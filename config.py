@@ -17,6 +17,7 @@ class ToolConfig:
     mode: str  # headless | interactive
     cmd: List[str]
     headless_cmd: Optional[List[str]] = None
+    resume_cmd: Optional[List[str]] = None
     interactive_cmd: Optional[List[str]] = None
     prompt_regex: Optional[str] = None
     resume_regex: Optional[str] = None
@@ -66,6 +67,7 @@ def load_config(path: str) -> AppConfig:
             mode=str(t.get("mode", "headless")),
             cmd=list(t.get("cmd", [])),
             headless_cmd=t.get("headless_cmd"),
+            resume_cmd=t.get("resume_cmd"),
             interactive_cmd=t.get("interactive_cmd"),
             prompt_regex=t.get("prompt_regex"),
             resume_regex=t.get("resume_regex"),
@@ -114,6 +116,7 @@ def save_config(config: AppConfig) -> None:
             "mode": tool.mode,
             "cmd": tool.cmd,
             "headless_cmd": tool.headless_cmd,
+            "resume_cmd": tool.resume_cmd,
             "interactive_cmd": tool.interactive_cmd,
             "prompt_regex": tool.prompt_regex,
             "resume_regex": tool.resume_regex,

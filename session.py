@@ -43,7 +43,10 @@ class Session:
         return await self._run_interactive(prompt)
 
     async def _run_headless(self, prompt: str) -> str:
-        cmd_template = self.tool.headless_cmd or self.tool.cmd
+        if self.resume_token and self.tool.resume_cmd:
+            cmd_template = self.tool.resume_cmd
+        else:
+            cmd_template = self.tool.headless_cmd or self.tool.cmd
         cmd, use_stdin = build_command(cmd_template, prompt, self.resume_token)
         env = os.environ.copy()
         if self.tool.env:
