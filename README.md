@@ -1,5 +1,7 @@
 # CLI Proxy Telegram Bridge
 
+[English version](README_EN.MD) | [Русская версия](README.md)
+
 Telegram‑бот для управления CLI‑агентами (Codex / Gemini / Qwen / Claude) с поддержкой нескольких сессий, очереди запросов, HTML‑вывода и кэширования справки по /командам каждого инструмента.
 
 ## Возможности
