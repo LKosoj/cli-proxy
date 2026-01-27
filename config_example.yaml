@@ -8,7 +8,7 @@ tools:
     cmd: ["codex", "exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
     resume_cmd: ["codex", "exec", "resume", "{resume}", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
     interactive_cmd: ["codex"]
-    resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
+    resume_regex: "session\\s*id\\s*:\\s*([A-Za-z0-9-]+)"
     help_cmd: "/status"
     auto_commands: ["/approvals full"]
     env:
