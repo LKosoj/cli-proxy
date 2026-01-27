@@ -1,0 +1,48 @@
+telegram:
+  token: "YOUR_TELEGRAM_BOT_TOKEN"
+  whitelist_chat_ids: [123456789]
+
+tools:
+  codex:
+    mode: interactive
+    cmd: ["codex"]
+    interactive_cmd: ["codex"]
+    resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
+    help_cmd: "/status"
+    auto_commands: ["/approvals full"]
+    env:
+      OPENAI_API_KEY: null
+      OPENAI_MODEL: null
+      OPENAI_BASE_URL: null
+  claude:
+    mode: headless
+    cmd: ["claude", "--continue", "--dangerously-skip-permissions", "-p", "{prompt}", "--resume", "{resume}"]
+    interactive_cmd: ["claude"]
+    help_cmd: "/help"
+    env:
+      ANTHROPIC_API_KEY: null
+  gemini:
+    mode: headless
+    cmd: ["gemini", "--approval-mode", "yolo", "--resume", "latest", "-p", "{prompt}"]
+    interactive_cmd: ["gemini"]
+    help_cmd: "/help"
+    env:
+      GOOGLE_API_KEY: null
+  qwen:
+    mode: headless
+    cmd: ["qwen", "--yolo", "--continue", "--prompt", "{prompt}", "--resume", "{resume}"]
+    interactive_cmd: ["qwen"]
+    help_cmd: "/help"
+    env:
+      QWEN_API_KEY: null
+
+defaults:
+  workdir: "/Users/you/projects"
+  idle_timeout_sec: 100
+  summary_max_chars: 4000
+  html_filename_prefix: "cli-output"
+  state_path: "state.json"
+  toolhelp_path: "toolhelp.json"
+  openai_api_key: null
+  openai_model: null
+  openai_base_url: "https://api.openai.com"

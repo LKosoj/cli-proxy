@@ -1,0 +1,22 @@
+{
+  "codex": {
+    "tool": "codex",
+    "content": "Codex CLI: список slash-команд открывается вводом '/' (popup). Основные команды: /approvals, /compact, /diff, /exit (/quit), /feedback, /init, /logout, /mcp, /mention, /model, /new, /review, /status, /undo, а также /fork и /resume. Для справки по параметрам используйте /status, для списка — '/'.",
+    "updated_at": 1769535888.381272
+  },
+  "claude": {
+    "tool": "claude",
+    "content": "Claude Code: встроенные команды доступны через /help. Документация указывает, что /help и /compact относятся к встроенным командам; полный список открывается /help.",
+    "updated_at": 1769535888.381272
+  },
+  "gemini": {
+    "tool": "gemini",
+    "content": "Gemini CLI: справка по командам — /help (или /?). Примеры slash-команд: /bug, /chat (save/resume/list/delete/share), /clear, /compress, /copy, /directory (/dir) add/show, /mcp, /memory, /restore, /settings, /stats, /theme, /auth, /about, /tools, /privacy, /quit (/exit).",
+    "updated_at": 1769535888.381272
+  },
+  "qwen": {
+    "tool": "qwen",
+    "content": "Qwen Code: справка по командам — /help (или /?). Примеры: /auth, /compress, /clear, /theme, /language, /quit (/exit), /bug, /chat.",
+    "updated_at": 1769535888.381272
+  }
+}
