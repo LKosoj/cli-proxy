@@ -6,6 +6,10 @@ from typing import List, Optional, Tuple
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
 _LOOSE_ANSI_RE = re.compile(r"\[(?:\d{1,3};)*\d{1,3}m")
+_TICK_OR_TIME_RE = re.compile(
+    r"\b\d{2}:\d{2}:\d{2}\b|\b\d{1,6}\s*(?:s|sec|сек)\b",
+    re.IGNORECASE,
+)
 
 
 def strip_ansi(text: str) -> str:
@@ -15,6 +19,11 @@ def strip_ansi(text: str) -> str:
 
 def has_ansi(text: str) -> bool:
     return _ANSI_RE.search(text) is not None
+
+
+def extract_tick_tokens(text: str) -> List[str]:
+    cleaned = strip_ansi(text)
+    return [m.group(0) for m in _TICK_OR_TIME_RE.finditer(cleaned)]
 
 
 def ansi_to_html(text: str) -> str:

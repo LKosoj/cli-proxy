@@ -1,7 +1,8 @@
 import asyncio
 import os
+import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import NetworkError, TimedOut
@@ -48,12 +49,9 @@ class BotApp:
         self.dirs_mode: Dict[int, str] = {}
         self.pending_dir_input: Dict[int, bool] = {}
         self.pending_git_clone: Dict[int, str] = {}
-        self.commands_menu: Dict[int, list] = {}
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.purge_menu: Dict[int, list] = {}
-        self.dirs_menu: Dict[int, list] = {}
-        self.state_menu_page: Dict[int, int] = {}
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
@@ -200,6 +198,11 @@ class BotApp:
 
     async def run_prompt(self, session: Session, prompt: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
         session.busy = True
+        session.started_at = time.time()
+        session.last_output_ts = session.started_at
+        session.last_tick_ts = None
+        session.last_tick_value = None
+        session.tick_seen = 0
         try:
             output = await session.run_prompt(prompt)
             await self.send_output(session, chat_id, output, context)
@@ -310,7 +313,7 @@ class BotApp:
         await self._send_message(context, chat_id=chat_id, text="Команда не найдена. Откройте меню бота.")
 
     async def _handle_cli_input(self, session: Session, text: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if session.busy:
+        if session.busy or session.is_active_by_tick():
             self.pending[chat_id] = PendingInput(session.id, text)
             keyboard = InlineKeyboardMarkup(
                 [
@@ -480,14 +483,6 @@ class BotApp:
             session = self.manager.create(tool, base)
             await query.edit_message_text(f"Сессия {session.id} создана и выбрана.")
             return
-        if query.data.startswith("cmd_run:"):
-            cmd = query.data.split(":", 1)[1]
-            handler = self._command_handlers().get(cmd)
-            if not handler:
-                await query.edit_message_text("Команда недоступна.")
-                return
-            await handler(update, context)
-            return
         if query.data.startswith("purge_pick:"):
             idx = int(query.data.split(":", 1)[1])
             items = self.purge_menu.get(chat_id, [])
@@ -500,11 +495,6 @@ class BotApp:
                 await query.edit_message_text("Сессия удалена из состояния.")
             else:
                 await query.edit_message_text("Сессия не найдена.")
-            return
-        if query.data.startswith("cmd_info:"):
-            cmd = query.data.split(":", 1)[1]
-            desc = self._command_descriptions().get(cmd, "Описание недоступно.")
-            await query.edit_message_text(f"/{cmd}\\n{desc}")
             return
         if query.data == "restore_yes":
             active = load_active_state(self.config.defaults.state_path)
@@ -710,10 +700,17 @@ class BotApp:
         if not s:
             await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
+        now = time.time()
+        busy_txt = "занята" if s.busy else "свободна"
+        run_for = f"{int(now - s.started_at)}с" if s.started_at else "нет"
+        last_out = f"{int(now - s.last_output_ts)}с назад" if s.last_output_ts else "нет"
+        tick_txt = f"{int(now - s.last_tick_ts)}с назад" if s.last_tick_ts else "нет"
         await self._send_message(context, 
             chat_id=chat_id,
             text=(
                 f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}\\n"
+                f"Статус: {busy_txt} | В работе: {run_for}\\n"
+                f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}\\n"
                 f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}"
             ),
         )
@@ -922,9 +919,6 @@ class BotApp:
             text="Меню доступно через кнопку рядом с полем ввода.",
         )
 
-    async def cmd_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self.cmd_menu(update, context)
-
     async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
@@ -963,7 +957,8 @@ class BotApp:
     def _bot_commands(self) -> list[BotCommand]:
         specs = self._command_specs()
         commands = []
-        for name, data in specs.items():
+        for name in self._ordered_commands(specs):
+            data = specs[name]
             commands.append(BotCommand(command=name, description=str(data["desc"])))
         return commands
 
@@ -1004,23 +999,6 @@ class BotApp:
         await self._send_message(context, 
             chat_id=chat_id,
             text="Выберите каталог:",
-            reply_markup=keyboard,
-        )
-
-    async def _send_commands_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-        specs = self._command_specs()
-        commands = list(sorted(specs.keys()))
-        self.commands_menu[chat_id] = commands
-        rows = []
-        for c in commands:
-            if specs[c]["quick"]:
-                rows.append([InlineKeyboardButton(f"▶ /{c}", callback_data=f"cmd_run:{c}")])
-            else:
-                rows.append([InlineKeyboardButton(f"/{c}", callback_data=f"cmd_info:{c}")])
-        keyboard = InlineKeyboardMarkup(rows)
-        await self._send_message(context, 
-            chat_id=chat_id,
-            text="Доступные команды (нажмите, чтобы увидеть описание):",
             reply_markup=keyboard,
         )
 
@@ -1066,30 +1044,34 @@ class BotApp:
             "setprompt": {"desc": "Установить prompt_regex для инструмента.", "quick": False},
             "toolhelp": {"desc": "Показать /команды выбранного инструмента.", "quick": True},
             "send": {"desc": "Отправить текст напрямую в CLI.", "quick": False},
-            "commands": {"desc": "Показать меню команд.", "quick": True},
         }
 
-    def _command_descriptions(self) -> Dict[str, str]:
-        return {k: v["desc"] for k, v in self._command_specs().items()}
-
-    def _command_handlers(self) -> Dict[str, Callable[[Update, ContextTypes.DEFAULT_TYPE], asyncio.Future]]:
-        return {
-            "tools": self.cmd_tools,
-            "new": self.cmd_new,
-            "sessions": self.cmd_sessions,
-            "use": self.cmd_use,
-            "close": self.cmd_close,
-            "status": self.cmd_status,
-            "interrupt": self.cmd_interrupt,
-            "queue": self.cmd_queue,
-            "clearqueue": self.cmd_clearqueue,
-            "dirs": self.cmd_dirs,
-            "gitclone": self.cmd_gitclone,
-            "state": self.cmd_state,
-            "toolhelp": self.cmd_toolhelp,
-            "purge": self.cmd_purge,
-            "commands": self.cmd_commands,
-        }
+    def _ordered_commands(self, specs: Dict[str, Dict[str, object]]) -> list[str]:
+        order = [
+            "tools",
+            "new",
+            "newpath",
+            "sessions",
+            "use",
+            "close",
+            "rename",
+            "status",
+            "interrupt",
+            "queue",
+            "clearqueue",
+            "send",
+            "resume",
+            "state",
+            "setprompt",
+            "dirs",
+            "gitclone",
+            "cwd",
+            "toolhelp",
+            "purge",
+        ]
+        ordered = [c for c in order if c in specs]
+        tail = [c for c in specs.keys() if c not in ordered]
+        return ordered + sorted(tail)
 
 def build_app(config: AppConfig) -> Application:
     app = Application.builder().token(config.telegram.token).build()
@@ -1123,7 +1105,6 @@ def build_app(config: AppConfig) -> Application:
     app.add_handler(CommandHandler("gitclone", bot_app.cmd_gitclone))
     app.add_handler(CommandHandler("resume", bot_app.cmd_resume))
     app.add_handler(CommandHandler("state", bot_app.cmd_state))
-    app.add_handler(CommandHandler("commands", bot_app.cmd_commands))
     app.add_handler(CommandHandler("menu", bot_app.cmd_menu))
     app.add_handler(CommandHandler("start", bot_app.cmd_menu))
     app.add_handler(CommandHandler("send", bot_app.cmd_send))

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import signal
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Deque, Dict, Optional, Tuple
@@ -9,7 +10,7 @@ import pexpect
 
 from config import AppConfig, ToolConfig, save_config
 from state import get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
-from utils import build_command, detect_prompt_regex, detect_resume_regex, resolve_env_value, strip_ansi
+from utils import build_command, detect_prompt_regex, detect_resume_regex, extract_tick_tokens, resolve_env_value, strip_ansi
 
 
 @dataclass
@@ -26,6 +27,11 @@ class Session:
     current_proc: Optional[asyncio.subprocess.Process] = None
     resume_token: Optional[str] = None
     auto_commands_ran: bool = False
+    started_at: Optional[float] = None
+    last_output_ts: Optional[float] = None
+    last_tick_ts: Optional[float] = None
+    last_tick_value: Optional[str] = None
+    tick_seen: int = 0
 
     async def run_prompt(self, prompt: str) -> str:
         if self.tool.mode == "headless":
@@ -61,6 +67,7 @@ class Session:
         out, _ = await proc.communicate()
         self.current_proc = None
         text = (out or b"").decode(errors="ignore")
+        self._update_activity(text)
         self._maybe_update_resume(text)
         return text
 
@@ -103,14 +110,32 @@ class Session:
 
         if self.tool.prompt_regex:
             self.child.expect(self.tool.prompt_regex)
-            return self.child.before
+            output = self.child.before
+            self._update_activity(output)
+            return output
 
         # No prompt regex: wait for timeout then attempt autodetect
-        try:
-            self.child.expect(pexpect.TIMEOUT)
-        except Exception:
-            pass
-        output = self.child.before
+        output_parts = []
+        last_output_ts = time.time()
+        while True:
+            try:
+                self.child.expect(pexpect.TIMEOUT, timeout=1)
+            except Exception:
+                pass
+            chunk = self.child.before
+            if chunk:
+                output_parts.append(chunk)
+                self._update_activity(chunk)
+                last_output_ts = time.time()
+            now = time.time()
+            last_tick_ts = self.last_tick_ts or 0.0
+            idle_for = now - last_output_ts
+            tick_idle_for = now - last_tick_ts if last_tick_ts else idle_for
+            if idle_for >= self.idle_timeout_sec and tick_idle_for >= self.idle_timeout_sec:
+                break
+            if self.child and not self.child.isalive():
+                break
+        output = "".join(output_parts)
         self._maybe_update_resume(output)
         self._maybe_autoset_resume_regex(output)
         lines = output.splitlines()
@@ -157,6 +182,24 @@ class Session:
         if regex:
             self.tool.resume_regex = regex
             save_config(self.config)
+
+    def _update_activity(self, text: str) -> None:
+        now = time.time()
+        self.last_output_ts = now
+        tokens = extract_tick_tokens(text)
+        if not tokens:
+            return
+        last = tokens[-1]
+        if self.last_tick_value and last != self.last_tick_value:
+            self.last_tick_ts = now
+            self.tick_seen += 1
+        self.last_tick_value = last
+
+    def is_active_by_tick(self, now: Optional[float] = None, window_sec: int = 3) -> bool:
+        if not self.last_tick_ts:
+            return False
+        now = time.time() if now is None else now
+        return (now - self.last_tick_ts) <= window_sec
 
 
 class SessionManager:

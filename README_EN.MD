@@ -68,24 +68,25 @@ Environment variables take precedence.
 ## Bot commands
 - `/tools` — list tools
 - `/new` — create a session (inline menu)
+- `/newpath <path>` — set path after choosing a tool
 - `/sessions` — list sessions
 - `/use` — set active session (menu)
 - `/close` — close a session (menu)
-- `/status` — active session status
+- `/rename <id> <name>` or `/rename <name>` — rename session
+- `/status` — active session status (busy, last activity/seconds tick)
 - `/interrupt` — interrupt generation
 - `/queue` — show queue
 - `/clearqueue` — clear queue for active session
+- `/send <text>` — send text directly to CLI
+- `/resume [token]` — show/set resume token
+- `/state [tool path]` — state by tool+path or menu
+- `/setprompt <tool> <regex>` — set prompt_regex for a tool
 - `/dirs` — browse directories (menu)
 - `/gitclone` — clone repo into a directory (menu)
 - `/cwd <path>` — create session in a directory
-- `/rename <id> <name>` or `/rename <name>` — rename session
-- `/resume [token]` — show/set resume token
-- `/state [tool path]` — state by tool+path or menu
 - `/toolhelp` — show tool /commands
-- `/commands` — commands menu
 - `/menu` — menu hint (menu is via Telegram button)
 - `/start` — show menu hint
-- `/send <text>` — send text directly to CLI
 - `/purge <id>` — delete session from saved state
 
 ## State
