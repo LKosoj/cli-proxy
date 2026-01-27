@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -67,6 +68,25 @@ class BotApp:
         if len(text) <= max_len:
             return text
         return text[: max_len - 3] + "..."
+
+    def _tool_exec(self, tool: ToolConfig) -> Optional[str]:
+        for cmd in (tool.cmd, tool.headless_cmd, tool.interactive_cmd):
+            if cmd and len(cmd) > 0:
+                return cmd[0]
+        return None
+
+    def _is_tool_available(self, name: str) -> bool:
+        tool = self.config.tools.get(name)
+        if not tool:
+            return False
+        exe = self._tool_exec(tool)
+        return bool(exe and shutil.which(exe))
+
+    def _available_tools(self) -> list[str]:
+        return [name for name in self.config.tools.keys() if self._is_tool_available(name)]
+
+    def _expected_tools(self) -> str:
+        return ", ".join(sorted(self.config.tools.keys()))
 
     async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> None:
         for attempt in range(5):
@@ -407,6 +427,12 @@ class BotApp:
             if tool not in self.config.tools:
                 await query.edit_message_text("Инструмент не найден.")
                 return
+            if not self._is_tool_available(tool):
+                await query.edit_message_text(
+                    "Инструмент не установлен. Сначала установите его. "
+                    f"Ожидаемые: {self._expected_tools()}"
+                )
+                return
             self.pending_new_tool[chat_id] = tool
             await query.edit_message_text(f"Выбран инструмент {tool}. Выберите каталог.")
             self.dirs_root[chat_id] = self.config.defaults.workdir
@@ -564,8 +590,18 @@ class BotApp:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
             return
-        tools = ", ".join(sorted(self.config.tools.keys()))
-        await self._send_message(context, chat_id=chat_id, text=f"Доступные инструменты: {tools}")
+        tools = sorted(self._available_tools())
+        if not tools:
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text=(
+                    "CLI не найдены. Сначала установите нужные инструменты. "
+                    f"Ожидаемые: {self._expected_tools()}"
+                ),
+            )
+            return
+        await self._send_message(context, chat_id=chat_id, text=f"Доступные инструменты: {', '.join(tools)}")
         
 
     async def cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -574,7 +610,17 @@ class BotApp:
             return
         args = context.args
         if len(args) < 2:
-            tools = list(sorted(self.config.tools.keys()))
+            tools = list(sorted(self._available_tools()))
+            if not tools:
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text=(
+                        "CLI не найдены. Сначала установите нужные инструменты. "
+                        f"Ожидаемые: {self._expected_tools()}"
+                    ),
+                )
+                return
             keyboard = InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton(t, callback_data=f"new_tool:{t}")]
@@ -590,6 +636,16 @@ class BotApp:
         tool, path = args[0], " ".join(args[1:])
         if tool not in self.config.tools:
             await self._send_message(context, chat_id=chat_id, text="Неизвестный инструмент.")
+            return
+        if not self._is_tool_available(tool):
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text=(
+                    "Инструмент не установлен. Сначала установите его. "
+                    f"Ожидаемые: {self._expected_tools()}"
+                ),
+            )
             return
         if not os.path.isdir(path):
             await self._send_message(context, chat_id=chat_id, text="Каталог не существует.")
@@ -969,7 +1025,17 @@ class BotApp:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
             return
-        tools = list(sorted(self.config.tools.keys()))
+        tools = list(sorted(self._available_tools()))
+        if not tools:
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text=(
+                    "CLI не найдены. Сначала установите нужные инструменты. "
+                    f"Ожидаемые: {self._expected_tools()}"
+                ),
+            )
+            return
         self.toolhelp_menu[chat_id] = tools
         keyboard = InlineKeyboardMarkup(
             [
