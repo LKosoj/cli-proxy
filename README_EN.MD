@@ -14,6 +14,8 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude) with multi
 - Inline menus for sessions, directories, and commands.
 - “Use this directory” button in the directory picker.
 - “git clone” button to clone a repo into the chosen directory.
+- Inline Git menu (status/fetch/pull ff-only/merge/rebase/diff/log/stash) for the active session.
+- Merge/rebase conflict handling with diff/abort/continue/call-agent buttons.
 - Cached tool help in `toolhelp.json`.
 
 ## Quick start
@@ -35,7 +37,7 @@ python bot.py
 
 ## Configuration
 `config.yaml` supports:
-- `tools.*`: launch commands, mode, prompt/resume/help
+- `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands)
 - `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings
 
 Per-tool environment variables:
@@ -83,6 +85,7 @@ Environment variables take precedence.
 - `/setprompt <tool> <regex>` — set prompt_regex for a tool
 - `/dirs` — browse directories (menu)
 - `/gitclone` — clone repo into a directory (menu)
+- `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash)
 - `/cwd <path>` — create session in a directory
 - `/toolhelp` — show tool /commands
 - `/menu` — menu hint (menu is via Telegram button)
