@@ -17,7 +17,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude) with multi
 - Inline Git menu (status/fetch/pull ff-only/merge/rebase/diff/log/stash/commit/push) for the active session.
 - Merge/rebase conflict handling with diff/abort/continue/call-agent buttons.
 - Cached tool help in `toolhelp.json`.
-- Separate MTProto menu: task goes to CLI, result is sent to the chosen chat.
+- Separate MTProto menu: task goes to CLI, result is written to an md file and its content is sent to the chosen chat.
 - Send files from the working directory via `/files`.
 - Task templates (hidden `/preset` command).
 
@@ -63,13 +63,15 @@ python bot.py
 
 6) **Extras**
    - Git operations are available via `/git` (status, pull, diff, commit, summary, etc.).
-   - MTProto menu (`/mtproto`) sends a task to CLI and delivers the result to the chosen chat.
+   - MTProto menu (`/mtproto`) sends a task to CLI. CLI writes an md file (timestamped), and the bot sends its content to the chosen chat (up to 12000 chars). Status is always sent to the bot.
 
 ## Configuration
 `config.yaml` supports:
 - `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands)
 - `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings, `github_token` for HTTPS git
 - `defaults.log_path`: bot log file path
+- `defaults.mtproto_output_dir`: directory for MTProto result md files (relative to workdir or absolute). Files are timestamped.
+- `defaults.mtproto_cleanup_days`: delete md files older than N days (default 5).
 - `mtproto.*`: MTProto enablement, `api_id/api_hash`, `session_string` or `session_path`, `targets` list for the send menu
 - `mcp.*`: TCP bridge for external clients (host/port/token)
 - `presets`: task templates list (name + prompt)
@@ -109,7 +111,7 @@ MTProto:
 - `mtproto.api_id` and `mtproto.api_hash` — Telegram API credentials.
 - `mtproto.session_string` (recommended) or `mtproto.session_path` for authorization.
 - `mtproto.targets` — target list (title + peer) shown in the menu.
-Flow: message from MTProto menu → executed in active CLI session → result delivered to the chosen chat.
+Flow: message from MTProto menu → executed in active CLI session → CLI writes md file (timestamped) → bot sends its content to the chosen chat (max 12000 chars), status always goes to the bot.
 
 ## Bot commands
 ### Visible in Telegram menu
@@ -118,6 +120,7 @@ Flow: message from MTProto menu → executed in active CLI session → result de
 - `/interrupt` — interrupt generation
 - `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/mtproto` — MTProto menu: send a task to CLI and receive the result in the chosen chat
+  - If called without text, the bot asks for the task (send `-` to cancel).
 - `/files` — send a file from the working directory
 - `/tools` — list tools
 - `/toolhelp` — show tool /commands

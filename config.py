@@ -39,6 +39,8 @@ class DefaultsConfig:
     openai_base_url: Optional[str] = None
     github_token: Optional[str] = None
     log_path: str = "bot.log"
+    mtproto_output_dir: str = ".mtproto"
+    mtproto_cleanup_days: int = 5
 
 
 @dataclasses.dataclass
@@ -124,6 +126,8 @@ def load_config(path: str) -> AppConfig:
         openai_base_url=defaults_raw.get("openai_base_url"),
         github_token=defaults_raw.get("github_token"),
         log_path=str(defaults_raw.get("log_path", "bot.log")),
+        mtproto_output_dir=str(defaults_raw.get("mtproto_output_dir", ".mtproto")),
+        mtproto_cleanup_days=int(defaults_raw.get("mtproto_cleanup_days", 5)),
     )
 
     targets: List[MTProtoTarget] = []
@@ -192,6 +196,8 @@ def save_config(config: AppConfig) -> None:
             "openai_base_url": config.defaults.openai_base_url,
             "github_token": config.defaults.github_token,
             "log_path": config.defaults.log_path,
+            "mtproto_output_dir": config.defaults.mtproto_output_dir,
+            "mtproto_cleanup_days": config.defaults.mtproto_cleanup_days,
         },
         "mtproto": {
             "enabled": config.mtproto.enabled,

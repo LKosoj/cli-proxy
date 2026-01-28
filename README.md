@@ -17,7 +17,7 @@ Telegram‑бот для управления CLI‑агентами (Codex / Ge
 - Inline‑меню Git‑операций (status/fetch/pull ff‑only/merge/rebase/diff/log/stash/commit/push) для активной сессии.
 - Обработка конфликтов merge/rebase с кнопками diff/abort/continue/позвать агента.
 - Кэш help‑команд инструмента в `toolhelp.json`.
-- Отдельное MTProto‑меню: задача отправляется в CLI, результат уходит в выбранный чат.
+- Отдельное MTProto‑меню: задача отправляется в CLI, результат формируется в md‑файл и его содержимое отправляется в выбранный чат.
 - Отправка файлов из рабочей директории через `/files`.
 - Шаблоны задач (скрытая команда `/preset`).
 
@@ -63,13 +63,15 @@ python bot.py
 
 6) **Дополнительно**
    - Git‑операции доступны через `/git` (status, pull, diff, commit, summary и т.д.).
-   - MTProto‑меню (`/mtproto`) позволяет отправить задачу в CLI и получить результат в выбранном чате.
+   - MTProto‑меню (`/mtproto`) отправляет задачу в CLI. CLI сохраняет результат в md‑файл (с timestamp), а бот отправляет содержимое в выбранный чат (до 12000 символов). Статус всегда приходит в бот.
 
 ## Конфигурация
 `config.yaml` поддерживает:
 - `tools.*`: команды запуска, режим, prompt/resume/help (включая `resume_cmd` для отдельных команд возобновления)
 - `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки, `github_token` для git по HTTPS
 - `defaults.log_path`: путь к файлу логов бота
+- `defaults.mtproto_output_dir`: каталог для md‑файлов результата MTProto (относительно workdir или абсолютный). Файлы создаются с timestamp в имени.
+- `defaults.mtproto_cleanup_days`: удалять md‑файлы старше N дней (по умолчанию 5).
 - `mtproto.*`: включение MTProto, `api_id/api_hash`, `session_string` или `session_path`, список `targets` для меню отправки
 - `mcp.*`: TCP‑bridge для внешних клиентов (host/port/token)
 - `presets`: список шаблонов задач (name + prompt)
@@ -109,7 +111,7 @@ MTProto:
 - `mtproto.api_id` и `mtproto.api_hash` — креденшелы Telegram API.
 - `mtproto.session_string` (рекомендуется) или `mtproto.session_path` для авторизации.
 - `mtproto.targets` — список целей (title + peer), которые появятся в меню.
-Логика: сообщение из MTProto‑меню → выполняется в активной CLI‑сессии → результат отправляется в выбранный чат.
+Логика: сообщение из MTProto‑меню → выполняется в активной CLI‑сессии → CLI пишет md‑файл (timestamp) → бот отправляет его содержимое в выбранный чат (до 12000 символов), статус всегда приходит в бот.
 
 ## Команды бота
 ### Видимые в меню Telegram
@@ -118,6 +120,7 @@ MTProto:
 - `/interrupt` — прервать генерацию
 - `/git` — Git‑операции по активной сессии (inline‑меню: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/mtproto` — MTProto меню: отправить задачу в CLI и получить результат в выбранном чате
+  - Если команда вызвана без текста, бот запросит задание (можно отправить `-` для отмены).
 - `/files` — отправить файл из рабочей директории
 - `/tools` — список инструментов
 - `/toolhelp` — получить /команды выбранного инструмента

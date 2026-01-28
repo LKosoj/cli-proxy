@@ -17,6 +17,7 @@ class MTProtoUI:
         self.config = config
         self._send_message = send_message
         self.pending_target: dict[int, int] = {}
+        self.pending_task: dict[int, str] = {}
         self._client: Optional["TelegramClient"] = None
         self._client_lock = asyncio.Lock()
 
@@ -27,8 +28,23 @@ class MTProtoUI:
         rows = []
         for idx, target in enumerate(self._targets()):
             rows.append([InlineKeyboardButton(target.title, callback_data=f"mt_pick:{idx}")])
-        rows.append([InlineKeyboardButton("Закрыть меню", callback_data="mt_close_menu")])
+        rows.append(
+            [
+                InlineKeyboardButton("Отмена", callback_data="mt_cancel"),
+                InlineKeyboardButton("Закрыть меню", callback_data="mt_close_menu"),
+            ]
+        )
         return InlineKeyboardMarkup(rows)
+
+    async def request_task(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._send_message(
+            context,
+            chat_id=chat_id,
+            text="Введите задание для MTProto (или '-' для отмены).",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Отмена", callback_data="mt_cancel")]]
+            ),
+        )
 
     async def _get_client(self) -> tuple[Optional["TelegramClient"], Optional[str]]:
         if TelegramClient is None or StringSession is None:
@@ -86,6 +102,11 @@ class MTProtoUI:
 
     async def handle_callback(self, query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         data = query.data or ""
+        if data == "mt_cancel":
+            self.pending_target.pop(chat_id, None)
+            self.pending_task.pop(chat_id, None)
+            await query.edit_message_text("Отменено.")
+            return True
         if data == "mt_close_menu":
             await query.edit_message_text("MTProto меню закрыто.")
             return True
@@ -100,6 +121,9 @@ class MTProtoUI:
                 await query.edit_message_text("Цель не найдена.")
                 return True
             self.pending_target[chat_id] = idx
+            if chat_id in self.pending_task:
+                await query.edit_message_text(f"Выбрана цель «{targets[idx].title}».")
+                return True
             await query.edit_message_text(
                 f"Введите сообщение для «{targets[idx].title}» (или '-' для отмены)."
             )
@@ -111,6 +135,8 @@ class MTProtoUI:
             return None
         idx = self.pending_target.pop(chat_id)
         message = text.strip()
+        if chat_id in self.pending_task:
+            message = self.pending_task.pop(chat_id)
         if message in ("-", "отмена", "Отмена"):
             await self._send_message(context, chat_id=chat_id, text="Отправка отменена.")
             return {"cancelled": True}

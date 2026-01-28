@@ -49,6 +49,8 @@ defaults:
   openai_base_url: "https://api.openai.com"
   github_token: null
   log_path: "bot.log"
+  mtproto_output_dir: ".mtproto"
+  mtproto_cleanup_days: 5
 
 mtproto:
   enabled: false
