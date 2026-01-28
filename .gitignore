@@ -208,3 +208,5 @@ __marimo__/
 config.yaml
 state.json
 /.vscode
+TZ.md
+AGENTS.md
