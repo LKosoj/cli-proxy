@@ -330,6 +330,13 @@ class SessionManager:
             )
             session.name = val.get("name") or f"{tool}@{workdir}"
             session.resume_token = val.get("resume_token")
+            if not session.resume_token:
+                try:
+                    st = get_state(self.config.defaults.state_path, tool, workdir)
+                    if st and st.resume_token:
+                        session.resume_token = st.resume_token
+                except Exception:
+                    pass
             session.queue = deque(val.get("queue", []))
             self.sessions[sid] = session
             if sid.startswith("s"):

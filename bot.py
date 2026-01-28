@@ -19,7 +19,7 @@ from telegram.ext import (
 
 from config import AppConfig, ToolConfig, load_config
 from session import Session, SessionManager, run_tool_help
-from summary import summarize_text, suggest_commit_message
+from summary import summarize_text_with_reason, suggest_commit_message
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
@@ -50,6 +50,7 @@ class BotApp:
         self.dirs_root: Dict[int, str] = {}
         self.dirs_mode: Dict[int, str] = {}
         self.pending_dir_input: Dict[int, bool] = {}
+        self.pending_dir_create: Dict[int, str] = {}
         self.pending_git_clone: Dict[int, str] = {}
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
@@ -529,6 +530,7 @@ class BotApp:
         if nav:
             rows.append(nav)
         rows.append([InlineKeyboardButton("Использовать этот каталог", callback_data="dir_use_current")])
+        rows.append([InlineKeyboardButton("Создать каталог", callback_data="dir_create")])
         rows.append([InlineKeyboardButton("git clone", callback_data="dir_git_clone")])
         rows.append([InlineKeyboardButton("Ввести путь", callback_data="dir_enter")])
         return InlineKeyboardMarkup(rows)
@@ -557,17 +559,22 @@ class BotApp:
         return None
 
     async def send_output(self, session: Session, chat_id: int, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+        summary_error = None
         try:
-            summary = await asyncio.to_thread(summarize_text, strip_ansi(output), config=self.config)
-            summary_source = "OpenAI"
+            summary, summary_error = await asyncio.to_thread(
+                summarize_text_with_reason, strip_ansi(output), config=self.config
+            )
         except Exception:
             summary = None
-            summary_source = "preview"
+            summary_error = "неизвестная ошибка"
         if summary:
             preview = summary
+            summary_source = "OpenAI"
         else:
             preview = build_preview(output, self.config.defaults.summary_max_chars)
             summary_source = "preview"
+            if summary_error:
+                summary_source = f"{summary_source} ({summary_error})"
         header = (
             f"[{session.id}|{session.name or session.tool.name}] Сессия: {session.id} | Инструмент: {session.tool.name}\\n"
             f"Каталог: {session.workdir}\\n"
@@ -597,6 +604,10 @@ class BotApp:
                 preview,
                 name=session.name,
             )
+        except Exception:
+            pass
+        try:
+            self.manager._persist_sessions()
         except Exception:
             pass
 
@@ -655,6 +666,40 @@ class BotApp:
         if not self.is_allowed(chat_id):
             return
         text = update.message.text
+        if chat_id in self.pending_dir_create:
+            base = self.pending_dir_create.pop(chat_id)
+            name = text.strip()
+            if name in ("-", "отмена", "Отмена"):
+                await self._send_message(context, chat_id=chat_id, text="Создание каталога отменено.")
+                return
+            if not name:
+                await self._send_message(context, chat_id=chat_id, text="Имя каталога пустое.")
+                return
+            if not os.path.isdir(base):
+                await self._send_message(context, chat_id=chat_id, text="Базовый каталог недоступен.")
+                return
+            if os.path.isabs(name):
+                target = os.path.normpath(name)
+            else:
+                target = os.path.normpath(os.path.join(base, name))
+            root = self.dirs_root.get(chat_id, self.config.defaults.workdir)
+            if not is_within_root(target, root):
+                await self._send_message(context, chat_id=chat_id, text="Нельзя выйти за пределы корневого каталога.")
+                return
+            if not is_within_root(target, base):
+                await self._send_message(context, chat_id=chat_id, text="Путь должен быть внутри текущего каталога.")
+                return
+            if os.path.exists(target):
+                await self._send_message(context, chat_id=chat_id, text="Каталог уже существует.")
+                return
+            try:
+                os.makedirs(target, exist_ok=False)
+            except Exception as e:
+                await self._send_message(context, chat_id=chat_id, text=f"Не удалось создать каталог: {e}")
+                return
+            await self._send_message(context, chat_id=chat_id, text=f"Каталог создан: {target}")
+            await self._send_dirs_menu(chat_id, context, base)
+            return
         if self.pending_dir_input.pop(chat_id, None):
             tool = self.pending_new_tool.get(chat_id)
             if not tool:
@@ -894,6 +939,13 @@ class BotApp:
         if query.data == "dir_enter":
             self.pending_dir_input[chat_id] = True
             await query.edit_message_text("Отправьте путь к каталогу сообщением.")
+            return
+        if query.data == "dir_create":
+            base = self.dirs_base.get(chat_id, self.config.defaults.workdir)
+            self.pending_dir_create[chat_id] = base
+            await query.edit_message_text(
+                "Отправьте имя нового каталога или путь относительно текущего. Для отмены введите '-'."
+            )
             return
         if query.data == "dir_git_clone":
             base = self.dirs_base.get(chat_id, self.config.defaults.workdir)

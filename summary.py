@@ -1,6 +1,7 @@
 import os
+from typing import Optional, Tuple
+
 import requests
-from typing import Optional
 
 from config import AppConfig
 
@@ -20,6 +21,39 @@ def _get_openai_config(config: Optional[AppConfig] = None):
     return api_key, model, base_url.rstrip("/")
 
 
+def _strip_cli_preamble(text: str) -> str:
+    lines = text.splitlines()
+    if not lines:
+        return text
+    scan_limit = min(len(lines), 80)
+    user_idx = None
+    for idx in range(scan_limit):
+        label = lines[idx].strip().lower()
+        if label in ("user", "user:"):
+            user_idx = idx
+            break
+    if user_idx is None:
+        return text
+    header = lines[:user_idx]
+    meta_lines = 0
+    separators = 0
+    for line in header:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if set(stripped) == {"-"} and len(stripped) >= 4:
+            separators += 1
+            continue
+        if ":" in stripped:
+            key = stripped.split(":", 1)[0].strip()
+            if 1 <= len(key) <= 24:
+                meta_lines += 1
+    if meta_lines >= 3 or separators >= 1:
+        remainder = lines[user_idx + 1 :]
+        return "\n".join(remainder).lstrip()
+    return text
+
+
 def _length_bucket(text_len: int) -> str:
     if text_len < 2000:
         return "короткий"
@@ -37,10 +71,16 @@ def _suggest_max_tokens(text: str, max_chars: int) -> int:
     return min(1200, rough + size_hint * 100)
 
 
-def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig] = None) -> Optional[str]:
-    cfg = _get_openai_config(config)
-    if not cfg:
-        return None
+def _compact_reason(reason: str) -> str:
+    clean = " ".join(reason.split()).strip()
+    if len(clean) > 120:
+        return f"{clean[:117]}..."
+    return clean
+
+
+def _summarize_with_cfg(
+    text: str, max_chars: int, cfg: Tuple[str, str, str]
+) -> str:
     api_key, model, base_url = cfg
 
     payload = {
@@ -72,7 +112,7 @@ def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig]
         "Content-Type": "application/json",
     }
     resp = requests.post(
-        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=20
+        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60
     )
     resp.raise_for_status()
     data = resp.json()
@@ -80,6 +120,39 @@ def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig]
     if len(summary) > max_chars:
         return summary[:max_chars]
     return summary
+
+
+def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig] = None) -> Optional[str]:
+    cfg = _get_openai_config(config)
+    if not cfg:
+        return None
+    cleaned = _strip_cli_preamble(text)
+    if len(cleaned) < 3000:
+        return cleaned
+    return _summarize_with_cfg(cleaned, max_chars, cfg)
+
+
+def summarize_text_with_reason(
+    text: str, max_chars: int = 3000, config: Optional[AppConfig] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    cfg = _get_openai_config(config)
+    if not cfg:
+        return None, "не настроены OPENAI_API_KEY/OPENAI_MODEL"
+    cleaned = _strip_cli_preamble(text)
+    if len(cleaned) < 3000:
+        return cleaned, None
+    try:
+        summary = _summarize_with_cfg(cleaned, max_chars, cfg)
+        return summary, None
+    except requests.Timeout:
+        return None, "таймаут OpenAI"
+    except requests.ConnectionError:
+        return None, "нет соединения с OpenAI"
+    except requests.HTTPError as err:
+        code = err.response.status_code if err.response is not None else "?"
+        return None, f"ошибка OpenAI HTTP {code}"
+    except Exception:
+        return None, "неожиданный ответ OpenAI"
 
 
 def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Optional[str]:
@@ -113,7 +186,7 @@ def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Opt
         "Content-Type": "application/json",
     }
     resp = requests.post(
-        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=20
+        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60
     )
     resp.raise_for_status()
     data = resp.json()
