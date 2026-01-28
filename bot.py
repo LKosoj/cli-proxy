@@ -16,7 +16,7 @@ from telegram.ext import (
     filters,
 )
 
-from config import AppConfig, load_config
+from config import AppConfig, ToolConfig, load_config
 from session import Session, SessionManager, run_tool_help
 from summary import summarize_text
 from state import get_state, load_active_state, update_state, clear_active_state
@@ -154,7 +154,7 @@ class BotApp:
         rows.append([InlineKeyboardButton("Ввести путь", callback_data="dir_enter")])
         return InlineKeyboardMarkup(rows)
 
-    def _prepare_dirs(self, chat_id: int, base: str) -> Optional[str]:
+    def _prepare_dirs(self, chat_id: int, base: str, allow_empty: bool = False) -> Optional[str]:
         root = self.dirs_root.get(chat_id, self.config.defaults.workdir)
         if not is_within_root(base, root):
             return "Нельзя выйти за пределы корневого каталога."
@@ -165,6 +165,11 @@ class BotApp:
         except Exception as e:
             return f"Ошибка чтения каталога: {e}"
         if not entries:
+            if allow_empty:
+                self.dirs_base[chat_id] = base
+                self.dirs_page[chat_id] = 0
+                self.dirs_menu[chat_id] = []
+                return None
             return "Подкаталогов нет. Добавьте хотя бы один каталог и попробуйте снова."
         self.dirs_base[chat_id] = base
         self.dirs_page[chat_id] = 0
@@ -1050,7 +1055,8 @@ class BotApp:
         )
 
     async def _send_dirs_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, base: str) -> None:
-        err = self._prepare_dirs(chat_id, base)
+        allow_empty = self.dirs_mode.get(chat_id) == "git_clone"
+        err = self._prepare_dirs(chat_id, base, allow_empty=allow_empty)
         if err:
             mode = self.dirs_mode.get(chat_id)
             if mode == "new_session":
