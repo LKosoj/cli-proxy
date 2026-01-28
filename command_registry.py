@@ -2,11 +2,16 @@ from typing import Dict, List
 
 
 def build_command_registry(bot_app) -> List[Dict[str, object]]:
+    mtproto_enabled = bool(getattr(bot_app.config, "mtproto", None) and bot_app.config.mtproto.enabled)
     return [
         {"name": "new", "desc": "Создать новую сессию (через меню).", "handler": bot_app.cmd_new, "menu": True},
         {"name": "sessions", "desc": "Меню управления сессиями.", "handler": bot_app.cmd_sessions, "menu": True},
         {"name": "interrupt", "desc": "Прервать текущую генерацию.", "handler": bot_app.cmd_interrupt, "menu": True},
         {"name": "git", "desc": "Git-операции по активной сессии (inline-меню).", "handler": bot_app.cmd_git, "menu": True},
+        {"name": "mtproto", "desc": "MTProto меню для отправки сообщений в заданные чаты.", "handler": bot_app.cmd_mtproto, "menu": mtproto_enabled},
+        {"name": "files", "desc": "Отправить файл из рабочей директории.", "handler": bot_app.cmd_files, "menu": True},
+        {"name": "preset", "desc": "Шаблоны задач для CLI.", "handler": bot_app.cmd_preset, "menu": False},
+        {"name": "metrics", "desc": "Метрики бота.", "handler": bot_app.cmd_metrics, "menu": False},
         {"name": "tools", "desc": "Показать доступные инструменты.", "handler": bot_app.cmd_tools, "menu": True},
         {"name": "toolhelp", "desc": "Показать /команды выбранного инструмента.", "handler": bot_app.cmd_toolhelp, "menu": True},
         {"name": "newpath", "desc": "Задать путь для новой сессии после выбора инструмента.", "handler": bot_app.cmd_newpath, "menu": False},

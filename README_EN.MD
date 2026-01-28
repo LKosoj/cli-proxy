@@ -17,6 +17,9 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude) with multi
 - Inline Git menu (status/fetch/pull ff-only/merge/rebase/diff/log/stash/commit/push) for the active session.
 - Merge/rebase conflict handling with diff/abort/continue/call-agent buttons.
 - Cached tool help in `toolhelp.json`.
+- Separate MTProto menu: task goes to CLI, result is sent to the chosen chat.
+- Send files from the working directory via `/files`.
+- Task templates (hidden `/preset` command).
 
 ## Quick start
 1) Install dependencies:
@@ -39,6 +42,10 @@ python bot.py
 `config.yaml` supports:
 - `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands)
 - `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings, `github_token` for HTTPS git
+- `defaults.log_path`: bot log file path
+- `mtproto.*`: MTProto enablement, `api_id/api_hash`, `session_string` or `session_path`, `targets` list for the send menu
+- `mcp.*`: TCP bridge for external clients (host/port/token)
+- `presets`: task templates list (name + prompt)
 
 Per-tool environment variables:
 ```yaml
@@ -70,12 +77,21 @@ Environment variables take precedence.
 GitHub PAT for HTTPS git:
 - `defaults.github_token` in `config.yaml` (used for clone/fetch/pull/push without interactive prompts)
 
+MTProto:
+- `mtproto.enabled` enables MTProto menu.
+- `mtproto.api_id` and `mtproto.api_hash` — Telegram API credentials.
+- `mtproto.session_string` (recommended) or `mtproto.session_path` for authorization.
+- `mtproto.targets` — target list (title + peer) shown in the menu.
+Flow: message from MTProto menu → executed in active CLI session → result delivered to the chosen chat.
+
 ## Bot commands
 ### Visible in Telegram menu
 - `/new` — create a session (inline menu)
 - `/sessions` — session management menu (use/status/rename/close/resume/state/queue/clearqueue)
 - `/interrupt` — interrupt generation
-- `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/help)
+- `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
+- `/mtproto` — MTProto menu: send a task to CLI and receive the result in the chosen chat
+- `/files` — send a file from the working directory
 - `/tools` — list tools
 - `/toolhelp` — show tool /commands
 ### Available but hidden from menu
@@ -92,6 +108,9 @@ GitHub PAT for HTTPS git:
 - `/state [tool path]` — state by tool+path or menu
 - `/clearqueue` — clear queue for active session
 - `/queue` — show queue
+- `/preset` — task templates for CLI
+- Presets are loaded from `config.yaml` (`presets` section).
+- `/metrics` — bot metrics
 
 ## State
 - `state.json` — last point (resume + summary) for tool+workdir

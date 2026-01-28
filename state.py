@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -26,16 +27,23 @@ class ActiveState:
 def _load_raw(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
         return {}
-    with open(path, "r", encoding="utf-8") as f:
-        content = f.read().strip()
-        if not content:
-            return {}
-        return json.loads(content)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if not content:
+                return {}
+            return json.loads(content)
+    except Exception as e:
+        logging.exception("state load failed: %s", e)
+        return {}
 
 
 def _save_raw(path: str, raw: Dict[str, Any]) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(raw, f, ensure_ascii=False, indent=2)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(raw, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.exception("state save failed: %s", e)
 
 
 def load_state(path: str) -> Dict[str, SessionState]:

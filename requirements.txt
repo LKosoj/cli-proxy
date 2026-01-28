@@ -4,3 +4,4 @@ pexpect==4.9.0
 ansi2html==1.9.1
 requests==2.32.3
 pytest==8.3.4
+telethon==1.36.0

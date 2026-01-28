@@ -131,12 +131,16 @@ class SessionUI:
                 return True
             now = time.time()
             busy_txt = "занята" if session.busy else "свободна"
+            git_txt = "git: занято" if getattr(session, "git_busy", False) else "git: свободно"
+            conflict_txt = ""
+            if getattr(session, "git_conflict", False):
+                conflict_txt = f" | конфликт: {session.git_conflict_kind or 'да'}"
             run_for = f"{int(now - session.started_at)}с" if session.started_at else "нет"
             last_out = f"{int(now - session.last_output_ts)}с назад" if session.last_output_ts else "нет"
             tick_txt = f"{int(now - session.last_tick_ts)}с назад" if session.last_tick_ts else "нет"
             text = (
                 f"Сессия: {session.id} ({session.name or session.tool.name}) @ {session.workdir}\n"
-                f"Статус: {busy_txt} | В работе: {run_for}\n"
+                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for}\n"
                 f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {session.tick_seen}\n"
                 f"Очередь: {len(session.queue)} | Resume: {'есть' if session.resume_token else 'нет'}"
             )

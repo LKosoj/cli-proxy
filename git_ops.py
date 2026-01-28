@@ -90,6 +90,9 @@ class GitOps:
                 InlineKeyboardButton("Push", callback_data="git_push"),
             ],
             [
+                InlineKeyboardButton("Summary", callback_data="git_summary"),
+            ],
+            [
                 InlineKeyboardButton("Help", callback_data="git_help"),
             ],
         ]
@@ -609,6 +612,24 @@ class GitOps:
         if data == "git_log":
             code, output = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "20"])
             await self._send_git_output(context, chat_id, "Log", output)
+            return True
+        if data == "git_summary":
+            await query.edit_message_text("Собираю git summary…")
+            session.git_busy = True
+            try:
+                code_status, status = await self._run_git(session, ["status", "--short", "--branch"])
+                code_stat, stat = await self._run_git(session, ["diff", "--stat"])
+                code_log, log = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "10"])
+                text_parts = ["Git summary:"]
+                if code_status == 0 and status.strip():
+                    text_parts.append("\nStatus:\n" + status.strip())
+                if code_stat == 0 and stat.strip():
+                    text_parts.append("\nDiff --stat:\n" + stat.strip())
+                if code_log == 0 and log.strip():
+                    text_parts.append("\nLog (last 10):\n" + log.strip())
+                await self._send_message(context, chat_id=chat_id, text="\n".join(text_parts)[:4000])
+            finally:
+                session.git_busy = False
             return True
         if data == "git_stash":
             session.git_busy = True

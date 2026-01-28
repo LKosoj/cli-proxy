@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Deque, Dict, Optional, Tuple
 
+import logging
 import pexpect
 
 from config import AppConfig, ToolConfig, save_config
@@ -22,7 +23,8 @@ class Session:
     config: AppConfig
     name: Optional[str] = None
     busy: bool = False
-    queue: Deque[str] = field(default_factory=deque)
+    queue: Deque[Dict[str, Any]] = field(default_factory=deque)
+    run_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     child: Optional[pexpect.spawn] = None
     current_proc: Optional[asyncio.subprocess.Process] = None
     resume_token: Optional[str] = None
@@ -234,8 +236,8 @@ class SessionManager:
                 session.resume_token = st.resume_token
             if st and st.name:
                 session.name = st.name
-        except Exception:
-            pass
+        except Exception as e:
+            logging.exception("persist_sessions failed: %s", e)
         self.sessions[sid] = session
         self.active_session_id = sid
         try:
@@ -294,12 +296,21 @@ class SessionManager:
         try:
             data: Dict[str, Any] = {}
             for sid, s in self.sessions.items():
+                queue_items: list[Dict[str, Any]] = []
+                for item in s.queue:
+                    if isinstance(item, str):
+                        queue_items.append({"text": item, "dest": {"kind": "telegram"}})
+                    elif isinstance(item, dict):
+                        text = item.get("text")
+                        if not text:
+                            continue
+                        queue_items.append(item)
                 data[sid] = {
                     "tool": s.tool.name,
                     "workdir": s.workdir,
                     "name": s.name,
                     "resume_token": s.resume_token,
-                    "queue": list(s.queue),
+                    "queue": queue_items,
                 }
             save_sessions(self.config.defaults.state_path, data)
         except Exception:
@@ -308,7 +319,8 @@ class SessionManager:
     def _restore_sessions(self) -> None:
         try:
             saved = load_sessions(self.config.defaults.state_path)
-        except Exception:
+        except Exception as e:
+            logging.exception("restore_sessions failed: %s", e)
             return
         max_id = 0
         for sid, val in saved.items():
@@ -332,7 +344,17 @@ class SessionManager:
                         session.resume_token = st.resume_token
                 except Exception:
                     pass
-            session.queue = deque(val.get("queue", []))
+            raw_queue = val.get("queue", [])
+            queue_items: list[Dict[str, Any]] = []
+            for item in raw_queue:
+                if isinstance(item, str):
+                    queue_items.append({"text": item, "dest": {"kind": "telegram"}})
+                elif isinstance(item, dict):
+                    text = item.get("text")
+                    if not text:
+                        continue
+                    queue_items.append(item)
+            session.queue = deque(queue_items)
             self.sessions[sid] = session
             if sid.startswith("s"):
                 try:

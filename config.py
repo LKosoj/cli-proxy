@@ -1,6 +1,6 @@
 import dataclasses
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
@@ -38,6 +38,37 @@ class DefaultsConfig:
     openai_model: Optional[str] = None
     openai_base_url: Optional[str] = None
     github_token: Optional[str] = None
+    log_path: str = "bot.log"
+
+
+@dataclasses.dataclass
+class MTProtoTarget:
+    title: str
+    peer: Union[int, str]
+
+
+@dataclasses.dataclass
+class MTProtoConfig:
+    enabled: bool = False
+    api_id: Optional[int] = None
+    api_hash: Optional[str] = None
+    session_string: Optional[str] = None
+    session_path: str = "mtproto.session"
+    targets: List[MTProtoTarget] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class MCPConfig:
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8765
+    token: Optional[str] = None
+
+
+@dataclasses.dataclass
+class PresetConfig:
+    name: str
+    prompt: str
 
 
 @dataclasses.dataclass
@@ -45,6 +76,9 @@ class AppConfig:
     telegram: TelegramConfig
     tools: Dict[str, ToolConfig]
     defaults: DefaultsConfig
+    mtproto: MTProtoConfig
+    mcp: MCPConfig
+    presets: List[PresetConfig]
     path: str
 
 
@@ -55,6 +89,7 @@ def load_config(path: str) -> AppConfig:
     telegram_raw = raw.get("telegram", {})
     tools_raw = raw.get("tools", {})
     defaults_raw = raw.get("defaults", {})
+    mtproto_raw = raw.get("mtproto", {})
 
     telegram = TelegramConfig(
         token=str(telegram_raw.get("token", "")),
@@ -88,9 +123,54 @@ def load_config(path: str) -> AppConfig:
         openai_model=defaults_raw.get("openai_model"),
         openai_base_url=defaults_raw.get("openai_base_url"),
         github_token=defaults_raw.get("github_token"),
+        log_path=str(defaults_raw.get("log_path", "bot.log")),
     )
 
-    return AppConfig(telegram=telegram, tools=tools, defaults=defaults, path=path)
+    targets: List[MTProtoTarget] = []
+    for entry in mtproto_raw.get("targets", []) or []:
+        title = str(entry.get("title") or entry.get("name") or "").strip()
+        peer_val = entry.get("peer", entry.get("id", entry.get("username")))
+        if title and peer_val is not None:
+            if isinstance(peer_val, str) and peer_val.lstrip("-").isdigit():
+                peer: Union[int, str] = int(peer_val)
+            else:
+                peer = peer_val
+            targets.append(MTProtoTarget(title=title, peer=peer))
+
+    api_id_raw = mtproto_raw.get("api_id")
+    api_id = None
+    if api_id_raw is not None:
+        try:
+            api_id = int(api_id_raw)
+        except Exception:
+            api_id = None
+
+    mtproto = MTProtoConfig(
+        enabled=bool(mtproto_raw.get("enabled", False)),
+        api_id=api_id,
+        api_hash=mtproto_raw.get("api_hash"),
+        session_string=mtproto_raw.get("session_string"),
+        session_path=str(mtproto_raw.get("session_path", "mtproto.session")),
+        targets=targets,
+    )
+
+    mcp_raw = raw.get("mcp", {})
+    mcp = MCPConfig(
+        enabled=bool(mcp_raw.get("enabled", False)),
+        host=str(mcp_raw.get("host", "127.0.0.1")),
+        port=int(mcp_raw.get("port", 8765)),
+        token=mcp_raw.get("token"),
+    )
+
+    presets_raw = raw.get("presets", []) or []
+    presets: List[PresetConfig] = []
+    for entry in presets_raw:
+        name = str(entry.get("name", "")).strip()
+        prompt = str(entry.get("prompt", "")).strip()
+        if name and prompt:
+            presets.append(PresetConfig(name=name, prompt=prompt))
+
+    return AppConfig(telegram=telegram, tools=tools, defaults=defaults, mtproto=mtproto, mcp=mcp, presets=presets, path=path)
 
 
 def save_config(config: AppConfig) -> None:
@@ -111,7 +191,25 @@ def save_config(config: AppConfig) -> None:
             "openai_model": config.defaults.openai_model,
             "openai_base_url": config.defaults.openai_base_url,
             "github_token": config.defaults.github_token,
+            "log_path": config.defaults.log_path,
         },
+        "mtproto": {
+            "enabled": config.mtproto.enabled,
+            "api_id": config.mtproto.api_id,
+            "api_hash": config.mtproto.api_hash,
+            "session_string": config.mtproto.session_string,
+            "session_path": config.mtproto.session_path,
+            "targets": [
+                {"title": t.title, "peer": t.peer} for t in config.mtproto.targets
+            ],
+        },
+        "mcp": {
+            "enabled": config.mcp.enabled,
+            "host": config.mcp.host,
+            "port": config.mcp.port,
+            "token": config.mcp.token,
+        },
+        "presets": [{"name": p.name, "prompt": p.prompt} for p in config.presets],
     }
 
     for name, tool in config.tools.items():

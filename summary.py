@@ -78,11 +78,17 @@ def _compact_reason(reason: str) -> str:
     return clean
 
 
+
+
 def _summarize_with_cfg(
     text: str, max_chars: int, cfg: Tuple[str, str, str]
 ) -> str:
     api_key, model, base_url = cfg
 
+    tail_len = 4000
+    head_len = min(6000, max(0, len(text) - tail_len))
+    head = text[:head_len]
+    tail = text[-tail_len:] if len(text) > tail_len else text
     payload = {
         "model": model,
         "messages": [
@@ -92,14 +98,17 @@ def _summarize_with_cfg(
                     "Сделай резюме на русском. Дай по делу, без воды. "
                     "Адаптируй длину под объём текста: "
                     "короткий → 2–4 пункта, средний → 4–6, длинный → 6–10. "
-                    "В каждом пункте 1–2 предложения. Не повторяйся и не пиши лишнего."
+                    "В каждом пункте 1–2 предложения. Не повторяйся и не пиши лишнего. "
+                    "Важно: обязательно учти ключевую информацию в конце текста и отрази её в резюме."
                 ),
             },
             {
                 "role": "user",
                 "content": (
                     f"Длина текста: {_length_bucket(len(text))}.\n"
-                    f"{text[:12000]}"
+                    "Фрагменты текста:\n"
+                    f"НАЧАЛО:\n{head}\n\n"
+                    f"КОНЕЦ:\n{tail}"
                 ),
             },
         ],
@@ -117,6 +126,9 @@ def _summarize_with_cfg(
     resp.raise_for_status()
     data = resp.json()
     summary = data["choices"][0]["message"]["content"].strip()
+    tail_digest = _tail_digest(text)
+    if tail_digest:
+        summary = f"{summary}\n\nКлючевое в конце:\n{tail_digest}"
     if len(summary) > max_chars:
         return summary[:max_chars]
     return summary
@@ -153,6 +165,25 @@ def summarize_text_with_reason(
         return None, f"ошибка OpenAI HTTP {code}"
     except Exception:
         return None, "неожиданный ответ OpenAI"
+
+def _tail_digest(text: str) -> str:
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return ""
+    tail = lines[-6:]
+    selected = []
+    for line in reversed(tail):
+        if line and line not in selected:
+            selected.append(line)
+        if len(selected) >= 2:
+            break
+    selected.reverse()
+    bullets = []
+    for line in selected:
+        if len(line) > 240:
+            line = line[:237] + "..."
+        bullets.append(f"- {line}")
+    return "\n".join(bullets)
 
 
 def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Optional[str]:

@@ -1,5 +1,6 @@
 import asyncio
 import html
+import logging
 import os
 import shutil
 import time
@@ -24,6 +25,9 @@ from command_registry import build_command_registry
 from dirs_ui import build_dirs_keyboard, prepare_dirs
 from session_ui import SessionUI
 from git_ops import GitOps
+from mtproto_ui import MTProtoUI
+from metrics import Metrics
+from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
@@ -36,12 +40,15 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
 class PendingInput:
     session_id: str
     text: str
+    dest: dict
 
 
 class BotApp:
     def __init__(self, config: AppConfig):
         self.config = config
+        self._setup_logging()
         self.manager = SessionManager(config)
+        self.metrics = Metrics()
         self.pending: Dict[int, PendingInput] = {}
         self.state_menu: Dict[int, list] = {}
         self.use_menu: Dict[int, list] = {}
@@ -58,6 +65,7 @@ class BotApp:
         self.pending_git_clone: Dict[int, str] = {}
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
+        self.files_menu: Dict[int, list] = {}
         self.session_ui = SessionUI(
             self.config,
             self.manager,
@@ -65,6 +73,7 @@ class BotApp:
             self._format_ts,
             self._short_label,
         )
+        self.mtproto = MTProtoUI(self.config, self._send_message)
         self.git = GitOps(
             self.config,
             self.manager,
@@ -73,9 +82,18 @@ class BotApp:
             self._short_label,
             self._handle_cli_input,
         )
+        self.mcp = MCPBridge(self.config, self)
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
+
+    def _setup_logging(self) -> None:
+        log_path = self.config.defaults.log_path
+        logging.basicConfig(
+            filename=log_path,
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+        )
 
     def _format_ts(self, ts: float) -> str:
         import datetime as _dt
@@ -148,7 +166,7 @@ class BotApp:
             rows.append(nav)
         return InlineKeyboardMarkup(rows)
 
-    async def send_output(self, session: Session, chat_id: int, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def send_output(self, session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
         summary_error = None
         try:
             summary, summary_error = await asyncio.to_thread(
@@ -171,20 +189,43 @@ class BotApp:
             f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\\n"
             f"Resume: {'есть' if session.resume_token else 'нет'} | Источник анонса: {summary_source}"
         )
-        await self._send_message(context, chat_id=chat_id, text=header)
-        if preview:
-            await self._send_message(context, chat_id=chat_id, text=preview)
+        if dest.get("kind") == "mtproto":
+            peer = dest.get("peer")
+            if peer is not None:
+                err = await self.mtproto.send_text(peer, header)
+                if err and dest.get("chat_id") is not None:
+                    await self._send_message(context, chat_id=dest.get("chat_id"), text=err)
+                if preview:
+                    err = await self.mtproto.send_text(peer, preview)
+                    if err and dest.get("chat_id") is not None:
+                        await self._send_message(context, chat_id=dest.get("chat_id"), text=err)
+        else:
+            chat_id = dest.get("chat_id")
+            if chat_id is not None:
+                await self._send_message(context, chat_id=chat_id, text=header)
+                if preview:
+                    await self._send_message(context, chat_id=chat_id, text=preview)
 
         html_text = ansi_to_html(output)
         path = make_html_file(html_text, self.config.defaults.html_filename_prefix)
         try:
-            with open(path, "rb") as f:
-                await self._send_document(context, chat_id=chat_id, document=f)
+            if dest.get("kind") == "mtproto":
+                peer = dest.get("peer")
+                if peer is not None:
+                    err = await self.mtproto.send_file(peer, path)
+                    if err and dest.get("chat_id") is not None:
+                        await self._send_message(context, chat_id=dest.get("chat_id"), text=err)
+            else:
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    with open(path, "rb") as f:
+                        await self._send_document(context, chat_id=chat_id, document=f)
         finally:
             try:
                 os.remove(path)
             except Exception:
                 pass
+        self.metrics.observe_output(len(output))
         try:
             update_state(
                 self.config.defaults.state_path,
@@ -194,31 +235,46 @@ class BotApp:
                 preview,
                 name=session.name,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logging.exception("update_state failed: %s", e)
         try:
             self.manager._persist_sessions()
-        except Exception:
-            pass
-
-    async def run_prompt(self, session: Session, prompt: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-        session.busy = True
-        session.started_at = time.time()
-        session.last_output_ts = session.started_at
-        session.last_tick_ts = None
-        session.last_tick_value = None
-        session.tick_seen = 0
-        try:
-            output = await session.run_prompt(prompt)
-            await self.send_output(session, chat_id, output, context)
         except Exception as e:
-            await self._send_message(context, chat_id=chat_id, text=f"Ошибка выполнения: {e}")
-        finally:
-            session.busy = False
-            if session.queue:
-                next_prompt = session.queue.popleft()
-                self.manager._persist_sessions()
-                asyncio.create_task(self.run_prompt(session, next_prompt, chat_id, context))
+            logging.exception("persist_sessions failed: %s", e)
+
+    async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        async with session.run_lock:
+            session.busy = True
+            session.started_at = time.time()
+            session.last_output_ts = session.started_at
+            session.last_tick_ts = None
+            session.last_tick_value = None
+            session.tick_seen = 0
+            try:
+                output = await session.run_prompt(prompt)
+                await self.send_output(session, dest, output, context)
+            except Exception as e:
+                logging.exception("run_prompt failed: %s", e)
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text=f"Ошибка выполнения: {e}")
+            finally:
+                session.busy = False
+                if session.queue:
+                    next_item = session.queue.popleft()
+                    if isinstance(next_item, str):
+                        next_prompt = next_item
+                        next_dest = {"kind": "telegram", "chat_id": dest.get("chat_id")}
+                    else:
+                        next_prompt = next_item.get("text", "")
+                        next_dest = next_item.get("dest") or {"kind": "telegram"}
+                        if next_dest.get("kind") == "telegram" and next_dest.get("chat_id") is None:
+                            next_dest["chat_id"] = dest.get("chat_id")
+                    try:
+                        self.manager._persist_sessions()
+                    except Exception as e:
+                        logging.exception("persist_sessions failed: %s", e)
+                    asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
     async def ensure_active_session(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> Optional[Session]:
         session = self.manager.active()
@@ -255,8 +311,15 @@ class BotApp:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
             return
+        self.metrics.inc("messages")
         text = update.message.text
         if await self.session_ui.handle_pending_message(chat_id, text, context):
+            return
+        mtproto_pending = await self.mtproto.consume_pending(chat_id, text, context)
+        if mtproto_pending is not None:
+            if mtproto_pending.get("cancelled"):
+                return
+            await self._dispatch_mtproto_task(chat_id, mtproto_pending, context)
             return
         if chat_id in self.pending_dir_create:
             base = self.pending_dir_create.pop(chat_id)
@@ -354,11 +417,34 @@ class BotApp:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
             return
+        self.metrics.inc("commands")
         await self._send_message(context, chat_id=chat_id, text="Команда не найдена. Откройте меню бота.")
 
-    async def _handle_cli_input(self, session: Session, text: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if session.busy or session.is_active_by_tick():
-            self.pending[chat_id] = PendingInput(session.id, text)
+    async def _dispatch_mtproto_task(self, chat_id: int, payload: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        session = await self.ensure_active_session(chat_id, context)
+        if not session:
+            return
+        dest = {
+            "kind": "mtproto",
+            "peer": payload.get("peer"),
+            "title": payload.get("title"),
+            "chat_id": chat_id,
+        }
+        await self._handle_cli_input(session, payload.get("message", ""), chat_id, context, dest=dest)
+
+    async def _handle_cli_input(
+        self,
+        session: Session,
+        text: str,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        dest: Optional[dict] = None,
+    ) -> None:
+        if dest is None:
+            dest = {"kind": "telegram", "chat_id": chat_id}
+        if session.busy or session.is_active_by_tick() or session.run_lock.locked():
+            self.pending[chat_id] = PendingInput(session.id, text, dest)
+            self.metrics.inc("queued")
             keyboard = InlineKeyboardMarkup(
                 [
                     [
@@ -374,7 +460,7 @@ class BotApp:
                 reply_markup=keyboard,
             )
             return
-        asyncio.create_task(self.run_prompt(session, text, chat_id, context))
+        asyncio.create_task(self.run_prompt(session, text, dest, context))
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -605,6 +691,50 @@ class BotApp:
             except Exception as e:
                 await query.edit_message_text(f"Ошибка получения help: {e}")
             return
+        if query.data.startswith("file_pick:"):
+            idx = int(query.data.split(":", 1)[1])
+            items = self.files_menu.get(chat_id, [])
+            if idx < 0 or idx >= len(items):
+                await query.edit_message_text("Файл не найден.")
+                return
+            path = items[idx]
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            if not is_within_root(path, session.workdir):
+                await query.edit_message_text("Нельзя выйти за пределы рабочей директории.")
+                return
+            if not os.path.isfile(path):
+                await query.edit_message_text("Файл не найден.")
+                return
+            size = os.path.getsize(path)
+            if size > 45 * 1024 * 1024:
+                await query.edit_message_text("Файл слишком большой для отправки.")
+                return
+            await query.edit_message_text(f"Отправляю файл: {os.path.basename(path)}")
+            with open(path, "rb") as f:
+                await self._send_document(context, chat_id=chat_id, document=f)
+            return
+        if query.data.startswith("preset_run:"):
+            code = query.data.split(":", 1)[1]
+            if code == "cancel":
+                await query.edit_message_text("Отменено.")
+                return
+            session = await self.ensure_active_session(chat_id, context)
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            presets = self._preset_commands()
+            prompt = presets.get(code)
+            if not prompt:
+                await query.edit_message_text("Шаблон не найден.")
+                return
+            await query.edit_message_text(f"Отправляю задачу: {code}")
+            await self._handle_cli_input(session, prompt, chat_id, context)
+            return
+        if await self.mtproto.handle_callback(query, chat_id, context):
+            return
         if await self.git.handle_callback(query, chat_id, context):
             return
         if await self.session_ui.handle_callback(query, chat_id, context):
@@ -623,7 +753,7 @@ class BotApp:
             await query.edit_message_text("Текущая генерация прервана. Ввод отброшен.")
             return
         if query.data == "queue_input":
-            session.queue.append(pending.text)
+            session.queue.append({"text": pending.text, "dest": pending.dest})
             self.manager._persist_sessions()
             await query.edit_message_text("Ввод поставлен в очередь.")
             return
@@ -804,6 +934,10 @@ class BotApp:
             return
         now = time.time()
         busy_txt = "занята" if s.busy else "свободна"
+        git_txt = "git: занято" if getattr(s, "git_busy", False) else "git: свободно"
+        conflict_txt = ""
+        if getattr(s, "git_conflict", False):
+            conflict_txt = f" | конфликт: {s.git_conflict_kind or 'да'}"
         run_for = f"{int(now - s.started_at)}с" if s.started_at else "нет"
         last_out = f"{int(now - s.last_output_ts)}с назад" if s.last_output_ts else "нет"
         tick_txt = f"{int(now - s.last_tick_ts)}с назад" if s.last_tick_ts else "нет"
@@ -811,7 +945,7 @@ class BotApp:
             chat_id=chat_id,
             text=(
                 f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}\\n"
-                f"Статус: {busy_txt} | В работе: {run_for}\\n"
+                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for}\\n"
                 f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}\\n"
                 f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}"
             ),
@@ -1068,6 +1202,96 @@ class BotApp:
             reply_markup=keyboard,
         )
 
+    async def cmd_mtproto(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        await self.mtproto.show_menu(chat_id, context)
+
+    async def cmd_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        session = await self.ensure_active_session(chat_id, context)
+        if not session:
+            return
+        base = session.workdir
+        if not os.path.isdir(base):
+            await self._send_message(context, chat_id=chat_id, text="Рабочий каталог недоступен.")
+            return
+        entries = []
+        for name in os.listdir(base):
+            path = os.path.join(base, name)
+            if os.path.isfile(path):
+                try:
+                    entries.append((os.path.getmtime(path), path))
+                except Exception:
+                    continue
+        entries.sort(reverse=True)
+        items = [p for _, p in entries][:20]
+        if not items:
+            await self._send_message(context, chat_id=chat_id, text="Файлы не найдены.")
+            return
+        self.files_menu[chat_id] = items
+        keyboard = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(self._short_label(os.path.basename(p), 60), callback_data=f"file_pick:{i}")]
+                for i, p in enumerate(items)
+            ]
+        )
+        await self._send_message(context, 
+            chat_id=chat_id,
+            text="Выберите файл для отправки:",
+            reply_markup=keyboard,
+        )
+
+    def _preset_commands(self) -> Dict[str, str]:
+        if self.config.presets:
+            return {p.name: p.prompt for p in self.config.presets}
+        return {
+            "tests": "Запусти тесты и дай краткий отчёт.",
+            "lint": "Запусти линтер/форматтер и дай краткий отчёт.",
+            "build": "Запусти сборку и дай краткий отчёт.",
+            "refactor": "Сделай небольшой рефакторинг по месту и объясни изменения.",
+        }
+
+    async def cmd_preset(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        presets = self._preset_commands()
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(k, callback_data=f"preset_run:{k}")] for k in presets.keys()]
+            + [[InlineKeyboardButton("Отмена", callback_data="preset_run:cancel")]]
+        )
+        await self._send_message(context, chat_id=chat_id, text="Выберите шаблон:", reply_markup=keyboard)
+
+    async def cmd_metrics(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        await self._send_message(context, chat_id=chat_id, text=self.metrics.snapshot())
+
+    async def run_prompt_raw(self, prompt: str, session_id: Optional[str] = None) -> str:
+        session = self.manager.get(session_id) if session_id else self.manager.active()
+        if not session:
+            raise RuntimeError("no_active_session")
+        if session.run_lock.locked():
+            raise RuntimeError("session_busy")
+        async with session.run_lock:
+            session.busy = True
+            session.started_at = time.time()
+            session.last_output_ts = session.started_at
+            session.last_tick_ts = None
+            session.last_tick_value = None
+            session.tick_seen = 0
+            try:
+                output = await session.run_prompt(prompt)
+                self.metrics.observe_output(len(output))
+                return output
+            finally:
+                session.busy = False
+
     async def _send_dirs_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, base: str) -> None:
         allow_empty = self.dirs_mode.get(chat_id) == "git_clone"
         err = prepare_dirs(
@@ -1138,6 +1362,7 @@ def build_app(config: AppConfig) -> Application:
 
     async def _post_init(application: Application) -> None:
         await bot_app.set_bot_commands(application)
+        await bot_app.mcp.start()
 
     async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         err = context.error
@@ -1148,7 +1373,13 @@ def build_app(config: AppConfig) -> Application:
         print(f"Ошибка бота: {err}")
 
     for entry in build_command_registry(bot_app):
-        app.add_handler(CommandHandler(entry["name"], entry["handler"]))
+        async def _wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _handler=entry["handler"]) -> None:
+            chat_id = update.effective_chat.id
+            if not bot_app.is_allowed(chat_id):
+                return
+            bot_app.metrics.inc("commands")
+            await _handler(update, context)
+        app.add_handler(CommandHandler(entry["name"], _wrap))
 
     app.add_handler(CallbackQueryHandler(bot_app.on_callback))
     app.add_handler(MessageHandler(filters.COMMAND, bot_app.on_unknown_command))

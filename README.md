@@ -17,6 +17,9 @@ Telegram‑бот для управления CLI‑агентами (Codex / Ge
 - Inline‑меню Git‑операций (status/fetch/pull ff‑only/merge/rebase/diff/log/stash/commit/push) для активной сессии.
 - Обработка конфликтов merge/rebase с кнопками diff/abort/continue/позвать агента.
 - Кэш help‑команд инструмента в `toolhelp.json`.
+- Отдельное MTProto‑меню: задача отправляется в CLI, результат уходит в выбранный чат.
+- Отправка файлов из рабочей директории через `/files`.
+- Шаблоны задач (скрытая команда `/preset`).
 
 ## Быстрый старт
 1) Установите зависимости:
@@ -39,6 +42,10 @@ python bot.py
 `config.yaml` поддерживает:
 - `tools.*`: команды запуска, режим, prompt/resume/help (включая `resume_cmd` для отдельных команд возобновления)
 - `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки, `github_token` для git по HTTPS
+- `defaults.log_path`: путь к файлу логов бота
+- `mtproto.*`: включение MTProto, `api_id/api_hash`, `session_string` или `session_path`, список `targets` для меню отправки
+- `mcp.*`: TCP‑bridge для внешних клиентов (host/port/token)
+- `presets`: список шаблонов задач (name + prompt)
 
 Для каждого инструмента можно задать переменные окружения:
 ```yaml
@@ -70,12 +77,21 @@ OpenAI может быть задан как через `config.yaml`, так и
 GitHub токен (PAT) для git по HTTPS:
 - `defaults.github_token` в `config.yaml` (используется для clone/fetch/pull/push, без интерактивных запросов)
 
+MTProto:
+- `mtproto.enabled` включает меню MTProto.
+- `mtproto.api_id` и `mtproto.api_hash` — креденшелы Telegram API.
+- `mtproto.session_string` (рекомендуется) или `mtproto.session_path` для авторизации.
+- `mtproto.targets` — список целей (title + peer), которые появятся в меню.
+Логика: сообщение из MTProto‑меню → выполняется в активной CLI‑сессии → результат отправляется в выбранный чат.
+
 ## Команды бота
 ### Видимые в меню Telegram
 - `/new` — создать сессию (inline‑меню)
 - `/sessions` — меню управления сессиями (use/status/rename/close/resume/state/queue/clearqueue)
 - `/interrupt` — прервать генерацию
-- `/git` — Git‑операции по активной сессии (inline‑меню: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/help)
+- `/git` — Git‑операции по активной сессии (inline‑меню: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
+- `/mtproto` — MTProto меню: отправить задачу в CLI и получить результат в выбранном чате
+- `/files` — отправить файл из рабочей директории
 - `/tools` — список инструментов
 - `/toolhelp` — получить /команды выбранного инструмента
 ### Доступны, но скрыты из меню
@@ -92,6 +108,9 @@ GitHub токен (PAT) для git по HTTPS:
 - `/state [tool path]` — состояние по tool+path или меню
 - `/clearqueue` — очистить очередь активной сессии
 - `/queue` — показать очередь
+- `/preset` — шаблоны задач для CLI
+- Шаблоны берутся из `config.yaml` (секция `presets`).
+- `/metrics` — метрики бота
 
 ## Состояния
 - `state.json` — последняя точка (resume + саммари) для tool+workdir

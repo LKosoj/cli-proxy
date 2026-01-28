@@ -48,3 +48,26 @@ defaults:
   openai_model: null
   openai_base_url: "https://api.openai.com"
   github_token: null
+  log_path: "bot.log"
+
+mtproto:
+  enabled: false
+  api_id: null
+  api_hash: null
+  session_string: null
+  session_path: "mtproto.session"
+  targets:
+    - title: "My Saved Messages"
+      peer: "me"
+
+mcp:
+  enabled: false
+  host: "127.0.0.1"
+  port: 8765
+  token: null
+
+presets:
+  - name: "tests"
+    prompt: "Запусти тесты и дай краткий отчёт."
+  - name: "lint"
+    prompt: "Запусти линтер/форматтер и дай краткий отчёт."
