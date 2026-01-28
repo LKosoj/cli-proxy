@@ -87,11 +87,9 @@ GitHub PAT for HTTPS git:
 - `/state [tool path]` — state by tool+path or menu
 - `/setprompt <tool> <regex>` — set prompt_regex for a tool
 - `/dirs` — browse directories (menu)
-- `/gitclone` — clone repo into a directory (menu)
 - `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push)
 - `/cwd <path>` — create session in a directory
 - `/toolhelp` — show tool /commands
-- `/menu` — menu hint (menu is via Telegram button)
 - `/start` — show menu hint
 - `/purge <id>` — delete session from saved state
 

@@ -1670,18 +1670,6 @@ class BotApp:
         session = self.manager.create(s.tool.name, path)
         await self._send_message(context, chat_id=chat_id, text=f"Новая сессия {session.id} создана и выбрана.")
 
-    async def cmd_gitclone(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        chat_id = update.effective_chat.id
-        if not self.is_allowed(chat_id):
-            return
-        base = self.config.defaults.workdir
-        if not os.path.isdir(base):
-            await self._send_message(context, chat_id=chat_id, text="Каталог не существует.")
-            return
-        self.dirs_root[chat_id] = base
-        self.dirs_mode[chat_id] = "git_clone"
-        await self._send_dirs_menu(chat_id, context, base)
-
     async def cmd_git(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
@@ -1786,15 +1774,6 @@ class BotApp:
             reply_markup=keyboard,
         )
 
-    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        chat_id = update.effective_chat.id
-        if not self.is_allowed(chat_id):
-            return
-        await self._send_message(context, 
-            chat_id=chat_id,
-            text="Меню доступно через кнопку рядом с полем ввода.",
-        )
-
     async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
@@ -1831,11 +1810,11 @@ class BotApp:
         )
 
     def _bot_commands(self) -> list[BotCommand]:
-        specs = self._command_specs()
         commands = []
-        for name in self._ordered_commands(specs):
-            data = specs[name]
-            commands.append(BotCommand(command=name, description=str(data["desc"])))
+        for entry in self._command_registry():
+            if not entry["menu"]:
+                continue
+            commands.append(BotCommand(command=entry["name"], description=str(entry["desc"])))
         return commands
 
     async def set_bot_commands(self, app: Application) -> None:
@@ -1909,58 +1888,29 @@ class BotApp:
                 except Exception:
                     pass
 
-    def _command_specs(self) -> Dict[str, Dict[str, object]]:
-        return {
-            "tools": {"desc": "Показать доступные инструменты.", "quick": True},
-            "new": {"desc": "Создать новую сессию (через меню).", "quick": True},
-            "newpath": {"desc": "Задать путь для новой сессии после выбора инструмента.", "quick": False},
-            "sessions": {"desc": "Список активных сессий.", "quick": True},
-            "use": {"desc": "Выбрать активную сессию (через меню).", "quick": True},
-            "close": {"desc": "Закрыть сессию (через меню).", "quick": True},
-            "status": {"desc": "Показать статус активной сессии.", "quick": True},
-            "interrupt": {"desc": "Прервать текущую генерацию.", "quick": True},
-            "queue": {"desc": "Показать очередь.", "quick": True},
-            "clearqueue": {"desc": "Очистить очередь активной сессии.", "quick": True},
-            "rename": {"desc": "Переименовать сессию.", "quick": False},
-            "purge": {"desc": "Удалить сессию из состояния.", "quick": False},
-            "cwd": {"desc": "Создать новую сессию в другом каталоге.", "quick": False},
-            "dirs": {"desc": "Просмотр каталогов (меню).", "quick": True},
-            "gitclone": {"desc": "Клонировать репозиторий (git clone) в каталог.", "quick": True},
-            "git": {"desc": "Git-операции по активной сессии (inline-меню).", "quick": True},
-            "resume": {"desc": "Показать/установить resume токен.", "quick": False},
-            "state": {"desc": "Просмотр состояния (меню).", "quick": True},
-            "setprompt": {"desc": "Установить prompt_regex для инструмента.", "quick": False},
-            "toolhelp": {"desc": "Показать /команды выбранного инструмента.", "quick": True},
-            "send": {"desc": "Отправить текст напрямую в CLI.", "quick": False},
-        }
-
-    def _ordered_commands(self, specs: Dict[str, Dict[str, object]]) -> list[str]:
-        order = [
-            "tools",
-            "new",
-            "newpath",
-            "sessions",
-            "use",
-            "close",
-            "rename",
-            "status",
-            "interrupt",
-            "queue",
-            "clearqueue",
-            "send",
-            "resume",
-            "state",
-            "setprompt",
-            "dirs",
-            "gitclone",
-            "git",
-            "cwd",
-            "toolhelp",
-            "purge",
+    def _command_registry(self) -> list[Dict[str, object]]:
+        return [
+            {"name": "new", "desc": "Создать новую сессию (через меню).", "handler": self.cmd_new, "menu": True},
+            {"name": "use", "desc": "Выбрать активную сессию (через меню).", "handler": self.cmd_use, "menu": True},
+            {"name": "sessions", "desc": "Список активных сессий.", "handler": self.cmd_sessions, "menu": True},
+            {"name": "tools", "desc": "Показать доступные инструменты.", "handler": self.cmd_tools, "menu": True},
+            {"name": "newpath", "desc": "Задать путь для новой сессии после выбора инструмента.", "handler": self.cmd_newpath, "menu": False},
+            {"name": "close", "desc": "Закрыть сессию (через меню).", "handler": self.cmd_close, "menu": True},
+            {"name": "status", "desc": "Показать статус активной сессии.", "handler": self.cmd_status, "menu": True},
+            {"name": "interrupt", "desc": "Прервать текущую генерацию.", "handler": self.cmd_interrupt, "menu": True},
+            {"name": "queue", "desc": "Показать очередь.", "handler": self.cmd_queue, "menu": True},
+            {"name": "clearqueue", "desc": "Очистить очередь активной сессии.", "handler": self.cmd_clearqueue, "menu": True},
+            {"name": "rename", "desc": "Переименовать сессию.", "handler": self.cmd_rename, "menu": True},
+            {"name": "purge", "desc": "Удалить сессию из состояния.", "handler": self.cmd_purge, "menu": True},
+            {"name": "cwd", "desc": "Создать новую сессию в другом каталоге.", "handler": self.cmd_cwd, "menu": False},
+            {"name": "dirs", "desc": "Просмотр каталогов (меню).", "handler": self.cmd_dirs, "menu": True},
+            {"name": "git", "desc": "Git-операции по активной сессии (inline-меню).", "handler": self.cmd_git, "menu": True},
+            {"name": "resume", "desc": "Показать/установить resume токен.", "handler": self.cmd_resume, "menu": True},
+            {"name": "state", "desc": "Просмотр состояния (меню).", "handler": self.cmd_state, "menu": True},
+            {"name": "setprompt", "desc": "Установить prompt_regex для инструмента.", "handler": self.cmd_setprompt, "menu": False},
+            {"name": "toolhelp", "desc": "Показать /команды выбранного инструмента.", "handler": self.cmd_toolhelp, "menu": True},
+            {"name": "send", "desc": "Отправить текст напрямую в CLI.", "handler": self.cmd_send, "menu": False},
         ]
-        ordered = [c for c in order if c in specs]
-        tail = [c for c in specs.keys() if c not in ordered]
-        return ordered + sorted(tail)
 
 def build_app(config: AppConfig) -> Application:
     app = Application.builder().token(config.telegram.token).build()
@@ -1977,29 +1927,8 @@ def build_app(config: AppConfig) -> Application:
             return
         print(f"Ошибка бота: {err}")
 
-    app.add_handler(CommandHandler("tools", bot_app.cmd_tools))
-    app.add_handler(CommandHandler("new", bot_app.cmd_new))
-    app.add_handler(CommandHandler("newpath", bot_app.cmd_newpath))
-    app.add_handler(CommandHandler("sessions", bot_app.cmd_sessions))
-    app.add_handler(CommandHandler("use", bot_app.cmd_use))
-    app.add_handler(CommandHandler("close", bot_app.cmd_close))
-    app.add_handler(CommandHandler("status", bot_app.cmd_status))
-    app.add_handler(CommandHandler("interrupt", bot_app.cmd_interrupt))
-    app.add_handler(CommandHandler("queue", bot_app.cmd_queue))
-    app.add_handler(CommandHandler("clearqueue", bot_app.cmd_clearqueue))
-    app.add_handler(CommandHandler("cwd", bot_app.cmd_cwd))
-    app.add_handler(CommandHandler("rename", bot_app.cmd_rename))
-    app.add_handler(CommandHandler("setprompt", bot_app.cmd_setprompt))
-    app.add_handler(CommandHandler("dirs", bot_app.cmd_dirs))
-    app.add_handler(CommandHandler("gitclone", bot_app.cmd_gitclone))
-    app.add_handler(CommandHandler("git", bot_app.cmd_git))
-    app.add_handler(CommandHandler("resume", bot_app.cmd_resume))
-    app.add_handler(CommandHandler("state", bot_app.cmd_state))
-    app.add_handler(CommandHandler("menu", bot_app.cmd_menu))
-    app.add_handler(CommandHandler("start", bot_app.cmd_menu))
-    app.add_handler(CommandHandler("send", bot_app.cmd_send))
-    app.add_handler(CommandHandler("purge", bot_app.cmd_purge))
-    app.add_handler(CommandHandler("toolhelp", bot_app.cmd_toolhelp))
+    for entry in bot_app._command_registry():
+        app.add_handler(CommandHandler(entry["name"], entry["handler"]))
 
     app.add_handler(CallbackQueryHandler(bot_app.on_callback))
     app.add_handler(MessageHandler(filters.COMMAND, bot_app.on_unknown_command))
