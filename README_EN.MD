@@ -38,6 +38,33 @@ pip install -r requirements.txt
 python bot.py
 ```
 
+## Suggested workflow
+1) **Start and pick a tool**
+   - Open the bot menu and run `/tools` to see available CLIs.
+   - Create a session via `/new` and select the working directory.
+
+2) **Send a task**
+   - Send a normal message — it goes to the active session.
+   - If the message starts with `/`, use `/send /command` or `> /command`.
+
+3) **Control execution**
+   - If the session is busy, the bot offers: cancel, queue, or discard input.
+   - Check active status with `/status` or via `/sessions`.
+   - Queue can be inspected with `/queue` and cleared with `/clearqueue`.
+
+4) **Handle results**
+   - You receive a short announcement first (summary or preview).
+   - Full output is sent as an HTML file — open it to review details.
+   - Use `/files` to download files from the working directory.
+
+5) **Sessions and continuation**
+   - Use `/sessions` to switch, rename, or close sessions.
+   - Resume tokens are saved and can be restored automatically.
+
+6) **Extras**
+   - Git operations are available via `/git` (status, pull, diff, commit, summary, etc.).
+   - MTProto menu (`/mtproto`) sends a task to CLI and delivers the result to the chosen chat.
+
 ## Configuration
 `config.yaml` supports:
 - `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands)
