@@ -1,4 +1,5 @@
 import asyncio
+import html
 import os
 import shutil
 import tempfile
@@ -172,6 +173,9 @@ class BotApp:
             [
                 InlineKeyboardButton("Commit", callback_data="git_commit"),
                 InlineKeyboardButton("Push", callback_data="git_push"),
+            ],
+            [
+                InlineKeyboardButton("Help", callback_data="git_help"),
             ],
         ]
         return InlineKeyboardMarkup(rows)
@@ -389,6 +393,28 @@ class BotApp:
         else:
             lines.append("Конфликт: нет")
         return "\n".join(lines)
+
+    async def _send_git_help(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        path = os.path.join(os.path.dirname(__file__), "git.md")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+        except Exception as e:
+            await self._send_message(context, chat_id=chat_id, text=f"Не удалось открыть git.md: {e}")
+            return
+        if not content:
+            await self._send_message(context, chat_id=chat_id, text="git.md пустой.")
+            return
+        html_text = f"<pre>{html.escape(content)}</pre>"
+        out_path = make_html_file(html_text, "git-help")
+        try:
+            with open(out_path, "rb") as f:
+                await self._send_document(context, chat_id=chat_id, document=f)
+        finally:
+            try:
+                os.remove(out_path)
+            except Exception:
+                pass
 
     async def _git_commit_context(self, session: Session) -> Optional[str]:
         code, status_out = await self._run_git(session, ["status", "--porcelain"])
@@ -1034,6 +1060,10 @@ class BotApp:
         if query.data == "git_pull_cancel":
             await query.edit_message_text("Pull отменен.")
             self.git_pull_target.pop(chat_id, None)
+            return
+        if query.data == "git_help":
+            await query.edit_message_text("Готовлю git help…")
+            await self._send_git_help(chat_id, context)
             return
         if query.data.startswith("git_") or query.data.startswith("gitpull_") or query.data.startswith("git_conflict"):
             session = await self._ensure_git_session(chat_id, context)

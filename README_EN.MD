@@ -71,27 +71,28 @@ GitHub PAT for HTTPS git:
 - `defaults.github_token` in `config.yaml` (used for clone/fetch/pull/push without interactive prompts)
 
 ## Bot commands
-- `/tools` — list tools
+### Visible in Telegram menu
 - `/new` — create a session (inline menu)
-- `/newpath <path>` — set path after choosing a tool
-- `/sessions` — list sessions
 - `/use` — set active session (menu)
-- `/close` — close a session (menu)
-- `/rename <id> <name>` or `/rename <name>` — rename session
+- `/sessions` — list sessions
 - `/status` — active session status (busy, last activity/seconds tick)
 - `/interrupt` — interrupt generation
 - `/queue` — show queue
 - `/clearqueue` — clear queue for active session
-- `/send <text>` — send text directly to CLI
-- `/resume [token]` — show/set resume token
-- `/state [tool path]` — state by tool+path or menu
-- `/setprompt <tool> <regex>` — set prompt_regex for a tool
+- `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/help)
+- `/rename <id> <name>` or `/rename <name>` — rename session
+- `/tools` — list tools
+- `/close` — close a session (menu)
 - `/dirs` — browse directories (menu)
-- `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push)
-- `/cwd <path>` — create session in a directory
-- `/toolhelp` — show tool /commands
-- `/start` — show menu hint
 - `/purge <id>` — delete session from saved state
+- `/resume [token]` — show/set resume token
+- `/toolhelp` — show tool /commands
+- `/state [tool path]` — state by tool+path or menu
+### Available but hidden from menu
+- `/newpath <path>` — set path after choosing a tool
+- `/cwd <path>` — create session in a directory
+- `/setprompt <tool> <regex>` — set prompt_regex for a tool
+- `/send <text>` — send text directly to CLI
 
 ## State
 - `state.json` — last point (resume + summary) for tool+workdir

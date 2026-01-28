@@ -71,27 +71,28 @@ GitHub токен (PAT) для git по HTTPS:
 - `defaults.github_token` в `config.yaml` (используется для clone/fetch/pull/push, без интерактивных запросов)
 
 ## Команды бота
-- `/tools` — список инструментов
+### Видимые в меню Telegram
 - `/new` — создать сессию (inline‑меню)
-- `/newpath <path>` — задать путь после выбора инструмента
-- `/sessions` — список сессий
 - `/use` — выбрать активную сессию (menu)
-- `/close` — закрыть сессию (menu)
-- `/rename <id> <name>` или `/rename <name>` — переименовать сессию
+- `/sessions` — список сессий
 - `/status` — статус активной сессии (busy, последняя активность/тик секундомера)
 - `/interrupt` — прервать генерацию
 - `/queue` — показать очередь
 - `/clearqueue` — очистить очередь активной сессии
-- `/send <текст>` — отправить текст напрямую в CLI
-- `/resume [token]` — показать/установить resume
-- `/state [tool path]` — состояние по tool+path или меню
-- `/setprompt <tool> <regex>` — установить prompt_regex для инструмента
+- `/git` — Git‑операции по активной сессии (inline‑меню: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/help)
+- `/rename <id> <name>` или `/rename <name>` — переименовать сессию
+- `/tools` — список инструментов
+- `/close` — закрыть сессию (menu)
 - `/dirs` — просмотр каталогов (menu)
-- `/git` — Git‑операции по активной сессии (inline‑меню: статус/fetch/pull/merge/rebase/diff/log/stash/commit/push)
-- `/cwd <path>` — создать сессию в каталоге
-- `/toolhelp` — получить /команды выбранного инструмента
-- `/start` — показать подсказку по меню
 - `/purge <id>` — удалить сессию из сохранённого состояния
+- `/resume [token]` — показать/установить resume
+- `/toolhelp` — получить /команды выбранного инструмента
+- `/state [tool path]` — состояние по tool+path или меню
+### Доступны, но скрыты из меню
+- `/newpath <path>` — задать путь после выбора инструмента
+- `/cwd <path>` — создать сессию в каталоге
+- `/setprompt <tool> <regex>` — установить prompt_regex для инструмента
+- `/send <текст>` — отправить текст напрямую в CLI
 
 ## Состояния
 - `state.json` — последняя точка (resume + саммари) для tool+workdir
