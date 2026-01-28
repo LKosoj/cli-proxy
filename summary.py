@@ -80,3 +80,44 @@ def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig]
     if len(summary) > max_chars:
         return summary[:max_chars]
     return summary
+
+
+def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Optional[str]:
+    cfg = _get_openai_config(config)
+    if not cfg:
+        return None
+    api_key, model, base_url = cfg
+
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Сформулируй краткое сообщение коммита по изменениям. "
+                    "Одна строка, без кавычек, без точки в конце, до ~80 символов. "
+                    "Пиши по-русски, отражай суть изменений."
+                ),
+            },
+            {
+                "role": "user",
+                "content": text[:12000],
+            },
+        ],
+        "max_tokens": 80,
+        "temperature": 0.2,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(
+        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=20
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    message = data["choices"][0]["message"]["content"].strip()
+    if not message:
+        return None
+    return message

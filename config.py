@@ -37,6 +37,7 @@ class DefaultsConfig:
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
     openai_base_url: Optional[str] = None
+    github_token: Optional[str] = None
 
 
 @dataclasses.dataclass
@@ -86,6 +87,7 @@ def load_config(path: str) -> AppConfig:
         openai_api_key=defaults_raw.get("openai_api_key"),
         openai_model=defaults_raw.get("openai_model"),
         openai_base_url=defaults_raw.get("openai_base_url"),
+        github_token=defaults_raw.get("github_token"),
     )
 
     return AppConfig(telegram=telegram, tools=tools, defaults=defaults, path=path)
@@ -108,6 +110,7 @@ def save_config(config: AppConfig) -> None:
             "openai_api_key": config.defaults.openai_api_key,
             "openai_model": config.defaults.openai_model,
             "openai_base_url": config.defaults.openai_base_url,
+            "github_token": config.defaults.github_token,
         },
     }
 

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -18,7 +19,7 @@ from telegram.ext import (
 
 from config import AppConfig, ToolConfig, load_config
 from session import Session, SessionManager, run_tool_help
-from summary import summarize_text
+from summary import summarize_text, suggest_commit_message
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
@@ -56,6 +57,8 @@ class BotApp:
         self.git_branch_menu: Dict[int, list] = {}
         self.git_pending_ref: Dict[int, str] = {}
         self.git_pull_target: Dict[int, str] = {}
+        self.pending_git_commit: Dict[int, str] = {}
+        self._git_askpass_path: Optional[str] = None
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
@@ -77,6 +80,40 @@ class BotApp:
             if cmd and len(cmd) > 0:
                 return cmd[0]
         return None
+
+    def _ensure_git_askpass(self) -> Optional[str]:
+        token = self.config.defaults.github_token
+        if not token:
+            return None
+        if self._git_askpass_path and os.path.isfile(self._git_askpass_path):
+            return self._git_askpass_path
+        fd, path = tempfile.mkstemp(prefix="cli-proxy-git-askpass-", text=True)
+        script = (
+            "#!/bin/sh\n"
+            "prompt=\"$1\"\n"
+            "case \"$prompt\" in\n"
+            "*Username*) echo \"x-access-token\" ;;\n"
+            "*Password*) echo \"$GIT_ASKPASS_TOKEN\" ;;\n"
+            "*) echo \"$GIT_ASKPASS_TOKEN\" ;;\n"
+            "esac\n"
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(script)
+        os.chmod(path, 0o700)
+        self._git_askpass_path = path
+        return path
+
+    def _git_env(self) -> dict:
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        token = self.config.defaults.github_token
+        if token:
+            askpass = self._ensure_git_askpass()
+            if askpass:
+                env["GIT_ASKPASS"] = askpass
+                env["GIT_ASKPASS_TOKEN"] = token
+                env["GIT_USERNAME"] = "x-access-token"
+        return env
 
     def _is_tool_available(self, name: str) -> bool:
         tool = self.config.tools.get(name)
@@ -130,6 +167,10 @@ class BotApp:
             [
                 InlineKeyboardButton("Log", callback_data="git_log"),
                 InlineKeyboardButton("Stash", callback_data="git_stash"),
+            ],
+            [
+                InlineKeyboardButton("Commit", callback_data="git_commit"),
+                InlineKeyboardButton("Push", callback_data="git_push"),
             ],
         ]
         return InlineKeyboardMarkup(rows)
@@ -225,10 +266,9 @@ class BotApp:
         return True
 
     async def _run_git(self, session: Session, args: list[str]) -> tuple[int, str]:
-        env = os.environ.copy()
+        env = self._git_env()
         env["GIT_PAGER"] = "cat"
         env["PAGER"] = "cat"
-        env["GIT_TERMINAL_PROMPT"] = "0"
         proc = await asyncio.create_subprocess_exec(
             "git",
             *args,
@@ -349,6 +389,32 @@ class BotApp:
             lines.append("Конфликт: нет")
         return "\n".join(lines)
 
+    async def _git_commit_context(self, session: Session) -> Optional[str]:
+        code, status_out = await self._run_git(session, ["status", "--porcelain"])
+        if code != 0:
+            return None
+        code, stat_out = await self._run_git(session, ["diff", "--stat"])
+        if code != 0:
+            stat_out = ""
+        code, diff_out = await self._run_git(session, ["diff"])
+        if code != 0:
+            diff_out = ""
+        text = (
+            "git status --porcelain:\n"
+            f"{status_out.strip()}\n\n"
+            "git diff --stat:\n"
+            f"{stat_out.strip()}\n\n"
+            "git diff:\n"
+            f"{diff_out.strip()}"
+        )
+        return text.strip()
+
+    def _sanitize_commit_message(self, message: str, max_len: int = 100) -> str:
+        cleaned = message.splitlines()[0].strip()
+        if len(cleaned) > max_len:
+            cleaned = cleaned[:max_len].rstrip()
+        return cleaned
+
     async def _send_git_output(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, title: str, output: str) -> None:
         text = output.strip()
         if not text:
@@ -357,6 +423,34 @@ class BotApp:
         if len(text) > 4000:
             text = text[:4000]
         await self._send_message(context, chat_id=chat_id, text=f"{title}:\n{text}")
+
+    async def _execute_git_commit(
+        self,
+        session: Session,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        message: str,
+    ) -> None:
+        session.git_busy = True
+        try:
+            code, status_out = await self._run_git(session, ["status", "--porcelain"])
+            if code != 0:
+                await self._send_message(context, chat_id=chat_id, text="Не удалось получить статус репозитория.")
+                return
+            if not status_out.strip():
+                await self._send_message(context, chat_id=chat_id, text="Нет изменений для коммита.")
+                return
+            code, add_out = await self._run_git(session, ["add", "-A"])
+            if code != 0:
+                await self._send_git_output(context, chat_id, "Git add", add_out)
+                return
+            code, commit_out = await self._run_git(session, ["commit", "-m", message])
+            await self._send_git_output(context, chat_id, "Git commit", commit_out)
+            if code == 0:
+                status = await self._git_status_text(session)
+                await self._send_message(context, chat_id=chat_id, text=status)
+        finally:
+            session.git_busy = False
 
     async def _handle_git_conflict(self, session: Session, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
         files = session.git_conflict_files or await self._git_conflict_files(session)
@@ -594,6 +688,7 @@ class BotApp:
                     "clone",
                     url,
                     cwd=base,
+                    env=self._git_env(),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                 )
@@ -605,6 +700,30 @@ class BotApp:
                     await self._send_message(context, chat_id=chat_id, text=f"Ошибка git clone:\\n{output[:4000]}")
             except Exception as e:
                 await self._send_message(context, chat_id=chat_id, text=f"Ошибка запуска git clone: {e}")
+            return
+        if chat_id in self.pending_git_commit:
+            session_id = self.pending_git_commit.pop(chat_id)
+            message = text.strip()
+            if message in ("-", "отмена", "Отмена"):
+                await self._send_message(context, chat_id=chat_id, text="Коммит отменен.")
+                return
+            if not message:
+                await self._send_message(context, chat_id=chat_id, text="Сообщение коммита пустое. Операция отменена.")
+                return
+            session = self.manager.get(session_id)
+            if not session:
+                await self._send_message(context, chat_id=chat_id, text="Сессия для коммита не найдена.")
+                return
+            if not await self._ensure_git_repo(session, chat_id, context):
+                return
+            if not await self._ensure_git_not_busy(session, chat_id, context):
+                return
+            conflicts = await self._git_conflict_files(session)
+            if conflicts:
+                await self._handle_git_conflict(session, chat_id, context)
+                return
+            message = self._sanitize_commit_message(message)
+            await self._execute_git_commit(session, chat_id, context, message)
             return
         session = await self.ensure_active_session(chat_id, context)
         if not session:
@@ -858,6 +977,7 @@ class BotApp:
             await query.edit_message_text("Операция отменена.")
             self.git_pending_ref.pop(chat_id, None)
             self.git_branch_menu.pop(chat_id, None)
+            self.pending_git_commit.pop(chat_id, None)
             return
         if query.data == "git_pull_cancel":
             await query.edit_message_text("Pull отменен.")
@@ -1053,6 +1173,91 @@ class BotApp:
                 try:
                     code, output = await self._run_git(session, ["stash", "push"])
                     await self._send_git_output(context, chat_id, "Stash", output)
+                    if code == 0:
+                        status = await self._git_status_text(session)
+                        await self._send_message(context, chat_id=chat_id, text=status)
+                finally:
+                    session.git_busy = False
+                return
+            if query.data == "git_commit":
+                await query.edit_message_text("Проверяю изменения для коммита…")
+                conflicts = await self._git_conflict_files(session)
+                if conflicts:
+                    await self._handle_git_conflict(session, chat_id, context)
+                    return
+                code, output = await self._run_git(session, ["status", "--porcelain"])
+                if code != 0:
+                    await self._send_message(context, chat_id=chat_id, text="Не удалось получить статус репозитория.")
+                    return
+                if not output.strip():
+                    await self._send_message(context, chat_id=chat_id, text="Нет изменений для коммита.")
+                    return
+                await self._send_message(context, chat_id=chat_id, text="Генерирую сообщение коммита…")
+                commit_context = await self._git_commit_context(session)
+                commit_message = None
+                if commit_context:
+                    try:
+                        commit_message = await asyncio.to_thread(
+                            suggest_commit_message,
+                            commit_context,
+                            config=self.config,
+                        )
+                    except Exception:
+                        commit_message = None
+                if commit_message:
+                    commit_message = self._sanitize_commit_message(commit_message)
+                    await self._send_message(
+                        context,
+                        chat_id=chat_id,
+                        text=f"Сообщение коммита: {commit_message}",
+                    )
+                    await self._execute_git_commit(session, chat_id, context, commit_message)
+                else:
+                    self.pending_git_commit[chat_id] = session.id
+                    await self._send_message(
+                        context,
+                        chat_id=chat_id,
+                        text=(
+                            "Не удалось сгенерировать сообщение. "
+                            "Отправьте сообщение коммита одним сообщением. Для отмены отправьте '-'."
+                        ),
+                    )
+                return
+            if query.data == "git_push":
+                await query.edit_message_text("Выполняю git push…")
+                session.git_busy = True
+                try:
+                    branch = await self._git_current_branch(session)
+                    upstream = await self._git_upstream(session)
+                    if upstream:
+                        code, output = await self._run_git(session, ["push"])
+                    else:
+                        code, remotes_out = await self._run_git(session, ["remote"])
+                        if code != 0:
+                            await self._send_message(
+                                context,
+                                chat_id=chat_id,
+                                text="Не удалось получить список remotes.",
+                            )
+                            return
+                        remotes = [r.strip() for r in remotes_out.splitlines() if r.strip()]
+                        if not remotes:
+                            await self._send_message(
+                                context,
+                                chat_id=chat_id,
+                                text="Remote не найден. Настройте remote (например, origin).",
+                            )
+                            return
+                        if not branch or branch == "HEAD":
+                            await self._send_message(
+                                context,
+                                chat_id=chat_id,
+                                text="Не удалось определить текущую ветку для push.",
+                            )
+                            return
+                        remote = "origin" if "origin" in remotes else remotes[0]
+                        code, output = await self._run_git(session, ["push", "-u", remote, branch])
+                    await self._send_git_output(context, chat_id, "Push", output)
                     if code == 0:
                         status = await self._git_status_text(session)
                         await self._send_message(context, chat_id=chat_id, text=status)

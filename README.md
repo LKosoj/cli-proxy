@@ -14,7 +14,7 @@ Telegram‑бот для управления CLI‑агентами (Codex / Ge
 - Inline‑меню для выбора сессий, каталогов и команд.
 - Кнопка “Использовать этот каталог” при выборе директории.
 - Кнопка “git clone” для клонирования репозитория в выбранный каталог.
-- Inline‑меню Git‑операций (status/fetch/pull ff‑only/merge/rebase/diff/log/stash) для активной сессии.
+- Inline‑меню Git‑операций (status/fetch/pull ff‑only/merge/rebase/diff/log/stash/commit/push) для активной сессии.
 - Обработка конфликтов merge/rebase с кнопками diff/abort/continue/позвать агента.
 - Кэш help‑команд инструмента в `toolhelp.json`.
 
@@ -38,7 +38,7 @@ python bot.py
 ## Конфигурация
 `config.yaml` поддерживает:
 - `tools.*`: команды запуска, режим, prompt/resume/help (включая `resume_cmd` для отдельных команд возобновления)
-- `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки
+- `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки, `github_token` для git по HTTPS
 
 Для каждого инструмента можно задать переменные окружения:
 ```yaml
@@ -67,6 +67,9 @@ OpenAI может быть задан как через `config.yaml`, так и
 
 Переменные окружения имеют приоритет.
 
+GitHub токен (PAT) для git по HTTPS:
+- `defaults.github_token` в `config.yaml` (используется для clone/fetch/pull/push, без интерактивных запросов)
+
 ## Команды бота
 - `/tools` — список инструментов
 - `/new` — создать сессию (inline‑меню)
@@ -85,7 +88,7 @@ OpenAI может быть задан как через `config.yaml`, так и
 - `/setprompt <tool> <regex>` — установить prompt_regex для инструмента
 - `/dirs` — просмотр каталогов (menu)
 - `/gitclone` — клонировать репозиторий в выбранный каталог (menu)
-- `/git` — Git‑операции по активной сессии (inline‑меню: статус/fetch/pull/merge/rebase/diff/log/stash)
+- `/git` — Git‑операции по активной сессии (inline‑меню: статус/fetch/pull/merge/rebase/diff/log/stash/commit/push)
 - `/cwd <path>` — создать сессию в каталоге
 - `/toolhelp` — получить /команды выбранного инструмента
 - `/menu` — подсказка по меню (меню доступно через кнопку рядом с полем ввода)
