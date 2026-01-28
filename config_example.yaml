@@ -4,19 +4,16 @@ telegram:
 
 tools:
   codex:
-    mode: headless
-    cmd: ["codex", "exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
-    resume_cmd: ["codex", "exec", "resume", "{resume}", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
+    mode: interactive
+    cmd: ["codex"]
     interactive_cmd: ["codex"]
-    resume_regex: "session\\s*id\\s*:\\s*([A-Za-z0-9-]+)"
+    resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
     help_cmd: "/status"
     auto_commands: ["/approvals full"]
     env:
       OPENAI_API_KEY: null
       OPENAI_MODEL: null
       OPENAI_BASE_URL: null
-      TERM: "dumb"
-      NO_COLOR: "1"
   claude:
     mode: headless
     cmd: ["claude", "--continue", "--dangerously-skip-permissions", "-p", "{prompt}", "--resume", "{resume}"]

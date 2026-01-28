@@ -32,6 +32,10 @@ class Session:
     last_tick_ts: Optional[float] = None
     last_tick_value: Optional[str] = None
     tick_seen: int = 0
+    git_busy: bool = False
+    git_conflict: bool = False
+    git_conflict_files: list[str] = field(default_factory=list)
+    git_conflict_kind: Optional[str] = None
 
     async def run_prompt(self, prompt: str) -> str:
         if self.tool.mode == "headless":
@@ -43,10 +47,9 @@ class Session:
         return await self._run_interactive(prompt)
 
     async def _run_headless(self, prompt: str) -> str:
+        cmd_template = self.tool.headless_cmd or self.tool.cmd
         if self.resume_token and self.tool.resume_cmd:
             cmd_template = self.tool.resume_cmd
-        else:
-            cmd_template = self.tool.headless_cmd or self.tool.cmd
         cmd, use_stdin = build_command(cmd_template, prompt, self.resume_token)
         env = os.environ.copy()
         if self.tool.env:

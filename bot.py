@@ -53,6 +53,9 @@ class BotApp:
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.purge_menu: Dict[int, list] = {}
+        self.git_branch_menu: Dict[int, list] = {}
+        self.git_pending_ref: Dict[int, str] = {}
+        self.git_pull_target: Dict[int, str] = {}
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
@@ -109,6 +112,288 @@ class BotApp:
                     print("Ошибка сети при отправке файла в Telegram.")
                     return
                 await asyncio.sleep(2 * (2 ** attempt))
+
+    def _build_git_keyboard(self) -> InlineKeyboardMarkup:
+        rows = [
+            [
+                InlineKeyboardButton("Status", callback_data="git_status"),
+                InlineKeyboardButton("Fetch", callback_data="git_fetch"),
+            ],
+            [
+                InlineKeyboardButton("Pull", callback_data="git_pull"),
+                InlineKeyboardButton("Merge", callback_data="git_merge_menu"),
+            ],
+            [
+                InlineKeyboardButton("Rebase", callback_data="git_rebase_menu"),
+                InlineKeyboardButton("Diff", callback_data="git_diff"),
+            ],
+            [
+                InlineKeyboardButton("Log", callback_data="git_log"),
+                InlineKeyboardButton("Stash", callback_data="git_stash"),
+            ],
+        ]
+        return InlineKeyboardMarkup(rows)
+
+    def _build_git_branches_keyboard(self, chat_id: int, action: str) -> InlineKeyboardMarkup:
+        branches = self.git_branch_menu.get(chat_id, [])
+        rows = []
+        for i, ref in enumerate(branches):
+            rows.append(
+                [InlineKeyboardButton(self._short_label(ref), callback_data=f"git_{action}_pick:{i}")]
+            )
+        rows.append([InlineKeyboardButton("Отмена", callback_data="git_cancel")])
+        return InlineKeyboardMarkup(rows)
+
+    def _build_git_pull_keyboard(self, ref: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(f"Merge {ref}", callback_data="git_pull_merge"),
+                    InlineKeyboardButton(f"Rebase {ref}", callback_data="git_pull_rebase"),
+                ],
+                [InlineKeyboardButton("Отмена", callback_data="git_pull_cancel")],
+            ]
+        )
+
+    def _build_git_confirm_keyboard(self, action: str, ref: str) -> InlineKeyboardMarkup:
+        label = "Выполнить merge" if action == "merge" else "Выполнить rebase"
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(f"{label} {ref}", callback_data=f"git_confirm_{action}")],
+                [InlineKeyboardButton("Отмена", callback_data="git_cancel")],
+            ]
+        )
+
+    def _build_git_conflict_keyboard(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Открыть diff", callback_data="git_conflict_diff"),
+                    InlineKeyboardButton("Abort", callback_data="git_conflict_abort"),
+                ],
+                [
+                    InlineKeyboardButton("Continue", callback_data="git_conflict_continue"),
+                    InlineKeyboardButton("Позвать агента", callback_data="git_conflict_agent"),
+                ],
+            ]
+        )
+
+    def _ensure_git_state(self, session: Session) -> None:
+        if not hasattr(session, "git_busy"):
+            session.git_busy = False
+        if not hasattr(session, "git_conflict"):
+            session.git_conflict = False
+        if not hasattr(session, "git_conflict_files"):
+            session.git_conflict_files = []
+        if not hasattr(session, "git_conflict_kind"):
+            session.git_conflict_kind = None
+
+    async def _ensure_git_session(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> Optional[Session]:
+        session = self.manager.active()
+        if not session:
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text="Нет активной сессии. Используйте /use для выбора.",
+            )
+            return None
+        self._ensure_git_state(session)
+        return session
+
+    async def _ensure_git_repo(self, session: Session, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        code, output = await self._run_git(session, ["rev-parse", "--is-inside-work-tree"])
+        if code != 0 or output.strip() != "true":
+            await self._send_message(context, chat_id=chat_id, text="Каталог не является git-репозиторием.")
+            return False
+        return True
+
+    async def _ensure_git_not_busy(self, session: Session, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        if session.busy or session.is_active_by_tick():
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text="CLI-сессия занята. Дождитесь завершения и попробуйте снова.",
+            )
+            return False
+        if session.git_busy:
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text="Git-операция уже выполняется. Подождите.",
+            )
+            return False
+        return True
+
+    async def _run_git(self, session: Session, args: list[str]) -> tuple[int, str]:
+        env = os.environ.copy()
+        env["GIT_PAGER"] = "cat"
+        env["PAGER"] = "cat"
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            *args,
+            cwd=session.workdir,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        output = (out or b"").decode(errors="ignore")
+        return proc.returncode, output
+
+    async def _git_current_branch(self, session: Session) -> Optional[str]:
+        code, output = await self._run_git(session, ["rev-parse", "--abbrev-ref", "HEAD"])
+        if code != 0:
+            return None
+        return output.strip() or None
+
+    async def _git_upstream(self, session: Session) -> Optional[str]:
+        code, output = await self._run_git(
+            session, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]
+        )
+        if code != 0:
+            return None
+        return output.strip() or None
+
+    async def _git_ref_exists(self, session: Session, ref: str) -> bool:
+        code, _ = await self._run_git(session, ["rev-parse", "--verify", "--quiet", ref])
+        return code == 0
+
+    async def _git_default_remote(self, session: Session) -> Optional[str]:
+        code, output = await self._run_git(session, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+        if code == 0 and output.strip():
+            return output.strip()
+        for ref in ("origin/main", "origin/master"):
+            if await self._git_ref_exists(session, ref):
+                return ref
+        return None
+
+    async def _git_ahead_behind(self, session: Session, ref: str) -> Optional[tuple[int, int]]:
+        code, output = await self._run_git(session, ["rev-list", "--left-right", "--count", f"HEAD...{ref}"])
+        if code != 0:
+            return None
+        parts = output.strip().split()
+        if len(parts) != 2:
+            return None
+        try:
+            ahead = int(parts[0])
+            behind = int(parts[1])
+        except Exception:
+            return None
+        return ahead, behind
+
+    async def _git_in_progress(self, session: Session) -> Optional[str]:
+        code, _ = await self._run_git(session, ["rev-parse", "-q", "--verify", "MERGE_HEAD"])
+        if code == 0:
+            return "merge"
+        for key in ("rebase-merge", "rebase-apply"):
+            code, output = await self._run_git(session, ["rev-parse", "--git-path", key])
+            if code == 0 and output.strip():
+                path = output.strip()
+                if not os.path.isabs(path):
+                    path = os.path.join(session.workdir, path)
+                if os.path.exists(path):
+                    return "rebase"
+        return None
+
+    def _git_set_conflict(self, session: Session, files: list[str], kind: Optional[str]) -> None:
+        session.git_conflict = True
+        session.git_conflict_files = files
+        session.git_conflict_kind = kind
+
+    def _git_clear_conflict(self, session: Session) -> None:
+        session.git_conflict = False
+        session.git_conflict_files = []
+        session.git_conflict_kind = None
+
+    async def _git_conflict_files(self, session: Session) -> list[str]:
+        code, output = await self._run_git(session, ["diff", "--name-only", "--diff-filter=U"])
+        if code != 0:
+            self._git_clear_conflict(session)
+            return []
+        files = [line.strip() for line in output.splitlines() if line.strip()]
+        if files:
+            kind = await self._git_in_progress(session)
+            self._git_set_conflict(session, files, kind)
+        else:
+            self._git_clear_conflict(session)
+        return files
+
+    async def _git_status_text(self, session: Session) -> str:
+        branch = await self._git_current_branch(session) or "неизвестно"
+        code, output = await self._run_git(session, ["status", "--porcelain"])
+        dirty = bool(output.strip()) if code == 0 else False
+        upstream = await self._git_upstream(session)
+        if not upstream and branch and branch != "HEAD":
+            candidate = f"origin/{branch}"
+            if await self._git_ref_exists(session, candidate):
+                upstream = candidate
+        if not upstream:
+            upstream = await self._git_default_remote(session)
+        ahead_behind = await self._git_ahead_behind(session, upstream) if upstream else None
+        conflicts = await self._git_conflict_files(session)
+        lines = [
+            f"Ветка: {branch}",
+            f"Состояние: {'dirty' if dirty else 'clean'}",
+        ]
+        if upstream and ahead_behind:
+            ahead, behind = ahead_behind
+            lines.append(f"Upstream: {upstream} | ahead {ahead} / behind {behind}")
+        elif upstream:
+            lines.append(f"Upstream: {upstream} | ahead/behind: недоступно")
+        else:
+            lines.append("Upstream: нет")
+        if conflicts:
+            lines.append(f"Конфликт: да ({len(conflicts)} файлов)")
+        else:
+            lines.append("Конфликт: нет")
+        return "\n".join(lines)
+
+    async def _send_git_output(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, title: str, output: str) -> None:
+        text = output.strip()
+        if not text:
+            await self._send_message(context, chat_id=chat_id, text=f"{title}: готово.")
+            return
+        if len(text) > 4000:
+            text = text[:4000]
+        await self._send_message(context, chat_id=chat_id, text=f"{title}:\n{text}")
+
+    async def _handle_git_conflict(self, session: Session, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        files = session.git_conflict_files or await self._git_conflict_files(session)
+        short_list = files[:10]
+        listing = "\n".join(f"- {f}" for f in short_list) if short_list else "- (список пуст)"
+        if len(files) > len(short_list):
+            listing += f"\n…и еще {len(files) - len(short_list)}"
+        await self._send_message(
+            context,
+            chat_id=chat_id,
+            text=f"Обнаружены конфликты:\n{listing}",
+            reply_markup=self._build_git_conflict_keyboard(),
+        )
+
+    async def _execute_merge_rebase(
+        self,
+        session: Session,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        action: str,
+        ref: str,
+    ) -> None:
+        session.git_busy = True
+        try:
+            if action == "merge":
+                code, output = await self._run_git(session, ["merge", ref])
+            else:
+                code, output = await self._run_git(session, ["rebase", ref])
+            await self._send_git_output(context, chat_id, f"{action.title()} {ref}", output)
+            conflicts = await self._git_conflict_files(session)
+            if conflicts:
+                await self._handle_git_conflict(session, chat_id, context)
+                return
+            if code == 0:
+                self._git_clear_conflict(session)
+        finally:
+            session.git_busy = False
 
     def _build_state_keyboard(self, chat_id: int) -> InlineKeyboardMarkup:
         keys = self.state_menu.get(chat_id, [])
@@ -569,6 +854,263 @@ class BotApp:
             except Exception as e:
                 await query.edit_message_text(f"Ошибка получения help: {e}")
             return
+        if query.data == "git_cancel":
+            await query.edit_message_text("Операция отменена.")
+            self.git_pending_ref.pop(chat_id, None)
+            self.git_branch_menu.pop(chat_id, None)
+            return
+        if query.data == "git_pull_cancel":
+            await query.edit_message_text("Pull отменен.")
+            self.git_pull_target.pop(chat_id, None)
+            return
+        if query.data.startswith("git_") or query.data.startswith("gitpull_") or query.data.startswith("git_conflict"):
+            session = await self._ensure_git_session(chat_id, context)
+            if not session:
+                return
+            if not await self._ensure_git_repo(session, chat_id, context):
+                return
+            if query.data not in ("git_conflict_agent",) and not await self._ensure_git_not_busy(session, chat_id, context):
+                return
+            if query.data == "git_status":
+                await query.edit_message_text("Получаю git status…")
+                text = await self._git_status_text(session)
+                await self._send_message(context, chat_id=chat_id, text=text)
+                return
+            if query.data == "git_fetch":
+                await query.edit_message_text("Выполняю git fetch…")
+                session.git_busy = True
+                try:
+                    code, output = await self._run_git(session, ["fetch", "--prune"])
+                    await self._send_git_output(context, chat_id, "Fetch", output)
+                    if code == 0:
+                        status = await self._git_status_text(session)
+                        await self._send_message(context, chat_id=chat_id, text=status)
+                finally:
+                    session.git_busy = False
+                return
+            if query.data == "git_pull":
+                await query.edit_message_text("Проверяю возможность fast-forward…")
+                session.git_busy = True
+                try:
+                    await self._run_git(session, ["fetch", "--prune"])
+                    branch = await self._git_current_branch(session)
+                    upstream = await self._git_upstream(session)
+                    if not upstream and branch and branch != "HEAD":
+                        candidate = f"origin/{branch}"
+                        if await self._git_ref_exists(session, candidate):
+                            upstream = candidate
+                    if not upstream:
+                        upstream = await self._git_default_remote(session)
+                    if not upstream:
+                        await self._send_message(
+                            context,
+                            chat_id=chat_id,
+                            text="Upstream не найден. Настройте upstream или выберите ветку через Merge/Rebase.",
+                        )
+                        return
+                    ahead_behind = await self._git_ahead_behind(session, upstream)
+                    if not ahead_behind:
+                        await self._send_message(
+                            context,
+                            chat_id=chat_id,
+                            text="Не удалось определить ahead/behind. Проверьте состояние репозитория.",
+                        )
+                        return
+                    ahead, behind = ahead_behind
+                    if behind == 0 and ahead == 0:
+                        await self._send_message(context, chat_id=chat_id, text="Ветка уже актуальна.")
+                        return
+                    if behind == 0 and ahead > 0:
+                        await self._send_message(
+                            context,
+                            chat_id=chat_id,
+                            text=f"Локальная ветка опережает {upstream} на {ahead}.",
+                        )
+                        return
+                    if ahead == 0 and behind > 0:
+                        code, output = await self._run_git(session, ["pull", "--ff-only"])
+                        if code == 0:
+                            await self._send_git_output(context, chat_id, "Pull --ff-only", output)
+                            status = await self._git_status_text(session)
+                            await self._send_message(context, chat_id=chat_id, text=status)
+                            return
+                    self.git_pull_target[chat_id] = upstream
+                    text = f"Fast-forward невозможен. Ahead {ahead} / Behind {behind} относительно {upstream}."
+                    await self._send_message(
+                        context,
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=self._build_git_pull_keyboard(upstream),
+                    )
+                    return
+                finally:
+                    session.git_busy = False
+            if query.data == "git_pull_merge":
+                ref = self.git_pull_target.get(chat_id)
+                if not ref:
+                    await query.edit_message_text("Не выбран upstream для merge.")
+                    return
+                await query.edit_message_text(f"Запускаю merge {ref}…")
+                await self._execute_merge_rebase(session, chat_id, context, "merge", ref)
+                return
+            if query.data == "git_pull_rebase":
+                ref = self.git_pull_target.get(chat_id)
+                if not ref:
+                    await query.edit_message_text("Не выбран upstream для rebase.")
+                    return
+                await query.edit_message_text(f"Запускаю rebase на {ref}…")
+                await self._execute_merge_rebase(session, chat_id, context, "rebase", ref)
+                return
+            if query.data == "git_merge_menu":
+                await query.edit_message_text("Список веток для merge…")
+                code, output = await self._run_git(session, ["branch", "-r"])
+                if code != 0:
+                    await self._send_message(context, chat_id=chat_id, text="Не удалось получить список веток.")
+                    return
+                branches = [b.strip() for b in output.splitlines() if b.strip() and "->" not in b]
+                if not branches:
+                    await self._send_message(context, chat_id=chat_id, text="Удаленных веток не найдено.")
+                    return
+                self.git_branch_menu[chat_id] = branches
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text="Выберите ветку для merge:",
+                    reply_markup=self._build_git_branches_keyboard(chat_id, "merge"),
+                )
+                return
+            if query.data == "git_rebase_menu":
+                await query.edit_message_text("Список веток для rebase…")
+                code, output = await self._run_git(session, ["branch", "-r"])
+                if code != 0:
+                    await self._send_message(context, chat_id=chat_id, text="Не удалось получить список веток.")
+                    return
+                branches = [b.strip() for b in output.splitlines() if b.strip() and "->" not in b]
+                if not branches:
+                    await self._send_message(context, chat_id=chat_id, text="Удаленных веток не найдено.")
+                    return
+                self.git_branch_menu[chat_id] = branches
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text="Выберите ветку для rebase:",
+                    reply_markup=self._build_git_branches_keyboard(chat_id, "rebase"),
+                )
+                return
+            if query.data.startswith("git_merge_pick:") or query.data.startswith("git_rebase_pick:"):
+                action = "merge" if query.data.startswith("git_merge_pick:") else "rebase"
+                idx = int(query.data.split(":", 1)[1])
+                branches = self.git_branch_menu.get(chat_id, [])
+                if idx < 0 or idx >= len(branches):
+                    await query.edit_message_text("Выбор недоступен.")
+                    return
+                ref = branches[idx]
+                ahead_behind = await self._git_ahead_behind(session, ref)
+                if ahead_behind:
+                    ahead, behind = ahead_behind
+                    info = f"Ahead {ahead} / Behind {behind} относительно {ref}."
+                else:
+                    info = f"Не удалось определить ahead/behind относительно {ref}."
+                self.git_pending_ref[chat_id] = ref
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text=info,
+                    reply_markup=self._build_git_confirm_keyboard(action, ref),
+                )
+                return
+            if query.data == "git_confirm_merge" or query.data == "git_confirm_rebase":
+                action = "merge" if query.data == "git_confirm_merge" else "rebase"
+                ref = self.git_pending_ref.get(chat_id)
+                if not ref:
+                    await query.edit_message_text("Не выбрана ветка.")
+                    return
+                await query.edit_message_text(f"Запускаю {action} {ref}…")
+                await self._execute_merge_rebase(session, chat_id, context, action, ref)
+                self.git_pending_ref.pop(chat_id, None)
+                return
+            if query.data == "git_diff":
+                await query.edit_message_text("Показываю git diff…")
+                code, output = await self._run_git(session, ["--no-pager", "diff", "--stat"])
+                if code != 0:
+                    await self._send_message(context, chat_id=chat_id, text="Не удалось получить diff.")
+                    return
+                await self._send_git_output(context, chat_id, "Diff", output)
+                return
+            if query.data == "git_log":
+                await query.edit_message_text("Показываю git log…")
+                code, output = await self._run_git(
+                    session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "20"]
+                )
+                if code != 0:
+                    await self._send_message(context, chat_id=chat_id, text="Не удалось получить log.")
+                    return
+                await self._send_git_output(context, chat_id, "Log", output)
+                return
+            if query.data == "git_stash":
+                await query.edit_message_text("Выполняю git stash…")
+                session.git_busy = True
+                try:
+                    code, output = await self._run_git(session, ["stash", "push"])
+                    await self._send_git_output(context, chat_id, "Stash", output)
+                    if code == 0:
+                        status = await self._git_status_text(session)
+                        await self._send_message(context, chat_id=chat_id, text=status)
+                finally:
+                    session.git_busy = False
+                return
+            if query.data == "git_conflict_diff":
+                await query.edit_message_text("Показываю diff конфликтов…")
+                code, output = await self._run_git(session, ["--no-pager", "diff"])
+                if code != 0:
+                    await self._send_message(context, chat_id=chat_id, text="Не удалось получить diff.")
+                    return
+                await self._send_git_output(context, chat_id, "Diff", output)
+                return
+            if query.data == "git_conflict_abort":
+                await query.edit_message_text("Пробую выполнить abort…")
+                mode = await self._git_in_progress(session)
+                if mode == "rebase":
+                    code, output = await self._run_git(session, ["rebase", "--abort"])
+                elif mode == "merge":
+                    code, output = await self._run_git(session, ["merge", "--abort"])
+                else:
+                    await self._send_message(context, chat_id=chat_id, text="Нет активного merge/rebase.")
+                    return
+                await self._send_git_output(context, chat_id, "Abort", output)
+                await self._git_conflict_files(session)
+                if not session.git_conflict:
+                    self._git_clear_conflict(session)
+                return
+            if query.data == "git_conflict_continue":
+                await query.edit_message_text("Пробую выполнить continue…")
+                mode = await self._git_in_progress(session)
+                if mode == "rebase":
+                    code, output = await self._run_git(session, ["rebase", "--continue"])
+                elif mode == "merge":
+                    code, output = await self._run_git(session, ["merge", "--continue"])
+                else:
+                    await self._send_message(context, chat_id=chat_id, text="Нет активного merge/rebase.")
+                    return
+                await self._send_git_output(context, chat_id, "Continue", output)
+                conflicts = await self._git_conflict_files(session)
+                if conflicts:
+                    await self._handle_git_conflict(session, chat_id, context)
+                return
+            if query.data == "git_conflict_agent":
+                files = session.git_conflict_files or await self._git_conflict_files(session)
+                files_text = ", ".join(files[:10]) if files else "нет файлов"
+                note = (
+                    "Нужна помощь с git-конфликтами. "
+                    f"Список файлов: {files_text}. "
+                    "Пожалуйста, предложи шаги для разрешения конфликтов и команды git."
+                )
+                await self._handle_cli_input(session, note, chat_id, context)
+                if session.busy or session.is_active_by_tick():
+                    await query.edit_message_text("Сессия занята. Выберите действие для очереди.")
+                else:
+                    await query.edit_message_text("Инструкция отправлена агенту.")
+                return
         pending = self.pending.pop(chat_id, None)
         if not pending:
             await query.edit_message_text("Нет ожидающего ввода.")
@@ -883,6 +1425,22 @@ class BotApp:
         self.dirs_mode[chat_id] = "git_clone"
         await self._send_dirs_menu(chat_id, context, base)
 
+    async def cmd_git(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        session = await self._ensure_git_session(chat_id, context)
+        if not session:
+            return
+        if not await self._ensure_git_repo(session, chat_id, context):
+            return
+        await self._send_message(
+            context,
+            chat_id=chat_id,
+            text="Git-операции:",
+            reply_markup=self._build_git_keyboard(),
+        )
+
     async def cmd_setprompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
@@ -1111,6 +1669,7 @@ class BotApp:
             "cwd": {"desc": "Создать новую сессию в другом каталоге.", "quick": False},
             "dirs": {"desc": "Просмотр каталогов (меню).", "quick": True},
             "gitclone": {"desc": "Клонировать репозиторий (git clone) в каталог.", "quick": True},
+            "git": {"desc": "Git-операции по активной сессии (inline-меню).", "quick": True},
             "resume": {"desc": "Показать/установить resume токен.", "quick": False},
             "state": {"desc": "Просмотр состояния (меню).", "quick": True},
             "setprompt": {"desc": "Установить prompt_regex для инструмента.", "quick": False},
@@ -1137,6 +1696,7 @@ class BotApp:
             "setprompt",
             "dirs",
             "gitclone",
+            "git",
             "cwd",
             "toolhelp",
             "purge",
@@ -1175,6 +1735,7 @@ def build_app(config: AppConfig) -> Application:
     app.add_handler(CommandHandler("setprompt", bot_app.cmd_setprompt))
     app.add_handler(CommandHandler("dirs", bot_app.cmd_dirs))
     app.add_handler(CommandHandler("gitclone", bot_app.cmd_gitclone))
+    app.add_handler(CommandHandler("git", bot_app.cmd_git))
     app.add_handler(CommandHandler("resume", bot_app.cmd_resume))
     app.add_handler(CommandHandler("state", bot_app.cmd_state))
     app.add_handler(CommandHandler("menu", bot_app.cmd_menu))
