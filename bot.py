@@ -55,11 +55,12 @@ class BotApp:
         self.pending_git_clone: Dict[int, str] = {}
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
-        self.purge_menu: Dict[int, list] = {}
         self.git_branch_menu: Dict[int, list] = {}
         self.git_pending_ref: Dict[int, str] = {}
         self.git_pull_target: Dict[int, str] = {}
         self.pending_git_commit: Dict[int, str] = {}
+        self.pending_session_rename: Dict[int, str] = {}
+        self.pending_session_resume: Dict[int, str] = {}
         self._git_askpass_path: Optional[str] = None
 
     def is_allowed(self, chat_id: int) -> bool:
@@ -692,6 +693,53 @@ class BotApp:
         if not self.is_allowed(chat_id):
             return
         text = update.message.text
+        if chat_id in self.pending_session_rename:
+            session_id = self.pending_session_rename.pop(chat_id)
+            session = self.manager.get(session_id)
+            name = text.strip()
+            if name in ("-", "отмена", "Отмена"):
+                await self._send_message(context, chat_id=chat_id, text="Переименование отменено.")
+                return
+            if not name:
+                await self._send_message(context, chat_id=chat_id, text="Имя сессии пустое.")
+                return
+            if not session:
+                await self._send_message(context, chat_id=chat_id, text="Сессия не найдена.")
+                return
+            session.name = name
+            update_state(
+                self.config.defaults.state_path,
+                session.tool.name,
+                session.workdir,
+                session.resume_token,
+                None,
+                name=session.name,
+            )
+            self.manager._persist_sessions()
+            await self._send_message(context, chat_id=chat_id, text="Имя сессии обновлено.")
+            return
+        if chat_id in self.pending_session_resume:
+            session_id = self.pending_session_resume.pop(chat_id)
+            session = self.manager.get(session_id)
+            token = text.strip()
+            if token in ("-", "отмена", "Отмена"):
+                await self._send_message(context, chat_id=chat_id, text="Изменение resume отменено.")
+                return
+            if not session:
+                await self._send_message(context, chat_id=chat_id, text="Сессия не найдена.")
+                return
+            session.resume_token = token
+            update_state(
+                self.config.defaults.state_path,
+                session.tool.name,
+                session.workdir,
+                session.resume_token,
+                None,
+                name=session.name,
+            )
+            self.manager._persist_sessions()
+            await self._send_message(context, chat_id=chat_id, text="Resume обновлен.")
+            return
         if chat_id in self.pending_dir_create:
             base = self.pending_dir_create.pop(chat_id)
             name = text.strip()
@@ -996,19 +1044,6 @@ class BotApp:
             session = self.manager.create(tool, base)
             await query.edit_message_text(f"Сессия {session.id} создана и выбрана.")
             return
-        if query.data.startswith("purge_pick:"):
-            idx = int(query.data.split(":", 1)[1])
-            items = self.purge_menu.get(chat_id, [])
-            if idx < 0 or idx >= len(items):
-                await query.edit_message_text("Выбор недоступен.")
-                return
-            sid = items[idx]
-            ok = self.manager.purge(sid)
-            if ok:
-                await query.edit_message_text("Сессия удалена из состояния.")
-            else:
-                await query.edit_message_text("Сессия не найдена.")
-            return
         if query.data == "restore_yes":
             active = load_active_state(self.config.defaults.state_path)
             if not active:
@@ -1064,6 +1099,150 @@ class BotApp:
         if query.data == "git_help":
             await query.edit_message_text("Готовлю git help…")
             await self._send_git_help(chat_id, context)
+            return
+        if query.data.startswith("sess_pick:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            label = session.name or f"{session.tool.name} @ {session.workdir}"
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Use", callback_data=f"sess_use:{session_id}"),
+                        InlineKeyboardButton("Status", callback_data=f"sess_status:{session_id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("Rename", callback_data=f"sess_rename:{session_id}"),
+                        InlineKeyboardButton("Resume", callback_data=f"sess_resume:{session_id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("Queue", callback_data=f"sess_queue:{session_id}"),
+                        InlineKeyboardButton("Clear queue", callback_data=f"sess_clearqueue:{session_id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("State", callback_data=f"sess_state:{session_id}"),
+                        InlineKeyboardButton("Close session", callback_data=f"sess_close:{session_id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("Закрыть меню", callback_data="sess_close_menu"),
+                    ],
+                ]
+            )
+            await query.edit_message_text(
+                f"Сессия {session.id}: {label}",
+                reply_markup=keyboard,
+            )
+            return
+        if query.data.startswith("sess_use:"):
+            session_id = query.data.split(":", 1)[1]
+            ok = self.manager.set_active(session_id)
+            if ok:
+                session = self.manager.get(session_id)
+                label = session.name or f"{session.tool.name} @ {session.workdir}"
+                await query.edit_message_text(f"Активная сессия: {session.id} | {label}")
+            else:
+                await query.edit_message_text("Сессия не найдена.")
+            return
+        if query.data.startswith("sess_status:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            now = time.time()
+            busy_txt = "занята" if session.busy else "свободна"
+            run_for = f"{int(now - session.started_at)}с" if session.started_at else "нет"
+            last_out = f"{int(now - session.last_output_ts)}с назад" if session.last_output_ts else "нет"
+            tick_txt = f"{int(now - session.last_tick_ts)}с назад" if session.last_tick_ts else "нет"
+            text = (
+                f"Сессия: {session.id} ({session.name or session.tool.name}) @ {session.workdir}\n"
+                f"Статус: {busy_txt} | В работе: {run_for}\n"
+                f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {session.tick_seen}\n"
+                f"Очередь: {len(session.queue)} | Resume: {'есть' if session.resume_token else 'нет'}"
+            )
+            await self._send_message(context, chat_id=chat_id, text=text)
+            await query.answer()
+            return
+        if query.data.startswith("sess_rename:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            self.pending_session_rename[chat_id] = session_id
+            await query.edit_message_text(
+                f"Введите новое имя для {session.id} (или '-' для отмены)."
+            )
+            return
+        if query.data.startswith("sess_resume:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            current = session.resume_token or "нет"
+            self.pending_session_resume[chat_id] = session_id
+            await query.edit_message_text(
+                f"Текущий resume: {current}\nВведите новый resume (или '-' для отмены)."
+            )
+            return
+        if query.data.startswith("sess_state:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            st = get_state(self.config.defaults.state_path, session.tool.name, session.workdir)
+            if not st:
+                await self._send_message(context, chat_id=chat_id, text="Состояние не найдено.")
+                await query.answer()
+                return
+            text = (
+                f"Инструмент: {st.tool}\n"
+                f"Каталог: {st.workdir}\n"
+                f"Resume: {st.resume_token or 'нет'}\n"
+                f"Summary: {st.summary or 'нет'}\n"
+                f"Updated: {self._format_ts(st.updated_at)}"
+            )
+            await self._send_message(context, chat_id=chat_id, text=text)
+            await query.answer()
+            return
+        if query.data.startswith("sess_queue:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            if not session.queue:
+                await query.edit_message_text("Очередь пуста.")
+                return
+            await query.edit_message_text(f"В очереди {len(session.queue)} сообщений.")
+            return
+        if query.data.startswith("sess_clearqueue:"):
+            session_id = query.data.split(":", 1)[1]
+            session = self.manager.get(session_id)
+            if not session:
+                await query.edit_message_text("Сессия не найдена.")
+                return
+            if not session.queue:
+                await query.edit_message_text("Очередь пуста.")
+                return
+            session.queue.clear()
+            self.manager._persist_sessions()
+            await query.edit_message_text("Очередь очищена.")
+            return
+        if query.data.startswith("sess_close:"):
+            session_id = query.data.split(":", 1)[1]
+            ok = self.manager.close(session_id)
+            if ok:
+                await query.edit_message_text("Сессия закрыта и удалена из состояния.")
+            else:
+                await query.edit_message_text("Сессия не найдена.")
+            return
+        if query.data == "sess_close_menu":
+            await query.edit_message_text("Меню закрыто.")
             return
         if query.data.startswith("git_") or query.data.startswith("gitpull_") or query.data.startswith("git_conflict"):
             session = await self._ensure_git_session(chat_id, context)
@@ -1516,12 +1695,19 @@ class BotApp:
         if not self.manager.sessions:
             await self._send_message(context, chat_id=chat_id, text="Активных сессий нет.")
             return
-        lines = []
+        rows = []
         for sid, s in self.manager.sessions.items():
-            active = "*" if sid == self.manager.active_session_id else " "
+            active = "★" if sid == self.manager.active_session_id else " "
             label = s.name or f"{s.tool.name} @ {s.workdir}"
-            lines.append(f"{active} {sid}: {label}")
-        await self._send_message(context, chat_id=chat_id, text="\n".join(lines))
+            text = self._short_label(f"{active} {sid}: {label}", max_len=60)
+            rows.append([InlineKeyboardButton(text, callback_data=f"sess_pick:{sid}")])
+        keyboard = InlineKeyboardMarkup(rows)
+        await self._send_message(
+            context,
+            chat_id=chat_id,
+            text="Выберите сессию:",
+            reply_markup=keyboard,
+        )
 
     async def cmd_use(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1817,28 +2003,6 @@ class BotApp:
         text = " ".join(context.args)
         await self._handle_cli_input(session, text, chat_id, context)
 
-    async def cmd_purge(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        chat_id = update.effective_chat.id
-        if not self.is_allowed(chat_id):
-            return
-        items = list(self.manager.sessions.keys())
-        if not items:
-            await self._send_message(context, chat_id=chat_id, text="Сессий нет.")
-            return
-        self.purge_menu[chat_id] = items
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton(sid, callback_data=f"purge_pick:{i}")]
-                for i, sid in enumerate(items)
-            ]
-        )
-        await self._send_message(
-            context,
-            chat_id=chat_id,
-            text="Выберите сессию для удаления:",
-            reply_markup=keyboard,
-        )
-
     def _bot_commands(self) -> list[BotCommand]:
         commands = []
         for entry in self._command_registry():
@@ -1903,11 +2067,19 @@ class BotApp:
             await self._send_message(context, chat_id=chat_id, text="help пустой.")
             return
         plain = strip_ansi(content)
+        suffix = (
+            "Чтобы отправить /команду в CLI, используйте /send /команда "
+            "или префикс '> /команда' в обычном сообщении."
+        )
+        if suffix not in plain:
+            plain = f"{plain}\n\n{suffix}"
         preview = plain[:4000]
         if preview:
             await self._send_message(context, chat_id=chat_id, text=preview)
         if has_ansi(content):
             html_text = ansi_to_html(content)
+            if suffix not in strip_ansi(content):
+                html_text = f"{html_text}<br><br>{html.escape(suffix)}"
             path = make_html_file(html_text, "toolhelp")
             try:
                 with open(path, "rb") as f:
@@ -1921,22 +2093,21 @@ class BotApp:
     def _command_registry(self) -> list[Dict[str, object]]:
         return [
             {"name": "new", "desc": "Создать новую сессию (через меню).", "handler": self.cmd_new, "menu": True},
-            {"name": "use", "desc": "Выбрать активную сессию (через меню).", "handler": self.cmd_use, "menu": True},
-            {"name": "sessions", "desc": "Список активных сессий.", "handler": self.cmd_sessions, "menu": True},
+            {"name": "use", "desc": "Выбрать активную сессию (через меню).", "handler": self.cmd_use, "menu": False},
+            {"name": "sessions", "desc": "Меню управления сессиями.", "handler": self.cmd_sessions, "menu": True},
             {"name": "tools", "desc": "Показать доступные инструменты.", "handler": self.cmd_tools, "menu": True},
             {"name": "newpath", "desc": "Задать путь для новой сессии после выбора инструмента.", "handler": self.cmd_newpath, "menu": False},
-            {"name": "close", "desc": "Закрыть сессию (через меню).", "handler": self.cmd_close, "menu": True},
-            {"name": "status", "desc": "Показать статус активной сессии.", "handler": self.cmd_status, "menu": True},
+            {"name": "close", "desc": "Закрыть сессию (через меню).", "handler": self.cmd_close, "menu": False},
+            {"name": "status", "desc": "Показать статус активной сессии.", "handler": self.cmd_status, "menu": False},
             {"name": "interrupt", "desc": "Прервать текущую генерацию.", "handler": self.cmd_interrupt, "menu": True},
-            {"name": "queue", "desc": "Показать очередь.", "handler": self.cmd_queue, "menu": True},
-            {"name": "clearqueue", "desc": "Очистить очередь активной сессии.", "handler": self.cmd_clearqueue, "menu": True},
-            {"name": "rename", "desc": "Переименовать сессию.", "handler": self.cmd_rename, "menu": True},
-            {"name": "purge", "desc": "Удалить сессию из состояния.", "handler": self.cmd_purge, "menu": True},
+            {"name": "queue", "desc": "Показать очередь.", "handler": self.cmd_queue, "menu": False},
+            {"name": "clearqueue", "desc": "Очистить очередь активной сессии.", "handler": self.cmd_clearqueue, "menu": False},
+            {"name": "rename", "desc": "Переименовать сессию.", "handler": self.cmd_rename, "menu": False},
             {"name": "cwd", "desc": "Создать новую сессию в другом каталоге.", "handler": self.cmd_cwd, "menu": False},
-            {"name": "dirs", "desc": "Просмотр каталогов (меню).", "handler": self.cmd_dirs, "menu": True},
+            {"name": "dirs", "desc": "Просмотр каталогов (меню).", "handler": self.cmd_dirs, "menu": False},
             {"name": "git", "desc": "Git-операции по активной сессии (inline-меню).", "handler": self.cmd_git, "menu": True},
-            {"name": "resume", "desc": "Показать/установить resume токен.", "handler": self.cmd_resume, "menu": True},
-            {"name": "state", "desc": "Просмотр состояния (меню).", "handler": self.cmd_state, "menu": True},
+            {"name": "resume", "desc": "Показать/установить resume токен.", "handler": self.cmd_resume, "menu": False},
+            {"name": "state", "desc": "Просмотр состояния (меню).", "handler": self.cmd_state, "menu": False},
             {"name": "setprompt", "desc": "Установить prompt_regex для инструмента.", "handler": self.cmd_setprompt, "menu": False},
             {"name": "toolhelp", "desc": "Показать /команды выбранного инструмента.", "handler": self.cmd_toolhelp, "menu": True},
             {"name": "send", "desc": "Отправить текст напрямую в CLI.", "handler": self.cmd_send, "menu": False},

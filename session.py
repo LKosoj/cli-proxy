@@ -9,7 +9,7 @@ from typing import Any, Callable, Deque, Dict, Optional, Tuple
 import pexpect
 
 from config import AppConfig, ToolConfig, save_config
-from state import get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
+from state import delete_state, get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
 from utils import build_command, detect_prompt_regex, detect_resume_regex, extract_tick_tokens, resolve_env_value, strip_ansi
 
 
@@ -277,15 +277,10 @@ class SessionManager:
             except Exception:
                 pass
         self._persist_sessions()
-        return True
-
-    def purge(self, session_id: str) -> bool:
-        removed = False
-        if session_id in self.sessions:
-            self.close(session_id)
-            removed = True
-        else:
-            removed = True
+        try:
+            delete_state(self.config.defaults.state_path, session.tool.name, session.workdir)
+        except Exception:
+            pass
         try:
             sessions = load_sessions(self.config.defaults.state_path)
             if session_id in sessions:
@@ -293,7 +288,7 @@ class SessionManager:
                 save_sessions(self.config.defaults.state_path, sessions)
         except Exception:
             pass
-        return removed
+        return True
 
     def _persist_sessions(self) -> None:
         try:

@@ -68,6 +68,13 @@ def save_state(path: str, data: Dict[str, SessionState]) -> None:
         }
     _save_raw(path, raw)
 
+def delete_state(path: str, tool: str, workdir: str) -> None:
+    raw = _load_raw(path)
+    key = make_key(tool, workdir)
+    if key in raw:
+        del raw[key]
+        _save_raw(path, raw)
+
 
 def make_key(tool: str, workdir: str) -> str:
     return f"{tool}::{workdir}"

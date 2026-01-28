@@ -73,26 +73,25 @@ GitHub PAT for HTTPS git:
 ## Bot commands
 ### Visible in Telegram menu
 - `/new` — create a session (inline menu)
-- `/use` — set active session (menu)
-- `/sessions` — list sessions
-- `/status` — active session status (busy, last activity/seconds tick)
+- `/sessions` — session management menu (use/status/rename/close/resume/state/queue/clearqueue)
 - `/interrupt` — interrupt generation
-- `/queue` — show queue
-- `/clearqueue` — clear queue for active session
 - `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/help)
-- `/rename <id> <name>` or `/rename <name>` — rename session
 - `/tools` — list tools
-- `/close` — close a session (menu)
-- `/dirs` — browse directories (menu)
-- `/purge <id>` — delete session from saved state
-- `/resume [token]` — show/set resume token
 - `/toolhelp` — show tool /commands
-- `/state [tool path]` — state by tool+path or menu
 ### Available but hidden from menu
+- `/dirs` — browse directories (menu)
 - `/newpath <path>` — set path after choosing a tool
+- `/use` — set active session (menu)
 - `/cwd <path>` — create session in a directory
 - `/setprompt <tool> <regex>` — set prompt_regex for a tool
 - `/send <text>` — send text directly to CLI
+- `/resume [token]` — show/set resume token
+- `/close` — close a session and remove it from saved state (menu)
+- `/status` — active session status (busy, last activity/seconds tick)
+- `/rename <id> <name>` or `/rename <name>` — rename session
+- `/state [tool path]` — state by tool+path or menu
+- `/clearqueue` — clear queue for active session
+- `/queue` — show queue
 
 ## State
 - `state.json` — last point (resume + summary) for tool+workdir
