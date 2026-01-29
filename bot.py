@@ -418,8 +418,16 @@ class BotApp:
         if not session:
             return
 
-        if text.startswith(">"):
-            forwarded = text[1:].lstrip()
+        stripped = text.lstrip()
+        if stripped.startswith(">"):
+            forwarded = stripped[1:].lstrip()
+            if not forwarded.startswith("/"):
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text="После '>' должна идти /команда.",
+                )
+                return
             await self._handle_cli_input(session, forwarded, chat_id, context)
             return
         await self._buffer_or_send(session, text, chat_id, context)
