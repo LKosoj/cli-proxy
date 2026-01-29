@@ -39,7 +39,11 @@ class Session:
     git_conflict_files: list[str] = field(default_factory=list)
     git_conflict_kind: Optional[str] = None
 
-    async def run_prompt(self, prompt: str) -> str:
+    async def run_prompt(self, prompt: str, image_path: Optional[str] = None) -> str:
+        if image_path:
+            if not self.tool.image_cmd:
+                raise RuntimeError(f"{self.tool.name} не поддерживает изображения")
+            return await self._run_headless(prompt, cmd_template=self.tool.image_cmd, image_path=image_path)
         if self.tool.mode == "headless":
             try:
                 return await self._run_headless(prompt)
@@ -48,11 +52,17 @@ class Session:
                 return await self._run_interactive(prompt)
         return await self._run_interactive(prompt)
 
-    async def _run_headless(self, prompt: str) -> str:
-        cmd_template = self.tool.headless_cmd or self.tool.cmd
-        if self.resume_token and self.tool.resume_cmd:
-            cmd_template = self.tool.resume_cmd
-        cmd, use_stdin = build_command(cmd_template, prompt, self.resume_token)
+    async def _run_headless(
+        self,
+        prompt: str,
+        cmd_template: Optional[List[str]] = None,
+        image_path: Optional[str] = None,
+    ) -> str:
+        if cmd_template is None:
+            cmd_template = self.tool.headless_cmd or self.tool.cmd
+            if self.resume_token and self.tool.resume_cmd:
+                cmd_template = self.tool.resume_cmd
+        cmd, use_stdin = build_command(cmd_template, prompt, self.resume_token, image=image_path)
         env = os.environ.copy()
         if self.tool.env:
             for k, v in self.tool.env.items():

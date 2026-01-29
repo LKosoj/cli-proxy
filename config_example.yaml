@@ -8,6 +8,7 @@ tools:
     cmd: ["codex"]
     interactive_cmd: ["codex"]
     resume_cmd: ["codex", "exec", "resume", "{resume}", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
+    image_cmd: ["codex", "--image", "{image}", "-p", "{prompt}"]
     resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
     help_cmd: "/status"
     auto_commands: ["/approvals full"]
@@ -51,6 +52,8 @@ defaults:
   log_path: "bot.log"
   mtproto_output_dir: ".mtproto"
   mtproto_cleanup_days: 5
+  image_temp_dir: ".attachments"
+  image_max_mb: 10
 
 mtproto:
   enabled: false

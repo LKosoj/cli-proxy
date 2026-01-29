@@ -43,7 +43,12 @@ def ansi_to_html(text: str) -> str:
     )
 
 
-def build_command(cmd_template: List[str], prompt: str, resume: Optional[str] = None) -> Tuple[List[str], bool]:
+def build_command(
+    cmd_template: List[str],
+    prompt: str,
+    resume: Optional[str] = None,
+    image: Optional[str] = None,
+) -> Tuple[List[str], bool]:
     replaced = False
     cmd: List[str] = []
     skip_next = False
@@ -59,6 +64,14 @@ def build_command(cmd_template: List[str], prompt: str, resume: Optional[str] = 
                 skip_next = part == "{resume}"
                 continue
             cmd.append(part.replace("{resume}", resume))
+            continue
+        if "{image}" in part:
+            if image is None:
+                if part == "{image}":
+                    continue
+                cmd.append(part.replace("{image}", ""))
+                continue
+            cmd.append(part.replace("{image}", image))
             continue
         if part == "--resume" and resume is None:
             skip_next = True

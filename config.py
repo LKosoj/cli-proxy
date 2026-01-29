@@ -18,6 +18,7 @@ class ToolConfig:
     cmd: List[str]
     headless_cmd: Optional[List[str]] = None
     resume_cmd: Optional[List[str]] = None
+    image_cmd: Optional[List[str]] = None
     interactive_cmd: Optional[List[str]] = None
     prompt_regex: Optional[str] = None
     resume_regex: Optional[str] = None
@@ -41,6 +42,8 @@ class DefaultsConfig:
     log_path: str = "bot.log"
     mtproto_output_dir: str = ".mtproto"
     mtproto_cleanup_days: int = 5
+    image_temp_dir: str = ".attachments"
+    image_max_mb: int = 10
 
 
 @dataclasses.dataclass
@@ -106,6 +109,7 @@ def load_config(path: str) -> AppConfig:
             cmd=list(t.get("cmd", [])),
             headless_cmd=t.get("headless_cmd"),
             resume_cmd=t.get("resume_cmd"),
+            image_cmd=t.get("image_cmd"),
             interactive_cmd=t.get("interactive_cmd"),
             prompt_regex=t.get("prompt_regex"),
             resume_regex=t.get("resume_regex"),
@@ -128,6 +132,8 @@ def load_config(path: str) -> AppConfig:
         log_path=str(defaults_raw.get("log_path", "bot.log")),
         mtproto_output_dir=str(defaults_raw.get("mtproto_output_dir", ".mtproto")),
         mtproto_cleanup_days=int(defaults_raw.get("mtproto_cleanup_days", 5)),
+        image_temp_dir=str(defaults_raw.get("image_temp_dir", ".attachments")),
+        image_max_mb=int(defaults_raw.get("image_max_mb", 10)),
     )
 
     targets: List[MTProtoTarget] = []
@@ -198,6 +204,8 @@ def save_config(config: AppConfig) -> None:
             "log_path": config.defaults.log_path,
             "mtproto_output_dir": config.defaults.mtproto_output_dir,
             "mtproto_cleanup_days": config.defaults.mtproto_cleanup_days,
+            "image_temp_dir": config.defaults.image_temp_dir,
+            "image_max_mb": config.defaults.image_max_mb,
         },
         "mtproto": {
             "enabled": config.mtproto.enabled,
@@ -224,6 +232,7 @@ def save_config(config: AppConfig) -> None:
             "cmd": tool.cmd,
             "headless_cmd": tool.headless_cmd,
             "resume_cmd": tool.resume_cmd,
+            "image_cmd": tool.image_cmd,
             "interactive_cmd": tool.interactive_cmd,
             "prompt_regex": tool.prompt_regex,
             "resume_regex": tool.resume_regex,

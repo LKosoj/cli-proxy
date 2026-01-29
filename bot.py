@@ -41,6 +41,7 @@ class PendingInput:
     session_id: str
     text: str
     dest: dict
+    image_path: Optional[str] = None
 
 
 class BotApp:
@@ -66,6 +67,8 @@ class BotApp:
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.files_menu: Dict[int, list] = {}
+        self.message_buffer: Dict[int, list[str]] = {}
+        self.buffer_tasks: Dict[int, asyncio.Task] = {}
         self.session_ui = SessionUI(
             self.config,
             self.manager,
@@ -242,8 +245,9 @@ class BotApp:
             session.last_tick_ts = None
             session.last_tick_value = None
             session.tick_seen = 0
+            image_path = dest.get("image_path")
             try:
-                output = await session.run_prompt(prompt)
+                output = await session.run_prompt(prompt, image_path=image_path)
                 if dest.get("kind") == "mtproto" and dest.get("file_path"):
                     await self._send_mtproto_result(session, dest, output, context, error=None)
                 else:
@@ -258,6 +262,11 @@ class BotApp:
                         await self._send_message(context, chat_id=chat_id, text=f"Ошибка выполнения: {e}")
             finally:
                 session.busy = False
+                if image_path and dest.get("cleanup_image"):
+                    try:
+                        os.remove(image_path)
+                    except Exception:
+                        pass
                 if session.queue:
                     next_item = session.queue.popleft()
                     if isinstance(next_item, str):
@@ -266,6 +275,10 @@ class BotApp:
                     else:
                         next_prompt = next_item.get("text", "")
                         next_dest = next_item.get("dest") or {"kind": "telegram"}
+                        image_path = next_item.get("image_path")
+                        if image_path:
+                            next_dest["image_path"] = image_path
+                            next_dest["cleanup_image"] = True
                         if next_dest.get("kind") == "telegram" and next_dest.get("chat_id") is None:
                             next_dest["chat_id"] = dest.get("chat_id")
                     try:
@@ -409,7 +422,7 @@ class BotApp:
             forwarded = text[1:].lstrip()
             await self._handle_cli_input(session, forwarded, chat_id, context)
             return
-        await self._handle_cli_input(session, text, chat_id, context)
+        await self._buffer_or_send(session, text, chat_id, context)
 
     async def on_unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -417,6 +430,134 @@ class BotApp:
             return
         self.metrics.inc("commands")
         await self._send_message(context, chat_id=chat_id, text="Команда не найдена. Откройте меню бота.")
+
+    async def on_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        self.metrics.inc("messages")
+        doc = update.message.document
+        if not doc:
+            return
+        filename = doc.file_name or ""
+        lower = filename.lower()
+        session = await self.ensure_active_session(chat_id, context)
+        if not session:
+            return
+        try:
+            file_obj = await context.bot.get_file(doc.file_id)
+            data = await file_obj.download_as_bytearray()
+        except Exception as e:
+            await self._send_message(context, chat_id=chat_id, text=f"Не удалось скачать файл: {e}")
+            return
+        if lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg") or (doc.mime_type or "").startswith("image/"):
+            if doc.file_size and doc.file_size > self.config.defaults.image_max_mb * 1024 * 1024:
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text=f"Изображение слишком большое. Лимит {self.config.defaults.image_max_mb} МБ.",
+                )
+                return
+            await self._flush_buffer(chat_id, session, context)
+            caption = (update.message.caption or "").strip()
+            await self._handle_image_bytes(session, data, filename or "image.jpg", caption, chat_id, context)
+            return
+        if not (lower.endswith(".txt") or lower.endswith(".md") or lower.endswith(".rst") or lower.endswith(".log")):
+            await self._send_message(context, chat_id=chat_id, text="Поддерживаются только .txt, .md, .rst и .log.")
+            return
+        if doc.file_size and doc.file_size > 300 * 1024:
+            await self._send_message(context, chat_id=chat_id, text="Файл слишком большой. Лимит 300 КБ.")
+            return
+        await self._flush_buffer(chat_id, session, context)
+        content = data.decode("utf-8", errors="replace")
+        caption = (update.message.caption or "").strip()
+        parts = []
+        if caption:
+            parts.append(caption)
+        parts.append(f"===== Вложение: {filename} =====")
+        parts.append(content)
+        payload = "\n\n".join(parts)
+        await self._handle_cli_input(session, payload, chat_id, context)
+
+    async def on_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        self.metrics.inc("messages")
+        photos = update.message.photo or []
+        if not photos:
+            return
+        session = await self.ensure_active_session(chat_id, context)
+        if not session:
+            return
+        await self._flush_buffer(chat_id, session, context)
+        photo = photos[-1]
+        if photo.file_size and photo.file_size > self.config.defaults.image_max_mb * 1024 * 1024:
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text=f"Изображение слишком большое. Лимит {self.config.defaults.image_max_mb} МБ.",
+            )
+            return
+        try:
+            file_obj = await context.bot.get_file(photo.file_id)
+            data = await file_obj.download_as_bytearray()
+        except Exception as e:
+            await self._send_message(context, chat_id=chat_id, text=f"Не удалось скачать изображение: {e}")
+            return
+        caption = (update.message.caption or "").strip()
+        filename = f"{photo.file_unique_id}.jpg"
+        await self._handle_image_bytes(session, data, filename, caption, chat_id, context)
+
+    async def _handle_image_bytes(
+        self,
+        session: Session,
+        data: bytearray,
+        filename: str,
+        caption: str,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        if not session.tool.image_cmd:
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text=f"CLI {session.tool.name} текущей сессии не поддерживает работу с изображениями.",
+            )
+            return
+        safe_name = os.path.basename(filename) or "image.jpg"
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        base_dir = self.config.defaults.image_temp_dir
+        if os.path.isabs(base_dir):
+            img_dir = base_dir
+        else:
+            img_dir = os.path.join(session.workdir, base_dir)
+        os.makedirs(img_dir, exist_ok=True)
+        self._cleanup_image_dir(img_dir)
+        out_name = f"{stamp}_{safe_name}"
+        image_path = os.path.join(img_dir, out_name)
+        try:
+            with open(image_path, "wb") as f:
+                f.write(data)
+        except Exception as e:
+            await self._send_message(context, chat_id=chat_id, text=f"Не удалось сохранить изображение: {e}")
+            return
+        prompt = caption.strip()
+        await self._handle_cli_input(session, prompt, chat_id, context, image_path=image_path)
+
+    def _cleanup_image_dir(self, img_dir: str) -> None:
+        cutoff = time.time() - 24 * 60 * 60
+        try:
+            for entry in os.scandir(img_dir):
+                if not entry.is_file():
+                    continue
+                try:
+                    if entry.stat().st_mtime < cutoff:
+                        os.remove(entry.path)
+                except Exception:
+                    continue
+        except Exception:
+            return
 
     async def _dispatch_mtproto_task(self, chat_id: int, payload: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
         session = await self.ensure_active_session(chat_id, context)
@@ -445,11 +586,15 @@ class BotApp:
         chat_id: int,
         context: ContextTypes.DEFAULT_TYPE,
         dest: Optional[dict] = None,
+        image_path: Optional[str] = None,
     ) -> None:
         if dest is None:
             dest = {"kind": "telegram", "chat_id": chat_id}
+        if image_path:
+            dest["image_path"] = image_path
+            dest["cleanup_image"] = True
         if session.busy or session.is_active_by_tick() or session.run_lock.locked():
-            self.pending[chat_id] = PendingInput(session.id, text, dest)
+            self.pending[chat_id] = PendingInput(session.id, text, dest, image_path=image_path)
             self.metrics.inc("queued")
             keyboard = InlineKeyboardMarkup(
                 [
@@ -467,6 +612,55 @@ class BotApp:
             )
             return
         asyncio.create_task(self.run_prompt(session, text, dest, context))
+
+    async def _buffer_or_send(
+        self,
+        session: Session,
+        text: str,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        if len(text) < 3000:
+            if self.message_buffer.get(chat_id):
+                self.message_buffer[chat_id].append(text)
+                await self._flush_buffer(chat_id, session, context)
+            else:
+                await self._handle_cli_input(session, text, chat_id, context)
+            return
+        self.message_buffer.setdefault(chat_id, []).append(text)
+        await self._schedule_flush(chat_id, session, context)
+
+    async def _schedule_flush(
+        self, chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        task = self.buffer_tasks.get(chat_id)
+        if task and not task.done():
+            task.cancel()
+        self.buffer_tasks[chat_id] = asyncio.create_task(
+            self._flush_after_delay(chat_id, session, context)
+        )
+
+    async def _flush_after_delay(
+        self, chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        try:
+            await asyncio.sleep(2)
+            await self._flush_buffer(chat_id, session, context)
+        except asyncio.CancelledError:
+            return
+
+    async def _flush_buffer(
+        self, chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        parts = self.message_buffer.get(chat_id, [])
+        if not parts:
+            return
+        self.message_buffer[chat_id] = []
+        task = self.buffer_tasks.pop(chat_id, None)
+        if task and not task.done():
+            task.cancel()
+        payload = "\n\n".join(parts)
+        await self._handle_cli_input(session, payload, chat_id, context)
 
     def _mtproto_output_path(self, workdir: str) -> str:
         base = self.config.defaults.mtproto_output_dir
@@ -839,14 +1033,27 @@ class BotApp:
 
         if query.data == "cancel_current":
             session.interrupt()
+            if pending.image_path:
+                try:
+                    os.remove(pending.image_path)
+                except Exception:
+                    pass
             await query.edit_message_text("Текущая генерация прервана. Ввод отброшен.")
             return
         if query.data == "queue_input":
-            session.queue.append({"text": pending.text, "dest": pending.dest})
+            item = {"text": pending.text, "dest": pending.dest}
+            if pending.image_path:
+                item["image_path"] = pending.image_path
+            session.queue.append(item)
             self.manager._persist_sessions()
             await query.edit_message_text("Ввод поставлен в очередь.")
             return
         if query.data == "discard_input":
+            if pending.image_path:
+                try:
+                    os.remove(pending.image_path)
+                except Exception:
+                    pass
             await query.edit_message_text("Ввод отменен.")
             return
 
@@ -1480,6 +1687,8 @@ def build_app(config: AppConfig) -> Application:
 
     app.add_handler(CallbackQueryHandler(bot_app.on_callback))
     app.add_handler(MessageHandler(filters.COMMAND, bot_app.on_unknown_command))
+    app.add_handler(MessageHandler(filters.PHOTO, bot_app.on_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, bot_app.on_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_app.on_message))
     app.post_init = _post_init
     app.add_error_handler(_on_error)

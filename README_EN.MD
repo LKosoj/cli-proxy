@@ -46,6 +46,8 @@ python bot.py
 2) **Send a task**
    - Send a normal message — it goes to the active session.
    - If the message starts with `/`, use `/send /command` or `> /command`.
+   - Long messages are buffered for 2 seconds; short ones (<3000) are sent immediately.
+   - `.txt`, `.md`, `.rst`, `.log` attachments (up to 300 KB) are sent immediately and merged with the caption.
 
 3) **Control execution**
    - If the session is busy, the bot offers: cancel, queue, or discard input.
@@ -67,11 +69,13 @@ python bot.py
 
 ## Configuration
 `config.yaml` supports:
-- `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands)
+- `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands) and `image_cmd` for image handling
 - `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings, `github_token` for HTTPS git
 - `defaults.log_path`: bot log file path
 - `defaults.mtproto_output_dir`: directory for MTProto result md files (relative to workdir or absolute). Files are timestamped.
 - `defaults.mtproto_cleanup_days`: delete md files older than N days (default 5).
+- `defaults.image_temp_dir`: temp image directory (relative to workdir or absolute).
+- `defaults.image_max_mb`: max size for a single image (default 10 MB).
 - `mtproto.*`: MTProto enablement, `api_id/api_hash`, `session_string` or `session_path`, `targets` list for the send menu
 - `mcp.*`: TCP bridge for external clients (host/port/token)
 - `presets`: task templates list (name + prompt)
@@ -112,6 +116,12 @@ MTProto:
 - `mtproto.session_string` (recommended) or `mtproto.session_path` for authorization.
 - `mtproto.targets` — target list (title + peer) shown in the menu.
 Flow: message from MTProto menu → executed in active CLI session → CLI writes md file (timestamped) → bot sends its content to the chosen chat (max 12000 chars), status always goes to the bot.
+
+## Attachments
+- Text files: `.txt`, `.md`, `.rst`, `.log` (up to 300 KB). Bot combines caption + file contents and sends to CLI.
+- Images: `.png`, `.jpg`, `.jpeg` (photo/document). Requires `image_cmd` for the selected CLI.
+  If current tool lacks `image_cmd`, bot reports that images are unsupported.
+  Caption is used as the prompt text.
 
 ## Bot commands
 ### Visible in Telegram menu
