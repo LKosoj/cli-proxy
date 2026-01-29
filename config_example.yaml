@@ -4,11 +4,11 @@ telegram:
 
 tools:
   codex:
-    mode: interactive
+    mode: headless
     cmd: ["codex"]
     interactive_cmd: ["codex"]
     resume_cmd: ["codex", "exec", "resume", "{resume}", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
-    image_cmd: ["codex", "--image", "{image}", "-p", "{prompt}"]
+    image_cmd: ["--image", "{image}"]
     resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
     help_cmd: "/status"
     auto_commands: ["/approvals full"]

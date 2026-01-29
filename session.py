@@ -43,7 +43,10 @@ class Session:
         if image_path:
             if not self.tool.image_cmd:
                 raise RuntimeError(f"{self.tool.name} не поддерживает изображения")
-            return await self._run_headless(prompt, cmd_template=self.tool.image_cmd, image_path=image_path)
+            cmd_template = self.tool.resume_cmd or self.tool.headless_cmd or self.tool.cmd
+            if self.tool.image_cmd:
+                cmd_template = cmd_template + self.tool.image_cmd
+            return await self._run_headless(prompt, cmd_template=cmd_template, image_path=image_path)
         if self.tool.mode == "headless":
             try:
                 return await self._run_headless(prompt)
