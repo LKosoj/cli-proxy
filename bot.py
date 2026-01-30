@@ -67,6 +67,10 @@ class BotApp:
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.files_menu: Dict[int, list] = {}
+        self.files_dir: Dict[int, str] = {}
+        self.files_page: Dict[int, int] = {}
+        self.files_entries: Dict[int, list] = {}
+        self.files_pending_delete: Dict[int, str] = {}
         self.message_buffer: Dict[int, list[str]] = {}
         self.buffer_tasks: Dict[int, asyncio.Task] = {}
         self.session_ui = SessionUI(
@@ -984,11 +988,12 @@ class BotApp:
             return
         if query.data.startswith("file_pick:"):
             idx = int(query.data.split(":", 1)[1])
-            items = self.files_menu.get(chat_id, [])
+            items = self.files_entries.get(chat_id, [])
             if idx < 0 or idx >= len(items):
                 await query.edit_message_text("Файл не найден.")
                 return
-            path = items[idx]
+            item = items[idx]
+            path = item.get("path") if isinstance(item, dict) else item
             session = self.manager.active()
             if not session:
                 await query.edit_message_text("Активной сессии нет.")
@@ -1006,6 +1011,145 @@ class BotApp:
             await query.edit_message_text(f"Отправляю файл: {os.path.basename(path)}")
             with open(path, "rb") as f:
                 await self._send_document(context, chat_id=chat_id, document=f)
+            return
+        if query.data.startswith("file_nav:"):
+            action = query.data.split(":", 1)[1]
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            if action == "cancel":
+                await query.edit_message_text("Операция отменена.")
+                return
+            if action.startswith("open:"):
+                idx = int(action.split(":", 1)[1])
+                entries = self.files_entries.get(chat_id, [])
+                if idx < 0 or idx >= len(entries):
+                    await query.edit_message_text("Папка не найдена.")
+                    return
+                entry = entries[idx]
+                path = entry.get("path") if isinstance(entry, dict) else None
+                if not path or not os.path.isdir(path):
+                    await query.edit_message_text("Папка не найдена.")
+                    return
+                if not is_within_root(path, session.workdir):
+                    await query.edit_message_text("Нельзя выйти за пределы рабочей директории.")
+                    return
+                self.files_dir[chat_id] = path
+                self.files_page[chat_id] = 0
+                await self._send_files_menu(chat_id, session, context, edit_message=query)
+                return
+            if action == "up":
+                current = self.files_dir.get(chat_id, session.workdir)
+                root = session.workdir
+                if os.path.abspath(current) == os.path.abspath(root):
+                    await query.edit_message_text("Уже в корне рабочей директории.")
+                    return
+                parent = os.path.dirname(current)
+                if not is_within_root(parent, root):
+                    await query.edit_message_text("Нельзя выйти за пределы рабочей директории.")
+                    return
+                self.files_dir[chat_id] = parent
+                self.files_page[chat_id] = 0
+                await self._send_files_menu(chat_id, session, context, edit_message=query)
+                return
+            if action == "prev":
+                page = max(0, self.files_page.get(chat_id, 0) - 1)
+                self.files_page[chat_id] = page
+                await self._send_files_menu(chat_id, session, context, edit_message=query)
+                return
+            if action == "next":
+                page = self.files_page.get(chat_id, 0) + 1
+                self.files_page[chat_id] = page
+                await self._send_files_menu(chat_id, session, context, edit_message=query)
+                return
+        if query.data.startswith("file_del:"):
+            idx = int(query.data.split(":", 1)[1])
+            entries = self.files_entries.get(chat_id, [])
+            if idx < 0 or idx >= len(entries):
+                await query.edit_message_text("Элемент не найден.")
+                return
+            entry = entries[idx]
+            path = entry.get("path") if isinstance(entry, dict) else None
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            if not path or not is_within_root(path, session.workdir):
+                await query.edit_message_text("Нельзя выйти за пределы рабочей директории.")
+                return
+            name = os.path.basename(path)
+            self.files_pending_delete[chat_id] = path
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Да", callback_data="file_del_confirm"),
+                        InlineKeyboardButton("Отмена", callback_data="file_del_cancel"),
+                    ]
+                ]
+            )
+            await query.edit_message_text(f"Удалить {name}? Подтвердите:", reply_markup=keyboard)
+            return
+        if query.data == "file_del_current":
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            current = self.files_dir.get(chat_id, session.workdir)
+            root = session.workdir
+            if os.path.abspath(current) == os.path.abspath(root):
+                await query.edit_message_text("Нельзя удалить корневую рабочую директорию.")
+                return
+            if not is_within_root(current, root):
+                await query.edit_message_text("Нельзя выйти за пределы рабочей директории.")
+                return
+            self.files_pending_delete[chat_id] = current
+            name = os.path.basename(current)
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Да", callback_data="file_del_confirm"),
+                        InlineKeyboardButton("Отмена", callback_data="file_del_cancel"),
+                    ]
+                ]
+            )
+            await query.edit_message_text(f"Удалить папку {name} рекурсивно? Подтвердите:", reply_markup=keyboard)
+            return
+        if query.data == "file_del_confirm":
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            path = self.files_pending_delete.pop(chat_id, None)
+            if not path:
+                await query.edit_message_text("Нет операции удаления.")
+                return
+            if not is_within_root(path, session.workdir):
+                await query.edit_message_text("Нельзя выйти за пределы рабочей директории.")
+                return
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+                await query.edit_message_text("Удалено.")
+            except Exception as e:
+                await query.edit_message_text(f"Ошибка удаления: {e}")
+            current = self.files_dir.get(chat_id, session.workdir)
+            if not os.path.isdir(current) or not is_within_root(current, session.workdir):
+                current = session.workdir
+                self.files_dir[chat_id] = current
+                self.files_page[chat_id] = 0
+            await self._send_files_menu(chat_id, session, context, edit_message=None)
+            return
+        if query.data == "file_del_cancel":
+            self.files_pending_delete.pop(chat_id, None)
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            await query.edit_message_text("Удаление отменено.")
+            await self._send_files_menu(chat_id, session, context, edit_message=None)
             return
         if query.data.startswith("preset_run:"):
             code = query.data.split(":", 1)[1]
@@ -1531,31 +1675,82 @@ class BotApp:
         if not os.path.isdir(base):
             await self._send_message(context, chat_id=chat_id, text="Рабочий каталог недоступен.")
             return
-        entries = []
-        for name in os.listdir(base):
-            path = os.path.join(base, name)
-            if os.path.isfile(path):
+        self.files_dir[chat_id] = base
+        self.files_page[chat_id] = 0
+        await self._send_files_menu(chat_id, session, context, edit_message=None)
+
+    def _list_dir_entries(self, base: str) -> list[dict]:
+        entries: list[dict] = []
+        try:
+            for name in os.listdir(base):
+                path = os.path.join(base, name)
                 try:
-                    entries.append((os.path.getmtime(path), path))
+                    is_dir = os.path.isdir(path)
                 except Exception:
                     continue
-        entries.sort(reverse=True)
-        items = [p for _, p in entries][:20]
-        if not items:
-            await self._send_message(context, chat_id=chat_id, text="Файлы не найдены.")
-            return
-        self.files_menu[chat_id] = items
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton(self._short_label(os.path.basename(p), 60), callback_data=f"file_pick:{i}")]
-                for i, p in enumerate(items)
-            ]
-        )
-        await self._send_message(context, 
-            chat_id=chat_id,
-            text="Выберите файл для отправки:",
-            reply_markup=keyboard,
-        )
+                entries.append({"name": name, "path": path, "is_dir": is_dir})
+        except Exception:
+            return []
+        entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+        return entries
+
+    async def _send_files_menu(
+        self,
+        chat_id: int,
+        session: Session,
+        context: ContextTypes.DEFAULT_TYPE,
+        edit_message: Optional[object],
+    ) -> None:
+        base = self.files_dir.get(chat_id, session.workdir)
+        if not os.path.isdir(base):
+            base = session.workdir
+            self.files_dir[chat_id] = base
+            self.files_page[chat_id] = 0
+        entries = self._list_dir_entries(base)
+        self.files_entries[chat_id] = entries
+        page = max(0, self.files_page.get(chat_id, 0))
+        page_size = 20
+        start = page * page_size
+        end = start + page_size
+        page_entries = entries[start:end]
+        total_pages = max(1, (len(entries) + page_size - 1) // page_size)
+        if page >= total_pages:
+            page = max(0, total_pages - 1)
+            self.files_page[chat_id] = page
+            start = page * page_size
+            end = start + page_size
+            page_entries = entries[start:end]
+        rows = []
+        for idx, entry in enumerate(page_entries, start=start):
+            if entry["is_dir"]:
+                open_cb = f"file_nav:open:{idx}"
+                label = f"📁 {entry['name']}"
+            else:
+                open_cb = f"file_pick:{idx}"
+                label = f"📄 {entry['name']}"
+            rows.append(
+                [
+                    InlineKeyboardButton(self._short_label(label, 60), callback_data=open_cb),
+                    InlineKeyboardButton("🗑", callback_data=f"file_del:{idx}"),
+                ]
+            )
+        nav_row = []
+        nav_row.append(InlineKeyboardButton("⬅️ вверх", callback_data="file_nav:up"))
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("◀️", callback_data="file_nav:prev"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton("▶️", callback_data="file_nav:next"))
+        if nav_row:
+            rows.append(nav_row)
+        if os.path.abspath(base) != os.path.abspath(session.workdir):
+            rows.append([InlineKeyboardButton("🗑 Удалить эту папку", callback_data="file_del_current")])
+        rows.append([InlineKeyboardButton("Отмена", callback_data="file_nav:cancel")])
+        text = f"Каталог: {base}\nСтраница {page + 1}/{total_pages}"
+        keyboard = InlineKeyboardMarkup(rows)
+        if edit_message:
+            await edit_message.edit_message_text(text, reply_markup=keyboard)
+        else:
+            await self._send_message(context, chat_id=chat_id, text=text, reply_markup=keyboard)
 
     def _preset_commands(self) -> Dict[str, str]:
         if self.config.presets:
