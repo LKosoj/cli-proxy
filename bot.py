@@ -632,12 +632,8 @@ class BotApp:
         chat_id: int,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
-        if len(text) < 3000:
-            if self.message_buffer.get(chat_id):
-                self.message_buffer[chat_id].append(text)
-                await self._flush_buffer(chat_id, session, context)
-            else:
-                await self._handle_cli_input(session, text, chat_id, context)
+        if len(text) < 3000 and not self.message_buffer.get(chat_id):
+            await self._handle_cli_input(session, text, chat_id, context)
             return
         self.message_buffer.setdefault(chat_id, []).append(text)
         await self._schedule_flush(chat_id, session, context)
