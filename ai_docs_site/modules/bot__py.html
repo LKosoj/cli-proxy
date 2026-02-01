@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>bot.py - cli-proxy</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">cli-proxy</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../testing.html" class="nav-link">Тестирование</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../configs/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="../configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
+</li>
+                                    
+<li>
+    <a href="../configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="bot__py.html" class="dropdown-item active" aria-current="page">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="command_registry__py.html" class="dropdown-item">command_registry.py</a>
+</li>
+                                    
+<li>
+    <a href="config__py.html" class="dropdown-item">config.py</a>
+</li>
+                                    
+<li>
+    <a href="dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="git_ops__py.html" class="dropdown-item">git_ops.py</a>
+</li>
+                                    
+<li>
+    <a href="mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+</li>
+                                    
+<li>
+    <a href="metrics__py.html" class="dropdown-item">metrics.py</a>
+</li>
+                                    
+<li>
+    <a href="mtproto_ui__py.html" class="dropdown-item">mtproto_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="session__py.html" class="dropdown-item">session.py</a>
+</li>
+                                    
+<li>
+    <a href="session_ui__py.html" class="dropdown-item">session_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="state__py.html" class="dropdown-item">state.py</a>
+</li>
+                                    
+<li>
+    <a href="summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+</li>
+                                    
+<li>
+    <a href="utils__py.html" class="dropdown-item">utils.py</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="index.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="command_registry__py.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#bot" class="nav-link">bot</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="bot">bot</h1>
+<p>BotApp — основной класс приложения Telegram-бота для управления сессиями выполнения инструментов, взаимодействия с Git, MTProto, отображения состояний и файлов.<br />
+Модуль координирует работу компонентов: сессий, интерфейсов, метрик, конфигурации и внешних систем (MCP, Git).<br />
+Обрабатывает команды, входящие сообщения, колбэки и поддерживает буферизацию вывода для эффективной отправки в Telegram.</p>
+<p>Ключевые структуры данных<br />
+PendingInput — хранит временные данные о входящем вводе от пользователя (сессия, текст, назначение, путь к изображению)</p>
+<hr />
+<p>BotApp.<strong>init</strong>(config: AppConfig)<br />
+Инициализирует экземпляр бота с заданной конфигурацией, настраивает логирование и внутренние состояния.<br />
+Аргументы<br />
+config — конфигурация приложения типа AppConfig</p>
+<hr />
+<p>BotApp.is_allowed(chat_id: int) -&gt; bool<br />
+Проверяет, разрешён ли доступ для указанного чата.<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+Возвращает<br />
+True, если чат в белом списке; иначе False</p>
+<hr />
+<p>BotApp._setup_logging()<br />
+Настраивает ротацию логов по времени (ежедневно в 03:00 UTC), удаляет предыдущие архивы и форматирует вывод.</p>
+<hr />
+<p>BotApp._format_ts(ts: float) -&gt; str<br />
+Форматирует временную метку в человекочитаемую строку.<br />
+Аргументы<br />
+ts — временная метка в формате Unix timestamp<br />
+Возвращает<br />
+Отформатированная строка вида "ГГГГ-ММ-ДД ЧЧ:ММ:СС" или "нет", если ts пуст</p>
+<hr />
+<p>BotApp._short_label(text: str, max_len: int = 40) -&gt; str<br />
+Обрезает текст до указанной длины, добавляя многоточие при необходимости.<br />
+Аргументы<br />
+text — исходный текст<br />
+max_len — максимальная длина (по умолчанию 40)<br />
+Возвращает<br />
+Обрезанная строка</p>
+<hr />
+<p>BotApp._tool_exec(tool: ToolConfig) -&gt; Optional[str]<br />
+Возвращает исполняемый бинарный файл для инструмента (первый из cmd, headless_cmd, interactive_cmd).<br />
+Аргументы<br />
+tool — конфигурация инструмента типа ToolConfig<br />
+Возвращает<br />
+Имя исполняемого файла или None, если не найдено</p>
+<hr />
+<p>BotApp._is_tool_available(name: str) -&gt; bool<br />
+Проверяет, доступен ли инструмент в системе (существует ли исполняемый файл).<br />
+Аргументы<br />
+name — имя инструмента<br />
+Возвращает<br />
+True, если инструмент доступен; иначе False</p>
+<hr />
+<p>BotApp._available_tools() -&gt; list[str]<br />
+Возвращает список имён доступных в системе инструментов.<br />
+Возвращает<br />
+Список строк — имён доступных инструментов</p>
+<hr />
+<p>BotApp._expected_tools() -&gt; str<br />
+Возвращает отсортированную строку с ожидаемыми именами инструментов из конфигурации.<br />
+Возвращает<br />
+Строка с перечислением имён инструментов</p>
+<hr />
+<p>BotApp._send_message(context: ContextTypes.DEFAULT_TYPE, **kwargs)<br />
+Отправляет сообщение в Telegram с повторными попытками при сетевых ошибках.<br />
+Аргументы<br />
+context — контекст Telegram-бота<br />
+kwargs — параметры для send_message (chat_id, text и др.)<br />
+Исключения<br />
+Повторяет до 5 раз при NetworkError или TimedOut, затем выводит сообщение об ошибке</p>
+<hr />
+<p>BotApp._send_document(context: ContextTypes.DEFAULT_TYPE, **kwargs)<br />
+Отправляет документ в Telegram с повторными попытками при сетевых ошибках.<br />
+Аргументы<br />
+context — контекст Telegram-бота<br />
+kwargs — параметры для send_document (chat_id, document и др.)<br />
+Исключения<br />
+Повторяет до 5 раз при NetworkError или TimedOut, затем выводит сообщение об ошибке</p>
+<hr />
+<p>BotApp._build_state_keyboard(chat_id: int) -&gt; InlineKeyboardMarkup<br />
+Создаёт клавиатуру для выбора сохранённого состояния с пагинацией.<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+Возвращает<br />
+Объект InlineKeyboardMarkup с кнопками состояний и навигацией</p>
+<hr />
+<p>BotApp.send_output(session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE, preview: str = None, summary_source: str = None) -&gt; None<br />
+Отправляет вывод сессии в Telegram, с генерацией краткого резюме или превью.<br />
+Аргументы<br />
+session — активная сессия<br />
+dest — словарь с параметрами назначения (chat_id, message_thread_id)<br />
+output — текст вывода (возможно, с ANSI-разметкой)<br />
+context — контекст Telegram-бота<br />
+preview — опциональный текст предварительного анонса<br />
+summary_source — источник информации для анонса (например, имя инструмента)<br />
+Исключения<br />
+Любые ошибки при генерации резюме обрабатываются внутри, не прерывают выполнение</p>
+<hr />
+<p>async def send_output(self, session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE, preview: str = None, summary_source: str = None) -&gt; None<br />
+Отправляет результат выполнения сессии в указанный канал (чат Telegram или MTProto) с оформлением заголовка и файлом вывода<br />
+Аргументы<br />
+session — активная сессия, генерирующая вывод<br />
+dest — словарь с параметрами назначения (тип, chat_id, peer и др.)<br />
+output — текстовый вывод для отправки<br />
+context — контекст выполнения Telegram-бота<br />
+preview — опциональный текст предварительного анонса<br />
+summary_source — источник информации для анонса (например, имя инструмента)<br />
+Возвращает<br />
+Ничего не возвращает<br />
+Исключения<br />
+Любые исключения при отправке сообщений или удалении временных файлов перехватываются и не прерывают выполнение</p>
+<hr />
+<p>async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Выполняет пользовательский запрос в рамках сессии, обрабатывает вывод или ошибку, отправляет результат и обрабатывает очередь<br />
+Аргументы<br />
+session — сессия, в которой выполняется запрос<br />
+prompt — текст запроса от пользователя<br />
+dest — параметры назначения для отправки результата<br />
+context — контекст выполнения Telegram-бота<br />
+Возвращает<br />
+Ничего не возвращает<br />
+Исключения<br />
+Перехватывает все исключения, логгирует их и отправляет сообщение об ошибке пользователю</p>
+<hr />
+<p>async def ensure_active_session(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; Optional[Session]<br />
+Проверяет наличие активной сессии, предлагает восстановить её при необходимости<br />
+Аргументы<br />
+chat_id — идентификатор чата пользователя<br />
+context — контекст выполнения Telegram-бота<br />
+Возвращает<br />
+Активную сессию, если она есть; None, если сессия отсутствует и не может быть восстановлена<br />
+Исключения<br />
+Нет явных исключений; ошибки при загрузке состояния логгируются, но не прерывают выполнение</p>
+<hr />
+<p>async def on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает входящее сообщение от пользователя: команды, создание каталогов, ввод путей, продолжение диалогов<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения Telegram-бота<br />
+Возвращает<br />
+Ничего не возвращает<br />
+Исключения<br />
+Нет явных исключений; все ошибки обрабатываются внутри метода с отправкой пользователю сообщения об ошибке</p>
+<hr />
+<p>async def on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает текстовые сообщения от пользователя, включая создание сессий, git clone, команды и буферизацию ввода<br />
+Аргументы<br />
+update — объект обновления от Telegram с информацией о сообщении<br />
+context — контекст выполнения бота, предоставляемый python-telegram-bot<br />
+Исключения<br />
+Не выбрасывает явно задокументированные исключения</p>
+<hr />
+<p>async def on_unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отвечает пользователю при вводе неизвестной команды<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения бота<br />
+Исключения<br />
+Не выбрасывает явно задокументированные исключения</p>
+<hr />
+<p>async def on_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает входящие документы: загружает, проверяет тип и размер, передаёт в сессию или обрабатывает как изображение<br />
+Аргументы<br />
+update — объект обновления с прикреплённым документом<br />
+context — контекст выполнения бота<br />
+Исключения<br />
+Не выбрасывает явно задокументированные исключения</p>
+<hr />
+<p>async def on_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает входящие фотографии: выбирает наибольшее изображение, проверяет размер, загружает и передаёт в сессию<br />
+Аргументы<br />
+update — объект обновления с прикреплённым фото<br />
+context — контекст выполнения бота<br />
+Исключения<br />
+Не выбрасывает явно задокументированные исключения</p>
+<hr />
+<p>async def _handle_image_bytes(self, session: Session, data: bytearray, filename: str, caption: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает байтовое представление изображения: сохраняет, отправляет в инструмент или возвращает ошибку, если инструмент не поддерживает изображения<br />
+Аргументы<br />
+session — активная сессия, в которую передаётся изображение<br />
+data — байтовые данные изображения<br />
+filename — имя файла изображения<br />
+caption — подпись к изображению (опционально)<br />
+chat_id — идентификатор чата для отправки ответов<br />
+context — контекст выполнения бота<br />
+Исключения<br />
+Не выбрасывает явно задокументированные исключения</p>
+<hr />
+<p>async def _handle_image_input(session: Session, chat_id: int, context: ContextTypes.DEFAULT_TYPE, filename: str, data: bytes, caption: str) -&gt; None<br />
+Обрабатывает входящее изображение: сохраняет во временной директории и передаёт в CLI с промптом.<br />
+Аргументы<br />
+session — активная сессия пользователя<br />
+chat_id — идентификатор чата для ответа<br />
+context — контекст выполнения Telegram-бота<br />
+filename — исходное имя файла изображения<br />
+data — бинарные данные изображения<br />
+caption — текстовое описание изображения (подпись)<br />
+Исключения<br />
+Возбуждает исключения при ошибках записи файла, но перехватывает их внутренне</p>
+<hr />
+<p>def _cleanup_image_dir(img_dir: str) -&gt; None<br />
+Удаляет файлы в указанной директории, старше 24 часов.<br />
+Аргументы<br />
+img_dir — путь к директории с временными изображениями</p>
+<hr />
+<p>async def _dispatch_mtproto_task(chat_id: int, payload: dict, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Инициирует выполнение задачи через MTProto: формирует путь к файлу и промпт, отправляет на обработку.<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+payload — данные задачи (сообщение, получатель и др.)<br />
+context — контекст выполнения Telegram-бота</p>
+<hr />
+<p>async def _handle_cli_input(session: Session, text: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE, dest: Optional[dict] = None, image_path: Optional[str] = None) -&gt; None<br />
+Передаёт текстовый ввод в CLI-сессию, ставит в очередь при занятой сессии.<br />
+Аргументы<br />
+session — активная сессия<br />
+text — текст команды или запроса<br />
+chat_id — идентификатор чата<br />
+context — контекст выполнения бота<br />
+dest — назначение результата (по умолчанию — Telegram)<br />
+image_path — путь к изображению, если оно прикреплено<br />
+Исключения<br />
+Не выбрасывает исключения напрямую</p>
+<hr />
+<p>async def _buffer_or_send(session: Session, text: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Буферизует сообщение, если оно слишком длинное или уже есть буфер; иначе отправляет сразу.<br />
+Аргументы<br />
+session — активная сессия<br />
+text — текст для отправки<br />
+chat_id — идентификатор чата<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>async def _schedule_flush(chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Планирует сброс буфера сообщений через задержку, отменяя предыдущую задачу.<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+session — активная сессия<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>async def _flush_after_delay(chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Выполняет задержку и сбрасывает буфер сообщений; прерывается при отмене задачи.<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+session — активная сессия<br />
+context — контекст выполнения бота<br />
+Исключения<br />
+asyncio.CancelledError — игнорируется при отмене задачи</p>
+<hr />
+<p>async def _flush_buffer(chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отправляет накопленные в буфере сообщения как единый блок.<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+session — активная сессия<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>def _mtproto_output_path(workdir: str) -&gt; str<br />
+Формирует уникальный путь для файла результата MTProto-задачи, очищает старые файлы.<br />
+Аргументы<br />
+workdir — рабочая директория сессии<br />
+Возвращает<br />
+Полный путь к файлу результата в формате result_YYYYMMDD_HHMMSS.md</p>
+<hr />
+<p>def _mtproto_prompt(text: str, file_path: str) -&gt; str<br />
+Формирует промпт для CLI с указанием сохранить результат в указанный файл.<br />
+Аргументы<br />
+text — исходный текст запроса<br />
+file_path — путь, куда CLI должен сохранить результат<br />
+Возвращает<br />
+Текст промпта с инструкцией для CLI</p>
+<hr />
+<p>async def _send_mtproto_result(session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE, error: Optional[str] = None) -&gt; None<br />
+Отправляет результат MTProto-задачи: читает файл и передаёт содержимое через MTProto.<br />
+Аргументы<br />
+session — сессия, в которой выполнялась задача<br />
+dest — словарь с назначением (peer, file_path, chat_id)<br />
+output — вывод CLI (игнорируется, если файл существует)<br />
+context — контекст выполнения бота<br />
+error — текст ошибки выполнения CLI, если была<br />
+Исключения<br />
+Логирует ошибки чтения файла, но не прерывает выполнение</p>
+<hr />
+<p>def _cleanup_mtproto_dir(out_dir: str) -&gt; None<br />
+Очищает директорию с результатами MTProto, удаляя файлы старше заданного количества дней.<br />
+Аргументы<br />
+out_dir — путь к директории с файлами результатов</p>
+<hr />
+<p>async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает входящие callback-запросы от Telegram-пользователей<br />
+Аргументы<br />
+update — объект обновления от Telegram с данными callback<br />
+context — контекст выполнения, предоставляемый python-telegram-bot<br />
+Исключения<br />
+Может подавлять исключения при работе с файловой системой и менеджером сессий</p>
+<hr />
+<p>def _cleanup_old_files(out_dir: str) -&gt; None<br />
+Удаляет Markdown-файлы в указанной директории, старше заданного количества дней<br />
+Аргументы<br />
+out_dir — путь к директории для очистки<br />
+Исключения<br />
+Игнорирует ошибки при доступе к файлам и чтении атрибутов</p>
+<hr />
+<p>def _format_ts(timestamp: float) -&gt; str<br />
+Форматирует Unix-время в человеко-читаемую строку<br />
+Аргументы<br />
+timestamp — временная метка в формате Unix time<br />
+Возвращает<br />
+Строка в формате "дд.мм.гггг чч:мм"</p>
+<hr />
+<p>def _build_state_keyboard(chat_id: int) -&gt; InlineKeyboardMarkup<br />
+Генерирует клавиатуру для выбора состояния сессии с пагинацией<br />
+Аргументы<br />
+chat_id — идентификатор чата, для которого строится меню<br />
+Возвращает<br />
+Объект InlineKeyboardMarkup с кнопками выбора и навигации</p>
+<hr />
+<p>def _send_dirs_menu(chat_id: int, context: ContextTypes.DEFAULT_TYPE, path: str) -&gt; None<br />
+Отправляет сообщение с меню выбора каталога<br />
+Аргументы<br />
+chat_id — идентификатор чата<br />
+context — контекст выполнения<br />
+path — путь к каталогу, содержимое которого отображается<br />
+Исключения<br />
+Может подавлять ошибки при отправке сообщений</p>
+<hr />
+<p>def _short_label(path: str) -&gt; str<br />
+Генерирует короткое имя каталога для отображения в кнопках<br />
+Аргументы<br />
+path — полный путь к каталогу<br />
+Возвращает<br />
+Короткое имя каталога (базовое имя пути)</p>
+<hr />
+<p>def is_within_root(path: str, root: str) -&gt; bool<br />
+Проверяет, находится ли путь внутри корневого каталога<br />
+Аргументы<br />
+path — проверяемый путь<br />
+root — корневой каталог<br />
+Возвращает<br />
+True, если путь находится внутри root, иначе False</p>
+<hr />
+<p>def prepare_dirs(dirs_menu, dirs_base, dirs_page, dirs_root, chat_id: int, path: str) -&gt; Optional[str]<br />
+Подготавливает данные каталогов для отображения в меню<br />
+Аргументы<br />
+dirs_menu — словарь для хранения списка каталогов<br />
+dirs_base — словарь текущего базового пути<br />
+dirs_page — словарь текущей страницы пагинации<br />
+dirs_root — словарь корневых каталогов<br />
+chat_id — идентификатор чата<br />
+path — путь, содержимое которого нужно подготовить<br />
+Возвращает<br />
+Сообщение об ошибке, если подготовка не удалась, иначе None</p>
+<hr />
+<p>def build_dirs_keyboard(dirs_menu, dirs_base, dirs_page, label_fn, chat_id: int, base_path: str, page: int) -&gt; InlineKeyboardMarkup<br />
+Создаёт inline-клавиатуру для навигации по каталогам<br />
+Аргументы<br />
+dirs_menu — хранилище списков каталогов<br />
+dirs_base — хранилище базовых путей<br />
+dirs_page — хранилище страниц пагинации<br />
+label_fn — функция для генерации меток кнопок<br />
+chat_id — идентификатор чата<br />
+base_path — текущий путь для отображения<br />
+page — номер страницы пагинации<br />
+Возвращает<br />
+Объект InlineKeyboardMarkup с кнопками каталогов и навигации</p>
+<hr />
+<p>async def handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает входящие callback-запросы от inline-кнопок.<br />
+Аргументы<br />
+update — Объект обновления Telegram, содержащий callback-данные.<br />
+context — Контекст выполнения бота, предоставляющий доступ к состоянию и сервисам.<br />
+Исключения<br />
+Может выбрасывать исключения при ошибках чтения/записи файлов, вызове внешних инструментов или сетевых операциях.</p>
+<hr />
+<p>async def _send_toolhelp_content(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, content: str) -&gt; None<br />
+Отправляет пользователю содержимое справки по инструменту, разбивая его на части при необходимости.<br />
+Аргументы<br />
+chat_id — Идентификатор чата для отправки сообщения.<br />
+context — Контекст выполнения бота.<br />
+content — Текст справочной информации, который необходимо отправить.</p>
+<hr />
+<p>async def _send_document(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, document: BinaryIO) -&gt; None<br />
+Отправляет бинарный документ в указанный чат.<br />
+Аргументы<br />
+context — Контекст выполнения бота.<br />
+chat_id — Идентификатор получателя.<br />
+document — Открываемый в режиме чтения бинарный файл для отправки.</p>
+<hr />
+<p>async def _send_files_menu(self, chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE, edit_message: Optional[CallbackQuery] = None) -&gt; None<br />
+Формирует и отправляет inline-меню с файлами и директориями из текущей рабочей директории сессии.<br />
+Аргументы<br />
+chat_id — Идентификатор чата.<br />
+session — Активная сессия, определяющая рабочую директорию.<br />
+context — Контекст выполнения бота.<br />
+edit_message — Опциональный запрос на редактирование существующего сообщения вместо отправки нового.</p>
+<hr />
+<p>def load_active_state(state_path: str) -&gt; Optional[ActiveState]<br />
+Загружает сохранённое состояние активной сессии из файла.<br />
+Аргументы<br />
+state_path — Путь к файлу состояния.<br />
+Возвращает<br />
+Объект ActiveState при успешной загрузке, иначе None.</p>
+<hr />
+<p>def clear_active_state(state_path: str) -&gt; None<br />
+Удаляет файл сохранённого состояния активной сессии.<br />
+Аргументы<br />
+state_path — Путь к файлу состояния.</p>
+<hr />
+<p>def get_toolhelp(toolhelp_path: str, tool: str) -&gt; Optional[ToolHelpEntry]<br />
+Извлекает закэшированную справку по инструменту из локального хранилища.<br />
+Аргументы<br />
+toolhelp_path — Путь к файлу с кэшем справки.<br />
+tool — Название инструмента.<br />
+Возвращает<br />
+Объект ToolHelpEntry, если справка найдена, иначе None.</p>
+<hr />
+<p>def update_toolhelp(toolhelp_path: str, tool: str, content: str) -&gt; None<br />
+Сохраняет или обновляет справку по инструменту в локальном хранилище.<br />
+Аргументы<br />
+toolhelp_path — Путь к файлу с кэшем справки.<br />
+tool — Название инструмента.<br />
+content — Текст справки для сохранения.</p>
+<hr />
+<p>def run_tool_help(tool_config: ToolConfig, workdir: str, timeout: int) -&gt; str<br />
+Синхронно запускает инструмент с флагом --help и возвращает его вывод.<br />
+Аргументы<br />
+tool_config — Конфигурация инструмента (путь, аргументы и т.д.).<br />
+workdir — Рабочая директория для запуска инструмента.<br />
+timeout — Максимальное время выполнения в секундах.<br />
+Возвращает<br />
+Вывод stdout инструмента при успешном выполнении.<br />
+Исключения<br />
+Выбрасывает исключение при таймауте, ошибке запуска или ненулевом коде возврата.</p>
+<hr />
+<p>async def handle_callback(self, query: CallbackQuery, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает входящие callback-запросы от пользовательских интерфейсов<br />
+Аргументы<br />
+query — объект callback-запроса от Telegram<br />
+chat_id — идентификатор чата<br />
+context — контекст выполнения бота<br />
+Исключения<br />
+Может выбрасывать исключения при ошибках файловых операций или недоступности сессии</p>
+<hr />
+<p>async def cmd_tools(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отображает список доступных CLI-инструментов<br />
+Аргументы<br />
+update — входящее обновление от Telegram<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>async def cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Создаёт новую сессию с указанным инструментом и рабочей директорией<br />
+Аргументы<br />
+update — входящее обновление от Telegram<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>async def cmd_newpath(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Завершает создание сессии, устанавливая путь после выбора инструмента<br />
+Аргументы<br />
+update — входящее обновление от Telegram<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>async def cmd_sessions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отображает список активных сессий<br />
+Аргументы<br />
+update — входящее обновление от Telegram<br />
+context — контекст выполнения бота</p>
+<hr />
+<p>async def cmd_use(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Активирует указанную сессию или показывает меню выбора, если сессия не указана.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_close(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Закрывает указанную сессию или показывает меню выбора, если сессия не указана.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Выводит текущее состояние активной сессии, включая статус, время работы и очередь.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отправляет сигнал прерывания активной сессии.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_queue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Показывает количество сообщений в очереди активной сессии.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_clearqueue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Очищает очередь активной сессии и сохраняет изменения.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_rename(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Переименовывает указанную или активную сессию и сохраняет новое имя.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_dirs(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Инициирует режим просмотра директорий, начиная с указанного пути или рабочей директории по умолчанию.<br />
+Аргументы<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения команды</p>
+<hr />
+<p>async def cmd_cwd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Устанавливает новую рабочую директорию для активной сессии и создает новую сессию с этим путём.<br />
+Аргументы<br />
+update — Объект обновления от Telegram, содержащий информацию о сообщении<br />
+context — Контекст выполнения команды, включая аргументы и данные сессии<br />
+Исключения<br />
+Выбрасывает исключения при ошибках отправки сообщений или некорректных путях</p>
+<hr />
+<p>async def cmd_git(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Инициализирует Git-сессию и отображает клавиатуру с доступными Git-операциями.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Может выбрасывать исключения при ошибках взаимодействия с Git или отправки сообщений</p>
+<hr />
+<p>async def cmd_setprompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Устанавливает регулярное выражение для распознавания промпта указанного инструмента.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды, содержит аргументы команды<br />
+Возвращает<br />
+None<br />
+Исключения<br />
+Сохранение конфигурации может завершиться ошибкой, если файл недоступен для записи</p>
+<hr />
+<p>async def cmd_resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Просматривает или устанавливает токен возобновления для активной сессии.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Может возникнуть ошибка при обновлении состояния на диске</p>
+<hr />
+<p>async def cmd_state(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Показывает состояние сессии: либо по указанным tool и workdir, либо через интерактивное меню.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Возможны ошибки при чтении файла состояния или его парсинге</p>
+<hr />
+<p>async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отправляет текстовое сообщение в активную сессию как CLI-ввод.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Может выбрасывать исключения при отсутствии сессии или ошибках обработки ввода</p>
+<hr />
+<p>def _bot_commands(self) -&gt; list[BotCommand]<br />
+Формирует список команд бота на основе реестра, фильтруя по отображению в меню.<br />
+Возвращает<br />
+Список объектов BotCommand для регистрации в Telegram<br />
+Исключения<br />
+Не выбрасывает исключения</p>
+<hr />
+<p>async def set_bot_commands(self, app: Application) -&gt; None<br />
+Устанавливает список команд бота в интерфейсе Telegram.<br />
+Аргументы<br />
+app — Экземпляр приложения Telegram Bot<br />
+Исключения<br />
+Может выбросить исключение при сетевой ошибке или недоступности API</p>
+<hr />
+<p>async def cmd_toolhelp(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отображает меню выбора инструмента для просмотра его специфичных команд.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Возможны ошибки при отправке сообщения с клавиатурой</p>
+<hr />
+<p>async def cmd_mtproto(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает команду MTProto: либо запрашивает задачу, либо отменяет её, либо сохраняет и показывает меню.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Может возникнуть ошибка при взаимодействии с подсистемой MTProto</p>
+<hr />
+<p>async def cmd_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Инициирует отображение файлового меню для активной сессии.<br />
+Аргументы<br />
+update — Объект обновления от Telegram<br />
+context — Контекст выполнения команды<br />
+Исключения<br />
+Выбрасывает исключения при отсутствии сессии или ошибках навигации по директориям</p>
+<hr />
+<p>def _list_dir_entries(base: str) -&gt; list[dict]<br />
+Возвращает отсортированный список элементов каталога (файлов и подкаталогов).<br />
+Аргументы<br />
+base — путь к каталогу, содержимое которого нужно перечислить<br />
+Возвращает<br />
+Список словарей с ключами "name", "path", "is_dir", отсортированный по типу (папки первыми) и имени</p>
+<hr />
+<p>async def _send_files_menu(self, chat_id: int, session: Session, context: ContextTypes.DEFAULT_TYPE, edit_message: Optional[object]) -&gt; None<br />
+Отправляет или обновляет интерактивное меню содержимого каталога с постраничной навигацией.<br />
+Аргументы<br />
+chat_id — идентификатор чата пользователя<br />
+session — активная сессия, содержащая рабочий каталог<br />
+context — контекст выполнения Telegram-бота<br />
+edit_message — опциональное сообщение для редактирования вместо отправки нового<br />
+Возвращает<br />
+None</p>
+<hr />
+<p>def _preset_commands(self) -&gt; Dict[str, str]<br />
+Возвращает словарь предопределённых команд (шаблонов) для быстрого запуска задач.<br />
+Возвращает<br />
+Словарь, где ключ — имя команды, значение — текстовый промпт</p>
+<hr />
+<p>def _guess_clone_path(self, url: str, base: str) -&gt; Optional[str]<br />
+Формирует путь для клонирования репозитория на основе URL и базового каталога.<br />
+Аргументы<br />
+url — URL репозитория (SSH или HTTPS)<br />
+base — базовый каталог, в котором будет создана папка<br />
+Возвращает<br />
+Полный путь для клонирования или None, если имя не может быть извлечено</p>
+<hr />
+<p>async def cmd_preset(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Обрабатывает команду выбора шаблонной задачи, отображая меню с доступными пресетами.<br />
+Аргументы<br />
+update — входящее обновление от Telegram<br />
+context — контекст выполнения бота<br />
+Возвращает<br />
+None</p>
+<hr />
+<p>async def cmd_metrics(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -&gt; None<br />
+Отправляет текущие метрики работы бота в ответ на команду.<br />
+Аргументы<br />
+update — входящее обновление от Telegram<br />
+context — контекст выполнения бота<br />
+Возвращает<br />
+None</p>
+<hr />
+<p>async def run_prompt_raw(self, prompt: str, session_id: Optional[str] = None) -&gt; str<br />
+Выполняет выполнение промпта в указанной или активной сессии с блокировкой.<br />
+Аргументы<br />
+prompt — текст промпта для выполнения<br />
+session_id — идентификатор сессии (опционально)<br />
+Возвращает<br />
+Результат выполнения промпта в виде строки<br />
+Исключения<br />
+RuntimeError — если сессия не найдена или занята</p>
+<hr />
+<p>async def _send_dirs_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, base: str) -&gt; None<br />
+Формирует и отправляет меню выбора каталога с поддержкой постраничного отображения.<br />
+Аргументы<br />
+chat_id — идентификатор чата пользователя<br />
+context — контекст выполнения Telegram-бота<br />
+base — базовый путь для отображения каталогов<br />
+Возвращает<br />
+None</p>
+<hr />
+<p>async def _send_toolhelp_content(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, content: str) -&gt; None<br />
+Отправляет пользователю содержимое справки по инструменту.<br />
+Аргументы<br />
+chat_id — идентификатор чата пользователя<br />
+context — контекст выполнения Telegram-бота<br />
+content — текст справки для отображения<br />
+Возвращает<br />
+None</p>
+<hr />
+<p>async def strip_ansi(text: str) -&gt; str<br />
+Удаляет ANSI-коды форматирования из строки.<br />
+Аргументы<br />
+text — Входная строка с возможными ANSI-кодами<br />
+Возвращает<br />
+Строка без ANSI-кодов</p>
+<hr />
+<p>async def has_ansi(text: str) -&gt; bool<br />
+Проверяет, содержит ли строка ANSI-коды форматирования.<br />
+Аргументы<br />
+text — Входная строка для проверки<br />
+Возвращает<br />
+True, если строка содержит ANSI-коды, иначе False</p>
+<hr />
+<p>async def ansi_to_html(text: str) -&gt; str<br />
+Преобразует строку с ANSI-кодами в HTML-представление с поддержкой цветов и стилей.<br />
+Аргументы<br />
+text — Входная строка с ANSI-кодами<br />
+Возвращает<br />
+HTML-строка с эквивалентным форматированием</p>
+<hr />
+<p>async def make_html_file(html_content: str, prefix: str = "output") -&gt; str<br />
+Создаёт временный HTML-файл с указанным содержимым.<br />
+Аргументы<br />
+html_content — Содержимое HTML-страницы<br />
+prefix — Префикс имени временного файла (по умолчанию "output")<br />
+Возвращает<br />
+Путь к созданному временному файлу</p>
+<hr />
+<p>def build_command_registry(bot_app: BotApp) -&gt; list[dict]<br />
+Формирует список команд бота с их обработчиками на основе зарегистрированных методов.<br />
+Аргументы<br />
+bot_app — Экземпляр приложения BotApp<br />
+Возвращает<br />
+Список словарей с ключами "name" (имя команды) и "handler" (асинхронная функция-обработчик)</p>
+<hr />
+<p>def build_app(config: AppConfig) -&gt; Application<br />
+Создаёт и настраивает экземпляр Telegram Application с обработчиками команд и сообщений.<br />
+Аргументы<br />
+config — Объект конфигурации приложения<br />
+Возвращает<br />
+Настроенный экземпляр Application из python-telegram-bot</p>
+<hr />
+<p>def main() -&gt; None<br />
+Точка входа приложения: загружает конфигурацию и запускает бота в режиме polling.</p>
+<hr />
+<p>class BotApp<br />
+Основной класс бота, управляющий командами, обработкой сообщений, вложениями и метриками.<br />
+Поля<br />
+config — Объект конфигурации приложения<br />
+metrics — Система сбора метрик (например, количество вызовов команд)<br />
+mcp — Экземпляр MCP-сервера для внешних вызовов<br />
+Методы<br />
+async set_bot_commands(application: Application) — Регистрирует команды бота в интерфейсе Telegram<br />
+async on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) — Обрабатывает нажатия на inline-кнопки<br />
+async on_unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) — Обрабатывает неизвестные команды<br />
+async on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) — Обрабатывает полученные фотографии<br />
+async on_document(update: Update, context: ContextTypes.DEFAULT_TYPE) — Обрабатывает полученные документы<br />
+async on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) — Обрабатывает текстовые сообщения без команд<br />
+is_allowed(chat_id: int) — Проверяет, разрешён ли доступ для указанного чата</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

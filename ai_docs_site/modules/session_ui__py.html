@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>session_ui.py - cli-proxy</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">cli-proxy</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../testing.html" class="nav-link">Тестирование</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../configs/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="../configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
+</li>
+                                    
+<li>
+    <a href="../configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="command_registry__py.html" class="dropdown-item">command_registry.py</a>
+</li>
+                                    
+<li>
+    <a href="config__py.html" class="dropdown-item">config.py</a>
+</li>
+                                    
+<li>
+    <a href="dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="git_ops__py.html" class="dropdown-item">git_ops.py</a>
+</li>
+                                    
+<li>
+    <a href="mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+</li>
+                                    
+<li>
+    <a href="metrics__py.html" class="dropdown-item">metrics.py</a>
+</li>
+                                    
+<li>
+    <a href="mtproto_ui__py.html" class="dropdown-item">mtproto_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="session__py.html" class="dropdown-item">session.py</a>
+</li>
+                                    
+<li>
+    <a href="session_ui__py.html" class="dropdown-item active" aria-current="page">session_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="state__py.html" class="dropdown-item">state.py</a>
+</li>
+                                    
+<li>
+    <a href="summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+</li>
+                                    
+<li>
+    <a href="utils__py.html" class="dropdown-item">utils.py</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="session__py.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="state__py.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#session_ui" class="nav-link">session_ui</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="session_ui">session_ui</h1>
+<p>Модуль предоставляет пользовательский интерфейс для управления сессиями через Telegram-бота. Он позволяет просматривать список сессий, выбирать активную, переименовывать, обновлять токен возобновления, а также получать статус и управлять очередью сессий. Взаимодействие осуществляется через inline-кнопки и обработку сообщений.</p>
+<p>Ключевые структуры данных<br />
+SessionUI — Класс для построения интерфейса управления сессиями в Telegram</p>
+<hr />
+<p>class SessionUI<br />
+Интерфейс управления сессиями через Telegram с поддержкой inline-меню и обработки ввода<br />
+Поля<br />
+config — Конфигурация приложения<br />
+manager — Менеджер сессий<br />
+_send_message — Асинхронная функция отправки сообщений в чат<br />
+_format_ts — Функция форматирования временных меток<br />
+_short_label — Функция усечения текста до заданной длины<br />
+pending_session_rename — Словарь ожидания ввода нового имени сессии (chat_id → session_id)<br />
+pending_session_resume — Словарь ожидания ввода нового resume-токена (chat_id → session_id)<br />
+Методы<br />
+build_sessions_menu() — Создаёт inline-клавиатуру со списком всех сессий<br />
+handle_pending_message(chat_id: int, text: str, context: ContextTypes.DEFAULT_TYPE) -&gt; bool — Обрабатывает текстовые сообщения от пользователя при ожидании ввода (переименование, resume)<br />
+handle_callback(query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; bool — Обрабатывает нажатия на inline-кнопки меню сессий</p>
+<hr />
+<p>build_sessions_menu()<br />
+Создаёт клавиатуру с перечнем всех сессий для выбора<br />
+Возвращает<br />
+InlineKeyboardMarkup — Готовая разметка с кнопками сессий</p>
+<hr />
+<p>handle_pending_message(chat_id: int, text: str, context: ContextTypes.DEFAULT_TYPE) -&gt; bool<br />
+Обрабатывает текстовые сообщения от пользователя в режиме ожидания ввода (переименование или resume)<br />
+Аргументы<br />
+chat_id — Идентификатор чата<br />
+text — Введённый пользователем текст<br />
+context — Контекст выполнения Telegram-бота<br />
+Возвращает<br />
+True, если сообщение было обработано как ожидающий ввод; иначе False</p>
+<hr />
+<p>handle_callback(query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; bool<br />
+Обрабатывает нажатия на inline-кнопки в меню сессий<br />
+Аргументы<br />
+query — Объект callback-запроса от Telegram<br />
+chat_id — Идентификатор чата<br />
+context — Контекст выполнения Telegram-бота<br />
+Возвращает<br />
+True, если callback был распознан и обработан; иначе False</p>
+<hr />
+<p>async def get_state(state_path: str, tool_name: str, workdir: str) -&gt; Optional[SessionState]<br />
+Возвращает состояние сессии по пути, имени инструмента и рабочему каталогу<br />
+Аргументы<br />
+state_path — путь к файлу или директории хранения состояний<br />
+tool_name — имя инструмента, связанного с сессией<br />
+workdir — рабочий каталог сессии<br />
+Возвращает<br />
+Объект SessionState при успехе, иначе None</p>
+<hr />
+<p>async def _send_message(self, context: Context, chat_id: int, text: str) -&gt; None<br />
+Отправляет текстовое сообщение пользователю через Telegram-бота<br />
+Аргументы<br />
+context — контекст выполнения бота<br />
+chat_id — идентификатор чата получателя<br />
+text — текст сообщения для отправки</p>
+<hr />
+<p>async def _format_ts(self, timestamp: float) -&gt; str<br />
+Форматирует временную метку в читаемую строку<br />
+Аргументы<br />
+timestamp — временная метка в формате Unix time<br />
+Возвращает<br />
+Строка с датой и временем в локальном формате</p>
+<hr />
+<p>class SessionManager<br />
+Управляет жизненным циклом сессий: создание, хранение, закрытие и сохранение на диск<br />
+Методы<br />
+get(session_id: str) — Возвращает сессию по идентификатору или None, если не найдена<br />
+close(session_id: str) — Закрывает сессию, удаляет её из менеджера и возвращает успех операции<br />
+_persist_sessions() — Сохраняет текущее состояние всех сессий на диск</p>
+<hr />
+<p>async def handle_callback_query(self, update: Update, context: Context) -&gt; bool<br />
+Обрабатывает входящие callback-запросы от пользовательского интерфейса<br />
+Аргументы<br />
+update — объект обновления от Telegram с данными callback<br />
+context — контекст выполнения бота<br />
+Возвращает<br />
+True, если запрос был обработан, иначе False<br />
+Исключения<br />
+Может выбрасывать исключения при ошибках взаимодействия с Telegram API</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

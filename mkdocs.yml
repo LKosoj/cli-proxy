@@ -1,0 +1,46 @@
+site_name: cli-proxy
+docs_dir: .ai-docs
+site_dir: ai_docs_site
+plugins:
+- search
+- mermaid2
+markdown_extensions:
+- tables
+- sane_lists
+- attr_list
+- def_list
+- footnotes
+- admonition
+- fenced_code
+- pymdownx.superfences
+nav:
+- Главная: index.md
+- Архитектура: architecture.md
+- Запуск: runtime.md
+- Зависимости: dependencies.md
+- Тестирование: testing.md
+- Соглашения: conventions.md
+- Глоссарий: glossary.md
+- Конфигурация проекта:
+  - Обзор: configs/index.md
+  - config_example.yaml: configs/files/config_example__yaml.md
+  - toolhelp.json: configs/files/toolhelp__json.md
+- Модули:
+  - Обзор: modules/index.md
+  - bot.py: modules/bot__py.md
+  - command_registry.py: modules/command_registry__py.md
+  - config.py: modules/config__py.md
+  - dirs_ui.py: modules/dirs_ui__py.md
+  - git_ops.py: modules/git_ops__py.md
+  - mcp_bridge.py: modules/mcp_bridge__py.md
+  - metrics.py: modules/metrics__py.md
+  - mtproto_ui.py: modules/mtproto_ui__py.md
+  - session.py: modules/session__py.md
+  - session_ui.py: modules/session_ui__py.md
+  - state.py: modules/state__py.md
+  - summary.py: modules/summary__py.md
+  - toolhelp.py: modules/toolhelp__py.md
+  - utils.py: modules/utils__py.md
+- Изменения: changes.md
+site_url: ''
+use_directory_urls: false

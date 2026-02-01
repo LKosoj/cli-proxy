@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="img/favicon.ico">
+        <title>Запуск - cli-proxy</title>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <link href="css/fontawesome.min.css" rel="stylesheet">
+        <link href="css/brands.min.css" rel="stylesheet">
+        <link href="css/solid.min.css" rel="stylesheet">
+        <link href="css/v4-font-face.min.css" rel="stylesheet">
+        <link href="css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="index.html">cli-proxy</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="runtime.html" class="nav-link active" aria-current="page">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="testing.html" class="nav-link">Тестирование</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="configs/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
+</li>
+                                    
+<li>
+    <a href="configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="modules/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="modules/bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/command_registry__py.html" class="dropdown-item">command_registry.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/config__py.html" class="dropdown-item">config.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/git_ops__py.html" class="dropdown-item">git_ops.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/metrics__py.html" class="dropdown-item">metrics.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/mtproto_ui__py.html" class="dropdown-item">mtproto_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/session__py.html" class="dropdown-item">session.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/session_ui__py.html" class="dropdown-item">session_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/state__py.html" class="dropdown-item">state.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/utils__py.html" class="dropdown-item">utils.py</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="architecture.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="dependencies.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#_1" class="nav-link">Запуск и окружение</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#_2" class="nav-link">Запуск бота</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Окружение</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_7" class="nav-link">Зависимости</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_8" class="nav-link">Тестирование</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_9" class="nav-link">Особенности запуска</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="_1">Запуск и окружение</h1>
+<h2 id="_2">Запуск бота</h2>
+<p>Бот запускается через основной скрипт <code>bot.py</code> в режиме polling:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>bot.py
+</code></pre></div>
+<p>При старте:
+1. Загружается конфигурация из <code>config.yaml</code>.
+2. Инициализируются компоненты: менеджер сессий, интерфейсы (SessionUI, GitOps, MTProtoUI), MCP-сервер.
+3. Устанавливаются обработчики команд и колбэков.
+4. Автоматически восстанавливаются сессии из <code>state.json</code>.
+5. Запускается polling-режим получения обновлений от Telegram.</p>
+<h2 id="_3">Окружение</h2>
+<h3 id="_4">Переменные окружения</h3>
+<p>Бот поддерживает подстановку переменных окружения в <code>config.yaml</code> через синтаксис <code>${VAR}</code>. Приоритет — переменные окружения выше значений в YAML.</p>
+<p>Ключевые переменные:
+- <code>TELEGRAM_TOKEN</code> — токен бота (альтернатива <code>telegram.token</code> в config).
+- <code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code>, <code>OPENAI_BASE_URL</code> — для генерации резюме и сообщений коммитов.
+- <code>GITHUB_TOKEN</code> — для доступа к приватным репозиториям (через <code>GIT_ASKPASS</code>).
+- <code>TELETHON_API_ID</code>, <code>TELETHON_API_HASH</code> — при использовании MTProto.</p>
+<h3 id="_5">Файлы состояния</h3>
+<ul>
+<li><code>state.json</code> — основной файл состояния: активная сессия, токены, очереди, метаданные.</li>
+<li><code>toolhelp.json</code> — кэш справки по инструментам (результаты <code>/toolhelp</code>).</li>
+</ul>
+<p>Файлы создаются автоматически при первом сохранении. Ошибки чтения/записи логируются, но не прерывают работу.</p>
+<h3 id="_6">Рабочие директории</h3>
+<ul>
+<li><code>workdir</code> — корневая директория сессий (настраивается в <code>defaults.workdir</code>).</li>
+<li><code>image_temp_dir</code> — временные файлы изображений (очищаются старше 24 часов).</li>
+<li><code>mtproto_output_dir</code> — результаты отправки через MTProto (очистка по <code>mtproto_cleanup_days</code>).</li>
+<li><code>log_path</code> — логи с ротацией (ежедневно в 03:00 UTC, хранится 1 архив).</li>
+</ul>
+<h2 id="_7">Зависимости</h2>
+<p>Установка зависимостей:
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+</code></pre></div></p>
+<p>Ключевые пакеты:
+- <code>python-telegram-bot</code> — основа бота.
+- <code>pexpect</code> — управление CLI-процессами.
+- <code>ansi2html</code> — конвертация цветного вывода.
+- <code>markdown-it-py[linkify,plugins]</code> — безопасный рендеринг Markdown.
+- <code>telethon</code> — опционально, для MTProto-интеграции.
+- <code>pytest</code> — тестирование (<code>pytest -q</code>).</p>
+<h2 id="_8">Тестирование</h2>
+<p>Запуск тестов:
+<div class="highlight"><pre><span></span><code>pytest<span class="w"> </span>-q
+</code></pre></div></p>
+<p>Тесты проверяют:
+- Обработку команд и колбэков.
+- Работу сессий и очередей.
+- Корректность генерации интерфейсов.
+- Парсинг конфигурации и состояния.</p>
+<h2 id="_9">Особенности запуска</h2>
+<ul>
+<li><strong>Автовосстановление</strong>: после перезапуска бот восстанавливает все сессии из <code>state.json</code>.</li>
+<li><strong>Безопасность</strong>: доступ только по <code>whitelist_chat_ids</code>, проверка путей через <code>is_within_root()</code>.</li>
+<li><strong>MTProto</strong>: при отсутствии <code>session_string</code> требуется ручная авторизация (однократно).</li>
+<li><strong>MCP-сервер</strong>: запускается только при <code>mcp.enabled: true</code>, слушает указанный хост/порт.</li>
+<li><strong>Буферизация</strong>: длинные сообщения отправляются асинхронно с отложенной отправкой.</li>
+</ul></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = ".",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="js/base.js"></script>
+        <script src="search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
