@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional, Tuple
 
 import requests
@@ -100,7 +101,10 @@ def _summarize_with_cfg(
                     "Адаптируй длину под объём текста: "
                     "короткий → 2–4 пункта, средний → 4–6, длинный → 6–10. "
                     "В каждом пункте 1–2 предложения. Не повторяйся и не пиши лишнего. "
-                    "Важно: обязательно учти ключевую информацию в конце текста и отрази её в резюме."
+                    "Важно: обязательно учти ключевую информацию в конце текста и отрази её в резюме. "
+                    "В конце добавь блок 'Ключевое в конце' (2–4 пункта): "
+                    "либо итог/результат доработки, либо вопросы к пользователю. "
+                    "Не включай служебные метрики (например, tokens used) и счетчики."
                 ),
             },
             {
@@ -173,16 +177,45 @@ def _tail_digest(text: str) -> str:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     if not lines:
         return ""
-    tail = lines[-6:]
+    tail = lines[-12:]
     selected = []
+    questions = []
+    results = []
+    result_markers = (
+        "готово", "сделано", "исправил", "исправлено", "обновил", "обновлено",
+        "добавил", "добавлено", "внес", "внесено", "реализовал", "реализовано",
+        "настроил", "настроено", "поправил", "поправлено", "исправляю",
+    )
     for line in reversed(tail):
+        lower = line.lower()
+        if "tokens used" in lower or lower.startswith("tokens used"):
+            continue
+        if re.fullmatch(r"[\d,\s.]+", line):
+            continue
+        if "?" in line:
+            if line not in questions:
+                questions.append(line)
+            continue
+        if any(marker in lower for marker in result_markers):
+            if line not in results:
+                results.append(line)
+            continue
         if line and line not in selected:
             selected.append(line)
-        if len(selected) >= 2:
-            break
-    selected.reverse()
+    picked: list[str] = []
+    for line in results[:3]:
+        picked.append(line)
+    for line in questions[:3]:
+        if line not in picked:
+            picked.append(line)
+    if len(picked) < 2:
+        for line in selected:
+            if line not in picked:
+                picked.append(line)
+            if len(picked) >= 2:
+                break
     bullets = []
-    for line in selected:
+    for line in picked[:4]:
         if len(line) > 240:
             line = line[:237] + "..."
         bullets.append(f"- {line}")
