@@ -143,32 +143,34 @@ def _remove_mcp_lines(text: str) -> str:
 
 def _dedupe_repeated_blocks(text: str) -> str:
     lines = text.splitlines()
-    if not lines:
+    total = len(lines)
+    if total == 0:
         return text
-    blocks: list[list[str]] = []
-    current: list[str] = []
-    for line in lines:
-        if line.strip() == "":
-            if current:
-                blocks.append(current)
-                current = []
-            blocks.append([line])
-            continue
-        current.append(line)
-    if current:
-        blocks.append(current)
-    seen: set[str] = set()
-    result: list[str] = []
-    for block in blocks:
-        if len(block) == 1 and block[0].strip() == "":
-            result.extend(block)
-            continue
-        key = "\n".join(block)
-        if key in seen:
-            continue
-        seen.add(key)
-        result.extend(block)
-    return "\n".join(result)
+    min_block = 1
+    changed = True
+    while changed:
+        changed = False
+        total = len(lines)
+        for i in range(total - min_block):
+            if lines[i].strip() == "":
+                continue
+            j = i + 1
+            while j <= total - min_block:
+                if lines[j].strip() == "":
+                    j += 1
+                    continue
+                k = 0
+                while i + k < total and j + k < total and lines[i + k] == lines[j + k]:
+                    k += 1
+                if k >= min_block:
+                    del lines[j : j + k]
+                    changed = True
+                    total = len(lines)
+                    break
+                j += 1
+            if changed:
+                break
+    return "\n".join(lines)
 
 
 def _render_mermaid_svg(source: str) -> Optional[str]:
