@@ -211,3 +211,4 @@ state.json
 TZ.md
 AGENTS.md
 /.ai_docs_cache
+.DS_Store
