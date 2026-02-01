@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import time
+import re
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -439,6 +440,23 @@ class BotApp:
                 output = (out or b"").decode(errors="ignore")
                 if proc.returncode == 0:
                     await self._send_message(context, chat_id=chat_id, text="Клонирование завершено.")
+                    tool = self.pending_new_tool.pop(chat_id, None)
+                    if tool:
+                        repo_path = None
+                        match = re.search(r"Cloning into '([^']+)'", output)
+                        if match:
+                            repo_path = os.path.join(base, match.group(1))
+                        if not repo_path:
+                            repo_path = self._guess_clone_path(url, base)
+                        root = self.dirs_root.get(chat_id, self.config.defaults.workdir)
+                        if repo_path and os.path.isdir(repo_path) and is_within_root(repo_path, root):
+                            session = self.manager.create(tool, repo_path)
+                            self.dirs_mode.pop(chat_id, None)
+                            await self._send_message(
+                                context,
+                                chat_id=chat_id,
+                                text=f"Сессия {session.id} создана и выбрана.",
+                            )
                 else:
                     await self._send_message(context, chat_id=chat_id, text=f"Ошибка git clone:\\n{output[:4000]}")
             except Exception as e:
@@ -1785,6 +1803,24 @@ class BotApp:
             "build": "Запусти сборку и дай краткий отчёт.",
             "refactor": "Сделай небольшой рефакторинг по месту и объясни изменения.",
         }
+
+    def _guess_clone_path(self, url: str, base: str) -> Optional[str]:
+        u = url.strip()
+        if not u:
+            return None
+        path = u
+        if u.startswith("git@") and ":" in u:
+            path = u.split(":", 1)[1]
+        elif "://" in u:
+            path = u.split("://", 1)[1]
+            if "/" in path:
+                path = path.split("/", 1)[1]
+        name = path.rstrip("/").split("/")[-1]
+        if name.endswith(".git"):
+            name = name[:-4]
+        if not name:
+            return None
+        return os.path.join(base, name)
 
     async def cmd_preset(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
