@@ -4,7 +4,7 @@ site_dir: ai_docs_site
 plugins:
 - search
 - mermaid2:
-    javascript: https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js
+    javascript: https://unpkg.com/mermaid@10.4.0/dist/mermaid.esm.min.mjs
 markdown_extensions:
 - tables
 - sane_lists
@@ -17,9 +17,7 @@ markdown_extensions:
     custom_fences:
     - name: mermaid
       class: mermaid
-      format: !!python/name:pymdownx.superfences.fence_code_format ''
-extra_javascript:
-- js/diagram-init.js
+      format: !!python/name:mermaid2.fence_mermaid ''
 nav:
 - Главная: index.md
 - Архитектура: architecture.md

@@ -178,7 +178,7 @@
 </div></div>
 <div class="col-md-9" role="main">
 <h1 id="_1">Архитектура</h1>
-<pre class="mermaid"><code>graph TD
+<div class="mermaid">graph TD
     A[Telegram-бот] --&gt; B[BotApp]
     B --&gt; C[SessionManager]
     C --&gt; D[Session]
@@ -219,7 +219,8 @@
     style M fill:#607D8B,stroke:#455A64,color:white
     style N fill:#8BC34A,stroke:#689F38,color:white
     style O fill:#673AB7,stroke:#512DA8,color:white
-    style P fill:#FFEB3B,stroke:#FBC02D,color:black</code></pre>
+    style P fill:#FFEB3B,stroke:#FBC02D,color:black
+</div>
 <h1 id="_2">Архитектура</h1>
 <p>Архитектура Telegram-бота построена вокруг центрального класса <code>BotApp</code>, управляющего жизненным циклом сессий, обработкой команд и интеграцией с внешними системами. Все компоненты взаимодействуют асинхронно через Telegram API и внутренние состояния.</p>
 <h2 id="_3">Основные компоненты</h2>
@@ -324,7 +325,6 @@
                 shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
         </script>
 <script src="js/base.js"></script>
-<script src="js/diagram-init.js"></script>
 <script src="search/main.js"></script>
 <div aria-hidden="true" aria-labelledby="searchModalLabel" class="modal" id="mkdocs_search_modal" role="dialog" tabindex="-1">
 <div class="modal-dialog modal-lg">
@@ -386,5 +386,6 @@
 </div>
 </div>
 </div>
-</body>
+<script type="module">import mermaid from "https://unpkg.com/mermaid@10.4.0/dist/mermaid.esm.min.mjs";
+mermaid.initialize({});</script></body>
 </html>
