@@ -121,23 +121,22 @@ def strip_ansi_codes(text: str) -> str:
 
 def _remove_mcp_lines(text: str) -> str:
     lines = text.splitlines()
-    filtered: list[str] = []
-    skipping = True
-    for line in lines:
+    first_mcp_idx = None
+    startup_idx = None
+    for idx, line in enumerate(lines):
         stripped = line.strip()
-        if skipping:
-            if stripped.lower().startswith("mcp startup:"):
-                filtered.append(line)
-                skipping = False
+        if first_mcp_idx is None and _MCP_LINE_RE.match(stripped):
+            first_mcp_idx = idx
+        if first_mcp_idx is not None and stripped.lower().startswith("mcp startup:"):
+            startup_idx = idx
+            break
+    if first_mcp_idx is None or startup_idx is None:
+        return text
+    filtered: list[str] = []
+    for idx, line in enumerate(lines):
+        if first_mcp_idx <= idx < startup_idx:
+            if _MCP_LINE_RE.match(line.strip()):
                 continue
-            if _MCP_LINE_RE.match(stripped):
-                continue
-            if stripped:
-                filtered.append(line)
-                skipping = False
-                continue
-            filtered.append(line)
-            continue
         filtered.append(line)
     return "\n".join(filtered)
 
