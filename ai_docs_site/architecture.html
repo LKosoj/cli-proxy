@@ -1,213 +1,184 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
-    <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        
-        
-        
-        <link rel="shortcut icon" href="img/favicon.ico">
-        <title>Архитектура - cli-proxy</title>
-        <link href="css/bootstrap.min.css" rel="stylesheet">
-        <link href="css/fontawesome.min.css" rel="stylesheet">
-        <link href="css/brands.min.css" rel="stylesheet">
-        <link href="css/solid.min.css" rel="stylesheet">
-        <link href="css/v4-font-face.min.css" rel="stylesheet">
-        <link href="css/base.css" rel="stylesheet">
-        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
-        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
-        <script>hljs.highlightAll();</script> 
-    </head>
 
-    <body>
-        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
-            <div class="container">
-                <a class="navbar-brand" href="index.html">cli-proxy</a>
-                <!-- Expander button -->
-                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-
-                <!-- Expanded navigation -->
-                <div id="navbar-collapse" class="navbar-collapse collapse">
-                        <!-- Main navigation -->
-                        <ul class="nav navbar-nav">
-                            <li class="nav-item">
-                                <a href="index.html" class="nav-link">Главная</a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="architecture.html" class="nav-link active" aria-current="page">Архитектура</a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="runtime.html" class="nav-link">Запуск</a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="dependencies.html" class="nav-link">Зависимости</a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="testing.html" class="nav-link">Тестирование</a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="conventions.html" class="nav-link">Соглашения</a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="glossary.html" class="nav-link">Глоссарий</a>
-                            </li>
-                            <li class="nav-item dropdown">
-                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
-                                <ul class="dropdown-menu">
-                                    
-<li>
-    <a href="configs/index.html" class="dropdown-item">Обзор</a>
+<html data-bs-theme="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="IE=edge" http-equiv="X-UA-Compatible"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="img/favicon.ico" rel="shortcut icon"/>
+<title>Архитектура - cli-proxy</title>
+<link href="css/bootstrap.min.css" rel="stylesheet"/>
+<link href="css/fontawesome.min.css" rel="stylesheet"/>
+<link href="css/brands.min.css" rel="stylesheet"/>
+<link href="css/solid.min.css" rel="stylesheet"/>
+<link href="css/v4-font-face.min.css" rel="stylesheet"/>
+<link href="css/base.css" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" id="hljs-light" rel="stylesheet"/>
+<link disabled="" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" id="hljs-dark" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+</head>
+<body>
+<div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+<div class="container">
+<a class="navbar-brand" href="index.html">cli-proxy</a>
+<!-- Expander button -->
+<button aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation" class="navbar-toggler" data-bs-target="#navbar-collapse" data-bs-toggle="collapse" type="button">
+<span class="navbar-toggler-icon"></span>
+</button>
+<!-- Expanded navigation -->
+<div class="navbar-collapse collapse" id="navbar-collapse">
+<!-- Main navigation -->
+<ul class="nav navbar-nav">
+<li class="nav-item">
+<a class="nav-link" href="index.html">Главная</a>
 </li>
-                                    
-<li>
-    <a href="configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
+<li class="nav-item">
+<a aria-current="page" class="nav-link active" href="architecture.html">Архитектура</a>
 </li>
-                                    
-<li>
-    <a href="configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
+<li class="nav-item">
+<a class="nav-link" href="runtime.html">Запуск</a>
 </li>
-                                </ul>
-                            </li>
-                            <li class="nav-item dropdown">
-                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
-                                <ul class="dropdown-menu">
-                                    
-<li>
-    <a href="modules/index.html" class="dropdown-item">Обзор</a>
+<li class="nav-item">
+<a class="nav-link" href="dependencies.html">Зависимости</a>
 </li>
-                                    
-<li>
-    <a href="modules/bot__py.html" class="dropdown-item">bot.py</a>
+<li class="nav-item">
+<a class="nav-link" href="testing.html">Тестирование</a>
 </li>
-                                    
-<li>
-    <a href="modules/command_registry__py.html" class="dropdown-item">command_registry.py</a>
+<li class="nav-item">
+<a class="nav-link" href="conventions.html">Соглашения</a>
 </li>
-                                    
-<li>
-    <a href="modules/config__py.html" class="dropdown-item">config.py</a>
+<li class="nav-item">
+<a class="nav-link" href="glossary.html">Глоссарий</a>
 </li>
-                                    
+<li class="nav-item dropdown">
+<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Конфигурация проекта</a>
+<ul class="dropdown-menu">
 <li>
-    <a href="modules/dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+<a class="dropdown-item" href="configs/index.html">Обзор</a>
 </li>
-                                    
 <li>
-    <a href="modules/git_ops__py.html" class="dropdown-item">git_ops.py</a>
+<a class="dropdown-item" href="configs/files/config_example__yaml.html">config_example.yaml</a>
 </li>
-                                    
 <li>
-    <a href="modules/mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+<a class="dropdown-item" href="configs/files/toolhelp__json.html">toolhelp.json</a>
 </li>
-                                    
+</ul>
+</li>
+<li class="nav-item dropdown">
+<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Модули</a>
+<ul class="dropdown-menu">
 <li>
-    <a href="modules/metrics__py.html" class="dropdown-item">metrics.py</a>
+<a class="dropdown-item" href="modules/index.html">Обзор</a>
 </li>
-                                    
 <li>
-    <a href="modules/mtproto_ui__py.html" class="dropdown-item">mtproto_ui.py</a>
+<a class="dropdown-item" href="modules/bot__py.html">bot.py</a>
 </li>
-                                    
 <li>
-    <a href="modules/session__py.html" class="dropdown-item">session.py</a>
+<a class="dropdown-item" href="modules/command_registry__py.html">command_registry.py</a>
 </li>
-                                    
 <li>
-    <a href="modules/session_ui__py.html" class="dropdown-item">session_ui.py</a>
+<a class="dropdown-item" href="modules/config__py.html">config.py</a>
 </li>
-                                    
 <li>
-    <a href="modules/state__py.html" class="dropdown-item">state.py</a>
+<a class="dropdown-item" href="modules/dirs_ui__py.html">dirs_ui.py</a>
 </li>
-                                    
 <li>
-    <a href="modules/summary__py.html" class="dropdown-item">summary.py</a>
+<a class="dropdown-item" href="modules/git_ops__py.html">git_ops.py</a>
 </li>
-                                    
 <li>
-    <a href="modules/toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+<a class="dropdown-item" href="modules/mcp_bridge__py.html">mcp_bridge.py</a>
 </li>
-                                    
 <li>
-    <a href="modules/utils__py.html" class="dropdown-item">utils.py</a>
+<a class="dropdown-item" href="modules/metrics__py.html">metrics.py</a>
 </li>
-                                </ul>
-                            </li>
-                            <li class="nav-item">
-                                <a href="changes.html" class="nav-link">Изменения</a>
-                            </li>
-                        </ul>
-
-                    <ul class="nav navbar-nav ms-md-auto">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
-                                <i class="fa fa-search"></i> Search
+<li>
+<a class="dropdown-item" href="modules/mtproto_ui__py.html">mtproto_ui.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/session__py.html">session.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/session_ui__py.html">session_ui.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/state__py.html">state.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/summary__py.html">summary.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/toolhelp__py.html">toolhelp.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/utils__py.html">utils.py</a>
+</li>
+</ul>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="changes.html">Изменения</a>
+</li>
+</ul>
+<ul class="nav navbar-nav ms-md-auto">
+<li class="nav-item">
+<a class="nav-link" data-bs-target="#mkdocs_search_modal" data-bs-toggle="modal" href="#">
+<i class="fa fa-search"></i> Search
                             </a>
-                        </li>
-                            <li class="nav-item">
-                                <a rel="prev" href="index.html" class="nav-link">
-                                    <i class="fa fa-arrow-left"></i> Previous
+</li>
+<li class="nav-item">
+<a class="nav-link" href="index.html" rel="prev">
+<i class="fa fa-arrow-left"></i> Previous
                                 </a>
-                            </li>
-                            <li class="nav-item">
-                                <a rel="next" href="runtime.html" class="nav-link">
+</li>
+<li class="nav-item">
+<a class="nav-link" href="runtime.html" rel="next">
                                     Next <i class="fa fa-arrow-right"></i>
-                                </a>
-                            </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <div class="container">
-            <div class="row">
-                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
-    <div class="navbar-header">
-        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
-            <span class="fa fa-angle-down"></span>
-        </button>
-    </div>
-
-    
-    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
-        <ul class="nav flex-column">
-            
-            <li class="nav-item" data-bs-level="1"><a href="#_1" class="nav-link">Архитектура</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            
-            <li class="nav-item" data-bs-level="1"><a href="#_2" class="nav-link">Архитектура</a>
-              <ul class="nav flex-column">
-            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Основные компоненты</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_4" class="nav-link">Потоки данных</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_5" class="nav-link">Хранение и конфигурация</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_6" class="nav-link">Безопасность</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-              </ul>
-            </li>
-        </ul>
-    </div>
+</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="container">
+<div class="row">
+<div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+<div class="navbar-header">
+<button class="navbar-toggler collapsed" data-bs-target="#toc-collapse" data-bs-toggle="collapse" title="Table of Contents" type="button">
+<span class="fa fa-angle-down"></span>
+</button>
+</div>
+<div class="navbar-collapse collapse card bg-body-tertiary" id="toc-collapse">
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_1">Архитектура</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_2">Архитектура</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_3">Основные компоненты</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_4">Потоки данных</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_5">Хранение и конфигурация</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_6">Безопасность</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
 </div></div>
-                    <div class="col-md-9" role="main">
-
+<div class="col-md-9" role="main">
 <h1 id="_1">Архитектура</h1>
-<div class="highlight"><pre><span></span><code>graph TD
+<pre class="mermaid"><code>graph TD
     A[Telegram-бот] --&gt; B[BotApp]
     B --&gt; C[SessionManager]
     C --&gt; D[Session]
@@ -248,8 +219,7 @@
     style M fill:#607D8B,stroke:#455A64,color:white
     style N fill:#8BC34A,stroke:#689F38,color:white
     style O fill:#673AB7,stroke:#512DA8,color:white
-    style P fill:#FFEB3B,stroke:#FBC02D,color:black
-</code></pre></div>
+    style P fill:#FFEB3B,stroke:#FBC02D,color:black</code></pre>
 <h1 id="_2">Архитектура</h1>
 <p>Архитектура Telegram-бота построена вокруг центрального класса <code>BotApp</code>, управляющего жизненным циклом сессий, обработкой команд и интеграцией с внешними системами. Все компоненты взаимодействуют асинхронно через Telegram API и внутренние состояния.</p>
 <h2 id="_3">Основные компоненты</h2>
@@ -342,81 +312,78 @@
 <li>Опциональная авторизация для MCP и MTProto</li>
 </ul>
 <p>Архитектура обеспечивает автономность, отказоустойчивость и глубокую интеграцию с локальной средой, позволяя управлять CLI-инструментами, Git и файлами через Telegram.</p></div>
-            </div>
-        </div>
-
-        <footer class="col-md-12">
-            <hr>
-            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
-        </footer>
-        <script src="js/bootstrap.bundle.min.js"></script>
-        <script>
+</div>
+</div>
+<footer class="col-md-12">
+<hr/>
+<p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+</footer>
+<script src="js/bootstrap.bundle.min.js"></script>
+<script>
             var base_url = ".",
                 shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
         </script>
-        <script src="js/base.js"></script>
-        <script src="search/main.js"></script>
-
-        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h4 class="modal-title" id="searchModalLabel">Search</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>From here you can search these documents. Enter your search terms below.</p>
-                <form>
-                    <div class="form-group">
-                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
-                    </div>
-                </form>
-                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
-            </div>
-            <div class="modal-footer">
-            </div>
-        </div>
-    </div>
-</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th style="width: 20%;">Keys</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="help shortcut"><kbd>?</kbd></td>
-                    <td>Open this help</td>
-                  </tr>
-                  <tr>
-                    <td class="next shortcut"><kbd>n</kbd></td>
-                    <td>Next page</td>
-                  </tr>
-                  <tr>
-                    <td class="prev shortcut"><kbd>p</kbd></td>
-                    <td>Previous page</td>
-                  </tr>
-                  <tr>
-                    <td class="search shortcut"><kbd>s</kbd></td>
-                    <td>Search</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="modal-footer">
-            </div>
-        </div>
-    </div>
+<script src="js/base.js"></script>
+<script src="search/main.js"></script>
+<div aria-hidden="true" aria-labelledby="searchModalLabel" class="modal" id="mkdocs_search_modal" role="dialog" tabindex="-1">
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+<div class="modal-header">
+<h4 class="modal-title" id="searchModalLabel">Search</h4>
+<button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
 </div>
-
-    </body>
+<div class="modal-body">
+<p>From here you can search these documents. Enter your search terms below.</p>
+<form>
+<div class="form-group">
+<input class="form-control" id="mkdocs-search-query" placeholder="Search..." title="Type search term here" type="search"/>
+</div>
+</form>
+<div data-no-results-text="No results found" id="mkdocs-search-results"></div>
+</div>
+<div class="modal-footer">
+</div>
+</div>
+</div>
+</div><div aria-hidden="true" aria-labelledby="keyboardModalLabel" class="modal" id="mkdocs_keyboard_modal" role="dialog" tabindex="-1">
+<div class="modal-dialog">
+<div class="modal-content">
+<div class="modal-header">
+<h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+<button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
+</div>
+<div class="modal-body">
+<table class="table">
+<thead>
+<tr>
+<th style="width: 20%;">Keys</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="help shortcut"><kbd>?</kbd></td>
+<td>Open this help</td>
+</tr>
+<tr>
+<td class="next shortcut"><kbd>n</kbd></td>
+<td>Next page</td>
+</tr>
+<tr>
+<td class="prev shortcut"><kbd>p</kbd></td>
+<td>Previous page</td>
+</tr>
+<tr>
+<td class="search shortcut"><kbd>s</kbd></td>
+<td>Search</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="modal-footer">
+</div>
+</div>
+</div>
+</div>
+</body>
 </html>

@@ -12,7 +12,11 @@ markdown_extensions:
 - footnotes
 - admonition
 - fenced_code
-- pymdownx.superfences
+- pymdownx.superfences:
+    custom_fences:
+    - name: mermaid
+      class: mermaid
+      format: !!python/name:pymdownx.superfences.fence_code_format ''
 nav:
 - Главная: index.md
 - Архитектура: architecture.md
