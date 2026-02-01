@@ -190,19 +190,6 @@
                     <div class="col-md-9" role="main">
 
 <h1 id="_1">Зависимости</h1>
-<p>Проект использует следующие Python-пакеты, перечисленные в <code>requirements.txt</code>:</p>
-<ul>
-<li><strong><code>python-telegram-bot</code></strong> — основа для реализации Telegram-бота, обеспечивает работу с API Telegram, обработку сообщений, колбэков и команд.</li>
-<li><strong><code>PyYAML</code></strong> — парсинг и запись конфигурационного файла <code>config.yaml</code> с поддержкой сложных структур и переменных окружения.</li>
-<li><strong><code>pexpect</code></strong> — управление интерактивными CLI-процессами (сессиями), ввод/вывод, обнаружение приглашений и тик-токенов.</li>
-<li><strong><code>ansi2html</code></strong> — преобразование ANSI-цветов в HTML для отображения форматированного вывода в Telegram.</li>
-<li><strong><code>requests</code></strong> — выполнение HTTP-запросов, включая рендеринг Mermaid-диаграмм через внешний сервис.</li>
-<li><strong><code>pytest</code></strong> — модульное тестирование логики бота и утилит.</li>
-<li><strong><code>telethon</code></strong> — альтернативная библиотека для работы с Telegram API через MTProto (опционально, требуется при включённой интеграции <code>mtproto</code>).</li>
-<li><strong><code>markdown-it-py</code></strong> и <strong><code>mdit-py-plugins</code></strong> — безопасная конвертация Markdown в HTML с поддержкой задач, таблиц и разрывов строк.</li>
-<li><strong><code>linkify-it-py</code></strong> — автоматическое распознавание и оборачивание URL в ссылки при обработке текста.</li>
-</ul>
-<p>Все версии пакетов зафиксированы для обеспечения воспроизводимости окружения. Опциональные зависимости (например, <code>telethon</code>) используются только при включённых соответствующих функциях в конфигурации.</p>
 <h2 id="_2">Выявленные зависимости</h2>
 <ul>
 <li>PyYAML==6.0.2</li>
