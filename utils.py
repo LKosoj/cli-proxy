@@ -125,11 +125,6 @@ def _remove_mcp_lines(text: str) -> str:
     skipping = True
     for line in lines:
         stripped = line.strip()
-        lowered = stripped.lower()
-        if lowered in ("user", "user:"):
-            filtered.append(line)
-            skipping = True
-            continue
         if skipping:
             if stripped.lower().startswith("mcp startup:"):
                 filtered.append(line)
