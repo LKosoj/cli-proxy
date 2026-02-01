@@ -373,6 +373,28 @@ class GitOps:
             cleaned = cleaned[:max_len].rstrip()
         return cleaned
 
+    def _sanitize_commit_body(self, body: str, max_len: int = 2000) -> str:
+        cleaned = body.strip()
+        if len(cleaned) > max_len:
+            cleaned = cleaned[:max_len].rstrip()
+        return cleaned
+
+    async def _build_commit_body(self, session: Session) -> Optional[str]:
+        code, stat_out = await self._run_git(session, ["diff", "--stat"])
+        if code != 0:
+            stat_out = ""
+        code, status_out = await self._run_git(session, ["status", "--porcelain"])
+        if code != 0:
+            status_out = ""
+        parts = []
+        if stat_out.strip():
+            parts.append("Изменения:\n" + stat_out.strip())
+        if status_out.strip():
+            parts.append("Статус:\n" + status_out.strip())
+        if not parts:
+            return None
+        return "\n\n".join(parts)
+
     async def _send_git_output(
         self,
         context: ContextTypes.DEFAULT_TYPE,
@@ -395,6 +417,7 @@ class GitOps:
         chat_id: int,
         context: ContextTypes.DEFAULT_TYPE,
         message: str,
+        body: Optional[str] = None,
     ) -> None:
         session.git_busy = True
         try:
@@ -402,7 +425,10 @@ class GitOps:
             if code != 0:
                 await self._send_git_output(context, chat_id, session, "Git add", add_out)
                 return
-            code, commit_out = await self._run_git(session, ["commit", "-m", message])
+            args = ["commit", "-m", message]
+            if body:
+                args += ["-m", body]
+            code, commit_out = await self._run_git(session, args)
             await self._send_git_output(context, chat_id, session, "Git commit", commit_out)
             if code == 0:
                 status = await self._git_status_text(session)
@@ -467,7 +493,10 @@ class GitOps:
             await self._handle_git_conflict(session, chat_id, context)
             return True
         message = self._sanitize_commit_message(message)
-        await self._execute_git_commit(session, chat_id, context, message)
+        body = await self._build_commit_body(session)
+        if body:
+            body = self._sanitize_commit_body(body)
+        await self._execute_git_commit(session, chat_id, context, message, body)
         return True
 
     async def handle_callback(self, query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -694,11 +723,23 @@ class GitOps:
                 await self._send_git_message(context, chat_id, session, "Не удалось получить diff для коммита.")
                 return True
             commit_message = None
+            commit_body = None
             if os.getenv("OPENAI_API_KEY") or self.config.defaults.openai_api_key:
-                from summary import suggest_commit_message
-                commit_message = await asyncio.to_thread(suggest_commit_message, commit_context, self.config)
+                from summary import suggest_commit_message_detailed
+                detailed = await asyncio.to_thread(
+                    suggest_commit_message_detailed, commit_context, self.config
+                )
+                if detailed:
+                    commit_message, commit_body = detailed
             if commit_message:
-                await self._execute_git_commit(session, chat_id, context, commit_message)
+                commit_message = self._sanitize_commit_message(commit_message)
+                if commit_body:
+                    commit_body = self._sanitize_commit_body(commit_body)
+                else:
+                    auto_body = await self._build_commit_body(session)
+                    if auto_body:
+                        commit_body = self._sanitize_commit_body(auto_body)
+                await self._execute_git_commit(session, chat_id, context, commit_message, commit_body)
             else:
                 self.pending_git_commit[chat_id] = session.id
                 await self._send_git_message(context, chat_id, session, "Введите сообщение коммита (или '-' для отмены):")

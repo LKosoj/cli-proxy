@@ -225,3 +225,70 @@ def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Opt
     if not message:
         return None
     return message
+
+
+def suggest_commit_message_detailed(
+    text: str, config: Optional[AppConfig] = None
+) -> Optional[Tuple[str, str]]:
+    cfg = _get_openai_config(config)
+    if not cfg:
+        return None
+    api_key, model, base_url = cfg
+
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Сформируй сообщение коммита в двух частях:\n"
+                    "1) Краткий заголовок одной строкой (до ~80 символов), без точки в конце.\n"
+                    "2) Детальное описание в 3–6 пунктах, каждый пункт с новой строки, "
+                    "по делу, с упоминанием ключевых файлов/изменений и поведения. "
+                    "Если были тесты — укажи их, иначе напиши 'Тесты: не запускались'.\n"
+                    "Верни в формате:\n"
+                    "SUMMARY: <текст>\n"
+                    "BODY:\n"
+                    "- ...\n"
+                ),
+            },
+            {
+                "role": "user",
+                "content": text[:12000],
+            },
+        ],
+        "max_tokens": 220,
+        "temperature": 0.2,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(
+        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    content = data["choices"][0]["message"]["content"].strip()
+    if not content:
+        return None
+    summary_line = ""
+    body_lines: list[str] = []
+    in_body = False
+    for line in content.splitlines():
+        if line.startswith("SUMMARY:"):
+            summary_line = line.replace("SUMMARY:", "", 1).strip()
+            continue
+        if line.startswith("BODY:"):
+            in_body = True
+            continue
+        if in_body:
+            if line.strip():
+                body_lines.append(line.rstrip())
+    if not summary_line:
+        return None
+    body = "\n".join(body_lines).strip()
+    if not body:
+        return None
+    return summary_line, body

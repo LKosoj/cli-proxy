@@ -95,12 +95,40 @@ class BotApp:
         return chat_id in self.config.telegram.whitelist_chat_ids
 
     def _setup_logging(self) -> None:
+        import datetime as _dt
+        from logging.handlers import TimedRotatingFileHandler
+
         log_path = self.config.defaults.log_path
-        logging.basicConfig(
-            filename=log_path,
-            level=logging.INFO,
-            format="%(asctime)s %(levelname)s %(message)s",
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        root.setLevel(logging.INFO)
+
+        handler = TimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            interval=1,
+            backupCount=1,
+            utc=True,
+            atTime=_dt.time(3, 0),
+            encoding="utf-8",
         )
+
+        def _namer(default_name: str) -> str:
+            return f"{log_path}.1"
+
+        def _rotator(source: str, dest: str) -> None:
+            try:
+                if os.path.exists(dest):
+                    os.remove(dest)
+            except Exception:
+                pass
+            os.replace(source, dest)
+
+        handler.namer = _namer
+        handler.rotator = _rotator
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        root.addHandler(handler)
 
     def _format_ts(self, ts: float) -> str:
         import datetime as _dt

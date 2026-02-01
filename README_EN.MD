@@ -7,7 +7,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude) with multi
 ## Features
 - Multiple CLI sessions in different directories.
 - Request queue and busy control.
-- Output always sent as an HTML file (ANSI colors preserved).
+- Output always sent as an HTML file (Markdown rendering, ANSI colors, Mermaid diagrams as SVG; on render failure they remain as code blocks).
 - Short preview: OpenAI summary or first 4000 chars.
 - Prompt and resume token autodetection, saved in `state.json`.
 - Active session restore after restart.
