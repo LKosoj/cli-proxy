@@ -15,6 +15,7 @@ _TICK_OR_TIME_RE = re.compile(
 )
 _MERMAID_BLOCK_RE = re.compile(r"```mermaid\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 _HTML_TAG_RE = re.compile(r"(<[^>]+>)")
+_MCP_LINE_RE = re.compile(r"^mcp:\s+", re.IGNORECASE)
 
 _ANSI_FG_COLORS = {
     30: "#000000",
@@ -51,7 +52,7 @@ def extract_tick_tokens(text: str) -> List[str]:
 
 
 def ansi_to_html(text: str) -> str:
-    cleaned = _normalize_markdown(text)
+    cleaned = normalize_text(text, strip_ansi=False)
     rendered = _render_mermaid_blocks(cleaned)
     html_body = _markdown_to_html(rendered)
     html_body = _apply_ansi_to_html(html_body)
@@ -105,27 +106,67 @@ def _render_mermaid_blocks(text: str) -> str:
     return _MERMAID_BLOCK_RE.sub(replacer, text)
 
 
-def _normalize_markdown(text: str) -> str:
+def normalize_text(text: str, strip_ansi: bool = True) -> str:
     if not text:
         return text
-    return _dedupe_repeated_tail(text)
+    if strip_ansi:
+        text = strip_ansi_codes(text)
+    text = _remove_mcp_lines(text)
+    return _dedupe_repeated_blocks(text)
 
 
-def _dedupe_repeated_tail(text: str) -> str:
+def strip_ansi_codes(text: str) -> str:
+    return strip_ansi(text)
+
+
+def _remove_mcp_lines(text: str) -> str:
+    lines = text.splitlines()
+    filtered: list[str] = []
+    skipping = True
+    for line in lines:
+        stripped = line.strip()
+        if skipping:
+            if stripped.lower().startswith("mcp startup:"):
+                filtered.append(line)
+                skipping = False
+                continue
+            if _MCP_LINE_RE.match(stripped):
+                continue
+            if stripped:
+                filtered.append(line)
+                skipping = False
+                continue
+            filtered.append(line)
+            continue
+        filtered.append(line)
+    return "\n".join(filtered)
+
+
+def _dedupe_repeated_blocks(text: str) -> str:
     lines = text.splitlines()
     total = len(lines)
-    if total < 10:
+    if total < 4:
         return text
-    max_tail = min(200, total // 2)
-    for tail_len in range(max_tail, 4, -1):
-        tail = lines[-tail_len:]
-        if not any(l.strip() for l in tail):
-            continue
-        haystack = lines[: total - tail_len]
-        for idx in range(0, len(haystack) - tail_len + 1):
-            if haystack[idx : idx + tail_len] == tail:
-                return "\n".join(lines[: total - tail_len])
-    return text
+    min_block = 3
+    changed = True
+    while changed:
+        changed = False
+        total = len(lines)
+        for i in range(total - min_block):
+            j = i + 1
+            while j <= total - min_block:
+                k = 0
+                while i + k < total and j + k < total and lines[i + k] == lines[j + k]:
+                    k += 1
+                if k >= min_block:
+                    del lines[j : j + k]
+                    changed = True
+                    total = len(lines)
+                    break
+                j += 1
+            if changed:
+                break
+    return "\n".join(lines)
 
 
 def _render_mermaid_svg(source: str) -> Optional[str]:
