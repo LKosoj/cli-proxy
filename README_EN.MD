@@ -47,7 +47,7 @@ python bot.py
    - Send a normal message — it goes to the active session.
    - If the message starts with `/`, use `/send /command` or `> /command`.
    - Long messages are buffered for 2 seconds; short ones (<3000) are sent immediately.
-   - `.txt`, `.md`, `.rst`, `.log` attachments (up to 300 KB) are sent immediately and merged with the caption.
+- `.txt`, `.md`, `.rst`, `.log`, `.html`, `.htm` attachments (up to 500 KB) are sent immediately and merged with the caption.
 
 3) **Control execution**
    - If the session is busy, the bot offers: cancel, queue, or discard input.
@@ -118,7 +118,7 @@ MTProto:
 Flow: message from MTProto menu → executed in active CLI session → CLI writes md file (timestamped) → bot sends its content to the chosen chat (max 12000 chars), status always goes to the bot.
 
 ## Attachments
-- Text files: `.txt`, `.md`, `.rst`, `.log` (up to 300 KB). Bot combines caption + file contents and sends to CLI.
+- Text files: `.txt`, `.md`, `.rst`, `.log`, `.html`, `.htm` (up to 500 KB). Bot combines caption + file contents and sends to CLI.
 - Images: `.png`, `.jpg`, `.jpeg` (photo/document). Requires `image_cmd` for the selected CLI.
   If current tool lacks `image_cmd`, bot reports that images are unsupported.
   Caption is used as the prompt text.

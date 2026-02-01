@@ -520,11 +520,22 @@ class BotApp:
             caption = (update.message.caption or "").strip()
             await self._handle_image_bytes(session, data, filename or "image.jpg", caption, chat_id, context)
             return
-        if not (lower.endswith(".txt") or lower.endswith(".md") or lower.endswith(".rst") or lower.endswith(".log")):
-            await self._send_message(context, chat_id=chat_id, text="Поддерживаются только .txt, .md, .rst и .log.")
+        if not (
+            lower.endswith(".txt")
+            or lower.endswith(".md")
+            or lower.endswith(".rst")
+            or lower.endswith(".log")
+            or lower.endswith(".html")
+            or lower.endswith(".htm")
+        ):
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text="Поддерживаются только .txt, .md, .rst, .log, .html и .htm.",
+            )
             return
-        if doc.file_size and doc.file_size > 300 * 1024:
-            await self._send_message(context, chat_id=chat_id, text="Файл слишком большой. Лимит 300 КБ.")
+        if doc.file_size and doc.file_size > 500 * 1024:
+            await self._send_message(context, chat_id=chat_id, text="Файл слишком большой. Лимит 500 КБ.")
             return
         await self._flush_buffer(chat_id, session, context)
         content = data.decode("utf-8", errors="replace")
