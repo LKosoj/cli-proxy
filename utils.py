@@ -51,7 +51,8 @@ def extract_tick_tokens(text: str) -> List[str]:
 
 
 def ansi_to_html(text: str) -> str:
-    rendered = _render_mermaid_blocks(text)
+    cleaned = _normalize_markdown(text)
+    rendered = _render_mermaid_blocks(cleaned)
     html_body = _markdown_to_html(rendered)
     html_body = _apply_ansi_to_html(html_body)
     return _wrap_html(html_body)
@@ -85,7 +86,7 @@ def _markdown_to_html(text: str) -> str:
     from mdit_py_plugins.tasklists import tasklists_plugin
 
     md = (
-        MarkdownIt("commonmark", {"html": True, "linkify": True})
+        MarkdownIt("commonmark", {"html": True, "linkify": True, "breaks": True})
         .enable("table")
         .enable("strikethrough")
         .use(tasklists_plugin, enabled=True)
@@ -102,6 +103,29 @@ def _render_mermaid_blocks(text: str) -> str:
         return f"<div class=\"mermaid-diagram\">{svg}</div>"
 
     return _MERMAID_BLOCK_RE.sub(replacer, text)
+
+
+def _normalize_markdown(text: str) -> str:
+    if not text:
+        return text
+    return _dedupe_repeated_tail(text)
+
+
+def _dedupe_repeated_tail(text: str) -> str:
+    lines = text.splitlines()
+    total = len(lines)
+    if total < 10:
+        return text
+    max_tail = min(200, total // 2)
+    for tail_len in range(max_tail, 4, -1):
+        tail = lines[-tail_len:]
+        if not any(l.strip() for l in tail):
+            continue
+        haystack = lines[: total - tail_len]
+        for idx in range(0, len(haystack) - tail_len + 1):
+            if haystack[idx : idx + tail_len] == tail:
+                return "\n".join(lines[: total - tail_len])
+    return text
 
 
 def _render_mermaid_svg(source: str) -> Optional[str]:
