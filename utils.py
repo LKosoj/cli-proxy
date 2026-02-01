@@ -82,13 +82,13 @@ def _wrap_html(body: str) -> str:
 
 def _markdown_to_html(text: str) -> str:
     from markdown_it import MarkdownIt
-    from mdit_py_plugins.tasklists import tasklists
+    from mdit_py_plugins.tasklists import tasklists_plugin
 
     md = (
         MarkdownIt("commonmark", {"html": True, "linkify": True})
         .enable("table")
         .enable("strikethrough")
-        .use(tasklists, enabled=True)
+        .use(tasklists_plugin, enabled=True)
     )
     return md.render(text)
 
