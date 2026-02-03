@@ -706,13 +706,9 @@ class ToolRegistry:
     async def execute(self, name: str, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         # enforce timeout for each tool
         try:
-            logging.info(f"tool start name={name}")
             return await asyncio.wait_for(self._execute_internal(name, args, ctx), timeout=TOOL_TIMEOUT_MS / 1000)
         except asyncio.TimeoutError:
-            logging.info(f"tool timeout name={name}")
             return {"success": False, "error": f"⏱️ Tool {name} timed out after {int(TOOL_TIMEOUT_MS/1000)}s"}
-        finally:
-            logging.info(f"tool end name={name}")
 
     async def _execute_internal(self, name: str, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         if name == "run_command":
@@ -732,9 +728,7 @@ class ToolRegistry:
         if name == "list_directory":
             return await self._list_directory(args, ctx)
         if name == "search_web":
-            logging.info("start search_web")
             return await self._search_web(args, ctx)
-            logging.info("finish search_web")
         if name == "fetch_page":
             return await self._fetch_page(args, ctx)
         if name == "manage_tasks":
@@ -979,21 +973,17 @@ class ToolRegistry:
         tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
         try:
             source = "proxy" if proxy_url else "zai" if zai_key else "tavily" if tavily_key else "none"
-            logging.info(f"search_web start source={source} qlen={len(query)}")
             if proxy_url:
-                logging.info("search_web using proxy_url")
                 r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=15)
                 if not r.ok:
                     raise RuntimeError(f"Proxy error: {r.status_code}")
                 results = (r.json() or {}).get("search_result", [])
             elif zai_key:
-                logging.info("search_web using Z.AI")
                 r = requests.post("https://api.z.ai/api/paas/v4/web_search", headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"}, json={"search_engine": "search-prime", "search_query": query, "count": 10}, timeout=15)
                 if not r.ok:
                     raise RuntimeError(f"Z.AI error: {r.status_code}")
                 results = (r.json() or {}).get("search_result", [])
             elif tavily_key:
-                logging.info("search_web using Tavily")
                 r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=15)
                 if not r.ok:
                     raise RuntimeError(f"Tavily error: {r.status_code}")
@@ -1003,7 +993,6 @@ class ToolRegistry:
                 return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)"}
 
             if not results:
-                logging.info("search_web no results")
                 return {"success": True, "output": "(no results)"}
             out_parts = []
             for i, r in enumerate(results):
@@ -1013,7 +1002,6 @@ class ToolRegistry:
                 date = r.get("publish_date") or r.get("date")
                 date_part = f" ({date})" if date else ""
                 out_parts.append(f"[{i+1}] {title}{date_part}\n{url}\n{content[:400]}")
-            logging.info(f"search_web done results={len(out_parts)}")
             return {"success": True, "output": "\n\n".join(out_parts)}
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
@@ -1511,7 +1499,6 @@ class ReActAgent:
             .replace("{{tools}}", ", ".join(TOOL_NAMES))
             .replace("{{userPorts}}", user_ports)
         )
-        logging.info("react system prompt loaded tools=%s", len(TOOL_NAMES))
         memory_content = get_memory_for_prompt(cwd)
         if memory_content:
             prompt += f"\n\n<MEMORY>\nNotes from previous sessions (use \"memory\" tool to update):\n{memory_content}\n</MEMORY>"
@@ -1552,7 +1539,6 @@ class ReActAgent:
         if not cfg:
             raise RuntimeError("OpenAI config missing")
         api_key, model, base_url = cfg
-        logging.info("react llm request model=%s tools=%s tool_choice=auto", model, len(definitions))
         payload = {"model": model, "messages": messages, "tools": definitions, "tool_choice": "auto"}
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         resp = requests.post(f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=90)
@@ -1562,7 +1548,6 @@ class ReActAgent:
 
     async def run(self, session_id: str, user_message: str, session_obj: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str]) -> str:
         cwd = session_obj.workdir
-        logging.info("react run start session_id=%s chat_id=%s", session_id, chat_id)
         if session_id not in self._sessions:
             self._sessions[session_id] = self._load_session(cwd)
         session = self._sessions[session_id]
@@ -1570,24 +1555,10 @@ class ReActAgent:
         final_response = ""
         blocked_count = 0
         for iteration in range(AGENT_MAX_ITERATIONS):
-            logging.info("react iteration start session_id=%s iter=%s", session_id, iteration + 1)
             messages = self._build_messages(session, user_message, cwd, chat_id, working)
-            logging.info("react call llm session_id=%s iter=%s messages=%s", session_id, iteration + 1, len(messages))
             raw_message = self._call_openai(messages)
-            logging.info(
-                "react llm response session_id=%s iter=%s keys=%s function_call=%s",
-                session_id,
-                iteration + 1,
-                list(raw_message.keys()),
-                "function_call" in raw_message,
-            )
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
-            if tool_calls:
-                tool_names = [call.get("function", {}).get("name") for call in tool_calls]
-                logging.info("react tool_calls session_id=%s iter=%s count=%s tools=%s", session_id, iteration + 1, len(tool_calls), tool_names)
-            else:
-                logging.info("react no tool_calls session_id=%s iter=%s", session_id, iteration + 1)
             if not tool_calls:
                 final_response = (content or "").strip() or "(empty response)"
                 break
@@ -1604,17 +1575,6 @@ class ReActAgent:
                         args = json.loads(fixed)
                     except Exception:
                         args = {}
-                if isinstance(args, dict):
-                    arg_keys = list(args.keys())
-                else:
-                    arg_keys = []
-                logging.info(
-                    "react tool_call prepared session_id=%s iter=%s tool=%s arg_keys=%s",
-                    session_id,
-                    iteration + 1,
-                    name,
-                    arg_keys,
-                )
                 ctx = {
                     "cwd": cwd,
                     "session_id": session_id,
@@ -1638,7 +1598,6 @@ class ReActAgent:
                 blocked_count = 0
         if not final_response:
             final_response = "⚠️ Max iterations reached"
-        logging.info("react run end session_id=%s", session_id)
         date_str = time.strftime("%Y-%m-%d")
         session.setdefault("history", []).append({"user": f"[{date_str}] {user_message}", "assistant": final_response})
         while len(session["history"]) > AGENT_MAX_HISTORY:
@@ -1657,7 +1616,6 @@ class AgentRunner:
             return "Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL."
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
-        logging.info("agent runner start session_id=%s chat_id=%s", session.id, chat_id)
         return await self._react.run(session.id, user_text, session, bot, context, chat_id, chat_type)
 
     def record_message(self, chat_id: int, message_id: int) -> None:
