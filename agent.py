@@ -1070,6 +1070,7 @@ class ToolRegistry:
         zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
         tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
         jina_key = os.getenv("JINA_API_KEY") or (self.config.defaults.jina_api_key if self.config else None)
+        timeout_sec = int(WEB_FETCH_TIMEOUT_MS / 1000)
         try:
             providers: List[tuple[str, Any]] = []
             if proxy_url:
