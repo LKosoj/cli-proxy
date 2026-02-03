@@ -71,7 +71,7 @@ python bot.py
 `config.yaml` supports:
 - `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands) and `image_cmd` (appended to base command/resume_cmd for image handling)
 - `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings, `zai_api_key`/`tavily_api_key` for web search/reader, `github_token` for HTTPS git
-- `defaults.log_path`: bot log file path
+- `defaults.log_path`: bot log file path (main log). Errors are written to a separate `*_error.log` file with the same rotation rules.
 - `defaults.mtproto_output_dir`: directory for MTProto result md files (relative to workdir or absolute). Files are timestamped.
 - `defaults.mtproto_cleanup_days`: delete md files older than N days (default 5).
 - `defaults.image_temp_dir`: temp image directory (relative to workdir or absolute).

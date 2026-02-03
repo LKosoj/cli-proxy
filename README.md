@@ -71,7 +71,7 @@ python bot.py
 `config.yaml` поддерживает:
 - `tools.*`: команды запуска, режим, prompt/resume/help (включая `resume_cmd` для отдельных команд возобновления) и `image_cmd` (добавляется к базовой команде/resume_cmd для обработки изображений)
 - `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки, `zai_api_key`/`tavily_api_key` для web‑поиска/reader, `github_token` для git по HTTPS
-- `defaults.log_path`: путь к файлу логов бота
+- `defaults.log_path`: путь к файлу логов бота (основной лог). Ошибки пишутся отдельно в файл `*_error.log` с теми же правилами ротации.
 - `defaults.mtproto_output_dir`: каталог для md‑файлов результата MTProto (относительно workdir или абсолютный). Файлы создаются с timestamp в имени.
 - `defaults.mtproto_cleanup_days`: удалять md‑файлы старше N дней (по умолчанию 5).
 - `defaults.image_temp_dir`: каталог для временных изображений (относительно workdir или абсолютный).
