@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 import re
 import time
@@ -396,6 +397,7 @@ async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
                 return {"success": True, "output": f"Started in background (PID: {proc.pid}). Check logs with: tail <logfile>"}
             return {"success": False, "error": f"Process started but died immediately (PID: {proc.pid}). Check the log file for errors!"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": f"Failed to start background process: {e}"}
 
     try:
@@ -417,6 +419,7 @@ async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
     except subprocess.TimeoutExpired:
         return {"success": False, "error": f"⏱️ Tool run_command timed out after {int(TOOL_TIMEOUT_MS/1000)}s"}
     except Exception as e:
+        logging.exception(f"tool failed {str(e)}")
         return {"success": False, "error": f"Exit 1: {sanitize_output(str(e))}"}
 
 
@@ -796,6 +799,7 @@ class ToolRegistry:
             content = "\n".join(slice_lines)
             return {"success": True, "output": content if content else "(empty file)"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _write_file(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -824,6 +828,7 @@ class ToolRegistry:
                 f.write(content)
             return {"success": True, "output": f"Written {len(content)} bytes to {path}"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _edit_file(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -857,6 +862,7 @@ class ToolRegistry:
                 f.write(new_content)
             return {"success": True, "output": f"Edited {path}"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _delete_file(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -876,6 +882,7 @@ class ToolRegistry:
             os.remove(full_path)
             return {"success": True, "output": f"Deleted: {path}"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _search_files(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -900,6 +907,7 @@ class ToolRegistry:
                     break
             return {"success": True, "output": "\n".join(files) or "(no matches)"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _search_text(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -953,6 +961,7 @@ class ToolRegistry:
                 return {"success": True, "output": completed.stdout}
             return {"success": False, "error": completed.stderr or "list failed"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _search_web(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -993,6 +1002,7 @@ class ToolRegistry:
                 out_parts.append(f"[{i+1}] {title}{date_part}\n{url}\n{content[:400]}")
             return {"success": True, "output": "\n\n".join(out_parts)}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _fetch_page(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -1052,6 +1062,7 @@ class ToolRegistry:
                 return {"success": True, "output": output}
             return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY)"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
     async def _manage_tasks(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -1179,6 +1190,7 @@ class ToolRegistry:
                 await bot._send_document(context, chat_id=chat_id, document=f, caption=caption)
             return {"success": True, "output": f"Sent file: {os.path.basename(resolved)}"}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             msg = str(e)
             if "not enough rights" in msg or "CHAT_SEND_MEDIA_FORBIDDEN" in msg:
                 return {"success": False, "error": "Cannot send files in this group (no permissions). Try: read the file and paste contents, or tell user to DM for files."}
@@ -1204,6 +1216,7 @@ class ToolRegistry:
                     return {"success": True, "output": "Deleted last message"}
                 return {"success": False, "error": "Failed to delete (maybe already deleted or too old)"}
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 return {"success": False, "error": f"Delete failed: {e}"}
         if action == "delete_by_index":
             idx = args.get("index", -1)
@@ -1220,6 +1233,7 @@ class ToolRegistry:
                     return {"success": True, "output": f"Deleted message at index {idx}"}
                 return {"success": False, "error": "Failed to delete"}
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 return {"success": False, "error": f"Delete failed: {e}"}
         if action == "edit_last":
             new_text = args.get("new_text")
@@ -1232,6 +1246,7 @@ class ToolRegistry:
                     return {"success": True, "output": "Edited last message"}
                 return {"success": False, "error": "Failed to edit (maybe too old or contains media)"}
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 return {"success": False, "error": f"Edit failed: {e}"}
         return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -1328,6 +1343,7 @@ class ToolRegistry:
             output = strip_ansi(output)
             return {"success": True, "output": _trim_output(output)}
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
 
 

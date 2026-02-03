@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Dict, Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,6 +22,7 @@ def prepare_dirs(
     try:
         entries = sorted(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
     except Exception as e:
+        logging.exception(f"tool failed {str(e)}")
         return f"Ошибка чтения каталога: {e}"
     if not entries:
         if allow_empty:

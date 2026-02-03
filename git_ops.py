@@ -2,6 +2,7 @@ import asyncio
 import html
 import os
 import tempfile
+import logging
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -330,6 +331,7 @@ class GitOps:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read().strip()
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             await self._send_git_message(context, chat_id, session, f"Не удалось открыть git.md: {e}")
             return
         if not content:

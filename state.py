@@ -34,7 +34,7 @@ def _load_raw(path: str) -> Dict[str, Any]:
                 return {}
             return json.loads(content)
     except Exception as e:
-        logging.exception("state load failed: %s", e)
+        logging.exception(f"tool failed {str(e)}")
         return {}
 
 
@@ -43,7 +43,7 @@ def _save_raw(path: str, raw: Dict[str, Any]) -> None:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logging.exception("state save failed: %s", e)
+        logging.exception(f"tool failed {str(e)}")
 
 
 def load_state(path: str) -> Dict[str, SessionState]:

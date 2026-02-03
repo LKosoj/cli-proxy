@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from typing import Any, Dict, Optional
 
 
@@ -45,6 +46,7 @@ class MCPBridge:
                 output = await self.bot_app.run_prompt_raw(prompt, session_id=session_id)
                 await self._write(writer, {"ok": True, "output": output})
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 await self._write(writer, {"ok": False, "error": str(e)})
         writer.close()
         await writer.wait_closed()

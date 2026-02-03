@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -76,6 +77,7 @@ class MTProtoUI:
                 self._client = client
                 return client, None
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 return None, f"Ошибка MTProto: {e}"
 
     async def show_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -155,6 +157,7 @@ class MTProtoUI:
             await client.send_message(peer, text)
             return None
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return f"Ошибка MTProto: {e}"
 
     async def send_file(self, peer, path: str) -> Optional[str]:
@@ -165,4 +168,5 @@ class MTProtoUI:
             await client.send_file(peer, path)
             return None
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             return f"Ошибка MTProto: {e}"

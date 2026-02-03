@@ -262,7 +262,7 @@ class SessionManager:
             if st and st.name:
                 session.name = st.name
         except Exception as e:
-            logging.exception("persist_sessions failed: %s", e)
+            logging.exception(f"tool failed {str(e)}")
         self.sessions[sid] = session
         self.active_session_id = sid
         try:
@@ -347,7 +347,7 @@ class SessionManager:
         try:
             saved = load_sessions(self.config.defaults.state_path)
         except Exception as e:
-            logging.exception("restore_sessions failed: %s", e)
+            logging.exception(f"tool failed {str(e)}")
             return
         max_id = 0
         for sid, val in saved.items():

@@ -381,11 +381,11 @@ class BotApp:
                 name=session.name,
             )
         except Exception as e:
-            logging.exception("update_state failed: %s", e)
+            logging.exception(f"tool failed {str(e)}")
         try:
             self.manager._persist_sessions()
         except Exception as e:
-            logging.exception("persist_sessions failed: %s", e)
+            logging.exception(f"tool failed {str(e)}")
 
     async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
         async with session.run_lock:
@@ -403,7 +403,7 @@ class BotApp:
                 else:
                     await self.send_output(session, dest, output, context)
             except Exception as e:
-                logging.exception("run_prompt failed: %s", e)
+                logging.exception(f"tool failed {str(e)}")
                 if dest.get("kind") == "mtproto" and dest.get("file_path"):
                     await self._send_mtproto_result(session, dest, "", context, error=str(e))
                 else:
@@ -434,7 +434,7 @@ class BotApp:
                     try:
                         self.manager._persist_sessions()
                     except Exception as e:
-                        logging.exception("persist_sessions failed: %s", e)
+                        logging.exception(f"tool failed {str(e)}")
                     asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
     async def run_agent(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -465,13 +465,13 @@ class BotApp:
                         name=session.name,
                     )
                 except Exception as e:
-                    logging.exception("update_state failed: %s", e)
+                    logging.exception(f"tool failed {str(e)}")
                 try:
                     self.manager._persist_sessions()
                 except Exception as e:
-                    logging.exception("persist_sessions failed: %s", e)
+                    logging.exception(f"tool failed {str(e)}")
             except Exception as e:
-                logging.exception("run_agent failed: %s", e)
+                logging.exception(f"tool failed {str(e)}")
                 chat_id = dest.get("chat_id")
                 if chat_id is not None:
                     await self._send_message(context, chat_id=chat_id, text=f"Ошибка агента: {e}")
@@ -490,7 +490,7 @@ class BotApp:
                     try:
                         self.manager._persist_sessions()
                     except Exception as e:
-                        logging.exception("persist_sessions failed: %s", e)
+                        logging.exception(f"tool failed {str(e)}")
                     if session.agent_enabled:
                         asyncio.create_task(self.run_agent(session, next_prompt, next_dest, context))
                     else:
@@ -571,6 +571,7 @@ class BotApp:
             try:
                 os.makedirs(target, exist_ok=False)
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 await self._send_message(context, chat_id=chat_id, text=f"Не удалось создать каталог: {e}")
                 return
             await self._send_message(context, chat_id=chat_id, text=f"Каталог создан: {target}")
@@ -637,6 +638,7 @@ class BotApp:
                 else:
                     await self._send_message(context, chat_id=chat_id, text=f"Ошибка git clone:\\n{output[:4000]}")
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 await self._send_message(context, chat_id=chat_id, text=f"Ошибка запуска git clone: {e}")
             return
         if await self.git.handle_pending_commit_message(chat_id, text, context):
@@ -683,6 +685,7 @@ class BotApp:
             file_obj = await context.bot.get_file(doc.file_id)
             data = await file_obj.download_as_bytearray()
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             await self._send_message(context, chat_id=chat_id, text=f"Не удалось скачать файл: {e}")
             return
         if lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg") or (doc.mime_type or "").startswith("image/"):
@@ -749,6 +752,7 @@ class BotApp:
             file_obj = await context.bot.get_file(photo.file_id)
             data = await file_obj.download_as_bytearray()
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             await self._send_message(context, chat_id=chat_id, text=f"Не удалось скачать изображение: {e}")
             return
         caption = (update.message.caption or "").strip()
@@ -786,6 +790,7 @@ class BotApp:
             with open(image_path, "wb") as f:
                 f.write(data)
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             await self._send_message(context, chat_id=chat_id, text=f"Не удалось сохранить изображение: {e}")
             return
         prompt = caption.strip()
@@ -994,7 +999,7 @@ class BotApp:
                         file_exists = True
                         break
                 except Exception as e:
-                    logging.exception("mtproto read failed: %s", e)
+                    logging.exception(f"tool failed {str(e)}")
             await asyncio.sleep(0.5)
         if file_exists:
             if len(content) > 12000:
@@ -1315,6 +1320,7 @@ class BotApp:
                 await query.edit_message_text("Help получен, отправляю…")
                 await self._send_toolhelp_content(chat_id, context, content)
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 await query.edit_message_text(f"Ошибка получения help: {e}")
             return
         if query.data.startswith("file_pick:"):
@@ -1465,6 +1471,7 @@ class BotApp:
                     os.remove(path)
                 await query.edit_message_text("Удалено.")
             except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
                 await query.edit_message_text(f"Ошибка удаления: {e}")
             current = self.files_dir.get(chat_id, session.workdir)
             if not os.path.isdir(current) or not is_within_root(current, session.workdir):
@@ -1942,6 +1949,7 @@ class BotApp:
 
             data = load_state(self.config.defaults.state_path)
         except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
             await self._send_message(context, chat_id=chat_id, text=f"Ошибка чтения состояния: {e}")
             return
         if not data:
