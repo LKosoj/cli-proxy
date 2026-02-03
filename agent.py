@@ -988,6 +988,7 @@ class ToolRegistry:
                     raise RuntimeError(f"Tavily error: {r.status_code}")
                 results = (r.json() or {}).get("results", [])
             else:
+                logging.exception(f"tool failed: No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)")
                 return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)"}
 
             if not results:
