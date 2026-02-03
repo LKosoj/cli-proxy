@@ -972,6 +972,7 @@ class ToolRegistry:
         zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
         tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
         jina_key = os.getenv("JINA_API_KEY") or (self.config.defaults.jina_api_key if self.config else None)
+        timeout_sec = int(WEB_FETCH_TIMEOUT_MS / 1000)
         try:
             providers: List[tuple[str, Any]] = []
             if proxy_url:
@@ -991,12 +992,12 @@ class ToolRegistry:
             for name, _ in providers:
                 try:
                     if name == "proxy":
-                        r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=15)
+                        r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=timeout_sec)
                         if not r.ok:
                             raise RuntimeError(f"Proxy error: {r.status_code}")
                         results = (r.json() or {}).get("search_result", [])
                     elif name == "tavily":
-                        r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=15)
+                        r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=timeout_sec)
                         if not r.ok:
                             raise RuntimeError(f"Tavily error: {r.status_code}")
                         results = (r.json() or {}).get("results", [])
@@ -1009,7 +1010,7 @@ class ToolRegistry:
                                 "Authorization": f"Bearer {jina_key}",
                                 "X-Respond-With": "no-content",
                             },
-                            timeout=15,
+                            timeout=timeout_sec,
                         )
                         if not r.ok:
                             raise RuntimeError(f"Jina search error: {r.status_code}")
@@ -1020,7 +1021,7 @@ class ToolRegistry:
                             "https://api.z.ai/api/paas/v4/web_search",
                             headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"},
                             json={"search_engine": "search-prime", "search_query": query, "count": 10},
-                            timeout=15,
+                            timeout=timeout_sec,
                         )
                         if not r.ok:
                             raise RuntimeError(f"Z.AI error: {r.status_code}")
@@ -1086,7 +1087,7 @@ class ToolRegistry:
             for name, _ in providers:
                 try:
                     if name == "proxy":
-                        r = requests.get(f"{proxy_url}/zai/read", params={"url": url}, timeout=15)
+                        r = requests.get(f"{proxy_url}/zai/read", params={"url": url}, timeout=timeout_sec)
                         if not r.ok:
                             raise RuntimeError(f"Proxy error: {r.status_code}")
                         data = (r.json() or {}).get("reader_result") or {}
@@ -1107,7 +1108,7 @@ class ToolRegistry:
                             "https://api.tavily.com/extract",
                             headers={"Content-Type": "application/json", "Authorization": f"Bearer {tavily_key}"},
                             json={"urls": [url]},
-                            timeout=15,
+                            timeout=timeout_sec,
                         )
                         if not r.ok:
                             raise RuntimeError(f"Tavily extract error: {r.status_code}")
@@ -1126,7 +1127,7 @@ class ToolRegistry:
                         r = requests.get(
                             f"https://r.jina.ai/{url}",
                             headers={"Authorization": f"Bearer {jina_key}"},
-                            timeout=15,
+                            timeout=timeout_sec,
                         )
                         if not r.ok:
                             raise RuntimeError(f"Jina extract error: {r.status_code}")
@@ -1139,7 +1140,7 @@ class ToolRegistry:
                             "https://api.z.ai/api/paas/v4/reader",
                             headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"},
                             json={"url": url, "return_format": "markdown", "retain_images": False, "timeout": int(WEB_FETCH_TIMEOUT_MS / 1000)},
-                            timeout=15,
+                            timeout=timeout_sec,
                         )
                         if not r.ok:
                             raise RuntimeError(f"Z.AI Reader error: {r.status_code}")
