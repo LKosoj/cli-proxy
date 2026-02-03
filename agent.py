@@ -1560,17 +1560,25 @@ class ReActAgent:
 
     async def run(self, session_id: str, user_message: str, session_obj: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str]) -> str:
         cwd = session_obj.workdir
+        logging.info("react run start session_id=%s chat_id=%s", session_id, chat_id)
         if session_id not in self._sessions:
             self._sessions[session_id] = self._load_session(cwd)
         session = self._sessions[session_id]
         working: List[Dict[str, Any]] = []
         final_response = ""
         blocked_count = 0
-        for _ in range(AGENT_MAX_ITERATIONS):
+        for iteration in range(AGENT_MAX_ITERATIONS):
+            logging.info("react iteration start session_id=%s iter=%s", session_id, iteration + 1)
             messages = self._build_messages(session, user_message, cwd, chat_id, working)
+            logging.info("react call llm session_id=%s iter=%s messages=%s", session_id, iteration + 1, len(messages))
             raw_message = self._call_openai(messages)
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
+            if tool_calls:
+                tool_names = [call.get("function", {}).get("name") for call in tool_calls]
+                logging.info("react tool_calls session_id=%s iter=%s count=%s tools=%s", session_id, iteration + 1, len(tool_calls), tool_names)
+            else:
+                logging.info("react no tool_calls session_id=%s iter=%s", session_id, iteration + 1)
             if not tool_calls:
                 final_response = (content or "").strip() or "(empty response)"
                 break
@@ -1587,6 +1595,17 @@ class ReActAgent:
                         args = json.loads(fixed)
                     except Exception:
                         args = {}
+                if isinstance(args, dict):
+                    arg_keys = list(args.keys())
+                else:
+                    arg_keys = []
+                logging.info(
+                    "react tool_call prepared session_id=%s iter=%s tool=%s arg_keys=%s",
+                    session_id,
+                    iteration + 1,
+                    name,
+                    arg_keys,
+                )
                 ctx = {
                     "cwd": cwd,
                     "session_id": session_id,
@@ -1610,6 +1629,7 @@ class ReActAgent:
                 blocked_count = 0
         if not final_response:
             final_response = "⚠️ Max iterations reached"
+        logging.info("react run end session_id=%s", session_id)
         date_str = time.strftime("%Y-%m-%d")
         session.setdefault("history", []).append({"user": f"[{date_str}] {user_message}", "assistant": final_response})
         while len(session["history"]) > AGENT_MAX_HISTORY:
@@ -1628,6 +1648,7 @@ class AgentRunner:
             return "Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL."
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
+        logging.info("agent runner start session_id=%s chat_id=%s", session.id, chat_id)
         return await self._react.run(session.id, user_text, session, bot, context, chat_id, chat_type)
 
     def record_message(self, chat_id: int, message_id: int) -> None:
