@@ -676,7 +676,8 @@ TOOL_NAMES = [d["function"]["name"] for d in definitions]
 
 # ==== Tool execution ====
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, config: Optional[AppConfig] = None) -> None:
+        self.config = config
         self.pending_questions: Dict[str, asyncio.Future] = {}
         self.recent_messages: Dict[int, List[int]] = {}
         self.task_store: Dict[str, List[Dict[str, Any]]] = {}
@@ -1452,7 +1453,7 @@ class ReActAgent:
         self.config = config
         self._openai_cfg = _get_openai_config(config)
         self._sessions: Dict[str, Dict[str, Any]] = {}
-        self._tool_registry = ToolRegistry()
+        self._tool_registry = ToolRegistry(config)
 
     def record_message(self, chat_id: int, message_id: int) -> None:
         self._tool_registry.record_message(chat_id, message_id)
