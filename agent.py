@@ -972,17 +972,22 @@ class ToolRegistry:
         zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
         tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
         try:
+            source = "proxy" if proxy_url else "zai" if zai_key else "tavily" if tavily_key else "none"
+            logging.info(f"search_web start source={source} qlen={len(query)}")
             if proxy_url:
+                logging.info("search_web using proxy_url")
                 r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=15)
                 if not r.ok:
                     raise RuntimeError(f"Proxy error: {r.status_code}")
                 results = (r.json() or {}).get("search_result", [])
             elif zai_key:
+                logging.info("search_web using Z.AI")
                 r = requests.post("https://api.z.ai/api/paas/v4/web_search", headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"}, json={"search_engine": "search-prime", "search_query": query, "count": 10}, timeout=15)
                 if not r.ok:
                     raise RuntimeError(f"Z.AI error: {r.status_code}")
                 results = (r.json() or {}).get("search_result", [])
             elif tavily_key:
+                logging.info("search_web using Tavily")
                 r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=15)
                 if not r.ok:
                     raise RuntimeError(f"Tavily error: {r.status_code}")
@@ -992,6 +997,7 @@ class ToolRegistry:
                 return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)"}
 
             if not results:
+                logging.info("search_web no results")
                 return {"success": True, "output": "(no results)"}
             out_parts = []
             for i, r in enumerate(results):
@@ -1001,6 +1007,7 @@ class ToolRegistry:
                 date = r.get("publish_date") or r.get("date")
                 date_part = f" ({date})" if date else ""
                 out_parts.append(f"[{i+1}] {title}{date_part}\n{url}\n{content[:400]}")
+            logging.info(f"search_web done results={len(out_parts)}")
             return {"success": True, "output": "\n\n".join(out_parts)}
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
