@@ -971,26 +971,69 @@ class ToolRegistry:
         proxy_url = os.getenv("PROXY_URL")
         zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
         tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
+        jina_key = os.getenv("JINA_API_KEY") or (self.config.defaults.jina_api_key if self.config else None)
         try:
-            source = "proxy" if proxy_url else "zai" if zai_key else "tavily" if tavily_key else "none"
+            providers: List[tuple[str, Any]] = []
             if proxy_url:
-                r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=15)
-                if not r.ok:
-                    raise RuntimeError(f"Proxy error: {r.status_code}")
-                results = (r.json() or {}).get("search_result", [])
-            elif zai_key:
-                r = requests.post("https://api.z.ai/api/paas/v4/web_search", headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"}, json={"search_engine": "search-prime", "search_query": query, "count": 10}, timeout=15)
-                if not r.ok:
-                    raise RuntimeError(f"Z.AI error: {r.status_code}")
-                results = (r.json() or {}).get("search_result", [])
-            elif tavily_key:
-                r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=15)
-                if not r.ok:
-                    raise RuntimeError(f"Tavily error: {r.status_code}")
-                results = (r.json() or {}).get("results", [])
-            else:
-                logging.exception(f"tool failed: No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)")
-                return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)"}
+                providers.append(("proxy", "proxy"))
+            if tavily_key:
+                providers.append(("tavily", "tavily"))
+            if jina_key:
+                providers.append(("jina", "jina"))
+            if zai_key:
+                providers.append(("zai", "zai"))
+            if not providers:
+                logging.exception("tool failed: No search API configured (PROXY_URL or TAVILY_API_KEY or JINA_API_KEY or ZAI_API_KEY)")
+                return {"success": False, "error": "No search API configured (PROXY_URL or TAVILY_API_KEY or JINA_API_KEY or ZAI_API_KEY)"}
+
+            last_error: Optional[str] = None
+            results = None
+            for name, _ in providers:
+                try:
+                    if name == "proxy":
+                        r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=15)
+                        if not r.ok:
+                            raise RuntimeError(f"Proxy error: {r.status_code}")
+                        results = (r.json() or {}).get("search_result", [])
+                    elif name == "tavily":
+                        r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=15)
+                        if not r.ok:
+                            raise RuntimeError(f"Tavily error: {r.status_code}")
+                        results = (r.json() or {}).get("results", [])
+                    elif name == "jina":
+                        r = requests.get(
+                            "https://s.jina.ai/",
+                            params={"q": query},
+                            headers={
+                                "Accept": "application/json",
+                                "Authorization": f"Bearer {jina_key}",
+                                "X-Respond-With": "no-content",
+                            },
+                            timeout=15,
+                        )
+                        if not r.ok:
+                            raise RuntimeError(f"Jina search error: {r.status_code}")
+                        data = r.json() or {}
+                        results = data.get("data") or []
+                    elif name == "zai":
+                        r = requests.post(
+                            "https://api.z.ai/api/paas/v4/web_search",
+                            headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"},
+                            json={"search_engine": "search-prime", "search_query": query, "count": 10},
+                            timeout=15,
+                        )
+                        if not r.ok:
+                            raise RuntimeError(f"Z.AI error: {r.status_code}")
+                        results = (r.json() or {}).get("search_result", [])
+                    break
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                    last_error = str(e)
+                    results = None
+                    continue
+
+            if results is None:
+                return {"success": False, "error": last_error or "Search failed"}
 
             if not results:
                 return {"success": True, "output": "(no results)"}
@@ -998,10 +1041,10 @@ class ToolRegistry:
             for i, r in enumerate(results):
                 title = r.get("title") or ""
                 url = r.get("link") or r.get("url")
-                content = r.get("content") or ""
+                content = r.get("content") or r.get("description") or ""
                 date = r.get("publish_date") or r.get("date")
                 date_part = f" ({date})" if date else ""
-                out_parts.append(f"[{i+1}] {title}{date_part}\n{url}\n{content[:400]}")
+                out_parts.append(f"[{i+1}] {title}{date_part}\n{url}\n{content}")
             return {"success": True, "output": "\n\n".join(out_parts)}
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
@@ -1011,6 +1054,8 @@ class ToolRegistry:
         url = (args.get("url") or "").strip()
         if not url:
             return {"success": False, "error": "URL required"}
+        if not re.match(r"^https?://", url, re.I):
+            url = f"https://{url}"
         blocked = [
             re.compile(r"^https?://169\.254\.169\.254", re.I),
             re.compile(r"^https?://metadata\.google\.internal", re.I),
@@ -1022,47 +1067,100 @@ class ToolRegistry:
                 return {"success": False, "error": "🚫 BLOCKED: Cannot access metadata endpoints"}
         proxy_url = os.getenv("PROXY_URL")
         zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
+        tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
+        jina_key = os.getenv("JINA_API_KEY") or (self.config.defaults.jina_api_key if self.config else None)
         try:
+            providers: List[tuple[str, Any]] = []
             if proxy_url:
-                r = requests.get(f"{proxy_url}/zai/read", params={"url": url}, timeout=15)
-                if not r.ok:
-                    raise RuntimeError(f"Proxy error: {r.status_code}")
-                data = (r.json() or {}).get("reader_result") or {}
-                content = data.get("content")
-                if not content:
-                    raise RuntimeError("No content returned")
-                title = data.get("title")
-                desc = data.get("description")
-                output = ""
-                if title:
-                    output += f"# {title}\n\n"
-                if desc:
-                    output += f"> {desc}\n\n"
-                output += content
-                return {"success": True, "output": output}
+                providers.append(("proxy", "proxy"))
+            if tavily_key:
+                providers.append(("tavily", "tavily"))
+            if jina_key:
+                providers.append(("jina", "jina"))
             if zai_key:
-                r = requests.post(
-                    "https://api.z.ai/api/paas/v4/reader",
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"},
-                    json={"url": url, "return_format": "markdown", "retain_images": False, "timeout": int(WEB_FETCH_TIMEOUT_MS / 1000)},
-                    timeout=15,
-                )
-                if not r.ok:
-                    raise RuntimeError(f"Z.AI Reader error: {r.status_code}")
-                data = (r.json() or {}).get("reader_result") or {}
-                content = data.get("content")
-                if not content:
-                    raise RuntimeError("No content returned")
-                title = data.get("title")
-                desc = data.get("description")
-                output = ""
-                if title:
-                    output += f"# {title}\n\n"
-                if desc:
-                    output += f"> {desc}\n\n"
-                output += content
-                return {"success": True, "output": output}
-            return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY)"}
+                providers.append(("zai", "zai"))
+            if not providers:
+                return {"success": False, "error": "No search API configured (PROXY_URL or TAVILY_API_KEY or JINA_API_KEY or ZAI_API_KEY)"}
+
+            last_error: Optional[str] = None
+            for name, _ in providers:
+                try:
+                    if name == "proxy":
+                        r = requests.get(f"{proxy_url}/zai/read", params={"url": url}, timeout=15)
+                        if not r.ok:
+                            raise RuntimeError(f"Proxy error: {r.status_code}")
+                        data = (r.json() or {}).get("reader_result") or {}
+                        content = data.get("content")
+                        if not content:
+                            raise RuntimeError("No content returned")
+                        title = data.get("title")
+                        desc = data.get("description")
+                        output = ""
+                        if title:
+                            output += f"# {title}\n\n"
+                        if desc:
+                            output += f"> {desc}\n\n"
+                        output += content
+                        return {"success": True, "output": output}
+                    if name == "tavily":
+                        r = requests.post(
+                            "https://api.tavily.com/extract",
+                            headers={"Content-Type": "application/json", "Authorization": f"Bearer {tavily_key}"},
+                            json={"urls": [url]},
+                            timeout=15,
+                        )
+                        if not r.ok:
+                            raise RuntimeError(f"Tavily extract error: {r.status_code}")
+                        data = r.json() or {}
+                        results = data.get("results") or data.get("data") or []
+                        if isinstance(results, dict):
+                            results = [results]
+                        item = results[0] if results else {}
+                        content = item.get("content") or item.get("raw_content") or ""
+                        if not content:
+                            raise RuntimeError("No content returned")
+                        title = item.get("title") or ""
+                        output = f"# {title}\n\n{content}" if title else content
+                        return {"success": True, "output": output}
+                    if name == "jina":
+                        r = requests.get(
+                            f"https://r.jina.ai/{url}",
+                            headers={"Authorization": f"Bearer {jina_key}"},
+                            timeout=15,
+                        )
+                        if not r.ok:
+                            raise RuntimeError(f"Jina extract error: {r.status_code}")
+                        content = r.text or ""
+                        if not content.strip():
+                            raise RuntimeError("No content returned")
+                        return {"success": True, "output": content}
+                    if name == "zai":
+                        r = requests.post(
+                            "https://api.z.ai/api/paas/v4/reader",
+                            headers={"Content-Type": "application/json", "Authorization": f"Bearer {zai_key}"},
+                            json={"url": url, "return_format": "markdown", "retain_images": False, "timeout": int(WEB_FETCH_TIMEOUT_MS / 1000)},
+                            timeout=15,
+                        )
+                        if not r.ok:
+                            raise RuntimeError(f"Z.AI Reader error: {r.status_code}")
+                        data = (r.json() or {}).get("reader_result") or {}
+                        content = data.get("content")
+                        if not content:
+                            raise RuntimeError("No content returned")
+                        title = data.get("title")
+                        desc = data.get("description")
+                        output = ""
+                        if title:
+                            output += f"# {title}\n\n"
+                        if desc:
+                            output += f"> {desc}\n\n"
+                        output += content
+                        return {"success": True, "output": output}
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                    last_error = str(e)
+                    continue
+            return {"success": False, "error": last_error or "Fetch failed"}
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}

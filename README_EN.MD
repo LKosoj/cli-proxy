@@ -70,7 +70,7 @@ python bot.py
 ## Configuration
 `config.yaml` supports:
 - `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands) and `image_cmd` (appended to base command/resume_cmd for image handling)
-- `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings, `zai_api_key`/`tavily_api_key` for web search/reader, `github_token` for HTTPS git
+- `defaults.*`: base dir, timeouts, state/toolhelp paths, OpenAI settings, `zai_api_key`/`tavily_api_key`/`jina_api_key` for web search/reader, `github_token` for HTTPS git
 - `defaults.log_path`: bot log file path (main log). Errors are written to a separate `*_error.log` file with the same rotation rules.
 - `defaults.mtproto_output_dir`: directory for MTProto result md files (relative to workdir or absolute). Files are timestamped.
 - `defaults.mtproto_cleanup_days`: delete md files older than N days (default 5).
@@ -114,6 +114,11 @@ Z.AI web search/reader:
 Tavily web search/reader:
 - `defaults.tavily_api_key` in `config.yaml`
 - or env `TAVILY_API_KEY` (takes precedence)
+Tavily provides free monthly limits — you can use them.
+
+Jina.ai web search/reader:
+- `defaults.jina_api_key` in `config.yaml`
+- or env `JINA_API_KEY` (takes precedence)
 
 GitHub PAT for HTTPS git:
 - `defaults.github_token` in `config.yaml` (used for clone/fetch/pull/push without interactive prompts)

@@ -40,6 +40,7 @@ class DefaultsConfig:
     openai_base_url: Optional[str] = None
     zai_api_key: Optional[str] = None
     tavily_api_key: Optional[str] = None
+    jina_api_key: Optional[str] = None
     github_token: Optional[str] = None
     log_path: str = "bot.log"
     mtproto_output_dir: str = ".mtproto"
@@ -132,6 +133,7 @@ def load_config(path: str) -> AppConfig:
         openai_base_url=defaults_raw.get("openai_base_url"),
         zai_api_key=defaults_raw.get("zai_api_key"),
         tavily_api_key=defaults_raw.get("tavily_api_key"),
+        jina_api_key=defaults_raw.get("jina_api_key"),
         github_token=defaults_raw.get("github_token"),
         log_path=str(defaults_raw.get("log_path", "bot.log")),
         mtproto_output_dir=str(defaults_raw.get("mtproto_output_dir", ".mtproto")),
@@ -206,6 +208,7 @@ def save_config(config: AppConfig) -> None:
             "openai_base_url": config.defaults.openai_base_url,
             "zai_api_key": config.defaults.zai_api_key,
             "tavily_api_key": config.defaults.tavily_api_key,
+            "jina_api_key": config.defaults.jina_api_key,
             "github_token": config.defaults.github_token,
             "log_path": config.defaults.log_path,
             "mtproto_output_dir": config.defaults.mtproto_output_dir,

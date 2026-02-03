@@ -50,6 +50,7 @@ defaults:
   openai_base_url: "https://api.openai.com"
   zai_api_key: null
   tavily_api_key: null
+  jina_api_key: null
   github_token: null
   log_path: "bot.log"
   mtproto_output_dir: ".mtproto"
