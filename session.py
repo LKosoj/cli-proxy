@@ -27,6 +27,7 @@ class Session:
     run_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     child: Optional[pexpect.spawn] = None
     current_proc: Optional[asyncio.subprocess.Process] = None
+    _headless_interrupt_flag: bool = False
     resume_token: Optional[str] = None
     auto_commands_ran: bool = False
     started_at: Optional[float] = None
@@ -81,14 +82,17 @@ class Session:
             stdin=asyncio.subprocess.PIPE if use_stdin else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
         )
         self.current_proc = proc
+        self._headless_interrupt_flag = False
         if use_stdin and proc.stdin:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
             proc.stdin.close()
         out, _ = await proc.communicate()
         self.current_proc = None
+        self._headless_interrupt_flag = False
         text = (out or b"").decode(errors="ignore")
         self._update_activity(text)
         self._maybe_update_resume(text)
@@ -171,10 +175,16 @@ class Session:
     def interrupt(self) -> None:
         if self.tool.mode == "headless":
             if self.current_proc and self.current_proc.returncode is None:
+                self._headless_interrupt_flag = True
                 try:
-                    self.current_proc.send_signal(signal.SIGINT)
+                    os.killpg(self.current_proc.pid, signal.SIGINT)
+                    os.killpg(self.current_proc.pid, signal.SIGTERM)
+                    os.killpg(self.current_proc.pid, signal.SIGKILL)
                 except Exception:
-                    pass
+                    try:
+                        self.current_proc.kill()
+                    except Exception:
+                        pass
             return
         if self.child and self.child.isalive():
             try:
