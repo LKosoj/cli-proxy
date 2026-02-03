@@ -57,6 +57,21 @@ defaults:
   mtproto_cleanup_days: 5
   image_temp_dir: ".attachments"
   image_max_mb: 10
+  clarification_enabled: true
+  clarification_keywords:
+    - "уточни"
+    - "уточните"
+    - "не ясно"
+    - "непонятно"
+    - "какой"
+    - "какая"
+    - "какие"
+    - "какое"
+    - "сколько"
+    - "когда"
+    - "где"
+    - "почему"
+    - "зачем"
 
 mtproto:
   enabled: false

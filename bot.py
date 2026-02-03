@@ -32,7 +32,8 @@ from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
-from agent import AgentRunner, execute_shell_command, pop_pending_command, set_approval_callback
+from agent import execute_shell_command, pop_pending_command, set_approval_callback
+from agent.orchestrator import OrchestratorRunner
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -84,7 +85,7 @@ class BotApp:
             self._format_ts,
             self._short_label,
         )
-        self.agent = AgentRunner(self.config)
+        self.agent = OrchestratorRunner(self.config)
         set_approval_callback(self._request_command_approval)
         self.mtproto = MTProtoUI(self.config, self._send_message)
         self.git = GitOps(

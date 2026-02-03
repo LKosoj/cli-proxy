@@ -47,6 +47,24 @@ class DefaultsConfig:
     mtproto_cleanup_days: int = 5
     image_temp_dir: str = ".attachments"
     image_max_mb: int = 10
+    clarification_enabled: bool = True
+    clarification_keywords: List[str] = dataclasses.field(
+        default_factory=lambda: [
+            "уточни",
+            "уточните",
+            "не ясно",
+            "непонятно",
+            "какой",
+            "какая",
+            "какие",
+            "какое",
+            "сколько",
+            "когда",
+            "где",
+            "почему",
+            "зачем",
+        ]
+    )
 
 
 @dataclasses.dataclass
@@ -140,6 +158,13 @@ def load_config(path: str) -> AppConfig:
         mtproto_cleanup_days=int(defaults_raw.get("mtproto_cleanup_days", 5)),
         image_temp_dir=str(defaults_raw.get("image_temp_dir", ".attachments")),
         image_max_mb=int(defaults_raw.get("image_max_mb", 10)),
+        clarification_enabled=bool(defaults_raw.get("clarification_enabled", True)),
+        clarification_keywords=list(
+            defaults_raw.get(
+                "clarification_keywords",
+                DefaultsConfig(workdir="").clarification_keywords,
+            )
+        ),
     )
 
     targets: List[MTProtoTarget] = []
@@ -215,6 +240,8 @@ def save_config(config: AppConfig) -> None:
             "mtproto_cleanup_days": config.defaults.mtproto_cleanup_days,
             "image_temp_dir": config.defaults.image_temp_dir,
             "image_max_mb": config.defaults.image_max_mb,
+            "clarification_enabled": config.defaults.clarification_enabled,
+            "clarification_keywords": config.defaults.clarification_keywords,
         },
         "mtproto": {
             "enabled": config.mtproto.enabled,
