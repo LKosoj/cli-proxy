@@ -32,7 +32,7 @@ from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
-from agent import AgentRunner
+from agent import AgentRunner, execute_shell_command, pop_pending_command, set_approval_callback
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -75,6 +75,8 @@ class BotApp:
         self.files_pending_delete: Dict[int, str] = {}
         self.message_buffer: Dict[int, list[str]] = {}
         self.buffer_tasks: Dict[int, asyncio.Task] = {}
+        self.pending_questions: Dict[str, Dict[str, object]] = {}
+        self.context_by_chat: Dict[int, ContextTypes.DEFAULT_TYPE] = {}
         self.session_ui = SessionUI(
             self.config,
             self.manager,
@@ -83,6 +85,7 @@ class BotApp:
             self._short_label,
         )
         self.agent = AgentRunner(self.config)
+        set_approval_callback(self._request_command_approval)
         self.mtproto = MTProtoUI(self.config, self._send_message)
         self.git = GitOps(
             self.config,
@@ -164,11 +167,14 @@ class BotApp:
     def _expected_tools(self) -> str:
         return ", ".join(sorted(self.config.tools.keys()))
 
-    async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> None:
+    async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
         for attempt in range(5):
             try:
-                await context.bot.send_message(**kwargs)
-                return
+                message = await context.bot.send_message(**kwargs)
+                chat_id = kwargs.get("chat_id")
+                if chat_id and message:
+                    self.agent.record_message(chat_id, message.message_id)
+                return message
             except (NetworkError, TimedOut):
                 if attempt == 4:
                     print("Ошибка сети при отправке сообщения в Telegram.")
@@ -185,6 +191,58 @@ class BotApp:
                     print("Ошибка сети при отправке файла в Telegram.")
                     return
                 await asyncio.sleep(2 * (2 ** attempt))
+
+    async def _send_ask_question(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        chat_id: int,
+        session_id: str,
+        question_id: str,
+        question: str,
+        options: list[str],
+    ) -> None:
+        self.pending_questions[question_id] = {"options": options, "chat_id": chat_id, "session_id": session_id}
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(opt, callback_data=f"ask:{question_id}:{idx}")] for idx, opt in enumerate(options)]
+        )
+        await self._send_message(context, chat_id=chat_id, text=question, reply_markup=keyboard)
+
+    async def _delete_message(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int) -> bool:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            return True
+        except Exception:
+            return False
+
+    async def _edit_message(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, text: str) -> bool:
+        try:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            return True
+        except Exception:
+            return False
+
+    def _request_command_approval(self, chat_id: int, cmd_id: str, cmd: str, reason: str) -> None:
+        context = self.context_by_chat.get(chat_id)
+        if not context:
+            return
+
+        async def _send() -> None:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("✅ Одобрить", callback_data=f"approve_cmd:{cmd_id}"),
+                        InlineKeyboardButton("❌ Запретить", callback_data=f"deny_cmd:{cmd_id}"),
+                    ]
+                ]
+            )
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text=f"Нужное подтверждение: {reason}\nКоманда:\n{cmd}",
+                reply_markup=keyboard,
+            )
+
+        asyncio.create_task(_send())
 
     def _build_state_keyboard(self, chat_id: int) -> InlineKeyboardMarkup:
         keys = self.state_menu.get(chat_id, [])
@@ -416,6 +474,7 @@ class BotApp:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
             return
+        self.context_by_chat[chat_id] = context
         self.metrics.inc("messages")
         text = update.message.text
         if await self.session_ui.handle_pending_message(chat_id, text, context):
@@ -920,6 +979,46 @@ class BotApp:
         await query.answer()
         chat_id = query.message.chat_id
         if not self.is_allowed(chat_id):
+            return
+        self.context_by_chat[chat_id] = context
+        if query.data.startswith("approve_cmd:"):
+            cmd_id = query.data.split(":", 1)[1]
+            pending = pop_pending_command(cmd_id)
+            if not pending:
+                await query.edit_message_text("Запрос уже обработан.")
+                return
+            await query.edit_message_text("Одобрено. Выполняю команду...")
+            result = await execute_shell_command(pending.command, pending.cwd)
+            output = result.get("output") if result.get("success") else result.get("error")
+            await self._send_message(context, chat_id=chat_id, text=output or "(пустой вывод)")
+            return
+        if query.data.startswith("deny_cmd:"):
+            cmd_id = query.data.split(":", 1)[1]
+            pop_pending_command(cmd_id)
+            await query.edit_message_text("Команда отклонена.")
+            return
+        if query.data.startswith("ask:"):
+            _, question_id, idx_str = query.data.split(":", 2)
+            pending = self.pending_questions.get(question_id)
+            if not pending:
+                await query.edit_message_text("Вопрос устарел.")
+                return
+            options = pending.get("options") or []
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                await query.edit_message_text("Некорректный выбор.")
+                return
+            if idx < 0 or idx >= len(options):
+                await query.edit_message_text("Выбор недоступен.")
+                return
+            answer = options[idx]
+            resolved = self.agent.resolve_question(question_id, answer)
+            self.pending_questions.pop(question_id, None)
+            if not resolved:
+                await query.edit_message_text("Ответ уже получен.")
+                return
+            await query.edit_message_text(f"Вы выбрали: {answer}")
             return
         if query.data.startswith("agent_set:"):
             session = self.manager.active()
