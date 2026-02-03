@@ -70,7 +70,7 @@ python bot.py
 ## Конфигурация
 `config.yaml` поддерживает:
 - `tools.*`: команды запуска, режим, prompt/resume/help (включая `resume_cmd` для отдельных команд возобновления) и `image_cmd` (добавляется к базовой команде/resume_cmd для обработки изображений)
-- `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки, `github_token` для git по HTTPS
+- `defaults.*`: базовый каталог, таймауты, пути к state/toolhelp, OpenAI настройки, `zai_api_key`/`tavily_api_key` для web‑поиска/reader, `github_token` для git по HTTPS
 - `defaults.log_path`: путь к файлу логов бота
 - `defaults.mtproto_output_dir`: каталог для md‑файлов результата MTProto (относительно workdir или абсолютный). Файлы создаются с timestamp в имени.
 - `defaults.mtproto_cleanup_days`: удалять md‑файлы старше N дней (по умолчанию 5).
@@ -106,6 +106,14 @@ OpenAI может быть задан как через `config.yaml`, так и
 - `OPENAI_BASE_URL`
 
 Переменные окружения имеют приоритет.
+
+Z.AI для web‑поиска/reader:
+- `defaults.zai_api_key` в `config.yaml`
+- или env `ZAI_API_KEY` (имеет приоритет)
+
+Tavily для web‑поиска/reader:
+- `defaults.tavily_api_key` в `config.yaml`
+- или env `TAVILY_API_KEY` (имеет приоритет)
 
 GitHub токен (PAT) для git по HTTPS:
 - `defaults.github_token` в `config.yaml` (используется для clone/fetch/pull/push, без интерактивных запросов)

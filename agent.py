@@ -14,7 +14,7 @@ import requests
 from config import AppConfig
 from utils import strip_ansi
 
-# ==== LocalTopSH-aligned config constants ====
+# ==== config constants ====
 TOOL_TIMEOUT_MS = 120_000
 GREP_TIMEOUT_MS = 30_000
 WEB_FETCH_TIMEOUT_MS = 30_000
@@ -57,7 +57,7 @@ def _trim_output(text: str) -> str:
     return f"{head}\n\n...(truncated {len(text) - OUTPUT_TRIM_LEN} chars)...\n\n{tail}"
 
 
-# ==== Memory & chat history (LocalTopSH compatible) ====
+# ==== Memory & chat history ====
 MEMORY_FILE = "MEMORY.md"
 SHARED_DIR = "/workspace/_shared"
 CHATS_DIR = f"{SHARED_DIR}/chats"
@@ -420,7 +420,7 @@ async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
         return {"success": False, "error": f"Exit 1: {sanitize_output(str(e))}"}
 
 
-# ==== Tool definitions (LocalTopSH) ====
+# ==== Tool definitions ====
 
 definitions: List[Dict[str, Any]] = [
     {
@@ -959,8 +959,8 @@ class ToolRegistry:
         if not query:
             return {"success": False, "error": "Query required"}
         proxy_url = os.getenv("PROXY_URL")
-        zai_key = os.getenv("ZAI_API_KEY")
-        tavily_key = os.getenv("TAVILY_API_KEY")
+        zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
+        tavily_key = os.getenv("TAVILY_API_KEY") or (self.config.defaults.tavily_api_key if self.config else None)
         try:
             if proxy_url:
                 r = requests.get(f"{proxy_url}/zai/search", params={"q": query}, timeout=15)
@@ -978,7 +978,7 @@ class ToolRegistry:
                     raise RuntimeError(f"Tavily error: {r.status_code}")
                 results = (r.json() or {}).get("results", [])
             else:
-                return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY)"}
+                return {"success": False, "error": "No search API configured (PROXY_URL or ZAI_API_KEY or TAVILY_API_KEY)"}
 
             if not results:
                 return {"success": True, "output": "(no results)"}
@@ -1008,7 +1008,7 @@ class ToolRegistry:
             if p.search(url):
                 return {"success": False, "error": "🚫 BLOCKED: Cannot access metadata endpoints"}
         proxy_url = os.getenv("PROXY_URL")
-        zai_key = os.getenv("ZAI_API_KEY")
+        zai_key = os.getenv("ZAI_API_KEY") or (self.config.defaults.zai_api_key if self.config else None)
         try:
             if proxy_url:
                 r = requests.get(f"{proxy_url}/zai/read", params={"url": url}, timeout=15)
