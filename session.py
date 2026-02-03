@@ -38,6 +38,8 @@ class Session:
     git_conflict: bool = False
     git_conflict_files: list[str] = field(default_factory=list)
     git_conflict_kind: Optional[str] = None
+    agent_enabled: bool = False
+    agent_memory: Dict[str, Any] = field(default_factory=dict)
 
     async def run_prompt(self, prompt: str, image_path: Optional[str] = None) -> str:
         if image_path:
@@ -324,6 +326,8 @@ class SessionManager:
                     "name": s.name,
                     "resume_token": s.resume_token,
                     "queue": queue_items,
+                    "agent_enabled": bool(getattr(s, "agent_enabled", False)),
+                    "agent_memory": getattr(s, "agent_memory", {}),
                 }
             save_sessions(self.config.defaults.state_path, data)
         except Exception:
@@ -350,6 +354,8 @@ class SessionManager:
             )
             session.name = val.get("name") or f"{tool}@{workdir}"
             session.resume_token = val.get("resume_token")
+            session.agent_enabled = bool(val.get("agent_enabled", False))
+            session.agent_memory = val.get("agent_memory", {}) or {}
             if not session.resume_token:
                 try:
                     st = get_state(self.config.defaults.state_path, tool, workdir)

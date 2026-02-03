@@ -32,6 +32,7 @@ from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
+from agent import AgentRunner
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -81,6 +82,7 @@ class BotApp:
             self._format_ts,
             self._short_label,
         )
+        self.agent = AgentRunner(self.config)
         self.mtproto = MTProtoUI(self.config, self._send_message)
         self.git = GitOps(
             self.config,
@@ -320,6 +322,65 @@ class BotApp:
                         logging.exception("persist_sessions failed: %s", e)
                     asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
+    async def run_agent(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        async with session.run_lock:
+            session.busy = True
+            session.started_at = time.time()
+            session.last_output_ts = session.started_at
+            session.last_tick_ts = None
+            session.last_tick_value = None
+            session.tick_seen = 0
+            try:
+                output = await self.agent.run(session, prompt, self, context, dest)
+                now = time.time()
+                session.last_output_ts = now
+                session.last_tick_ts = now
+                session.tick_seen = (session.tick_seen or 0) + 1
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text=output)
+                try:
+                    preview = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
+                    update_state(
+                        self.config.defaults.state_path,
+                        session.tool.name,
+                        session.workdir,
+                        session.resume_token,
+                        preview,
+                        name=session.name,
+                    )
+                except Exception as e:
+                    logging.exception("update_state failed: %s", e)
+                try:
+                    self.manager._persist_sessions()
+                except Exception as e:
+                    logging.exception("persist_sessions failed: %s", e)
+            except Exception as e:
+                logging.exception("run_agent failed: %s", e)
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text=f"Ошибка агента: {e}")
+            finally:
+                session.busy = False
+                if session.queue:
+                    next_item = session.queue.popleft()
+                    if isinstance(next_item, str):
+                        next_prompt = next_item
+                        next_dest = {"kind": "telegram", "chat_id": dest.get("chat_id")}
+                    else:
+                        next_prompt = next_item.get("text", "")
+                        next_dest = next_item.get("dest") or {"kind": "telegram"}
+                        if next_dest.get("kind") == "telegram" and next_dest.get("chat_id") is None:
+                            next_dest["chat_id"] = dest.get("chat_id")
+                    try:
+                        self.manager._persist_sessions()
+                    except Exception as e:
+                        logging.exception("persist_sessions failed: %s", e)
+                    if session.agent_enabled:
+                        asyncio.create_task(self.run_agent(session, next_prompt, next_dest, context))
+                    else:
+                        asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
+
     async def ensure_active_session(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> Optional[Session]:
         session = self.manager.active()
         if not session:
@@ -546,7 +607,7 @@ class BotApp:
         parts.append(f"===== Вложение: {filename} =====")
         parts.append(content)
         payload = "\n\n".join(parts)
-        await self._handle_cli_input(session, payload, chat_id, context)
+        await self._handle_user_input(session, payload, chat_id, context)
 
     async def on_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -682,6 +743,50 @@ class BotApp:
             return
         asyncio.create_task(self.run_prompt(session, text, dest, context))
 
+    async def _handle_agent_input(
+        self,
+        session: Session,
+        text: str,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        dest: Optional[dict] = None,
+    ) -> None:
+        if dest is None:
+            dest = {"kind": "telegram", "chat_id": chat_id}
+        if session.busy or session.is_active_by_tick() or session.run_lock.locked():
+            self.pending[chat_id] = PendingInput(session.id, text, dest)
+            self.metrics.inc("queued")
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                    ],
+                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                ]
+            )
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text="Сессия занята. Что сделать с вашим вводом?",
+                reply_markup=keyboard,
+            )
+            return
+        asyncio.create_task(self.run_agent(session, text, dest, context))
+
+    async def _handle_user_input(
+        self,
+        session: Session,
+        text: str,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        dest: Optional[dict] = None,
+    ) -> None:
+        if session.agent_enabled:
+            await self._handle_agent_input(session, text, chat_id, context, dest=dest)
+        else:
+            await self._handle_cli_input(session, text, chat_id, context, dest=dest)
+
     async def _buffer_or_send(
         self,
         session: Session,
@@ -690,7 +795,7 @@ class BotApp:
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         if len(text) < 3000 and not self.message_buffer.get(chat_id):
-            await self._handle_cli_input(session, text, chat_id, context)
+            await self._handle_user_input(session, text, chat_id, context)
             return
         self.message_buffer.setdefault(chat_id, []).append(text)
         await self._schedule_flush(chat_id, session, context)
@@ -725,7 +830,7 @@ class BotApp:
         if task and not task.done():
             task.cancel()
         payload = "\n\n".join(parts)
-        await self._handle_cli_input(session, payload, chat_id, context)
+        await self._handle_user_input(session, payload, chat_id, context)
 
     def _mtproto_output_path(self, workdir: str) -> str:
         base = self.config.defaults.mtproto_output_dir
@@ -815,6 +920,23 @@ class BotApp:
         await query.answer()
         chat_id = query.message.chat_id
         if not self.is_allowed(chat_id):
+            return
+        if query.data.startswith("agent_set:"):
+            session = self.manager.active()
+            if not session:
+                await query.edit_message_text("Активной сессии нет.")
+                return
+            mode = query.data.split(":", 1)[1]
+            session.agent_enabled = mode == "on"
+            try:
+                self.manager._persist_sessions()
+            except Exception:
+                pass
+            status = "включен" if session.agent_enabled else "выключен"
+            await query.edit_message_text(f"Агент {status}.")
+            return
+        if query.data == "agent_cancel":
+            await query.edit_message_text("Отменено.")
             return
         if query.data.startswith("state_pick:"):
             idx = int(query.data.split(":", 1)[1])
@@ -1442,15 +1564,43 @@ class BotApp:
         run_for = f"{int(now - s.started_at)}с" if s.started_at else "нет"
         last_out = f"{int(now - s.last_output_ts)}с назад" if s.last_output_ts else "нет"
         tick_txt = f"{int(now - s.last_tick_ts)}с назад" if s.last_tick_ts else "нет"
+        agent_txt = "включен" if getattr(s, "agent_enabled", False) else "выключен"
         await self._send_message(context, 
             chat_id=chat_id,
             text=(
                 f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}\\n"
-                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for}\\n"
+                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt}\\n"
                 f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}\\n"
                 f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}"
             ),
         )
+
+    async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        s = self.manager.active()
+        if not s:
+            await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
+            return
+        enabled = bool(getattr(s, "agent_enabled", False))
+        if enabled:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("Выключить агента", callback_data="agent_set:off")],
+                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                ]
+            )
+            text = "Агент сейчас включен. Выключить?"
+        else:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("Включить агента", callback_data="agent_set:on")],
+                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                ]
+            )
+            text = "Агент сейчас выключен. Включить?"
+        await self._send_message(context, chat_id=chat_id, text=text, reply_markup=keyboard)
 
     async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id

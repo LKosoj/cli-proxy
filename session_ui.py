@@ -119,7 +119,8 @@ class SessionUI:
             if ok:
                 session = self.manager.get(session_id)
                 label = session.name or f"{session.tool.name} @ {session.workdir}"
-                await query.edit_message_text(f"Активная сессия: {session.id} | {label}")
+                agent_txt = "включен" if getattr(session, "agent_enabled", False) else "выключен"
+                await query.edit_message_text(f"Активная сессия: {session.id} | {label} | Агент: {agent_txt}")
             else:
                 await query.edit_message_text("Сессия не найдена.")
             return True
@@ -138,9 +139,10 @@ class SessionUI:
             run_for = f"{int(now - session.started_at)}с" if session.started_at else "нет"
             last_out = f"{int(now - session.last_output_ts)}с назад" if session.last_output_ts else "нет"
             tick_txt = f"{int(now - session.last_tick_ts)}с назад" if session.last_tick_ts else "нет"
+            agent_txt = "включен" if getattr(session, "agent_enabled", False) else "выключен"
             text = (
                 f"Сессия: {session.id} ({session.name or session.tool.name}) @ {session.workdir}\n"
-                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for}\n"
+                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt}\n"
                 f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {session.tick_seen}\n"
                 f"Очередь: {len(session.queue)} | Resume: {'есть' if session.resume_token else 'нет'}"
             )
