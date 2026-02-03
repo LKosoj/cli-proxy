@@ -1511,6 +1511,7 @@ class ReActAgent:
             .replace("{{tools}}", ", ".join(TOOL_NAMES))
             .replace("{{userPorts}}", user_ports)
         )
+        logging.info("react system prompt loaded tools=%s", len(TOOL_NAMES))
         memory_content = get_memory_for_prompt(cwd)
         if memory_content:
             prompt += f"\n\n<MEMORY>\nNotes from previous sessions (use \"memory\" tool to update):\n{memory_content}\n</MEMORY>"
@@ -1551,6 +1552,7 @@ class ReActAgent:
         if not cfg:
             raise RuntimeError("OpenAI config missing")
         api_key, model, base_url = cfg
+        logging.info("react llm request model=%s tools=%s tool_choice=auto", model, len(definitions))
         payload = {"model": model, "messages": messages, "tools": definitions, "tool_choice": "auto"}
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         resp = requests.post(f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=90)
@@ -1572,6 +1574,13 @@ class ReActAgent:
             messages = self._build_messages(session, user_message, cwd, chat_id, working)
             logging.info("react call llm session_id=%s iter=%s messages=%s", session_id, iteration + 1, len(messages))
             raw_message = self._call_openai(messages)
+            logging.info(
+                "react llm response session_id=%s iter=%s keys=%s function_call=%s",
+                session_id,
+                iteration + 1,
+                list(raw_message.keys()),
+                "function_call" in raw_message,
+            )
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
             if tool_calls:
