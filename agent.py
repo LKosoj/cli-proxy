@@ -706,9 +706,13 @@ class ToolRegistry:
     async def execute(self, name: str, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         # enforce timeout for each tool
         try:
+            logging.info(f"tool start name={name}")
             return await asyncio.wait_for(self._execute_internal(name, args, ctx), timeout=TOOL_TIMEOUT_MS / 1000)
         except asyncio.TimeoutError:
+            logging.info(f"tool timeout name={name}")
             return {"success": False, "error": f"⏱️ Tool {name} timed out after {int(TOOL_TIMEOUT_MS/1000)}s"}
+        finally:
+            logging.info(f"tool end name={name}")
 
     async def _execute_internal(self, name: str, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         if name == "run_command":
