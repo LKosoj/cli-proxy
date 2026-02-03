@@ -728,7 +728,9 @@ class ToolRegistry:
         if name == "list_directory":
             return await self._list_directory(args, ctx)
         if name == "search_web":
+            logging.info("start search_web")
             return await self._search_web(args, ctx)
+            logging.info("finish search_web")
         if name == "fetch_page":
             return await self._fetch_page(args, ctx)
         if name == "manage_tasks":
