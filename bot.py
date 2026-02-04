@@ -563,6 +563,8 @@ class BotApp:
             return
         self.context_by_chat[chat_id] = context
         self.metrics.inc("messages")
+        if self._has_attachments(update.message):
+            return
         text = update.message.text
         if await self.session_ui.handle_pending_message(chat_id, text, context):
             return
@@ -690,6 +692,20 @@ class BotApp:
             await self._handle_cli_input(session, forwarded, chat_id, context)
             return
         await self._buffer_or_send(session, text, chat_id, context)
+
+    def _has_attachments(self, message: Message) -> bool:
+        return any(
+            [
+                message.document,
+                message.photo,
+                message.video,
+                message.audio,
+                message.voice,
+                message.sticker,
+                message.animation,
+                message.video_note,
+            ]
+        )
 
     async def on_unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -945,8 +961,12 @@ class BotApp:
         chat_id: int,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
-        if len(text) < 3000 and not self.message_buffer.get(chat_id):
-            await self._handle_user_input(session, text, chat_id, context)
+        if len(text) < 3000:
+            if not self.message_buffer.get(chat_id):
+                await self._handle_user_input(session, text, chat_id, context)
+                return
+            self.message_buffer.setdefault(chat_id, []).append(text)
+            await self._flush_buffer(chat_id, session, context)
             return
         self.message_buffer.setdefault(chat_id, []).append(text)
         await self._schedule_flush(chat_id, session, context)
