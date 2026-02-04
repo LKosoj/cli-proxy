@@ -503,306 +503,314 @@ class GitOps:
 
     async def handle_callback(self, query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         data = query.data or ""
-        if data == "git_cancel":
-            await query.edit_message_text("Операция отменена.")
-            self.git_pending_ref.pop(chat_id, None)
-            self.git_branch_menu.pop(chat_id, None)
-            self.pending_git_commit.pop(chat_id, None)
-            return True
-        if data == "git_pull_cancel":
-            await query.edit_message_text("Pull отменен.")
-            self.git_pull_target.pop(chat_id, None)
-            return True
-        if data == "git_help":
-            await query.edit_message_text("Готовлю git help…")
+        try:
+            if data == "git_cancel":
+                await query.edit_message_text("Операция отменена.")
+                self.git_pending_ref.pop(chat_id, None)
+                self.git_branch_menu.pop(chat_id, None)
+                self.pending_git_commit.pop(chat_id, None)
+                return True
+            if data == "git_pull_cancel":
+                await query.edit_message_text("Pull отменен.")
+                self.git_pull_target.pop(chat_id, None)
+                return True
+            if data == "git_help":
+                await query.edit_message_text("Готовлю git help…")
+                session = await self.ensure_git_session(chat_id, context)
+                if not session:
+                    return True
+                await self._send_git_help(session, chat_id, context)
+                return True
+            if not (data.startswith("git_") or data.startswith("gitpull_") or data.startswith("git_conflict")):
+                return False
+
             session = await self.ensure_git_session(chat_id, context)
             if not session:
                 return True
-            await self._send_git_help(session, chat_id, context)
-            return True
-        if not (data.startswith("git_") or data.startswith("gitpull_") or data.startswith("git_conflict")):
-            return False
+            if not await self.ensure_git_repo(session, chat_id, context):
+                return True
+            if data not in ("git_conflict_agent",) and not await self.ensure_git_not_busy(session, chat_id, context):
+                return True
 
-        session = await self.ensure_git_session(chat_id, context)
-        if not session:
-            return True
-        if not await self.ensure_git_repo(session, chat_id, context):
-            return True
-        if data not in ("git_conflict_agent",) and not await self.ensure_git_not_busy(session, chat_id, context):
-            return True
-
-        if data == "git_status":
-            await query.edit_message_text("Получаю git status…")
-            text = await self._git_status_text(session)
-            await self._send_git_message(context, chat_id, session, text)
-            return True
-        if data == "git_fetch":
-            await query.edit_message_text("Выполняю git fetch…")
-            session.git_busy = True
-            try:
-                code, output = await self._run_git(session, ["fetch", "--prune"])
-                await self._send_git_output(context, chat_id, session, "Fetch", output)
-                if code == 0:
-                    status = await self._git_status_text(session)
-                    await self._send_git_message(context, chat_id, session, status)
-            finally:
-                session.git_busy = False
-            return True
-        if data == "git_pull":
-            await query.edit_message_text("Проверяю возможность fast-forward…")
-            session.git_busy = True
-            try:
-                await self._run_git(session, ["fetch", "--prune"])
-                branch = await self._git_current_branch(session)
-                upstream = await self._git_upstream(session)
-                if not upstream and branch and branch != "HEAD":
-                    candidate = f"origin/{branch}"
-                    if await self._git_ref_exists(session, candidate):
-                        upstream = candidate
-                if not upstream:
-                    upstream = await self._git_default_remote(session)
-                if not upstream:
-                    await self._send_git_message(
-                        context,
-                        chat_id,
-                        session,
-                        "Upstream не найден. Настройте upstream или выберите ветку через Merge/Rebase.",
-                    )
-                    return True
-                ahead_behind = await self._git_ahead_behind(session, upstream)
-                if not ahead_behind:
-                    await self._send_git_message(
-                        context,
-                        chat_id,
-                        session,
-                        "Не удалось определить ahead/behind. Проверьте состояние репозитория.",
-                    )
-                    return True
-                ahead, behind = ahead_behind
-                if behind == 0 and ahead == 0:
-                    await self._send_git_message(context, chat_id, session, "Ветка уже актуальна.")
-                    return True
-                if behind > 0 and ahead == 0:
-                    code, output = await self._run_git(session, ["pull", "--ff-only"])
-                    await self._send_git_output(context, chat_id, session, "Pull --ff-only", output)
+            if data == "git_status":
+                await query.edit_message_text("Получаю git status…")
+                text = await self._git_status_text(session)
+                await self._send_git_message(context, chat_id, session, text)
+                return True
+            if data == "git_fetch":
+                await query.edit_message_text("Выполняю git fetch…")
+                session.git_busy = True
+                try:
+                    code, output = await self._run_git(session, ["fetch", "--prune"])
+                    await self._send_git_output(context, chat_id, session, "Fetch", output)
                     if code == 0:
                         status = await self._git_status_text(session)
                         await self._send_git_message(context, chat_id, session, status)
+                finally:
+                    session.git_busy = False
+                return True
+            if data == "git_pull":
+                await query.edit_message_text("Проверяю возможность fast-forward…")
+                session.git_busy = True
+                try:
+                    await self._run_git(session, ["fetch", "--prune"])
+                    branch = await self._git_current_branch(session)
+                    upstream = await self._git_upstream(session)
+                    if not upstream and branch and branch != "HEAD":
+                        candidate = f"origin/{branch}"
+                        if await self._git_ref_exists(session, candidate):
+                            upstream = candidate
+                    if not upstream:
+                        upstream = await self._git_default_remote(session)
+                    if not upstream:
+                        await self._send_git_message(
+                            context,
+                            chat_id,
+                            session,
+                            "Upstream не найден. Настройте upstream или выберите ветку через Merge/Rebase.",
+                        )
+                        return True
+                    ahead_behind = await self._git_ahead_behind(session, upstream)
+                    if not ahead_behind:
+                        await self._send_git_message(
+                            context,
+                            chat_id,
+                            session,
+                            "Не удалось определить ahead/behind. Проверьте состояние репозитория.",
+                        )
+                        return True
+                    ahead, behind = ahead_behind
+                    if behind == 0 and ahead == 0:
+                        await self._send_git_message(context, chat_id, session, "Ветка уже актуальна.")
+                        return True
+                    if behind > 0 and ahead == 0:
+                        code, output = await self._run_git(session, ["pull", "--ff-only"])
+                        await self._send_git_output(context, chat_id, session, "Pull --ff-only", output)
+                        if code == 0:
+                            status = await self._git_status_text(session)
+                            await self._send_git_message(context, chat_id, session, status)
+                        return True
+                    self.git_pull_target[chat_id] = upstream
+                    prefix = self._session_label(session)
+                    await self._send_message(
+                        context,
+                        chat_id=chat_id,
+                        text=f"{prefix}\nFast-forward невозможен. Ahead {ahead} / Behind {behind} относительно {upstream}.",
+                        reply_markup=self._build_git_pull_keyboard(upstream),
+                    )
+                finally:
+                    session.git_busy = False
+                return True
+            if data == "git_pull_merge":
+                ref = self.git_pull_target.get(chat_id)
+                if not ref:
+                    await self._send_git_message(context, chat_id, session, "Цель pull не определена.")
                     return True
-                self.git_pull_target[chat_id] = upstream
+                await self._git_merge_or_rebase(session, chat_id, context, "merge", ref)
+                self.git_pull_target.pop(chat_id, None)
+                return True
+            if data == "git_pull_rebase":
+                ref = self.git_pull_target.get(chat_id)
+                if not ref:
+                    await self._send_git_message(context, chat_id, session, "Цель pull не определена.")
+                    return True
+                await self._git_merge_or_rebase(session, chat_id, context, "rebase", ref)
+                self.git_pull_target.pop(chat_id, None)
+                return True
+            if data == "git_merge_menu":
+                code, output = await self._run_git(session, ["branch", "-r"])
+                branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
+                if not branches:
+                    await self._send_git_message(context, chat_id, session, "Нет удаленных веток.")
+                    return True
+                self.git_branch_menu[chat_id] = branches
                 prefix = self._session_label(session)
                 await self._send_message(
                     context,
                     chat_id=chat_id,
-                    text=f"{prefix}\nFast-forward невозможен. Ahead {ahead} / Behind {behind} относительно {upstream}.",
-                    reply_markup=self._build_git_pull_keyboard(upstream),
+                    text=f"{prefix}\nВыберите ветку для merge:",
+                    reply_markup=self._build_git_branches_keyboard(chat_id, "merge"),
                 )
-            finally:
-                session.git_busy = False
-            return True
-        if data == "git_pull_merge":
-            ref = self.git_pull_target.get(chat_id)
-            if not ref:
-                await self._send_git_message(context, chat_id, session, "Цель pull не определена.")
                 return True
-            await self._git_merge_or_rebase(session, chat_id, context, "merge", ref)
-            self.git_pull_target.pop(chat_id, None)
-            return True
-        if data == "git_pull_rebase":
-            ref = self.git_pull_target.get(chat_id)
-            if not ref:
-                await self._send_git_message(context, chat_id, session, "Цель pull не определена.")
-                return True
-            await self._git_merge_or_rebase(session, chat_id, context, "rebase", ref)
-            self.git_pull_target.pop(chat_id, None)
-            return True
-        if data == "git_merge_menu":
-            code, output = await self._run_git(session, ["branch", "-r"])
-            branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
-            if not branches:
-                await self._send_git_message(context, chat_id, session, "Нет удаленных веток.")
-                return True
-            self.git_branch_menu[chat_id] = branches
-            prefix = self._session_label(session)
-            await self._send_message(
-                context,
-                chat_id=chat_id,
-                text=f"{prefix}\nВыберите ветку для merge:",
-                reply_markup=self._build_git_branches_keyboard(chat_id, "merge"),
-            )
-            return True
-        if data == "git_rebase_menu":
-            code, output = await self._run_git(session, ["branch", "-r"])
-            branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
-            if not branches:
-                await self._send_git_message(context, chat_id, session, "Нет удаленных веток.")
-                return True
-            self.git_branch_menu[chat_id] = branches
-            prefix = self._session_label(session)
-            await self._send_message(
-                context,
-                chat_id=chat_id,
-                text=f"{prefix}\nВыберите ветку для rebase:",
-                reply_markup=self._build_git_branches_keyboard(chat_id, "rebase"),
-            )
-            return True
-        if data.startswith("git_merge_pick:") or data.startswith("git_rebase_pick:"):
-            action = "merge" if data.startswith("git_merge_pick:") else "rebase"
-            idx = int(data.split(":", 1)[1])
-            branches = self.git_branch_menu.get(chat_id, [])
-            if idx < 0 or idx >= len(branches):
-                await self._send_git_message(context, chat_id, session, "Выбор недоступен.")
-                return True
-            ref = branches[idx]
-            ahead_behind = await self._git_ahead_behind(session, ref)
-            if not ahead_behind:
-                info = f"Не удалось определить ahead/behind относительно {ref}."
-            else:
-                ahead, behind = ahead_behind
-                info = f"Ahead {ahead} / Behind {behind} относительно {ref}."
-            self.git_pending_ref[chat_id] = ref
-            prefix = self._session_label(session)
-            await self._send_message(
-                context,
-                chat_id=chat_id,
-                text=f"{prefix}\n{info}",
-                reply_markup=self._build_git_confirm_keyboard(action, ref),
-            )
-            return True
-        if data == "git_confirm_merge" or data == "git_confirm_rebase":
-            action = "merge" if data == "git_confirm_merge" else "rebase"
-            ref = self.git_pending_ref.get(chat_id)
-            if not ref:
-                await self._send_git_message(context, chat_id, session, "Ссылка не выбрана.")
-                return True
-            await self._git_merge_or_rebase(session, chat_id, context, action, ref)
-            self.git_pending_ref.pop(chat_id, None)
-            return True
-        if data == "git_diff":
-            code, output = await self._run_git(session, ["diff"])
-            await self._send_git_output(context, chat_id, session, "Diff", output)
-            return True
-        if data == "git_log":
-            code, output = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "20"])
-            await self._send_git_output(context, chat_id, session, "Log", output)
-            return True
-        if data == "git_summary":
-            await query.edit_message_text("Собираю git summary…")
-            session.git_busy = True
-            try:
-                code_status, status = await self._run_git(session, ["status", "--short", "--branch"])
-                code_stat, stat = await self._run_git(session, ["diff", "--stat"])
-                code_log, log = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "10"])
-                text_parts = ["Git summary:"]
-                if code_status == 0 and status.strip():
-                    text_parts.append("\nStatus:\n" + status.strip())
-                if code_stat == 0 and stat.strip():
-                    text_parts.append("\nDiff --stat:\n" + stat.strip())
-                if code_log == 0 and log.strip():
-                    text_parts.append("\nLog (last 10):\n" + log.strip())
-                await self._send_git_message(context, chat_id, session, "\n".join(text_parts)[:4000])
-            finally:
-                session.git_busy = False
-            return True
-        if data == "git_stash":
-            session.git_busy = True
-            try:
-                code, output = await self._run_git(session, ["stash", "push", "-u"])
-                await self._send_git_output(context, chat_id, session, "Stash", output)
-                if code == 0:
-                    status = await self._git_status_text(session)
-                    await self._send_git_message(context, chat_id, session, status)
-            finally:
-                session.git_busy = False
-            return True
-        if data == "git_commit":
-            conflicts = await self._git_conflict_files(session)
-            if conflicts:
-                await self._handle_git_conflict(session, chat_id, context)
-                return True
-            commit_context = await self._git_commit_context(session)
-            if not commit_context:
-                await self._send_git_message(context, chat_id, session, "Не удалось получить diff для коммита.")
-                return True
-            commit_message = None
-            commit_body = None
-            if os.getenv("OPENAI_API_KEY") or self.config.defaults.openai_api_key:
-                from summary import suggest_commit_message_detailed
-                detailed = await asyncio.to_thread(
-                    suggest_commit_message_detailed, commit_context, self.config
+            if data == "git_rebase_menu":
+                code, output = await self._run_git(session, ["branch", "-r"])
+                branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
+                if not branches:
+                    await self._send_git_message(context, chat_id, session, "Нет удаленных веток.")
+                    return True
+                self.git_branch_menu[chat_id] = branches
+                prefix = self._session_label(session)
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text=f"{prefix}\nВыберите ветку для rebase:",
+                    reply_markup=self._build_git_branches_keyboard(chat_id, "rebase"),
                 )
-                if detailed:
-                    commit_message, commit_body = detailed
-            if commit_message:
-                commit_message = self._sanitize_commit_message(commit_message)
-                if commit_body:
-                    commit_body = self._sanitize_commit_body(commit_body)
+                return True
+            if data.startswith("git_merge_pick:") or data.startswith("git_rebase_pick:"):
+                action = "merge" if data.startswith("git_merge_pick:") else "rebase"
+                idx = int(data.split(":", 1)[1])
+                branches = self.git_branch_menu.get(chat_id, [])
+                if idx < 0 or idx >= len(branches):
+                    await self._send_git_message(context, chat_id, session, "Выбор недоступен.")
+                    return True
+                ref = branches[idx]
+                ahead_behind = await self._git_ahead_behind(session, ref)
+                if not ahead_behind:
+                    info = f"Не удалось определить ahead/behind относительно {ref}."
                 else:
-                    auto_body = await self._build_commit_body(session)
-                    if auto_body:
-                        commit_body = self._sanitize_commit_body(auto_body)
-                await self._execute_git_commit(session, chat_id, context, commit_message, commit_body)
-            else:
-                self.pending_git_commit[chat_id] = session.id
-                await self._send_git_message(context, chat_id, session, "Введите сообщение коммита (или '-' для отмены):")
-            return True
-        if data == "git_push":
-            session.git_busy = True
-            try:
-                branch = await self._git_current_branch(session)
-                upstream = await self._git_upstream(session)
-                args = ["push"]
-                if branch and not upstream:
-                    args += ["-u", "origin", branch]
-                code, output = await self._run_git(session, args)
-                await self._send_git_output(context, chat_id, session, "Push", output)
-                if code == 0:
-                    status = await self._git_status_text(session)
-                    await self._send_git_message(context, chat_id, session, status)
-            finally:
-                session.git_busy = False
-            return True
-        if data == "git_conflict_diff":
-            code, output = await self._run_git(session, ["diff"])
-            await self._send_git_output(context, chat_id, session, "Diff", output)
-            return True
-        if data == "git_conflict_abort":
-            mode = await self._git_in_progress(session)
-            if not mode:
-                await self._send_git_message(context, chat_id, session, "Нет активного merge/rebase.")
+                    ahead, behind = ahead_behind
+                    info = f"Ahead {ahead} / Behind {behind} относительно {ref}."
+                self.git_pending_ref[chat_id] = ref
+                prefix = self._session_label(session)
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text=f"{prefix}\n{info}",
+                    reply_markup=self._build_git_confirm_keyboard(action, ref),
+                )
                 return True
-            cmd = ["merge", "--abort"] if mode == "merge" else ["rebase", "--abort"]
-            code, output = await self._run_git(session, cmd)
-            await self._send_git_output(context, chat_id, session, "Abort", output)
-            await self._git_conflict_files(session)
-            if not session.git_conflict:
-                self._git_clear_conflict(session)
-            return True
-        if data == "git_conflict_continue":
-            mode = await self._git_in_progress(session)
-            if not mode:
-                await self._send_git_message(context, chat_id, session, "Нет активного merge/rebase.")
+            if data == "git_confirm_merge" or data == "git_confirm_rebase":
+                action = "merge" if data == "git_confirm_merge" else "rebase"
+                ref = self.git_pending_ref.get(chat_id)
+                if not ref:
+                    await self._send_git_message(context, chat_id, session, "Ссылка не выбрана.")
+                    return True
+                await self._git_merge_or_rebase(session, chat_id, context, action, ref)
+                self.git_pending_ref.pop(chat_id, None)
                 return True
-            cmd = ["merge", "--continue"] if mode == "merge" else ["rebase", "--continue"]
-            code, output = await self._run_git(session, cmd)
-            await self._send_git_output(context, chat_id, session, "Continue", output)
-            conflicts = await self._git_conflict_files(session)
-            if conflicts:
-                await self._handle_git_conflict(session, chat_id, context)
+            if data == "git_diff":
+                code, output = await self._run_git(session, ["diff"])
+                await self._send_git_output(context, chat_id, session, "Diff", output)
+                return True
+            if data == "git_log":
+                code, output = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "20"])
+                await self._send_git_output(context, chat_id, session, "Log", output)
+                return True
+            if data == "git_summary":
+                await query.edit_message_text("Собираю git summary…")
+                session.git_busy = True
+                try:
+                    code_status, status = await self._run_git(session, ["status", "--short", "--branch"])
+                    code_stat, stat = await self._run_git(session, ["diff", "--stat"])
+                    code_log, log = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "10"])
+                    text_parts = ["Git summary:"]
+                    if code_status == 0 and status.strip():
+                        text_parts.append("\nStatus:\n" + status.strip())
+                    if code_stat == 0 and stat.strip():
+                        text_parts.append("\nDiff --stat:\n" + stat.strip())
+                    if code_log == 0 and log.strip():
+                        text_parts.append("\nLog (last 10):\n" + log.strip())
+                    await self._send_git_message(context, chat_id, session, "\n".join(text_parts)[:4000])
+                finally:
+                    session.git_busy = False
+                return True
+            if data == "git_stash":
+                session.git_busy = True
+                try:
+                    code, output = await self._run_git(session, ["stash", "push", "-u"])
+                    await self._send_git_output(context, chat_id, session, "Stash", output)
+                    if code == 0:
+                        status = await self._git_status_text(session)
+                        await self._send_git_message(context, chat_id, session, status)
+                finally:
+                    session.git_busy = False
+                return True
+            if data == "git_commit":
+                try:
+                    await query.edit_message_text("Готовлю commit…")
+                except Exception:
+                    pass
+                conflicts = await self._git_conflict_files(session)
+                if conflicts:
+                    await self._handle_git_conflict(session, chat_id, context)
+                    return True
+                commit_context = await self._git_commit_context(session)
+                if not commit_context:
+                    await self._send_git_message(context, chat_id, session, "Не удалось получить diff для коммита.")
+                    return True
+                commit_message = None
+                commit_body = None
+                if os.getenv("OPENAI_API_KEY") or self.config.defaults.openai_api_key:
+                    from summary import suggest_commit_message_detailed
+                    detailed = await asyncio.to_thread(
+                        suggest_commit_message_detailed, commit_context, self.config
+                    )
+                    if detailed:
+                        commit_message, commit_body = detailed
+                if commit_message:
+                    commit_message = self._sanitize_commit_message(commit_message)
+                    if commit_body:
+                        commit_body = self._sanitize_commit_body(commit_body)
+                    else:
+                        auto_body = await self._build_commit_body(session)
+                        if auto_body:
+                            commit_body = self._sanitize_commit_body(auto_body)
+                    await self._execute_git_commit(session, chat_id, context, commit_message, commit_body)
+                else:
+                    self.pending_git_commit[chat_id] = session.id
+                    await self._send_git_message(context, chat_id, session, "Введите сообщение коммита (или '-' для отмены):")
+                return True
+            if data == "git_push":
+                session.git_busy = True
+                try:
+                    branch = await self._git_current_branch(session)
+                    upstream = await self._git_upstream(session)
+                    args = ["push"]
+                    if branch and not upstream:
+                        args += ["-u", "origin", branch]
+                    code, output = await self._run_git(session, args)
+                    await self._send_git_output(context, chat_id, session, "Push", output)
+                    if code == 0:
+                        status = await self._git_status_text(session)
+                        await self._send_git_message(context, chat_id, session, status)
+                finally:
+                    session.git_busy = False
+                return True
+            if data == "git_conflict_diff":
+                code, output = await self._run_git(session, ["diff"])
+                await self._send_git_output(context, chat_id, session, "Diff", output)
+                return True
+            if data == "git_conflict_abort":
+                mode = await self._git_in_progress(session)
+                if not mode:
+                    await self._send_git_message(context, chat_id, session, "Нет активного merge/rebase.")
+                    return True
+                cmd = ["merge", "--abort"] if mode == "merge" else ["rebase", "--abort"]
+                code, output = await self._run_git(session, cmd)
+                await self._send_git_output(context, chat_id, session, "Abort", output)
+                await self._git_conflict_files(session)
+                if not session.git_conflict:
+                    self._git_clear_conflict(session)
+                return True
+            if data == "git_conflict_continue":
+                mode = await self._git_in_progress(session)
+                if not mode:
+                    await self._send_git_message(context, chat_id, session, "Нет активного merge/rebase.")
+                    return True
+                cmd = ["merge", "--continue"] if mode == "merge" else ["rebase", "--continue"]
+                code, output = await self._run_git(session, cmd)
+                await self._send_git_output(context, chat_id, session, "Continue", output)
+                conflicts = await self._git_conflict_files(session)
+                if conflicts:
+                    await self._handle_git_conflict(session, chat_id, context)
+                return True
+            if data == "git_conflict_agent":
+                files = session.git_conflict_files or await self._git_conflict_files(session)
+                files_text = ", ".join(files[:10]) if files else "нет файлов"
+                note = (
+                    "Нужна помощь с git-конфликтами. "
+                    f"Список файлов: {files_text}. "
+                    "Пожалуйста, предложи шаги для разрешения конфликтов и команды git."
+                )
+                await self._handle_cli_input(session, note, chat_id, context)
+                if session.busy or session.is_active_by_tick():
+                    await query.edit_message_text("Сессия занята. Выберите действие для очереди.")
+                else:
+                    await query.edit_message_text("Инструкция отправлена агенту.")
+                return True
             return True
-        if data == "git_conflict_agent":
-            files = session.git_conflict_files or await self._git_conflict_files(session)
-            files_text = ", ".join(files[:10]) if files else "нет файлов"
-            note = (
-                "Нужна помощь с git-конфликтами. "
-                f"Список файлов: {files_text}. "
-                "Пожалуйста, предложи шаги для разрешения конфликтов и команды git."
-            )
-            await self._handle_cli_input(session, note, chat_id, context)
-            if session.busy or session.is_active_by_tick():
-                await query.edit_message_text("Сессия занята. Выберите действие для очереди.")
-            else:
-                await query.edit_message_text("Инструкция отправлена агенту.")
+        except Exception as e:
+            logging.exception(f"Ошибка git callback: {e}")
+            await self._send_message(context, chat_id=chat_id, text=f"Ошибка выполнения git: {e}")
             return True
-
-        return True

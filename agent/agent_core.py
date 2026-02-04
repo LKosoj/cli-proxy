@@ -1672,6 +1672,8 @@ class ReActAgent:
                 break
             working.append({"role": raw_message.get("role"), "content": content, "tool_calls": tool_calls})
             has_blocked = False
+            unknown_tool = False
+            all_failed = True
             for call in tool_calls:
                 name = call.get("function", {}).get("name")
                 raw_args = call.get("function", {}).get("arguments") or "{}"
@@ -1694,11 +1696,23 @@ class ReActAgent:
                 }
                 result = await self._tool_registry.execute(name, args, ctx)
                 output = result.get("output") if result.get("success") else f"Error: {result.get('error')}"
+                if result.get("success"):
+                    all_failed = False
+                else:
+                    err_text = str(result.get("error") or "")
+                    if err_text.startswith("Unknown tool:"):
+                        unknown_tool = True
                 if output and "BLOCKED:" in output:
                     has_blocked = True
                     blocked_count += 1
                     output += "\n\n⛔ THIS COMMAND IS PERMANENTLY BLOCKED. Do NOT retry it. Find an alternative approach or inform the user this action is not allowed."
                 working.append({"role": "tool", "tool_call_id": call.get("id"), "content": output or "Success"})
+            if unknown_tool:
+                final_response = "Не могу выполнить без инструментов, уточните."
+                break
+            if all_failed and not (content or "").strip():
+                final_response = "Не могу выполнить без инструментов, уточните."
+                break
             if blocked_count >= AGENT_MAX_BLOCKED:
                 final_response = "🚫 Stopped: Multiple blocked commands detected. The requested actions are not allowed for security reasons."
                 break

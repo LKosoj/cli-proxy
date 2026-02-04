@@ -1045,102 +1045,112 @@ class BotApp:
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
-        await query.answer()
-        chat_id = query.message.chat_id
-        if not self.is_allowed(chat_id):
+        try:
+            await query.answer()
+        except Exception as e:
+            logging.exception(f"Ошибка ответа на callback: {e}")
+        chat_id = query.message.chat_id if query.message else None
+        if not chat_id:
             return
-        self.context_by_chat[chat_id] = context
-        if query.data.startswith("approve_cmd:"):
-            cmd_id = query.data.split(":", 1)[1]
-            pending = pop_pending_command(cmd_id)
-            if not pending:
-                await query.edit_message_text("Запрос уже обработан.")
+        try:
+            if not self.is_allowed(chat_id):
                 return
-            await query.edit_message_text("Одобрено. Выполняю команду...")
-            result = await execute_shell_command(pending.command, pending.cwd)
-            output = result.get("output") if result.get("success") else result.get("error")
-            await self._send_message(context, chat_id=chat_id, text=output or "(пустой вывод)")
-            return
-        if query.data.startswith("deny_cmd:"):
-            cmd_id = query.data.split(":", 1)[1]
-            pop_pending_command(cmd_id)
-            await query.edit_message_text("Команда отклонена.")
-            return
-        if query.data.startswith("ask:"):
-            _, question_id, idx_str = query.data.split(":", 2)
-            pending = self.pending_questions.get(question_id)
-            if not pending:
-                await query.edit_message_text("Вопрос устарел.")
+            self.context_by_chat[chat_id] = context
+            if query.data.startswith("approve_cmd:"):
+                cmd_id = query.data.split(":", 1)[1]
+                pending = pop_pending_command(cmd_id)
+                if not pending:
+                    await query.edit_message_text("Запрос уже обработан.")
+                    return
+                await query.edit_message_text("Одобрено. Выполняю команду...")
+                result = await execute_shell_command(pending.command, pending.cwd)
+                output = result.get("output") if result.get("success") else result.get("error")
+                await self._send_message(context, chat_id=chat_id, text=output or "(пустой вывод)")
                 return
-            options = pending.get("options") or []
-            try:
-                idx = int(idx_str)
-            except ValueError:
-                await query.edit_message_text("Некорректный выбор.")
+            if query.data.startswith("deny_cmd:"):
+                cmd_id = query.data.split(":", 1)[1]
+                pop_pending_command(cmd_id)
+                await query.edit_message_text("Команда отклонена.")
                 return
-            if idx < 0 or idx >= len(options):
-                await query.edit_message_text("Выбор недоступен.")
+            if query.data.startswith("ask:"):
+                _, question_id, idx_str = query.data.split(":", 2)
+                pending = self.pending_questions.get(question_id)
+                if not pending:
+                    await query.edit_message_text("Вопрос устарел.")
+                    return
+                options = pending.get("options") or []
+                try:
+                    idx = int(idx_str)
+                except ValueError:
+                    await query.edit_message_text("Некорректный выбор.")
+                    return
+                if idx < 0 or idx >= len(options):
+                    await query.edit_message_text("Выбор недоступен.")
+                    return
+                answer = options[idx]
+                resolved = self.agent.resolve_question(question_id, answer)
+                self.pending_questions.pop(question_id, None)
+                if not resolved:
+                    await query.edit_message_text("Ответ уже получен.")
+                    return
+                await query.edit_message_text(f"Вы выбрали: {answer}")
                 return
-            answer = options[idx]
-            resolved = self.agent.resolve_question(question_id, answer)
-            self.pending_questions.pop(question_id, None)
-            if not resolved:
-                await query.edit_message_text("Ответ уже получен.")
+            if query.data.startswith("agent_set:"):
+                session = self.manager.active()
+                if not session:
+                    await query.edit_message_text("Активной сессии нет.")
+                    return
+                mode = query.data.split(":", 1)[1]
+                session.agent_enabled = mode == "on"
+                try:
+                    self.manager._persist_sessions()
+                except Exception:
+                    pass
+                status = "включен" if session.agent_enabled else "выключен"
+                await query.edit_message_text(f"Агент {status}.")
                 return
-            await query.edit_message_text(f"Вы выбрали: {answer}")
-            return
-        if query.data.startswith("agent_set:"):
-            session = self.manager.active()
-            if not session:
-                await query.edit_message_text("Активной сессии нет.")
+            if query.data == "agent_cancel":
+                await query.edit_message_text("Отменено.")
                 return
-            mode = query.data.split(":", 1)[1]
-            session.agent_enabled = mode == "on"
-            try:
-                self.manager._persist_sessions()
-            except Exception:
-                pass
-            status = "включен" if session.agent_enabled else "выключен"
-            await query.edit_message_text(f"Агент {status}.")
-            return
-        if query.data == "agent_cancel":
-            await query.edit_message_text("Отменено.")
-            return
-        if query.data.startswith("state_pick:"):
-            idx = int(query.data.split(":", 1)[1])
-            keys = self.state_menu.get(chat_id, [])
-            if idx < 0 or idx >= len(keys):
-                await query.edit_message_text("Выбор недоступен.")
-                return
-            from state import load_state
+            if query.data.startswith("state_pick:"):
+                idx = int(query.data.split(":", 1)[1])
+                keys = self.state_menu.get(chat_id, [])
+                if idx < 0 or idx >= len(keys):
+                    await query.edit_message_text("Выбор недоступен.")
+                    return
+                from state import load_state
 
-            data = load_state(self.config.defaults.state_path)
-            key = keys[idx]
-            st = data.get(key)
-            if not st:
-                await query.edit_message_text("Состояние не найдено.")
+                data = load_state(self.config.defaults.state_path)
+                key = keys[idx]
+                st = data.get(key)
+                if not st:
+                    await query.edit_message_text("Состояние не найдено.")
+                    return
+                text = (
+                    f"Tool: {st.tool}\\n"
+                    f"Workdir: {st.workdir}\\n"
+                    f"Resume: {st.resume_token or 'нет'}\\n"
+                    f"Name: {st.name or 'нет'}\\n"
+                    f"Summary: {st.summary or 'нет'}\\n"
+                    f"Updated: {self._format_ts(st.updated_at)}"
+                )
+                await query.edit_message_text(text)
                 return
-            text = (
-                f"Tool: {st.tool}\\n"
-                f"Workdir: {st.workdir}\\n"
-                f"Resume: {st.resume_token or 'нет'}\\n"
-                f"Name: {st.name or 'нет'}\\n"
-                f"Summary: {st.summary or 'нет'}\\n"
-                f"Updated: {self._format_ts(st.updated_at)}"
-            )
-            await query.edit_message_text(text)
-            return
-        if query.data.startswith("state_page:"):
-            page = int(query.data.split(":", 1)[1])
-            keys = self.state_menu.get(chat_id, [])
-            if not keys:
-                await query.edit_message_text("Состояние не найдено.")
+            if query.data.startswith("state_page:"):
+                page = int(query.data.split(":", 1)[1])
+                keys = self.state_menu.get(chat_id, [])
+                if not keys:
+                    await query.edit_message_text("Состояние не найдено.")
+                    return
+                self.state_menu_page[chat_id] = page
+                await query.edit_message_text(
+                    "Выберите запись состояния:",
+                    reply_markup=self._build_state_keyboard(chat_id),
+                )
                 return
-            self.state_menu_page[chat_id] = page
-            await query.edit_message_text(
-                "Выберите запись состояния:",
-                reply_markup=self._build_state_keyboard(chat_id),
-            )
+        except Exception as e:
+            logging.exception(f"Ошибка обработки кнопки: {e}")
+            await self._send_message(context, chat_id=chat_id, text=f"Ошибка обработки кнопки: {e}")
             return
         if query.data.startswith("use_pick:"):
             idx = int(query.data.split(":", 1)[1])
