@@ -1752,6 +1752,8 @@ class ReActAgent:
         while len(session["history_by_task"][history_key]) > AGENT_MAX_HISTORY:
             session["history_by_task"][history_key].pop(0)
         self._save_session(cwd, session)
+        # Ensure next run reloads from disk instead of cached memory.
+        self._sessions.pop(session_id, None)
         return final_response
 
 
