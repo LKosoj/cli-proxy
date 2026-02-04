@@ -57,6 +57,8 @@ defaults:
   mtproto_cleanup_days: 5
   image_temp_dir: ".attachments"
   image_max_mb: 10
+  memory_max_kb: 32
+  memory_compact_target_kb: 24
   clarification_enabled: true
   clarification_keywords:
     - "уточни"

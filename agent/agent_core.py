@@ -30,8 +30,9 @@ MAX_MEMORY_CHARS = 2000
 CHAT_MESSAGE_LEN = 200
 LOG_DETAILS_LEN = 100
 
-SYSTEM_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "agent", "system.txt")
-BLOCKED_PATTERNS_PATH = os.path.join(os.path.dirname(__file__), "approvals", "blocked-patterns.json")
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+SYSTEM_PROMPT_PATH = os.path.join(REPO_ROOT, "agent", "system.txt")
+BLOCKED_PATTERNS_PATH = os.path.join(REPO_ROOT, "agent", "approvals", "blocked-patterns.json")
 
 # ==== OpenAI config ====
 

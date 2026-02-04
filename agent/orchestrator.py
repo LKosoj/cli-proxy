@@ -8,6 +8,15 @@ from config import AppConfig
 from .contracts import ExecutorRequest, PlanStep
 from .dispatcher import Dispatcher
 from .executor import Executor
+from .memory_policy import compress_memory, decide_memory_save
+from .memory_store import (
+    append_memory_tagged,
+    compact_memory_by_priority,
+    memory_size_bytes,
+    read_memory,
+    trim_for_context,
+    write_memory,
+)
 from .planner import plan_steps
 
 
@@ -20,7 +29,12 @@ class OrchestratorRunner:
     async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
+        cwd = self._config.defaults.workdir
+        memory_text = read_memory(cwd)
+        memory_context = trim_for_context(memory_text, max_chars=2000)
         ctx_summary = f"session_id={session.id} chat_id={chat_id}"
+        if memory_context:
+            ctx_summary = f"{ctx_summary}\nmemory:\n{memory_context}"
         replan_count = 0
         while True:
             steps = plan_steps(self._config, user_text, ctx_summary)
@@ -63,7 +77,9 @@ class OrchestratorRunner:
             if restart:
                 continue
 
-            return "\n\n".join([r for r in results if r]) or "(empty response)"
+            final_response = "\n\n".join([r for r in results if r]) or "(empty response)"
+            self._maybe_update_memory(user_text, final_response, memory_text, cwd)
+            return final_response
 
     async def _execute_step(self, step: PlanStep, session: Any, bot: Any, context: Any, dest: Dict[str, Any]):
         profile = self._dispatcher.get_profile(step)
@@ -91,3 +107,23 @@ class OrchestratorRunner:
 
     def resolve_question(self, question_id: str, answer: str) -> bool:
         return self._executor.resolve_question(question_id, answer)
+
+    def _maybe_update_memory(self, user_text: str, final_response: str, memory_text: str, cwd: str) -> None:
+        decision = decide_memory_save(self._config, user_text, final_response, memory_text)
+        if not decision:
+            return
+        tag, content = decision
+        append_memory_tagged(cwd, tag, content)
+        updated = read_memory(cwd)
+        max_bytes = int(self._config.defaults.memory_max_kb) * 1024
+        if memory_size_bytes(updated) <= max_bytes:
+            return
+        target_chars = int(self._config.defaults.memory_compact_target_kb) * 1024
+        compacted = compress_memory(self._config, updated, target_chars)
+        if compacted:
+            write_memory(cwd, compacted)
+            return
+        # Обязательная компрессия при лимите: если LLM недоступен, грубо ужимаем
+        priority = ["PREF", "DECISION", "CONFIG", "AGREEMENT"]
+        compacted_local = compact_memory_by_priority(updated, max_bytes, priority)
+        write_memory(cwd, compacted_local)

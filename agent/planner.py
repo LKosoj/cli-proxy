@@ -11,7 +11,7 @@ from .heuristics import needs_clarification, normalize_ask_step
 from config import AppConfig
 
 
-_PLANNER_SYSTEM = """Ты — оркестратор. Построй скрытый план шагов для выполнения задачи пользователя.
+_PLANNER_SYSTEM = """Ты — оркестратор. Построй план шагов для выполнения задачи пользователя.
 Верни строго JSON со структурой:
 {
   "steps": [

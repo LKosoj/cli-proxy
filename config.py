@@ -47,6 +47,8 @@ class DefaultsConfig:
     mtproto_cleanup_days: int = 5
     image_temp_dir: str = ".attachments"
     image_max_mb: int = 10
+    memory_max_kb: int = 32
+    memory_compact_target_kb: int = 24
     clarification_enabled: bool = True
     clarification_keywords: List[str] = dataclasses.field(
         default_factory=lambda: [
@@ -158,6 +160,8 @@ def load_config(path: str) -> AppConfig:
         mtproto_cleanup_days=int(defaults_raw.get("mtproto_cleanup_days", 5)),
         image_temp_dir=str(defaults_raw.get("image_temp_dir", ".attachments")),
         image_max_mb=int(defaults_raw.get("image_max_mb", 10)),
+        memory_max_kb=int(defaults_raw.get("memory_max_kb", 32)),
+        memory_compact_target_kb=int(defaults_raw.get("memory_compact_target_kb", 24)),
         clarification_enabled=bool(defaults_raw.get("clarification_enabled", True)),
         clarification_keywords=list(
             defaults_raw.get(
@@ -240,6 +244,8 @@ def save_config(config: AppConfig) -> None:
             "mtproto_cleanup_days": config.defaults.mtproto_cleanup_days,
             "image_temp_dir": config.defaults.image_temp_dir,
             "image_max_mb": config.defaults.image_max_mb,
+            "memory_max_kb": config.defaults.memory_max_kb,
+            "memory_compact_target_kb": config.defaults.memory_compact_target_kb,
             "clarification_enabled": config.defaults.clarification_enabled,
             "clarification_keywords": config.defaults.clarification_keywords,
         },
