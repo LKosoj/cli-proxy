@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +28,35 @@ class OrchestratorRunner:
         self._executor = Executor(config)
         self._dispatcher = Dispatcher(config)
 
+    def _load_session(self, cwd: str) -> Dict[str, Any]:
+        path = os.path.join(cwd, "SESSION.json")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    data.setdefault("orchestrator_by_task", {})
+                    return data
+            except Exception:
+                return {"orchestrator_by_task": {}}
+        return {"orchestrator_by_task": {}}
+
+    def _save_session(self, cwd: str, session: Dict[str, Any]) -> None:
+        path = os.path.join(cwd, "SESSION.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(session, f, ensure_ascii=False, indent=2)
+
+    def _build_orchestrator_context(self, session_data: Dict[str, Any], task_key: str) -> str:
+        history = session_data.get("orchestrator_by_task", {}).get(task_key, [])
+        if not history:
+            return ""
+        recent = history[-25:]
+        try:
+            payload = json.dumps(recent, ensure_ascii=False)
+        except Exception:
+            return ""
+        return f"\norchestrator_history:\n{payload}"
+
     async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
@@ -35,6 +66,9 @@ class OrchestratorRunner:
         ctx_summary = f"session_id={session.id} chat_id={chat_id}"
         if memory_context:
             ctx_summary = f"{ctx_summary}\nmemory:\n{memory_context}"
+        task_key = session.id
+        session_data = self._load_session(cwd)
+        ctx_summary += self._build_orchestrator_context(session_data, task_key)
         replan_count = 0
         while True:
             steps = await plan_steps(self._config, user_text, ctx_summary)
@@ -78,6 +112,24 @@ class OrchestratorRunner:
                 continue
 
             final_response = "\n\n".join([r for r in results if r]) or "(empty response)"
+            try:
+                date_str = time.strftime("%Y-%m-%d")
+                entry = {
+                    "date": date_str,
+                    "user": user_text,
+                    "context": ctx_summary,
+                    "steps": [step.model_dump() for step in steps],
+                    "results": results,
+                    "final": final_response,
+                }
+                session_data.setdefault("orchestrator_by_task", {}).setdefault(task_key, []).append(entry)
+                # Не держим лишнее в памяти — только последние N записей.
+                max_items = 50
+                while len(session_data["orchestrator_by_task"][task_key]) > max_items:
+                    session_data["orchestrator_by_task"][task_key].pop(0)
+                self._save_session(cwd, session_data)
+            except Exception:
+                pass
             await self._maybe_update_memory(user_text, final_response, memory_text, cwd)
             return final_response
 
