@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update, Message
 from telegram.error import NetworkError, TimedOut
 from telegram.ext import (
     Application,
