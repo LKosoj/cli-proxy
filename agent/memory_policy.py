@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from typing import Optional, Tuple
 
-import requests
-
 from config import AppConfig
+from .openai_client import chat_completion
 
 
 _DECIDER_SYSTEM = """Ты принимаешь решение, что сохранить в долговременную память проекта.
@@ -24,33 +23,7 @@ _COMPRESS_SYSTEM = """Ты сжимаешь память проекта, что�
 Верни только сжатый текст памяти без JSON."""
 
 
-def _get_openai_config(config: AppConfig) -> Optional[Tuple[str, str, str]]:
-    api_key = config.defaults.openai_api_key
-    model = config.defaults.openai_model
-    base_url = config.defaults.openai_base_url or "https://api.openai.com"
-    if not api_key or not model:
-        return None
-    return api_key, model, base_url.rstrip("/")
-
-
-def _call_llm(config: AppConfig, system: str, user: str) -> str:
-    cfg = _get_openai_config(config)
-    if not cfg:
-        return ""
-    api_key, model, base_url = cfg
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    payload = {"model": model, "messages": messages, "temperature": 0.2}
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    resp = requests.post(f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60)
-    resp.raise_for_status()
-    data = resp.json()
-    return (data["choices"][0]["message"].get("content") or "").strip()
-
-
-def decide_memory_save(
+async def decide_memory_save(
     config: AppConfig, user_text: str, final_response: str, memory_text: str
 ) -> Optional[Tuple[str, str]]:
     prompt = (
@@ -59,7 +32,7 @@ def decide_memory_save(
         f"Итоговый ответ:\n{final_response}\n\n"
         "Нужно ли сохранять что-то новое?"
     )
-    raw = _call_llm(config, _DECIDER_SYSTEM, prompt)
+    raw = await chat_completion(config, _DECIDER_SYSTEM, prompt)
     if not raw:
         return None
     try:
@@ -83,9 +56,9 @@ def decide_memory_save(
     return tag, content
 
 
-def compress_memory(config: AppConfig, memory_text: str, max_chars: int) -> Optional[str]:
+async def compress_memory(config: AppConfig, memory_text: str, max_chars: int) -> Optional[str]:
     if not memory_text:
         return ""
     prompt = f"Лимит: {max_chars} символов.\n\nПамять:\n{memory_text}"
-    raw = _call_llm(config, _COMPRESS_SYSTEM, prompt)
+    raw = await chat_completion(config, _COMPRESS_SYSTEM, prompt)
     return raw.strip() if raw else None

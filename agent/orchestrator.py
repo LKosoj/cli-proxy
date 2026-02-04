@@ -37,7 +37,7 @@ class OrchestratorRunner:
             ctx_summary = f"{ctx_summary}\nmemory:\n{memory_context}"
         replan_count = 0
         while True:
-            steps = plan_steps(self._config, user_text, ctx_summary)
+            steps = await plan_steps(self._config, user_text, ctx_summary)
             results: List[str] = []
             restart = False
             # Группируем по параллельности
@@ -78,7 +78,7 @@ class OrchestratorRunner:
                 continue
 
             final_response = "\n\n".join([r for r in results if r]) or "(empty response)"
-            self._maybe_update_memory(user_text, final_response, memory_text, cwd)
+            await self._maybe_update_memory(user_text, final_response, memory_text, cwd)
             return final_response
 
     async def _execute_step(self, step: PlanStep, session: Any, bot: Any, context: Any, dest: Dict[str, Any]):
@@ -108,8 +108,8 @@ class OrchestratorRunner:
     def resolve_question(self, question_id: str, answer: str) -> bool:
         return self._executor.resolve_question(question_id, answer)
 
-    def _maybe_update_memory(self, user_text: str, final_response: str, memory_text: str, cwd: str) -> None:
-        decision = decide_memory_save(self._config, user_text, final_response, memory_text)
+    async def _maybe_update_memory(self, user_text: str, final_response: str, memory_text: str, cwd: str) -> None:
+        decision = await decide_memory_save(self._config, user_text, final_response, memory_text)
         if not decision:
             return
         tag, content = decision
@@ -119,7 +119,7 @@ class OrchestratorRunner:
         if memory_size_bytes(updated) <= max_bytes:
             return
         target_chars = int(self._config.defaults.memory_compact_target_kb) * 1024
-        compacted = compress_memory(self._config, updated, target_chars)
+        compacted = await compress_memory(self._config, updated, target_chars)
         if compacted:
             write_memory(cwd, compacted)
             return

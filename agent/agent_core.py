@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
+from openai import AsyncOpenAI
 
 from config import AppConfig
 from utils import strip_ansi
@@ -1571,6 +1572,10 @@ class ReActAgent:
     def __init__(self, config: AppConfig):
         self.config = config
         self._openai_cfg = _get_openai_config(config)
+        self._openai_client = None
+        if self._openai_cfg:
+            api_key, _, base_url = self._openai_cfg
+            self._openai_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._sessions: Dict[str, Dict[str, Any]] = {}
         self._tool_registry = ToolRegistry(config)
 
@@ -1635,17 +1640,19 @@ class ReActAgent:
         messages.extend(working)
         return messages
 
-    def _call_openai(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _call_openai(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         cfg = self._openai_cfg
-        if not cfg:
+        if not cfg or not self._openai_client:
             raise RuntimeError("OpenAI config missing")
-        api_key, model, base_url = cfg
-        payload = {"model": model, "messages": messages, "tools": definitions, "tool_choice": "auto"}
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        resp = requests.post(f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=90)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]
+        _, model, _ = cfg
+        resp = await self._openai_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=definitions,
+            tool_choice="auto",
+        )
+        message = resp.choices[0].message
+        return message.model_dump()
 
     async def run(self, session_id: str, user_message: str, session_obj: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str]) -> str:
         cwd = session_obj.workdir
@@ -1657,7 +1664,7 @@ class ReActAgent:
         blocked_count = 0
         for iteration in range(AGENT_MAX_ITERATIONS):
             messages = self._build_messages(session, user_message, cwd, chat_id, working)
-            raw_message = self._call_openai(messages)
+            raw_message = await self._call_openai(messages)
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
             if not tool_calls:

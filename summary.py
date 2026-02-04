@@ -1,8 +1,9 @@
+import logging
 import os
 import re
 from typing import Optional, Tuple
 
-import requests
+from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusError
 
 from config import AppConfig
 from utils import normalize_text
@@ -82,7 +83,7 @@ def _compact_reason(reason: str) -> str:
 
 
 
-def _summarize_with_cfg(
+async def _summarize_with_cfg(
     text: str, max_chars: int, cfg: Tuple[str, str, str]
 ) -> str:
     api_key, model, base_url = cfg
@@ -91,9 +92,10 @@ def _summarize_with_cfg(
     head_len = min(6000, max(0, len(text) - tail_len))
     head = text[:head_len]
     tail = text[-tail_len:] if len(text) > tail_len else text
-    payload = {
-        "model": model,
-        "messages": [
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    resp = await client.chat.completions.create(
+        model=model,
+        messages=[
             {
                 "role": "system",
                 "content": (
@@ -117,20 +119,10 @@ def _summarize_with_cfg(
                 ),
             },
         ],
-        "max_tokens": _suggest_max_tokens(text, max_chars),
-        "temperature": 0.2,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    resp = requests.post(
-        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60
+        max_tokens=_suggest_max_tokens(text, max_chars),
+        temperature=0.2,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    summary = data["choices"][0]["message"]["content"].strip()
+    summary = (resp.choices[0].message.content or "").strip()
     tail_digest = _tail_digest(text)
     if tail_digest:
         summary = f"{summary}\n\nКлючевое в конце:\n{tail_digest}"
@@ -139,7 +131,7 @@ def _summarize_with_cfg(
     return summary
 
 
-def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig] = None) -> Optional[str]:
+async def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig] = None) -> Optional[str]:
     cfg = _get_openai_config(config)
     if not cfg:
         return None
@@ -147,10 +139,10 @@ def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig]
     cleaned = normalize_text(cleaned, strip_ansi=True)
     if len(cleaned) < 3000:
         return cleaned
-    return _summarize_with_cfg(cleaned, max_chars, cfg)
+    return await _summarize_with_cfg(cleaned, max_chars, cfg)
 
 
-def summarize_text_with_reason(
+async def summarize_text_with_reason(
     text: str, max_chars: int = 3000, config: Optional[AppConfig] = None
 ) -> Tuple[Optional[str], Optional[str]]:
     cfg = _get_openai_config(config)
@@ -161,16 +153,19 @@ def summarize_text_with_reason(
     if len(cleaned) < 3000:
         return cleaned, None
     try:
-        summary = _summarize_with_cfg(cleaned, max_chars, cfg)
+        summary = await _summarize_with_cfg(cleaned, max_chars, cfg)
         return summary, None
-    except requests.Timeout:
+    except APITimeoutError:
+        logging.getLogger(__name__).exception("OpenAI timeout")
         return None, "таймаут OpenAI"
-    except requests.ConnectionError:
+    except APIConnectionError:
+        logging.getLogger(__name__).exception("OpenAI connection error")
         return None, "нет соединения с OpenAI"
-    except requests.HTTPError as err:
-        code = err.response.status_code if err.response is not None else "?"
-        return None, f"ошибка OpenAI HTTP {code}"
+    except APIStatusError as err:
+        logging.getLogger(__name__).exception("OpenAI status error")
+        return None, f"ошибка OpenAI HTTP {err.status_code}"
     except Exception:
+        logging.getLogger(__name__).exception("OpenAI summary error")
         return None, "неожиданный ответ OpenAI"
 
 def _tail_digest(text: str) -> str:

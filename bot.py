@@ -239,16 +239,20 @@ class BotApp:
                     return
                 await asyncio.sleep(2 * (2 ** attempt))
 
-    async def _send_document(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> None:
+    async def _send_document(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> bool:
         for attempt in range(5):
             try:
                 await context.bot.send_document(**kwargs)
-                return
-            except (NetworkError, TimedOut):
+                return True
+            except (NetworkError, TimedOut) as e:
                 if attempt == 4:
-                    print("Ошибка сети при отправке файла в Telegram.")
-                    return
+                    logging.exception("Ошибка сети при отправке файла в Telegram.")
+                    return False
                 await asyncio.sleep(2 * (2 ** attempt))
+            except Exception:
+                logging.exception("Не удалось отправить файл в Telegram.")
+                return False
+        return False
 
     async def _send_ask_question(
         self,
@@ -323,8 +327,8 @@ class BotApp:
     async def send_output(self, session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
         summary_error = None
         try:
-            summary, summary_error = await asyncio.to_thread(
-                summarize_text_with_reason, strip_ansi(output), config=self.config
+            summary, summary_error = await summarize_text_with_reason(
+                strip_ansi(output), config=self.config
             )
         except Exception:
             summary = None
@@ -365,7 +369,9 @@ class BotApp:
                 chat_id = dest.get("chat_id")
                 if chat_id is not None:
                     with open(path, "rb") as f:
-                        await self._send_document(context, chat_id=chat_id, document=f)
+                        ok = await self._send_document(context, chat_id=chat_id, document=f)
+                    if not ok:
+                        logging.error("Не удалось отправить файл с выводом инструмента.")
         finally:
             try:
                 os.remove(path)
@@ -1347,8 +1353,14 @@ class BotApp:
                 await query.edit_message_text("Файл слишком большой для отправки.")
                 return
             await query.edit_message_text(f"Отправляю файл: {os.path.basename(path)}")
-            with open(path, "rb") as f:
-                await self._send_document(context, chat_id=chat_id, document=f)
+            try:
+                with open(path, "rb") as f:
+                    ok = await self._send_document(context, chat_id=chat_id, document=f)
+                if not ok:
+                    await query.edit_message_text("Ошибка отправки файла. Проверьте логи бота.")
+            except Exception as e:
+                logging.exception(f"Ошибка отправки файла из меню: {e}")
+                await query.edit_message_text("Ошибка отправки файла. Проверьте логи бота.")
             return
         if query.data.startswith("file_nav:"):
             action = query.data.split(":", 1)[1]
@@ -2242,7 +2254,9 @@ class BotApp:
             path = make_html_file(html_text, "toolhelp")
             try:
                 with open(path, "rb") as f:
-                    await self._send_document(context, chat_id=chat_id, document=f)
+                    ok = await self._send_document(context, chat_id=chat_id, document=f)
+                if not ok:
+                    await self._send_message(context, chat_id=chat_id, text="Ошибка отправки файла help. Проверьте логи бота.")
             finally:
                 try:
                     os.remove(path)
