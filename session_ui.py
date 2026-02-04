@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -8,12 +8,23 @@ from state import get_state, update_state
 
 
 class SessionUI:
-    def __init__(self, config, manager, send_message, format_ts, short_label) -> None:
+    def __init__(
+        self,
+        config,
+        manager,
+        send_message,
+        format_ts,
+        short_label,
+        on_close: Optional[Callable[[str], None]] = None,
+        on_before_close: Optional[Callable[[str, int, ContextTypes.DEFAULT_TYPE], None]] = None,
+    ) -> None:
         self.config = config
         self.manager = manager
         self._send_message = send_message
         self._format_ts = format_ts
         self._short_label = short_label
+        self._on_close = on_close
+        self._on_before_close = on_before_close
         self.pending_session_rename: dict[int, str] = {}
         self.pending_session_resume: dict[int, str] = {}
 
@@ -219,8 +230,12 @@ class SessionUI:
             return True
         if data.startswith("sess_close:"):
             session_id = data.split(":", 1)[1]
+            if self._on_before_close:
+                self._on_before_close(session_id, chat_id, context)
             ok = self.manager.close(session_id)
             if ok:
+                if self._on_close:
+                    self._on_close(session_id)
                 await query.edit_message_text("Сессия закрыта и удалена из состояния.")
             else:
                 await query.edit_message_text("Сессия не найдена.")

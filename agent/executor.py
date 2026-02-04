@@ -77,3 +77,6 @@ class Executor:
 
     def resolve_question(self, question_id: str, answer: str) -> bool:
         return self._runner.resolve_question(question_id, answer)
+
+    def clear_session_cache(self, session_id: str) -> None:
+        self._runner.clear_session_cache(session_id)

@@ -1756,6 +1756,9 @@ class ReActAgent:
         self._sessions.pop(session_id, None)
         return final_response
 
+    def clear_session_cache(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
 
 class AgentRunner:
     def __init__(self, config: AppConfig):
@@ -1782,3 +1785,6 @@ class AgentRunner:
 
     def resolve_question(self, question_id: str, answer: str) -> bool:
         return self._react.resolve_question(question_id, answer)
+
+    def clear_session_cache(self, session_id: str) -> None:
+        self._react.clear_session_cache(session_id)

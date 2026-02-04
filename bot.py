@@ -85,6 +85,8 @@ class BotApp:
             self._send_message,
             self._format_ts,
             self._short_label,
+            self._clear_agent_session_cache,
+            self._interrupt_before_close,
         )
         self.agent = OrchestratorRunner(self.config)
         set_approval_callback(self._request_command_approval)
@@ -508,6 +510,21 @@ class BotApp:
                         self._start_agent_task(session, next_prompt, next_dest, context)
                     else:
                         asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
+
+    def _clear_agent_session_cache(self, session_id: str) -> None:
+        try:
+            self.agent.clear_session_cache(session_id)
+        except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
+
+    def _interrupt_before_close(self, session_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        session = self.manager.get(session_id)
+        if not session:
+            return
+        session.interrupt()
+        task = self.agent_tasks.get(chat_id)
+        if task and not task.done():
+            task.cancel()
 
     async def ensure_active_session(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> Optional[Session]:
         session = self.manager.active()
@@ -1180,8 +1197,10 @@ class BotApp:
                 await query.edit_message_text("Выбор недоступен.")
                 return
             sid = items[idx]
+            self._interrupt_before_close(sid, chat_id, context)
             ok = self.manager.close(sid)
             if ok:
+                self._clear_agent_session_cache(sid)
                 await query.edit_message_text("Сессия закрыта.")
             else:
                 await query.edit_message_text("Сессия не найдена.")
@@ -1733,8 +1752,10 @@ class BotApp:
                 chat_id=chat_id, text="Выберите сессию для закрытия:", reply_markup=keyboard
             )
             return
+        self._interrupt_before_close(context.args[0], chat_id, context)
         ok = self.manager.close(context.args[0])
         if ok:
+            self._clear_agent_session_cache(context.args[0])
             await self._send_message(context, chat_id=chat_id, text="Сессия закрыта.")
         else:
             await self._send_message(context, chat_id=chat_id, text="Сессия не найдена.")

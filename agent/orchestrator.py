@@ -108,6 +108,9 @@ class OrchestratorRunner:
     def resolve_question(self, question_id: str, answer: str) -> bool:
         return self._executor.resolve_question(question_id, answer)
 
+    def clear_session_cache(self, session_id: str) -> None:
+        self._executor.clear_session_cache(session_id)
+
     async def _maybe_update_memory(self, user_text: str, final_response: str, memory_text: str, cwd: str) -> None:
         decision = await decide_memory_save(self._config, user_text, final_response, memory_text)
         if not decision:
