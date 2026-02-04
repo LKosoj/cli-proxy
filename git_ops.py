@@ -732,10 +732,8 @@ class GitOps:
                 commit_message = None
                 commit_body = None
                 if os.getenv("OPENAI_API_KEY") or self.config.defaults.openai_api_key:
-                    from summary import suggest_commit_message_detailed
-                    detailed = await asyncio.to_thread(
-                        suggest_commit_message_detailed, commit_context, self.config
-                    )
+                    from summary import suggest_commit_message_detailed_async
+                    detailed = await suggest_commit_message_detailed_async(commit_context, self.config)
                     if detailed:
                         commit_message, commit_body = detailed
                 if commit_message:

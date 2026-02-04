@@ -60,7 +60,7 @@ class Executor:
             validate_response(resp)
             return resp
         # Пока используем текущий ReAct как исполнителя.
-        output = await self._runner.run(session, request.goal, bot, context, dest)
+        output = await self._runner.run(session, request.goal, bot, context, dest, task_id=request.task_id)
         resp = ExecutorResponse(
             task_id=request.task_id,
             status="ok",

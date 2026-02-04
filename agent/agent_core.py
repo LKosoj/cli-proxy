@@ -1619,20 +1619,34 @@ class ReActAgent:
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    data.setdefault("history_by_task", {})
+                    if "history" in data and "history_by_task" not in data:
+                        data["history_by_task"] = {"legacy": data.get("history", [])}
+                    return data
             except Exception:
-                return {"history": []}
-        return {"history": []}
+                return {"history_by_task": {}}
+        return {"history_by_task": {}}
 
     def _save_session(self, cwd: str, session: Dict[str, Any]) -> None:
         path = os.path.join(cwd, "SESSION.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(session, f, ensure_ascii=False, indent=2)
 
-    def _build_messages(self, session: Dict[str, Any], user_message: str, cwd: str, chat_id: Optional[int], working: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _build_messages(
+        self,
+        session: Dict[str, Any],
+        user_message: str,
+        cwd: str,
+        chat_id: Optional[int],
+        working: List[Dict[str, Any]],
+        task_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
         messages: List[Dict[str, Any]] = []
         messages.append({"role": "system", "content": self._load_system_prompt(cwd, chat_id)})
-        for conv in session.get("history", []):
+        task_history = session.get("history_by_task", {}).get(task_id or "unknown", [])
+        for conv in task_history:
             messages.append({"role": "user", "content": conv.get("user", "")})
             messages.append({"role": "assistant", "content": conv.get("assistant", "")})
         date_str = time.strftime("%Y-%m-%d")
@@ -1654,7 +1668,17 @@ class ReActAgent:
         message = resp.choices[0].message
         return message.model_dump()
 
-    async def run(self, session_id: str, user_message: str, session_obj: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str]) -> str:
+    async def run(
+        self,
+        session_id: str,
+        user_message: str,
+        session_obj: Any,
+        bot: Any,
+        context: Any,
+        chat_id: Optional[int],
+        chat_type: Optional[str],
+        task_id: Optional[str],
+    ) -> str:
         cwd = session_obj.workdir
         if session_id not in self._sessions:
             self._sessions[session_id] = self._load_session(cwd)
@@ -1663,7 +1687,7 @@ class ReActAgent:
         final_response = ""
         blocked_count = 0
         for iteration in range(AGENT_MAX_ITERATIONS):
-            messages = self._build_messages(session, user_message, cwd, chat_id, working)
+            messages = self._build_messages(session, user_message, cwd, chat_id, working, task_id)
             raw_message = await self._call_openai(messages)
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
@@ -1721,9 +1745,12 @@ class ReActAgent:
         if not final_response:
             final_response = "⚠️ Max iterations reached"
         date_str = time.strftime("%Y-%m-%d")
-        session.setdefault("history", []).append({"user": f"[{date_str}] {user_message}", "assistant": final_response})
-        while len(session["history"]) > AGENT_MAX_HISTORY:
-            session["history"].pop(0)
+        history_key = task_id or "unknown"
+        session.setdefault("history_by_task", {}).setdefault(history_key, []).append(
+            {"user": f"[{date_str}] {user_message}", "assistant": final_response}
+        )
+        while len(session["history_by_task"][history_key]) > AGENT_MAX_HISTORY:
+            session["history_by_task"][history_key].pop(0)
         self._save_session(cwd, session)
         return final_response
 
@@ -1733,12 +1760,20 @@ class AgentRunner:
         self.config = config
         self._react = ReActAgent(config)
 
-    async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
+    async def run(
+        self,
+        session: Any,
+        user_text: str,
+        bot: Any,
+        context: Any,
+        dest: Dict[str, Any],
+        task_id: Optional[str] = None,
+    ) -> str:
         if not _get_openai_config(self.config):
             return "Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL."
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
-        return await self._react.run(session.id, user_text, session, bot, context, chat_id, chat_type)
+        return await self._react.run(session.id, user_text, session, bot, context, chat_id, chat_type, task_id)
 
     def record_message(self, chat_id: int, message_id: int) -> None:
         self._react.record_message(chat_id, message_id)

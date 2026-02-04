@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from typing import List
 
 from .contracts import PlanStep
@@ -75,4 +76,18 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
         )
         normalize_ask_step(ask_step)
         steps.insert(0, ask_step)
+    _ensure_unique_step_ids(steps)
     return steps
+
+
+def _ensure_unique_step_ids(steps: List[PlanStep]) -> None:
+    seen: set[str] = set()
+    for idx, step in enumerate(steps, start=1):
+        base_id = step.id or f"step{idx}"
+        candidate = base_id
+        if candidate in seen:
+            candidate = f"{base_id}_{int(time.time())}_{uuid.uuid4().hex[:4]}"
+        while candidate in seen:
+            candidate = f"{base_id}_{uuid.uuid4().hex[:6]}"
+        step.id = candidate
+        seen.add(candidate)

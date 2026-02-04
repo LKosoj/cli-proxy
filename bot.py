@@ -78,6 +78,7 @@ class BotApp:
         self.buffer_tasks: Dict[int, asyncio.Task] = {}
         self.pending_questions: Dict[str, Dict[str, object]] = {}
         self.context_by_chat: Dict[int, ContextTypes.DEFAULT_TYPE] = {}
+        self.agent_tasks: Dict[int, asyncio.Task] = {}
         self.session_ui = SessionUI(
             self.config,
             self.manager,
@@ -477,6 +478,11 @@ class BotApp:
                     self.manager._persist_sessions()
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
+            except asyncio.CancelledError:
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text="Агент прерван.")
+                raise
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
                 chat_id = dest.get("chat_id")
@@ -499,7 +505,7 @@ class BotApp:
                     except Exception as e:
                         logging.exception(f"tool failed {str(e)}")
                     if session.agent_enabled:
-                        asyncio.create_task(self.run_agent(session, next_prompt, next_dest, context))
+                        self._start_agent_task(session, next_prompt, next_dest, context)
                     else:
                         asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
@@ -900,7 +906,7 @@ class BotApp:
                 reply_markup=keyboard,
             )
             return
-        asyncio.create_task(self.run_agent(session, text, dest, context))
+        self._start_agent_task(session, text, dest, context)
 
     async def _handle_user_input(
         self,
@@ -1797,7 +1803,23 @@ class BotApp:
             await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
         s.interrupt()
+        task = self.agent_tasks.get(chat_id)
+        if task and not task.done():
+            task.cancel()
         await self._send_message(context, chat_id=chat_id, text="Прерывание отправлено.")
+
+    def _start_agent_task(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        task = asyncio.create_task(self.run_agent(session, prompt, dest, context))
+        chat_id = dest.get("chat_id")
+        if chat_id is not None:
+            self.agent_tasks[chat_id] = task
+
+            def _cleanup(_task: asyncio.Task, cid: int = chat_id) -> None:
+                current = self.agent_tasks.get(cid)
+                if current is _task:
+                    self.agent_tasks.pop(cid, None)
+
+            task.add_done_callback(_cleanup)
 
     async def cmd_queue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id

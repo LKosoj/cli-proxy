@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -217,91 +218,68 @@ def _tail_digest(text: str) -> str:
     return "\n".join(bullets)
 
 
-def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Optional[str]:
+async def _chat_completion_async(
+    config: AppConfig, system: str, user: str, max_tokens: int, temperature: float
+) -> str:
     cfg = _get_openai_config(config)
     if not cfg:
-        return None
+        return ""
     api_key, model, base_url = cfg
-
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Сформулируй краткое сообщение коммита по изменениям. "
-                    "Одна строка, без кавычек, без точки в конце, до ~80 символов. "
-                    "Пиши по-русски, отражай суть изменений."
-                ),
-            },
-            {
-                "role": "user",
-                "content": text[:12000],
-            },
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    resp = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
-        "max_tokens": 80,
-        "temperature": 0.2,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    resp = requests.post(
-        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60
+        max_tokens=max_tokens,
+        temperature=temperature,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    message = data["choices"][0]["message"]["content"].strip()
-    if not message:
+    content = resp.choices[0].message.content if resp.choices else ""
+    return (content or "").strip()
+
+
+async def suggest_commit_message_async(
+    text: str, config: Optional[AppConfig] = None
+) -> Optional[str]:
+    if not config:
         return None
-    return message
+    content = await _chat_completion_async(
+        config,
+        (
+            "Сформулируй краткое сообщение коммита по изменениям. "
+            "Одна строка, без кавычек, без точки в конце, до ~80 символов. "
+            "Пиши по-русски, отражай суть изменений."
+        ),
+        text[:12000],
+        max_tokens=80,
+        temperature=0.2,
+    )
+    return content or None
 
 
-def suggest_commit_message_detailed(
+async def suggest_commit_message_detailed_async(
     text: str, config: Optional[AppConfig] = None
 ) -> Optional[Tuple[str, str]]:
-    cfg = _get_openai_config(config)
-    if not cfg:
+    if not config:
         return None
-    api_key, model, base_url = cfg
-
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Сформируй сообщение коммита в двух частях:\n"
-                    "1) Краткий заголовок одной строкой (до ~80 символов), без точки в конце.\n"
-                    "2) Детальное описание в 3–6 пунктах, каждый пункт с новой строки, "
-                    "по делу, с упоминанием ключевых файлов/изменений и поведения. "
-                    "Если были тесты — укажи их, иначе напиши 'Тесты: не запускались'.\n"
-                    "Верни в формате:\n"
-                    "SUMMARY: <текст>\n"
-                    "BODY:\n"
-                    "- ...\n"
-                ),
-            },
-            {
-                "role": "user",
-                "content": text[:12000],
-            },
-        ],
-        "max_tokens": 220,
-        "temperature": 0.2,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    resp = requests.post(
-        f"{base_url}/v1/chat/completions", json=payload, headers=headers, timeout=60
+    content = await _chat_completion_async(
+        config,
+        (
+            "Сформируй сообщение коммита в двух частях:\n"
+            "1) Краткий заголовок одной строкой (до ~80 символов), без точки в конце.\n"
+            "2) Детальное описание в 3–6 пунктах, каждый пункт с новой строки, "
+            "по делу, с упоминанием ключевых файлов/изменений и поведения. "
+            "Если были тесты — укажи их, иначе напиши 'Тесты: не запускались'.\n"
+            "Верни в формате:\n"
+            "SUMMARY: <текст>\n"
+            "BODY:\n"
+            "- ...\n"
+        ),
+        text[:12000],
+        max_tokens=220,
+        temperature=0.2,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    content = data["choices"][0]["message"]["content"].strip()
     if not content:
         return None
     summary_line = ""
@@ -323,3 +301,25 @@ def suggest_commit_message_detailed(
     if not body:
         return None
     return summary_line, body
+
+
+def suggest_commit_message(text: str, config: Optional[AppConfig] = None) -> Optional[str]:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop:
+        return None
+    return asyncio.run(suggest_commit_message_async(text, config))
+
+
+def suggest_commit_message_detailed(
+    text: str, config: Optional[AppConfig] = None
+) -> Optional[Tuple[str, str]]:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop:
+        return None
+    return asyncio.run(suggest_commit_message_detailed_async(text, config))
