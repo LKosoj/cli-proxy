@@ -44,6 +44,7 @@ from utils import (
 )
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
+from agent.plugins.task_management import run_task_deadline_checker
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -113,6 +114,7 @@ class BotApp:
             self._handle_cli_input,
         )
         self.mcp = MCPBridge(self.config, self)
+        self._task_deadline_checker_task: Optional[asyncio.Task] = None
 
     def _configure_agent_sandbox(self) -> None:
         root = sandbox_root(self.config.defaults.workdir)
@@ -2578,6 +2580,11 @@ def build_app(config: AppConfig) -> Application:
     async def _post_init(application: Application) -> None:
         await bot_app.set_bot_commands(application)
         await bot_app.mcp.start()
+        if not bot_app._task_deadline_checker_task:
+            bot_app._task_deadline_checker_task = asyncio.create_task(
+                run_task_deadline_checker(application, bot_app.is_allowed),
+                name="task_deadline_checker",
+            )
 
     async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         err = context.error
