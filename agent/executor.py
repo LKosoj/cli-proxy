@@ -35,9 +35,11 @@ class Executor:
         state_root = self._sandbox_root()
         session_workspace = self._session_workspace(session.id)
         os.makedirs(session_workspace, exist_ok=True)
+        project_root = getattr(session, "project_root", None)
+        agent_cwd = project_root or session_workspace
         proxy_session = SimpleNamespace(
             id=session.id,
-            workdir=session_workspace,
+            workdir=agent_cwd,
             state_root=state_root,
         )
         question = (request.inputs or {}).get("question")

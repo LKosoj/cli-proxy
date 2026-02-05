@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import time
 import uuid
 import subprocess
@@ -396,6 +397,37 @@ def _check_workspace_isolation(command: str, user_workspace: str) -> Tuple[bool,
     return False, None
 
 
+def _resolve_within_workspace(path: str, cwd: str) -> Tuple[Optional[str], Optional[str]]:
+    full_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+    resolved = os.path.realpath(full_path)
+    root = os.path.realpath(cwd)
+    if resolved == root or resolved.startswith(root + os.sep):
+        return full_path, None
+    return None, "🚫 BLOCKED: Cannot access outside project root"
+
+
+def _check_command_path_escape(command: str, cwd: str) -> Tuple[bool, Optional[str]]:
+    try:
+        parts = shlex.split(command)
+    except Exception:
+        parts = command.split()
+    root = os.path.realpath(cwd)
+    for part in parts:
+        if not part or part in {"|", "||", "&&", ";"}:
+            continue
+        if re.search(r"(?:^|/)\.\.(?:/|$)", part):
+            return True, "BLOCKED: Path traversal is not allowed"
+        if part.startswith(("~", "/", "../", "..\\")) or part == "..":
+            expanded = os.path.expanduser(part)
+            target = expanded if os.path.isabs(expanded) else os.path.normpath(os.path.join(cwd, expanded))
+            resolved = os.path.realpath(target)
+            if not (resolved == root or resolved.startswith(root + os.sep)):
+                return True, "BLOCKED: Command references path outside project root"
+    if re.search(r"[<>]\s*/", command):
+        return True, "BLOCKED: Redirection outside project root is not allowed"
+    return False, None
+
+
 async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
     is_background = bool(re.search(r"&\s*$", command.strip())) or "nohup" in command
     if is_background:
@@ -776,6 +808,9 @@ class ToolRegistry:
         blocked_ws, reason_ws = _check_workspace_isolation(cmd, cwd)
         if blocked_ws:
             return {"success": False, "error": f"🚫 {reason_ws}"}
+        blocked_path, reason_path = _check_command_path_escape(cmd, cwd)
+        if blocked_path:
+            return {"success": False, "error": f"🚫 {reason_path}"}
         dangerous, blocked, reason = check_command(cmd, chat_type)
         if blocked:
             return {"success": False, "error": f"🚫 {reason}\n\nThis command is not allowed for security reasons."}
@@ -795,7 +830,9 @@ class ToolRegistry:
         if not path:
             return {"success": False, "error": "Path required"}
         cwd = ctx["cwd"]
-        full_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+        full_path, err = _resolve_within_workspace(path, cwd)
+        if err:
+            return {"success": False, "error": err}
         if _is_other_user_workspace(full_path, cwd):
             return {"success": False, "error": "🚫 BLOCKED: Cannot access other user's workspace"}
         if _is_sensitive_file(full_path):
@@ -824,12 +861,11 @@ class ToolRegistry:
         if not path:
             return {"success": False, "error": "Path required"}
         cwd = ctx["cwd"]
-        full_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+        full_path, err = _resolve_within_workspace(path, cwd)
+        if err:
+            return {"success": False, "error": err}
         if _is_other_user_workspace(full_path, cwd):
             return {"success": False, "error": "🚫 BLOCKED: Cannot access other user's workspace"}
-        resolved = os.path.realpath(full_path)
-        if not resolved.startswith(os.path.realpath(cwd)):
-            return {"success": False, "error": "🚫 BLOCKED: Cannot write files outside workspace"}
         if _is_sensitive_file(full_path):
             return {"success": False, "error": f"🚫 BLOCKED: Cannot write to sensitive file ({os.path.basename(full_path)})"}
         symlink_check = _is_symlink_escape(full_path, cwd)
@@ -854,7 +890,9 @@ class ToolRegistry:
         if not path or old_text is None or new_text is None:
             return {"success": False, "error": "path, old_text, new_text required"}
         cwd = ctx["cwd"]
-        full_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+        full_path, err = _resolve_within_workspace(path, cwd)
+        if err:
+            return {"success": False, "error": err}
         if _is_other_user_workspace(full_path, cwd):
             return {"success": False, "error": "🚫 BLOCKED: Cannot access other user's workspace"}
         if _is_sensitive_file(full_path):
@@ -886,12 +924,11 @@ class ToolRegistry:
         if not path:
             return {"success": False, "error": "Path required"}
         cwd = ctx["cwd"]
-        full_path = path if os.path.isabs(path) else os.path.join(cwd, path)
-        resolved = os.path.realpath(full_path)
+        full_path, err = _resolve_within_workspace(path, cwd)
+        if err:
+            return {"success": False, "error": err}
         if _is_other_user_workspace(full_path, cwd):
             return {"success": False, "error": "🚫 BLOCKED: Cannot access other user's workspace"}
-        if not resolved.startswith(os.path.realpath(cwd)):
-            return {"success": False, "error": "Security: cannot delete files outside workspace"}
         if not os.path.exists(full_path):
             return {"success": False, "error": f"File not found: {full_path}"}
         try:
@@ -905,12 +942,18 @@ class ToolRegistry:
         pattern = (args.get("pattern") or "").strip()
         if not pattern:
             return {"success": False, "error": "Pattern required"}
+        if re.search(r"(?:^|/)\.\.(?:/|$)", pattern):
+            return {"success": False, "error": "🚫 BLOCKED: Path traversal is not allowed"}
         cwd = ctx["cwd"]
         try:
             import glob
             matches = glob.glob(os.path.join(cwd, pattern), recursive=True)
             files: List[str] = []
             for p in matches:
+                resolved = os.path.realpath(p)
+                root = os.path.realpath(cwd)
+                if not (resolved == root or resolved.startswith(root + os.sep)):
+                    continue
                 rel = os.path.relpath(p, cwd)
                 if "/node_modules/" in rel or rel.startswith("node_modules/"):
                     continue
@@ -936,6 +979,10 @@ class ToolRegistry:
         search_path = args.get("path") or cwd
         if not os.path.isabs(search_path):
             search_path = os.path.join(cwd, search_path)
+        resolved_path, err = _resolve_within_workspace(search_path, cwd)
+        if err:
+            return {"success": False, "error": err}
+        search_path = resolved_path
         flags = ["-rn"]
         if args.get("ignore_case"):
             flags.append("-i")
@@ -962,6 +1009,10 @@ class ToolRegistry:
         dir_path = path if path else cwd
         if not os.path.isabs(dir_path):
             dir_path = os.path.join(cwd, dir_path)
+        resolved_path, err = _resolve_within_workspace(dir_path, cwd)
+        if err:
+            return {"success": False, "error": err}
+        dir_path = resolved_path
         if _is_other_user_workspace(dir_path, cwd):
             return {"success": False, "error": "🚫 BLOCKED: Cannot access other user's workspace"}
         blocked_dirs = ["/etc", "/root", "/.ssh", "/proc", "/sys", "/dev", "/boot", "/var/log", "/var/run"]
@@ -1285,11 +1336,10 @@ class ToolRegistry:
         context = ctx.get("context")
         if not bot or not context:
             return {"success": False, "error": "Send file callback not configured"}
-        full_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+        full_path, err = _resolve_within_workspace(path, cwd)
+        if err:
+            return {"success": False, "error": err}
         resolved = os.path.realpath(full_path)
-        cwd_resolved = os.path.realpath(cwd)
-        if not resolved.startswith(cwd_resolved) and not resolved.startswith("/workspace/"):
-            return {"success": False, "error": "🚫 BLOCKED: Can only send files from your workspace"}
         filename = os.path.basename(resolved).lower()
         blocked = [".env", "credentials", "secrets", "password", "token", ".pem", "id_rsa", "id_ed25519", ".key", "serviceaccount"]
         for b in blocked:

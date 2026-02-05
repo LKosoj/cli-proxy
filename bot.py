@@ -78,6 +78,7 @@ class BotApp:
         self.pending_dir_input: Dict[int, bool] = {}
         self.pending_dir_create: Dict[int, str] = {}
         self.pending_git_clone: Dict[int, str] = {}
+        self.pending_agent_project: Dict[int, str] = {}
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.files_menu: Dict[int, list] = {}
@@ -583,6 +584,31 @@ class BotApp:
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
 
+    def _set_agent_project_root(
+        self,
+        session: Session,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        project_root: Optional[str],
+    ) -> tuple[bool, str]:
+        if project_root:
+            root = self.config.defaults.workdir
+            if not is_within_root(project_root, root):
+                return False, "Нельзя выйти за пределы корневого каталога."
+            if not os.path.isdir(project_root):
+                return False, "Каталог не существует."
+            project_root = os.path.realpath(project_root)
+        session.project_root = project_root
+        self._interrupt_before_close(session.id, chat_id, context)
+        self._clear_agent_session_cache(session.id)
+        try:
+            self.manager._persist_sessions()
+        except Exception:
+            pass
+        if project_root:
+            return True, f"Проект подключен: {project_root}"
+        return True, "Проект отключен."
+
     def _interrupt_before_close(self, session_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
         session = self.manager.get(session_id)
         if not session:
@@ -676,10 +702,7 @@ class BotApp:
             await self._send_dirs_menu(chat_id, context, base)
             return
         if self.pending_dir_input.pop(chat_id, None):
-            tool = self.pending_new_tool.get(chat_id)
-            if not tool:
-                await self._send_message(context, chat_id=chat_id, text="Инструмент не выбран.")
-                return
+            mode = self.dirs_mode.get(chat_id, "new_session")
             path = text.strip()
             if not os.path.isdir(path):
                 await self._send_message(context, chat_id=chat_id, text="Каталог не существует.")
@@ -687,6 +710,20 @@ class BotApp:
             root = self.dirs_root.get(chat_id, self.config.defaults.workdir)
             if not is_within_root(path, root):
                 await self._send_message(context, chat_id=chat_id, text="Нельзя выйти за пределы корневого каталога.")
+                return
+            if mode == "agent_project":
+                session_id = self.pending_agent_project.pop(chat_id, None)
+                session = self.manager.get(session_id) if session_id else None
+                if not session:
+                    await self._send_message(context, chat_id=chat_id, text="Активная сессия не найдена.")
+                    return
+                ok, msg = self._set_agent_project_root(session, chat_id, context, path)
+                self.dirs_mode.pop(chat_id, None)
+                await self._send_message(context, chat_id=chat_id, text=msg if ok else "Не удалось подключить проект.")
+                return
+            tool = self.pending_new_tool.get(chat_id)
+            if not tool:
+                await self._send_message(context, chat_id=chat_id, text="Инструмент не выбран.")
                 return
             session = self.manager.create(tool, path)
             self.pending_new_tool.pop(chat_id, None)
@@ -1218,6 +1255,25 @@ class BotApp:
                 status = "включен" if session.agent_enabled else "выключен"
                 await query.edit_message_text(f"Агент {status}.")
                 return
+            if query.data in ("agent_project_connect", "agent_project_change"):
+                session = self.manager.active()
+                if not session:
+                    await query.edit_message_text("Активной сессии нет.")
+                    return
+                self.pending_agent_project[chat_id] = session.id
+                self.dirs_root[chat_id] = self.config.defaults.workdir
+                self.dirs_mode[chat_id] = "agent_project"
+                await query.edit_message_text("Выберите каталог проекта.")
+                await self._send_dirs_menu(chat_id, context, self.config.defaults.workdir)
+                return
+            if query.data == "agent_project_disconnect":
+                session = self.manager.active()
+                if not session:
+                    await query.edit_message_text("Активной сессии нет.")
+                    return
+                ok, msg = self._set_agent_project_root(session, chat_id, context, None)
+                await query.edit_message_text(msg if ok else "Не удалось отключить проект.")
+                return
             if query.data == "agent_cancel":
                 await query.edit_message_text("Отменено.")
                 return
@@ -1342,6 +1398,16 @@ class BotApp:
                 self.pending_git_clone[chat_id] = path
                 await query.edit_message_text("Отправьте ссылку для git clone.")
                 return
+            if mode == "agent_project":
+                session_id = self.pending_agent_project.pop(chat_id, None)
+                session = self.manager.get(session_id) if session_id else None
+                if not session:
+                    await query.edit_message_text("Активная сессия не найдена.")
+                    return
+                ok, msg = self._set_agent_project_root(session, chat_id, context, path)
+                self.dirs_mode.pop(chat_id, None)
+                await query.edit_message_text(msg if ok else "Не удалось подключить проект.")
+                return
             tool = self.pending_new_tool.pop(chat_id, None)
             if not tool:
                 await query.edit_message_text("Инструмент не выбран.")
@@ -1422,6 +1488,16 @@ class BotApp:
             if mode == "git_clone":
                 self.pending_git_clone[chat_id] = base
                 await query.edit_message_text("Отправьте ссылку для git clone.")
+                return
+            if mode == "agent_project":
+                session_id = self.pending_agent_project.pop(chat_id, None)
+                session = self.manager.get(session_id) if session_id else None
+                if not session:
+                    await query.edit_message_text("Активная сессия не найдена.")
+                    return
+                ok, msg = self._set_agent_project_root(session, chat_id, context, base)
+                self.dirs_mode.pop(chat_id, None)
+                await query.edit_message_text(msg if ok else "Не удалось подключить проект.")
                 return
             tool = self.pending_new_tool.pop(chat_id, None)
             if not tool:
@@ -1886,11 +1962,14 @@ class BotApp:
         last_out = f"{int(now - s.last_output_ts)}с назад" if s.last_output_ts else "нет"
         tick_txt = f"{int(now - s.last_tick_ts)}с назад" if s.last_tick_ts else "нет"
         agent_txt = "включен" if getattr(s, "agent_enabled", False) else "выключен"
+        project_root = getattr(s, "project_root", None)
+        project_txt = project_root if project_root else "не подключен"
         await self._send_message(context, 
             chat_id=chat_id,
             text=(
                 f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}\\n"
                 f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt}\\n"
+                f"Проект: {project_txt}\\n"
                 f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}\\n"
                 f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}"
             ),
@@ -1905,16 +1984,20 @@ class BotApp:
             await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
         enabled = bool(getattr(s, "agent_enabled", False))
+        project_root = getattr(s, "project_root", None)
+        project_line = f"Проект: {project_root}" if project_root else "Проект: не подключен"
         if enabled:
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("Выключить агента", callback_data="agent_set:off")],
-                    [InlineKeyboardButton("Очистить песочницу (кроме служебных)", callback_data="agent_clean_all")],
-                    [InlineKeyboardButton("Очистить текущую сессию (кроме служебных)", callback_data="agent_clean_session")],
-                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
-                ]
-            )
-            text = "Агент сейчас включен. Выключить?"
+            rows = [[InlineKeyboardButton("Выключить агента", callback_data="agent_set:off")]]
+            if project_root:
+                rows.append([InlineKeyboardButton("Сменить проект", callback_data="agent_project_change")])
+                rows.append([InlineKeyboardButton("Отключить проект", callback_data="agent_project_disconnect")])
+            else:
+                rows.append([InlineKeyboardButton("Подключить проект", callback_data="agent_project_connect")])
+            rows.append([InlineKeyboardButton("Очистить песочницу (кроме служебных)", callback_data="agent_clean_all")])
+            rows.append([InlineKeyboardButton("Очистить текущую сессию (кроме служебных)", callback_data="agent_clean_session")])
+            rows.append([InlineKeyboardButton("Отмена", callback_data="agent_cancel")])
+            keyboard = InlineKeyboardMarkup(rows)
+            text = f"Агент сейчас включен.\n{project_line}\nВыберите действие:"
         else:
             keyboard = InlineKeyboardMarkup(
                 [
@@ -1922,7 +2005,7 @@ class BotApp:
                     [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
                 ]
             )
-            text = "Агент сейчас выключен. Включить?"
+            text = f"Агент сейчас выключен.\n{project_line}\nВключить?"
         await self._send_message(context, chat_id=chat_id, text=text, reply_markup=keyboard)
 
     async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2377,6 +2460,8 @@ class BotApp:
                 self.pending_new_tool.pop(chat_id, None)
             if mode == "git_clone":
                 self.pending_git_clone.pop(chat_id, None)
+            if mode == "agent_project":
+                self.pending_agent_project.pop(chat_id, None)
             self.dirs_mode.pop(chat_id, None)
             self.dirs_menu.pop(chat_id, None)
             await self._send_message(context, chat_id=chat_id, text=err)
@@ -2390,9 +2475,10 @@ class BotApp:
             base,
             0,
         )
+        title = "Выберите каталог проекта:" if self.dirs_mode.get(chat_id) == "agent_project" else "Выберите каталог:"
         await self._send_message(context, 
             chat_id=chat_id,
-            text="Выберите каталог:",
+            text=title,
             reply_markup=keyboard,
         )
 
