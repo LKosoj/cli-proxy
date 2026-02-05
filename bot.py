@@ -479,6 +479,14 @@ class BotApp:
                     await self._send_mtproto_result(session, dest, output, context, error=None)
                 else:
                     await self.send_output(session, dest, output, context)
+                forced = getattr(session, "headless_forced_stop", None)
+                if forced:
+                    chat_id = dest.get("chat_id")
+                    details = f"{session.id} ({session.name or session.tool.name}) @ {session.workdir}"
+                    msg = f"CLI для сессии {details} завершен не штатно."
+                    if chat_id is not None:
+                        await self._send_message(context, chat_id=chat_id, text=msg)
+                    session.headless_forced_stop = None
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
                 if dest.get("kind") == "mtproto" and dest.get("file_path"):

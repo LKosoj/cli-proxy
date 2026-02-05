@@ -8,6 +8,8 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 import logging
 import pexpect
+import subprocess
+import shlex
 
 from config import AppConfig, ToolConfig, save_config
 from state import delete_state, get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
@@ -42,6 +44,7 @@ class Session:
     agent_enabled: bool = False
     agent_memory: Dict[str, Any] = field(default_factory=dict)
     project_root: Optional[str] = None
+    headless_forced_stop: Optional[str] = None
 
     async def run_prompt(self, prompt: str, image_path: Optional[str] = None) -> str:
         if image_path:
@@ -65,6 +68,7 @@ class Session:
         cmd_template: Optional[List[str]] = None,
         image_path: Optional[str] = None,
     ) -> str:
+        self.headless_forced_stop = None
         if cmd_template is None:
             cmd_template = self.tool.headless_cmd or self.tool.cmd
             if self.resume_token and self.tool.resume_cmd:
@@ -91,7 +95,43 @@ class Session:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
             proc.stdin.close()
-        out, _ = await proc.communicate()
+        process_name = self._cli_process_name()
+        communicate_task = asyncio.create_task(proc.communicate())
+        missing_count = 0
+        while True:
+            done, _ = await asyncio.wait({communicate_task}, timeout=2)
+            if done:
+                out, _ = communicate_task.result()
+                break
+            if process_name and not self._is_cli_process_alive(process_name):
+                missing_count += 1
+            else:
+                missing_count = 0
+            if missing_count >= 2:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)
+                if proc.returncode is None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                try:
+                    out, _ = await asyncio.wait_for(communicate_task, timeout=5)
+                except Exception:
+                    communicate_task.cancel()
+                    out = b""
+                text = (out or b"").decode(errors="ignore")
+                if not text:
+                    text = "⚠️ Процесс CLI завершился без вывода (сигнал от watchdog)."
+                self.headless_forced_stop = f"CLI процесс '{process_name}' завершён нештатно"
+                self.current_proc = None
+                self._headless_interrupt_flag = False
+                self._update_activity(text)
+                self._maybe_update_resume(text)
+                return text
         self.current_proc = None
         self._headless_interrupt_flag = False
         text = (out or b"").decode(errors="ignore")
@@ -234,6 +274,37 @@ class Session:
             return False
         now = time.time() if now is None else now
         return (now - self.last_tick_ts) <= window_sec
+
+    def _cli_process_name(self) -> Optional[str]:
+        if self.tool.cmd:
+            primary = os.path.basename(self.tool.cmd[0])
+            wrappers = {"python", "python3", "node", "bash", "sh", "npx", "pnpm", "yarn", "npm"}
+            if primary in wrappers:
+                for item in self.tool.cmd[1:]:
+                    if not item or item.startswith("-"):
+                        continue
+                    return os.path.basename(item)
+            return primary
+        return None
+
+    def _is_cli_process_alive(self, name: str) -> bool:
+        if not name:
+            return False
+        quoted = shlex.quote(name)
+        cmd = f"ps -ef | grep -w {quoted} | grep -v grep"
+        try:
+            completed = subprocess.run(
+                cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+                timeout=2,
+            )
+            return bool((completed.stdout or "").strip())
+        except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
+            return False
 
 
 class SessionManager:
