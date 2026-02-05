@@ -4,7 +4,8 @@ from typing import Any, Dict
 from types import SimpleNamespace
 import os
 
-from . import agent_core as agent
+from .agent_core import AgentRunner
+from .tooling.registry import ToolRegistry
 from .contracts import ExecutorRequest, ExecutorResponse, validate_request, validate_response
 from .profiles import ExecutorProfile
 
@@ -12,8 +13,8 @@ from .profiles import ExecutorProfile
 class Executor:
     def __init__(self, config):
         self._config = config
-        self._runner = agent.AgentRunner(config)
-        self._tool_registry = agent.ToolRegistry(config)
+        self._runner = AgentRunner(config)
+        self._tool_registry = ToolRegistry(config)
 
     def _sandbox_root(self) -> str:
         return os.path.join(self._config.defaults.workdir, "_sandbox")
@@ -56,6 +57,7 @@ class Executor:
                 "bot": bot,
                 "context": context,
                 "session": proxy_session,
+                "allowed_tools": profile.allowed_tools,
             }
             result = await self._tool_registry.execute("ask_user", {"question": question, "options": options}, ctx)
             if not result.get("success"):
@@ -100,3 +102,9 @@ class Executor:
 
     def clear_session_cache(self, session_id: str) -> None:
         self._runner.clear_session_cache(session_id)
+
+    def get_plugin_commands(self, profile: ExecutorProfile) -> Dict[str, Any]:
+        return self._tool_registry.build_bot_commands(profile.allowed_tools)
+
+    def get_plugin_ui(self, profile: ExecutorProfile) -> Dict[str, Any]:
+        return self._tool_registry.build_bot_ui(profile.allowed_tools)

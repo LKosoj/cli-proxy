@@ -165,6 +165,12 @@ class OrchestratorRunner:
     def clear_session_cache(self, session_id: str) -> None:
         self._executor.clear_session_cache(session_id)
 
+    def get_plugin_commands(self, profile: Any) -> Dict[str, Any]:
+        return self._executor.get_plugin_commands(profile)
+
+    def get_plugin_ui(self, profile: Any) -> Dict[str, Any]:
+        return self._executor.get_plugin_ui(profile)
+
     async def _maybe_update_memory(self, user_text: str, final_response: str, memory_text: str, cwd: str) -> None:
         decision = await decide_memory_save(self._config, user_text, final_response, memory_text)
         if not decision:

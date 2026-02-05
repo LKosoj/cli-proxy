@@ -15,6 +15,6 @@ class ExecutorProfile:
 
 
 def build_default_profile(config: AppConfig) -> ExecutorProfile:
-    from .agent_core import TOOL_NAMES
-    tools = list(sorted(TOOL_NAMES))
+    from .tooling.registry import ToolRegistry
+    tools = list(sorted(ToolRegistry(config).list_tool_names()))
     return ExecutorProfile(name="default", allowed_tools=tools)

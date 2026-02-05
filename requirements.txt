@@ -9,3 +9,6 @@ telethon==1.36.0
 markdown-it-py==3.0.0
 mdit-py-plugins==0.4.1
 linkify-it-py==2.0.3
+duckduckgo-search==7.5.2
+gTTS==2.5.4
+youtube-transcript-api==1.2.2

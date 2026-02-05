@@ -79,6 +79,7 @@ class BotApp:
         self.pending_dir_create: Dict[int, str] = {}
         self.pending_git_clone: Dict[int, str] = {}
         self.pending_agent_project: Dict[int, str] = {}
+        self.agent_plugin_commands: Dict[int, Dict[str, Dict[str, object]]] = {}
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.files_menu: Dict[int, list] = {}
@@ -1307,6 +1308,52 @@ class BotApp:
                 msg = "Файлы текущей сессии удалены." if ok else "Не удалось очистить файлы сессии."
                 await query.edit_message_text(msg)
                 return
+            if query.data == "agent_plugin_commands":
+                session = self.manager.active()
+                if not session or not getattr(session, "agent_enabled", False):
+                    await query.edit_message_text("Агент не активен.")
+                    return
+                try:
+                    from agent.profiles import build_default_profile
+                    profile = build_default_profile(self.config)
+                    commands = self.agent.get_plugin_commands(profile)
+                    menu_entries = commands.get("menu_entries") or []
+                    if not menu_entries:
+                        await query.edit_message_text("Нет доступных команд плагинов.")
+                        return
+                    self.agent_plugin_commands[chat_id] = {
+                        c["command"]: c for c in (commands.get("plugin_commands") or [])
+                    }
+                    rows = [
+                        [InlineKeyboardButton(f"/{c['command']}", callback_data=f"agent_plugin_cmd:{c['command']}")]
+                        for c in menu_entries
+                    ]
+                    rows.append([InlineKeyboardButton("Назад", callback_data="agent_cancel")])
+                    await query.edit_message_text("Команды плагинов:", reply_markup=InlineKeyboardMarkup(rows))
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                    await query.edit_message_text("Не удалось получить команды плагинов.")
+                return
+            if query.data.startswith("agent_plugin_cmd:"):
+                cmd_name = query.data.split(":", 1)[1]
+                cmd_map = self.agent_plugin_commands.get(chat_id, {})
+                entry = cmd_map.get(cmd_name)
+                if not entry:
+                    await query.edit_message_text("Команда недоступна.")
+                    return
+                if entry.get("args"):
+                    await query.edit_message_text(f"Команда требует параметры: {entry.get('args')}")
+                    return
+                handler = entry.get("handler")
+                kwargs = entry.get("handler_kwargs") or {}
+                try:
+                    result = handler(update, context, **kwargs)
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                    await query.edit_message_text("Ошибка при выполнении команды.")
+                return
             if query.data.startswith("state_pick:"):
                 idx = int(query.data.split(":", 1)[1])
                 keys = self.state_menu.get(chat_id, [])
@@ -2001,6 +2048,7 @@ class BotApp:
                 rows.append([InlineKeyboardButton("Отключить проект", callback_data="agent_project_disconnect")])
             else:
                 rows.append([InlineKeyboardButton("Подключить проект", callback_data="agent_project_connect")])
+            rows.append([InlineKeyboardButton("Команды плагинов", callback_data="agent_plugin_commands")])
             rows.append([InlineKeyboardButton("Очистить песочницу (кроме служебных)", callback_data="agent_clean_all")])
             rows.append([InlineKeyboardButton("Очистить текущую сессию (кроме служебных)", callback_data="agent_clean_session")])
             rows.append([InlineKeyboardButton("Отмена", callback_data="agent_cancel")])
@@ -2523,6 +2571,7 @@ class BotApp:
 def build_app(config: AppConfig) -> Application:
     app = Application.builder().token(config.telegram.token).build()
     bot_app = BotApp(config)
+    app.bot_data["bot_app"] = bot_app
 
     async def _post_init(application: Application) -> None:
         await bot_app.set_bot_commands(application)
@@ -2536,7 +2585,9 @@ def build_app(config: AppConfig) -> Application:
             return
         print(f"Ошибка бота: {err}")
 
-    for entry in build_command_registry(bot_app):
+    core_registry = build_command_registry(bot_app)
+    core_command_names = {e["name"] for e in core_registry}
+    for entry in core_registry:
         async def _wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _handler=entry["handler"]) -> None:
             chat_id = update.effective_chat.id
             if not bot_app.is_allowed(chat_id):
@@ -2544,6 +2595,115 @@ def build_app(config: AppConfig) -> Application:
             bot_app.metrics.inc("commands")
             await _handler(update, context)
         app.add_handler(CommandHandler(entry["name"], _wrap))
+
+    # Install plugin-provided Telegram UI handlers before the generic catch-all handlers,
+    # otherwise plugins that rely on ConversationHandler/MessageHandler will never trigger.
+    try:
+        from agent.profiles import build_default_profile
+
+        profile = build_default_profile(config)
+        ui = bot_app.agent.get_plugin_ui(profile)
+        plugin_commands = ui.get("plugin_commands") or []
+        message_handlers = ui.get("message_handlers") or []
+        inline_handlers = ui.get("inline_handlers") or []
+
+        # 1) Callback query handlers declared by plugins (pattern-based).
+        for cmd in plugin_commands:
+            if cmd.get("callback_query_handler") and cmd.get("callback_pattern"):
+                handler_fn = cmd["callback_query_handler"]
+                pattern = cmd["callback_pattern"]
+                kwargs = cmd.get("handler_kwargs") or {}
+
+                async def _cb_wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _fn=handler_fn, _kw=kwargs) -> None:
+                    chat_id = update.effective_chat.id if update.effective_chat else None
+                    if not chat_id or not bot_app.is_allowed(chat_id):
+                        return
+                    session = bot_app.manager.active()
+                    if not session or not getattr(session, "agent_enabled", False):
+                        return
+                    try:
+                        res = _fn(update, context, **(_kw or {}))
+                        if asyncio.iscoroutine(res):
+                            await res
+                    except Exception as e:
+                        logging.exception(f"tool failed {str(e)}")
+
+                app.add_handler(CallbackQueryHandler(_cb_wrap, pattern=pattern))
+
+        # 2) Command handlers declared by plugins.
+        for cmd in plugin_commands:
+            command_name = cmd.get("command")
+            if not command_name:
+                continue
+            if command_name in core_command_names:
+                logging.warning(f"Skipping plugin command '{command_name}' because it collides with a core command")
+                continue
+            handler_fn = cmd.get("handler")
+            if not callable(handler_fn):
+                continue
+            kwargs = cmd.get("handler_kwargs") or {}
+
+            async def _cmd_wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _fn=handler_fn, _kw=kwargs) -> None:
+                chat_id = update.effective_chat.id
+                if not bot_app.is_allowed(chat_id):
+                    return
+                session = bot_app.manager.active()
+                if not session or not getattr(session, "agent_enabled", False):
+                    await bot_app._send_message(context, chat_id=chat_id, text="Агент не активен.")
+                    return
+                try:
+                    res = _fn(update, context, **(_kw or {}))
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                    await bot_app._send_message(context, chat_id=chat_id, text="Ошибка при выполнении команды плагина.")
+
+            app.add_handler(CommandHandler(command_name, _cmd_wrap, filters=filters.COMMAND))
+
+        # 3) Message handlers declared by plugins.
+        for cfg in message_handlers:
+            handler_obj = cfg.get("handler")
+            if handler_obj is None:
+                continue
+            try:
+                # Ready-to-register handler (e.g. ConversationHandler).
+                app.add_handler(handler_obj)
+                continue
+            except TypeError:
+                # Not a handler instance, fall through.
+                pass
+
+        # Back-compat dict configs: {"filters": filters.X, "handler": callable, "handler_kwargs": {...}}
+        for cfg in message_handlers:
+            if "filters" not in cfg:
+                continue
+            filter_obj = cfg.get("filters")
+            handler_fn = cfg.get("handler")
+            if not callable(handler_fn):
+                continue
+            kwargs = cfg.get("handler_kwargs") or {}
+
+            async def _msg_wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _fn=handler_fn, _kw=kwargs) -> None:
+                chat_id = update.effective_chat.id if update.effective_chat else None
+                if not chat_id or not bot_app.is_allowed(chat_id):
+                    return
+                session = bot_app.manager.active()
+                if not session or not getattr(session, "agent_enabled", False):
+                    return
+                try:
+                    res = _fn(update, context, **(_kw or {}))
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+
+            app.add_handler(MessageHandler(filter_obj, _msg_wrap))
+
+        # 4) Inline handlers (if any) follow the same pattern; left for later expansion.
+        _ = inline_handlers
+    except Exception as e:
+        logging.exception(f"tool failed {str(e)}")
 
     app.add_handler(CallbackQueryHandler(bot_app.on_callback))
     app.add_handler(MessageHandler(filters.COMMAND, bot_app.on_unknown_command))
