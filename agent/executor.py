@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+from types import SimpleNamespace
+import os
 
 from . import agent_core as agent
 from .contracts import ExecutorRequest, ExecutorResponse, validate_request, validate_response
@@ -9,8 +11,15 @@ from .profiles import ExecutorProfile
 
 class Executor:
     def __init__(self, config):
+        self._config = config
         self._runner = agent.AgentRunner(config)
         self._tool_registry = agent.ToolRegistry(config)
+
+    def _sandbox_root(self) -> str:
+        return os.path.join(self._config.defaults.workdir, "_sandbox")
+
+    def _session_workspace(self, session_id: str) -> str:
+        return os.path.join(self._sandbox_root(), "sessions", session_id)
 
     async def run(
         self,
@@ -23,19 +32,28 @@ class Executor:
     ) -> ExecutorResponse:
         validate_request(request)
         # Явный needs_input через ask_user
+        state_root = self._sandbox_root()
+        session_workspace = self._session_workspace(session.id)
+        os.makedirs(session_workspace, exist_ok=True)
+        proxy_session = SimpleNamespace(
+            id=session.id,
+            workdir=session_workspace,
+            state_root=state_root,
+        )
         question = (request.inputs or {}).get("question")
         options = (request.inputs or {}).get("options")
         if options is not None and len(options) < 2:
             options = ["Да", "Нет"]
         if question and options:
             ctx = {
-                "cwd": session.workdir,
-                "session_id": session.id,
+                "cwd": proxy_session.workdir,
+                "state_root": proxy_session.state_root,
+                "session_id": proxy_session.id,
                 "chat_id": dest.get("chat_id"),
                 "chat_type": dest.get("chat_type"),
                 "bot": bot,
                 "context": context,
-                "session": session,
+                "session": proxy_session,
             }
             result = await self._tool_registry.execute("ask_user", {"question": question, "options": options}, ctx)
             if not result.get("success"):
@@ -60,7 +78,7 @@ class Executor:
             validate_response(resp)
             return resp
         # Пока используем текущий ReAct как исполнителя.
-        output = await self._runner.run(session, request.goal, bot, context, dest, task_id=request.task_id)
+        output = await self._runner.run(proxy_session, request.goal, bot, context, dest, task_id=request.task_id)
         resp = ExecutorResponse(
             task_id=request.task_id,
             status="ok",

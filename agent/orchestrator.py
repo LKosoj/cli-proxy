@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from config import AppConfig
+from utils import sandbox_root
 from .contracts import ExecutorRequest, PlanStep
 from .dispatcher import Dispatcher
 from .executor import Executor
@@ -60,7 +61,8 @@ class OrchestratorRunner:
     async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
-        cwd = self._config.defaults.workdir
+        cwd = sandbox_root(self._config.defaults.workdir)
+        os.makedirs(cwd, exist_ok=True)
         memory_text = read_memory(cwd)
         memory_context = trim_for_context(memory_text, max_chars=2000)
         ctx_summary = f"session_id={session.id} chat_id={chat_id}"

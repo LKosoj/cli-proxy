@@ -62,9 +62,21 @@ def _trim_output(text: str) -> str:
 
 # ==== Memory & chat history ====
 MEMORY_FILE = "MEMORY.md"
-SHARED_DIR = "/workspace/_shared"
-CHATS_DIR = f"{SHARED_DIR}/chats"
-GLOBAL_LOG_FILE = f"{SHARED_DIR}/GLOBAL_LOG.md"
+
+
+def _shared_dir() -> str:
+    sandbox_root_env = os.getenv("AGENT_SANDBOX_ROOT")
+    if sandbox_root_env:
+        return os.path.join(sandbox_root_env, "_shared")
+    return os.path.join(os.getcwd(), "_sandbox", "_shared")
+
+
+def _chats_dir() -> str:
+    return os.path.join(_shared_dir(), "chats")
+
+
+def _global_log_file() -> str:
+    return os.path.join(_shared_dir(), "GLOBAL_LOG.md")
 
 
 def _ensure_dir(path: str) -> None:
@@ -72,18 +84,19 @@ def _ensure_dir(path: str) -> None:
 
 
 def _ensure_shared() -> None:
-    _ensure_dir(SHARED_DIR)
+    _ensure_dir(_shared_dir())
 
 
 def _ensure_chats() -> None:
     _ensure_shared()
-    _ensure_dir(CHATS_DIR)
+    _ensure_dir(_chats_dir())
 
 
 def _chat_history_file(chat_id: Optional[int]) -> str:
+    chats_dir = _chats_dir()
     if chat_id is None:
-        return f"{CHATS_DIR}/chat_global.md"
-    return f"{CHATS_DIR}/chat_{chat_id}.md"
+        return os.path.join(chats_dir, "chat_global.md")
+    return os.path.join(chats_dir, f"chat_{chat_id}.md")
 
 
 def save_chat_message(username: str, text: str, is_bot: bool = False, chat_id: Optional[int] = None) -> None:
@@ -127,11 +140,12 @@ def log_global(user_id: str, action: str, details: Optional[str] = None) -> None
         _ensure_shared()
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         line = f"| {timestamp} | {user_id} | {action} | {(details or '-')[:LOG_DETAILS_LEN]} |\n"
-        if not os.path.exists(GLOBAL_LOG_FILE):
+        log_path = _global_log_file()
+        if not os.path.exists(log_path):
             header = "# Global Activity Log\n\n| Time | User | Action | Details |\n|------|------|--------|--------|\n"
-            with open(GLOBAL_LOG_FILE, "w", encoding="utf-8") as f:
+            with open(log_path, "w", encoding="utf-8") as f:
                 f.write(header)
-        with open(GLOBAL_LOG_FILE, "a", encoding="utf-8") as f:
+        with open(log_path, "a", encoding="utf-8") as f:
             f.write(line)
     except Exception:
         return
@@ -1236,8 +1250,8 @@ class ToolRegistry:
 
     async def _memory(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         action = args.get("action")
-        cwd = ctx["cwd"]
-        path = os.path.join(cwd, MEMORY_FILE)
+        state_root = ctx.get("state_root") or ctx["cwd"]
+        path = os.path.join(state_root, MEMORY_FILE)
         if action == "read":
             if not os.path.exists(path):
                 return {"success": True, "output": "(memory is empty)"}
@@ -1605,7 +1619,7 @@ class ReActAgent:
             .replace("{{tools}}", ", ".join(TOOL_NAMES))
             .replace("{{userPorts}}", user_ports)
         )
-        memory_content = get_memory_for_prompt(cwd)
+        memory_content = get_memory_for_prompt(state_root)
         if memory_content:
             prompt += f"\n\n<MEMORY>\nNotes from previous sessions (use \"memory\" tool to update):\n{memory_content}\n</MEMORY>"
         chat_history = get_chat_history(chat_id)
@@ -1614,8 +1628,8 @@ class ReActAgent:
             prompt += f"\n\n<RECENT_CHAT>\nИстория чата ({line_count} сообщений). ЭТО ВСЁ что у тебя есть - от самых старых к новым:\n{chat_history}\n</RECENT_CHAT>"
         return prompt
 
-    def _load_session(self, cwd: str) -> Dict[str, Any]:
-        path = os.path.join(cwd, "SESSION.json")
+    def _load_session(self, state_root: str) -> Dict[str, Any]:
+        path = os.path.join(state_root, "SESSION.json")
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -1629,8 +1643,8 @@ class ReActAgent:
                 return {"history_by_task": {}}
         return {"history_by_task": {}}
 
-    def _save_session(self, cwd: str, session: Dict[str, Any]) -> None:
-        path = os.path.join(cwd, "SESSION.json")
+    def _save_session(self, state_root: str, session: Dict[str, Any]) -> None:
+        path = os.path.join(state_root, "SESSION.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(session, f, ensure_ascii=False, indent=2)
 
@@ -1638,13 +1652,13 @@ class ReActAgent:
         self,
         session: Dict[str, Any],
         user_message: str,
-        cwd: str,
+        state_root: str,
         chat_id: Optional[int],
         working: List[Dict[str, Any]],
         task_id: Optional[str],
     ) -> List[Dict[str, Any]]:
         messages: List[Dict[str, Any]] = []
-        messages.append({"role": "system", "content": self._load_system_prompt(cwd, chat_id)})
+        messages.append({"role": "system", "content": self._load_system_prompt(state_root, chat_id)})
         task_history = session.get("history_by_task", {}).get(task_id or "unknown", [])
         for conv in task_history:
             messages.append({"role": "user", "content": conv.get("user", "")})
@@ -1680,14 +1694,15 @@ class ReActAgent:
         task_id: Optional[str],
     ) -> str:
         cwd = session_obj.workdir
+        state_root = getattr(session_obj, "state_root", cwd)
         if session_id not in self._sessions:
-            self._sessions[session_id] = self._load_session(cwd)
+            self._sessions[session_id] = self._load_session(state_root)
         session = self._sessions[session_id]
         working: List[Dict[str, Any]] = []
         final_response = ""
         blocked_count = 0
         for iteration in range(AGENT_MAX_ITERATIONS):
-            messages = self._build_messages(session, user_message, cwd, chat_id, working, task_id)
+            messages = self._build_messages(session, user_message, state_root, chat_id, working, task_id)
             raw_message = await self._call_openai(messages)
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
@@ -1711,6 +1726,7 @@ class ReActAgent:
                         args = {}
                 ctx = {
                     "cwd": cwd,
+                    "state_root": state_root,
                     "session_id": session_id,
                     "chat_id": chat_id,
                     "chat_type": chat_type,
@@ -1751,7 +1767,7 @@ class ReActAgent:
         )
         while len(session["history_by_task"][history_key]) > AGENT_MAX_HISTORY:
             session["history_by_task"][history_key].pop(0)
-        self._save_session(cwd, session)
+        self._save_session(state_root, session)
         # Ensure next run reloads from disk instead of cached memory.
         self._sessions.pop(session_id, None)
         return final_response

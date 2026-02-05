@@ -31,7 +31,17 @@ from metrics import Metrics
 from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, update_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
-from utils import ansi_to_html, build_preview, has_ansi, is_within_root, make_html_file, strip_ansi
+from utils import (
+    ansi_to_html,
+    build_preview,
+    has_ansi,
+    is_within_root,
+    make_html_file,
+    sandbox_root,
+    sandbox_session_dir,
+    sandbox_shared_dir,
+    strip_ansi,
+)
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
 
@@ -51,6 +61,7 @@ class BotApp:
     def __init__(self, config: AppConfig):
         self.config = config
         self._setup_logging()
+        self._configure_agent_sandbox()
         self.manager = SessionManager(config)
         self.metrics = Metrics()
         self.pending: Dict[int, PendingInput] = {}
@@ -100,6 +111,61 @@ class BotApp:
             self._handle_cli_input,
         )
         self.mcp = MCPBridge(self.config, self)
+
+    def _configure_agent_sandbox(self) -> None:
+        root = sandbox_root(self.config.defaults.workdir)
+        shared = sandbox_shared_dir(self.config.defaults.workdir)
+        chats = os.path.join(shared, "chats")
+        sessions = os.path.join(root, "sessions")
+        os.makedirs(root, exist_ok=True)
+        os.makedirs(shared, exist_ok=True)
+        os.makedirs(chats, exist_ok=True)
+        os.makedirs(sessions, exist_ok=True)
+        os.environ["AGENT_SANDBOX_ROOT"] = root
+
+    def _agent_sandbox_root(self) -> str:
+        return sandbox_root(self.config.defaults.workdir)
+
+    def _agent_service_entries(self) -> set[str]:
+        return {"_shared", "SESSION.json", "MEMORY.md"}
+
+    def _clear_agent_sandbox(self) -> tuple[int, int]:
+        root = self._agent_sandbox_root()
+        if not os.path.isdir(root):
+            return 0, 0
+        removed = 0
+        errors = 0
+        for name in os.listdir(root):
+            if name in self._agent_service_entries():
+                continue
+            path = os.path.join(root, name)
+            try:
+                if os.path.isdir(path) and not os.path.islink(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+                removed += 1
+            except Exception:
+                errors += 1
+        return removed, errors
+
+    def _clear_agent_session_files(self, session_id: str) -> bool:
+        root = self._agent_sandbox_root()
+        session_dir = sandbox_session_dir(self.config.defaults.workdir, session_id)
+        try:
+            real_root = os.path.realpath(root)
+            real_target = os.path.realpath(session_dir)
+            if not real_target.startswith(real_root + os.sep):
+                return False
+            if os.path.isdir(real_target):
+                shutil.rmtree(real_target)
+                return True
+            if os.path.exists(real_target):
+                os.remove(real_target)
+                return True
+            return True
+        except Exception:
+            return False
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
@@ -1155,6 +1221,28 @@ class BotApp:
             if query.data == "agent_cancel":
                 await query.edit_message_text("Отменено.")
                 return
+            if query.data == "agent_clean_all":
+                session = self.manager.active()
+                if session:
+                    self._interrupt_before_close(session.id, chat_id, context)
+                    self._clear_agent_session_cache(session.id)
+                removed, errors = self._clear_agent_sandbox()
+                msg = f"Песочница очищена. Удалено: {removed}."
+                if errors:
+                    msg += f" Ошибок: {errors}."
+                await query.edit_message_text(msg)
+                return
+            if query.data == "agent_clean_session":
+                session = self.manager.active()
+                if not session:
+                    await query.edit_message_text("Активной сессии нет.")
+                    return
+                self._interrupt_before_close(session.id, chat_id, context)
+                self._clear_agent_session_cache(session.id)
+                ok = self._clear_agent_session_files(session.id)
+                msg = "Файлы текущей сессии удалены." if ok else "Не удалось очистить файлы сессии."
+                await query.edit_message_text(msg)
+                return
             if query.data.startswith("state_pick:"):
                 idx = int(query.data.split(":", 1)[1])
                 keys = self.state_menu.get(chat_id, [])
@@ -1821,6 +1909,8 @@ class BotApp:
             keyboard = InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton("Выключить агента", callback_data="agent_set:off")],
+                    [InlineKeyboardButton("Очистить песочницу (кроме служебных)", callback_data="agent_clean_all")],
+                    [InlineKeyboardButton("Очистить текущую сессию (кроме служебных)", callback_data="agent_clean_session")],
                     [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
                 ]
             )

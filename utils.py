@@ -37,6 +37,18 @@ _ANSI_FG_COLORS = {
 }
 
 
+def sandbox_root(workdir: str) -> str:
+    return os.path.join(workdir, "_sandbox")
+
+
+def sandbox_shared_dir(workdir: str) -> str:
+    return os.path.join(sandbox_root(workdir), "_shared")
+
+
+def sandbox_session_dir(workdir: str, session_id: str) -> str:
+    return os.path.join(sandbox_root(workdir), "sessions", session_id)
+
+
 def strip_ansi(text: str) -> str:
     text = _ANSI_RE.sub("", text)
     return _LOOSE_ANSI_RE.sub("", text)
