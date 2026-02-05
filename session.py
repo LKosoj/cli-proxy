@@ -95,7 +95,6 @@ class Session:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
             proc.stdin.close()
-        process_name = self._cli_process_name()
         communicate_task = asyncio.create_task(proc.communicate())
         missing_count = 0
         while True:
@@ -103,30 +102,27 @@ class Session:
             if done:
                 out, _ = communicate_task.result()
                 break
-            if process_name and not self._is_cli_process_alive(process_name):
+            if proc.returncode is not None:
                 missing_count += 1
             else:
                 missing_count = 0
             if missing_count >= 2:
+                # Процесс уже завершился, но communicate завис из-за незакрытого stdout/pipe.
                 try:
-                    proc.terminate()
+                    if proc.stdout:
+                        out = await asyncio.wait_for(proc.stdout.read(), timeout=2)
+                    else:
+                        out = b""
+                except Exception:
+                    out = b""
+                try:
+                    communicate_task.cancel()
                 except Exception:
                     pass
-                await asyncio.sleep(0.5)
-                if proc.returncode is None:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                try:
-                    out, _ = await asyncio.wait_for(communicate_task, timeout=5)
-                except Exception:
-                    communicate_task.cancel()
-                    out = b""
                 text = (out or b"").decode(errors="ignore")
                 if not text:
-                    text = "⚠️ Процесс CLI завершился без вывода (сигнал от watchdog)."
-                self.headless_forced_stop = f"CLI процесс '{process_name}' завершён нештатно"
+                    text = "⚠️ CLI завершился, но не вернул вывод (stdout не закрыт)."
+                self.headless_forced_stop = "CLI завершился без корректного завершения вывода"
                 self.current_proc = None
                 self._headless_interrupt_flag = False
                 self._update_activity(text)
