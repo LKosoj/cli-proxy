@@ -184,7 +184,7 @@ class ReActAgent:
             .replace("{{tools}}", tool_names)
             .replace("{{userPorts}}", user_ports)
         )
-        memory_content = get_memory_for_prompt(state_root)
+        memory_content = get_memory_for_prompt(cwd)
         if memory_content:
             prompt += f"\n\n<MEMORY>\nNotes from previous sessions (use \"memory\" tool to update):\n{memory_content}\n</MEMORY>"
         chat_history = get_chat_history(chat_id)

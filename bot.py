@@ -1322,7 +1322,9 @@ class BotApp:
                         await query.edit_message_text("Нет доступных команд плагинов.")
                         return
                     self.agent_plugin_commands[chat_id] = {
-                        c["command"]: c for c in (commands.get("plugin_commands") or [])
+                        c["command"]: c
+                        for c in (commands.get("plugin_commands") or [])
+                        if isinstance(c, dict) and c.get("command")
                     }
                     rows = [
                         [InlineKeyboardButton(f"/{c['command']}", callback_data=f"agent_plugin_cmd:{c['command']}")]
