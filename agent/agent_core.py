@@ -293,6 +293,16 @@ class ReActAgent:
         blocked_count = 0
         tool_facts: List[Dict[str, Any]] = []
         iterations_done = 0
+
+        def _text_preview(v: Any, max_chars: int = 2000) -> str:
+            try:
+                s = strip_ansi(str(v or ""))
+            except Exception:
+                s = ""
+            if len(s) > max_chars:
+                return s[:max_chars] + "...(truncated)"
+            return s
+
         for iteration in range(AGENT_MAX_ITERATIONS):
             messages = self._build_messages(
                 session,
@@ -387,12 +397,16 @@ class ReActAgent:
                     output += "\n\n⛔ THIS COMMAND IS PERMANENTLY BLOCKED. Do NOT retry it. Find an alternative approach or inform the user this action is not allowed."
                 working.append({"role": "tool", "tool_call_id": call.get("id"), "content": output or "Success"})
             for meta, result in zip(call_meta, results):
+                out = result.get("output") if result.get("success") else None
                 tool_facts.append(
                     {
                         "tool": meta.get("name"),
                         "args": meta.get("args"),
                         "success": bool(result.get("success")),
                         "error": result.get("error"),
+                        # Keep a small preview of tool output for partial results / debugging.
+                        "output_len": len(str(out or "")) if out is not None else 0,
+                        "output_preview": _text_preview(out, max_chars=2000) if out is not None else "",
                     }
                 )
             if unknown_tool:
@@ -414,8 +428,35 @@ class ReActAgent:
                 blocked_count = 0
         if not final_response:
             _log.warning("ReAct max iterations reached (%d)", AGENT_MAX_ITERATIONS)
-            final_response = "⚠️ Max iterations reached"
-            final_status = "timeout"
+            # This is not a hard error: return whatever we managed to collect so the orchestrator
+            # can decide whether to continue/replan.
+            recent = tool_facts[-6:]
+            lines: List[str] = []
+            lines.append(f"⚠️ Достигнут лимит итераций ({AGENT_MAX_ITERATIONS}). Возвращаю промежуточный результат.")
+            if recent:
+                lines.append("")
+                lines.append("Последние вызовы инструментов:")
+                for t in recent:
+                    tool = t.get("tool") or "?"
+                    ok = bool(t.get("success"))
+                    args = t.get("args") or {}
+                    try:
+                        args_s = json.dumps(args, ensure_ascii=False)
+                    except Exception:
+                        args_s = repr(args)
+                    if len(args_s) > 300:
+                        args_s = args_s[:300] + "...(truncated)"
+                    lines.append(f"- {tool}: success={ok} args={args_s}")
+                    if ok:
+                        prev = (t.get("output_preview") or "").strip()
+                        if prev:
+                            lines.append(prev)
+                    else:
+                        err = str(t.get("error") or "").strip()
+                        if err:
+                            lines.append(f"error: {err[:400]}")
+            final_response = "\n".join(lines).strip()
+            final_status = "partial"
         if final_status == "ok":
             try:
                 if any((not bool(t.get("success"))) for t in tool_facts):
