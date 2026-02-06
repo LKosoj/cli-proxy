@@ -128,7 +128,10 @@ async def _summarize_with_cfg(
     if tail_digest:
         summary = f"{summary}\n\nКлючевое в конце:\n{tail_digest}"
     if len(summary) > max_chars:
-        return summary[:max_chars]
+        suffix = "\n...(обрезано)..."
+        if max_chars <= len(suffix) + 20:
+            return summary[:max_chars]
+        return summary[: max_chars - len(suffix)] + suffix
     return summary
 
 

@@ -522,7 +522,29 @@ class BotApp:
                 session.tick_seen = (session.tick_seen or 0) + 1
                 chat_id = dest.get("chat_id")
                 if chat_id is not None:
-                    await self._send_message(context, chat_id=chat_id, text=output)
+                    # Telegram hard limit is 4096 chars per message. Instead of failing or silently truncating
+                    # elsewhere, always send a readable preview and attach the full output as HTML if needed.
+                    if len(output) <= 3900:
+                        await self._send_message(context, chat_id=chat_id, text=output)
+                    else:
+                        preview = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
+                        await self._send_message(
+                            context,
+                            chat_id=chat_id,
+                            text=f"{preview}\n\nПолный вывод во вложении (HTML).",
+                        )
+                        html_text = ansi_to_html(output)
+                        path = make_html_file(html_text, self.config.defaults.html_filename_prefix)
+                        try:
+                            with open(path, "rb") as f:
+                                ok = await self._send_document(context, chat_id=chat_id, document=f)
+                            if not ok:
+                                logging.error("Не удалось отправить HTML с полным выводом агента.")
+                        finally:
+                            try:
+                                os.remove(path)
+                            except Exception:
+                                pass
                 try:
                     preview = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
                     update_state(

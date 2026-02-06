@@ -364,7 +364,11 @@ def build_preview(text: str, max_chars: int) -> str:
     plain = strip_ansi(text)
     if len(plain) <= max_chars:
         return plain
-    return plain[:max_chars]
+    # Делает обрезку явной: иначе пользователю кажется, что агент "не дописал" ответ.
+    suffix = "\n...(обрезано)..."
+    if max_chars <= len(suffix) + 20:
+        return plain[:max_chars]
+    return plain[: max_chars - len(suffix)] + suffix
 
 
 def escape_html_text(text: str) -> str:
