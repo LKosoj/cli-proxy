@@ -5,6 +5,7 @@ import os
 import shutil
 import time
 import re
+import concurrent.futures
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -50,6 +51,13 @@ from agent.tooling.registry import get_tool_registry
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+
+# HTML rendering of large ANSI logs is CPU-heavy and often pure-Python.
+# Running it in a thread can starve the event loop due to the GIL, which looks like "polling freeze".
+# For large outputs we offload conversion to a separate process.
+_HTML_PROCESS_THRESHOLD_CHARS = 100_000
+_HTML_PROCESS_POOL = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+_HTML_RENDER_TAIL_CHARS = 10_000
 
 
 @dataclass
@@ -519,14 +527,30 @@ class BotApp:
                     f"Каталог: {session.workdir}\n"
                     f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\n"
                     f"Resume: {'есть' if session.resume_token else 'нет'}\n"
-                    "Сначала отправлю полный вывод во вложении (HTML), затем пришлю summary."
+                    f"Сначала отправлю вывод во вложении (HTML, последние {_HTML_RENDER_TAIL_CHARS} символов), затем пришлю summary."
                 )
                 if chat_id is not None:
                     await self._send_message(context, chat_id=chat_id, text=header)
 
             async def _render_html_to_file() -> str:
+                # Keep the log prefix stable for existing log parsing, but note that for big outputs
+                # we may switch to a process pool (see below).
                 _so_log.info("[send_output] generating HTML (in thread)...")
-                html_text_local = await asyncio.to_thread(ansi_to_html, output)
+                render_src = output[-_HTML_RENDER_TAIL_CHARS:] if len(output) > _HTML_RENDER_TAIL_CHARS else output
+                if len(render_src) != len(output):
+                    _so_log.info(
+                        "[send_output] HTML: truncating output for render (orig_len=%d -> render_len=%d)",
+                        len(output),
+                        len(render_src),
+                    )
+                loop = asyncio.get_running_loop()
+                t0 = time.time()
+                if len(render_src) >= _HTML_PROCESS_THRESHOLD_CHARS:
+                    _so_log.info("[send_output] HTML: using process pool (len=%d)", len(render_src))
+                    html_text_local = await loop.run_in_executor(_HTML_PROCESS_POOL, ansi_to_html, render_src)
+                else:
+                    html_text_local = await asyncio.to_thread(ansi_to_html, render_src)
+                _so_log.info("[send_output] HTML: conversion done in %.2fs", time.time() - t0)
                 return await asyncio.to_thread(make_html_file, html_text_local, self.config.defaults.html_filename_prefix)
 
             async def _summarize() -> tuple[Optional[str], Optional[str]]:

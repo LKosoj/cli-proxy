@@ -187,29 +187,43 @@ class OrchestratorRunner:
                 except Exception as e:
                     self._log.exception("compose_final_answer: failed to send ready message: %s", e)
 
-                # 2) One HTML+summary via send_output (no header)
-                try:
-                    await bot.send_output(
-                        session,
-                        dest,
-                        final_text,
-                        context,
-                        send_header=False,
-                        force_html=True,
-                    )
-                except Exception as e:
-                    self._log.exception("compose_final_answer: failed to send final output: %s", e)
-
-                # 3) Additional materials as separate messages
-                for a in artifacts:
-                    path = a.get("path") or ""
-                    if not path or not os.path.exists(path):
-                        continue
+                async def _send_payload_bg() -> None:
+                    # 2) One HTML+summary via send_output (no header)
                     try:
-                        with open(path, "rb") as f:
-                            await bot._send_document(context, chat_id=chat_id, document=f)
+                        await bot.send_output(
+                            session,
+                            dest,
+                            final_text,
+                            context,
+                            send_header=False,
+                            force_html=True,
+                        )
                     except Exception as e:
-                        self._log.exception("compose_final_answer: failed to send artifact %r: %s", path, e)
+                        self._log.exception("compose_final_answer: failed to send final output: %s", e)
+
+                    # 3) Additional materials as separate messages
+                    for a in artifacts:
+                        path = a.get("path") or ""
+                        if not path or not os.path.exists(path):
+                            continue
+                        try:
+                            with open(path, "rb") as f:
+                                await bot._send_document(context, chat_id=chat_id, document=f)
+                        except Exception as e:
+                            self._log.exception("compose_final_answer: failed to send artifact %r: %s", path, e)
+
+                # Do not block the update handler/polling loop on heavy HTML generation/upload.
+                task = asyncio.create_task(_send_payload_bg())
+
+                def _cb(t: asyncio.Task) -> None:
+                    try:
+                        t.result()
+                    except asyncio.CancelledError:
+                        return
+                    except Exception as e:
+                        self._log.exception("compose_final_answer: background send failed: %s", e)
+
+                task.add_done_callback(_cb)
 
                 self._log.info("step end corr_id=%s status=%s", corr_id, "ok")
                 return final_text
