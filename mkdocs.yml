@@ -39,7 +39,6 @@ nav:
   - git_ops.py: modules/git_ops__py.md
   - mcp_bridge.py: modules/mcp_bridge__py.md
   - metrics.py: modules/metrics__py.md
-  - mtproto_ui.py: modules/mtproto_ui__py.md
   - session.py: modules/session__py.md
   - session_ui.py: modules/session_ui__py.md
   - state.py: modules/state__py.md

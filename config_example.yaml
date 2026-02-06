@@ -53,8 +53,6 @@ defaults:
   jina_api_key: null
   github_token: null
   log_path: "bot.log"
-  mtproto_output_dir: ".mtproto"
-  mtproto_cleanup_days: 5
   image_temp_dir: ".attachments"
   image_max_mb: 10
   memory_max_kb: 32
@@ -75,21 +73,39 @@ defaults:
     - "почему"
     - "зачем"
 
-mtproto:
-  enabled: false
-  api_id: null
-  api_hash: null
-  session_string: null
-  session_path: "mtproto.session"
-  targets:
-    - title: "My Saved Messages"
-      peer: "me"
-
 mcp:
   enabled: false
   host: "127.0.0.1"
   port: 8765
   token: null
+
+mcp_clients: []
+# MCP client connections (external servers). Transport: stdio.
+# Example:
+# mcp_clients:
+#   - name: "filesystem"
+#     enabled: true
+#     transport: "stdio"
+#     cmd: ["node", "/path/to/mcp-filesystem-server/index.js"]
+#     cwd: null
+#     env:
+#       SOME_TOKEN: "${SOME_TOKEN}"
+#     timeout_ms: 30000
+
+# Optional alternative format (like Claude Desktop): mcp_servers.<name>.url
+mcp_servers:
+  context7:
+    url: "http://127.0.0.1:8888/servers/context7/mcp"
+  notebooklm:
+    url: "http://127.0.0.1:8888/servers/notebooklm/mcp"
+  vsegpt_image:
+    url: "http://127.0.0.1:8888/servers/vsegpt_image/mcp"
+  vsegpt_tts:
+    url: "http://127.0.0.1:8888/servers/vsegpt_tts/mcp"
+  chrome-devtools:
+    url: "http://127.0.0.1:8888/servers/chrome-devtools/mcp"
+  sequentialthinking-tools:
+    url: "http://127.0.0.1:8888/servers/sequentialthinking-tools/mcp"
 
 presets:
   - name: "tests"

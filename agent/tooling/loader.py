@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import logging
+import sys
 from pathlib import Path
 from typing import List
 
@@ -48,6 +49,9 @@ class PluginLoader:
             if not spec or not spec.loader:
                 return None
             module = importlib.util.module_from_spec(spec)
+            # Some decorators (e.g. dataclasses) expect the module to be present in sys.modules
+            # while the module code is executed.
+            sys.modules[spec.name] = module
             spec.loader.exec_module(module)
             return module
         except Exception as e:

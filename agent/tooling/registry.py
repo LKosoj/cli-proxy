@@ -6,8 +6,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from agent.mcp.manager import MCPManager
 from agent.plugins.base import ToolPlugin
 from agent.tooling.loader import PluginLoader
+from agent.tooling.mcp_plugin import MCPRemoteToolPlugin
 from agent.tooling.spec import ToolSpec
 from agent.tooling.constants import TOOL_TIMEOUT_MS
 
@@ -19,6 +21,11 @@ class ToolRegistry:
         self.plugin_instances: Dict[str, ToolPlugin] = {}
         self.specs: Dict[str, ToolSpec] = {}
 
+        self._mcp_manager = MCPManager(config)
+        self._mcp_loaded = False
+        self._mcp_lock = asyncio.Lock()
+        self._mcp_tool_keys: set[str] = set()
+
         # shared state stores
         self.pending_questions: Dict[str, asyncio.Future] = {}
         self.recent_messages: Dict[int, List[int]] = {}
@@ -27,6 +34,8 @@ class ToolRegistry:
         self.user_tasks: Dict[int, set] = {}
 
         self._load_plugins()
+        # Register cached MCP tools (if any) so they can appear immediately in the tool list.
+        self._register_mcp_cached_tools()
 
     def _load_plugins(self) -> None:
         loader = PluginLoader(Path(__file__).resolve().parent.parent / "plugins")
@@ -37,6 +46,75 @@ class ToolRegistry:
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
                 continue
+
+    def _unique_tool_name(self, base: str) -> str:
+        if base not in self.specs:
+            return base
+        i = 2
+        while True:
+            name = f"{base}_{i}"
+            if name not in self.specs:
+                return name
+            i += 1
+
+    def _register_mcp_cached_tools(self) -> None:
+        try:
+            cached = self._mcp_manager.load_cached_tools()
+        except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
+            return
+        for server_name, tool in cached:
+            try:
+                key = f"{server_name}::{tool.name}"
+                if key in self._mcp_tool_keys:
+                    continue
+                base_name = self._mcp_manager.build_registry_name(server_name, tool.name)
+                name = self._unique_tool_name(base_name)
+                plugin = MCPRemoteToolPlugin(
+                    registry_name=name,
+                    server_name=server_name,
+                    tool=tool,
+                    manager=self._mcp_manager,
+                )
+                self.register(plugin)
+                self._mcp_tool_keys.add(key)
+            except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
+                continue
+
+    async def ensure_mcp_loaded(self) -> None:
+        # If no MCP client config, nothing to do.
+        if not getattr(self.config, "mcp_clients", None):
+            return
+        if self._mcp_loaded:
+            return
+        async with self._mcp_lock:
+            if self._mcp_loaded:
+                return
+            discovered = await self._mcp_manager.list_all_tools()
+            for server_name, tool in discovered:
+                key = f"{server_name}::{tool.name}"
+                if key in self._mcp_tool_keys:
+                    continue
+                base_name = self._mcp_manager.build_registry_name(server_name, tool.name)
+                name = self._unique_tool_name(base_name)
+                try:
+                    plugin = MCPRemoteToolPlugin(
+                        registry_name=name,
+                        server_name=server_name,
+                        tool=tool,
+                        manager=self._mcp_manager,
+                    )
+                    self.register(plugin)
+                    self._mcp_tool_keys.add(key)
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                    continue
+            try:
+                self._mcp_manager.save_cached_tools(discovered)
+            except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
+            self._mcp_loaded = True
 
     def _build_services(self) -> Dict[str, Any]:
         return {
@@ -81,6 +159,12 @@ class ToolRegistry:
         if model_family == "google":
             return [{"function_declarations": [s.to_google_tool() for s in specs]}]
         return [s.to_openai_tool() for s in specs]
+
+    async def get_definitions_async(
+        self, allowed_tools: Optional[List[str]] = None, model_family: str = "openai"
+    ) -> List[Dict[str, Any]]:
+        await self.ensure_mcp_loaded()
+        return self.get_definitions(allowed_tools, model_family=model_family)
 
     def get_plugin_commands(self, allowed_tools: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         names = self._filter_allowed(allowed_tools)

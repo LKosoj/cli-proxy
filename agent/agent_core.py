@@ -238,7 +238,7 @@ class ReActAgent:
         if not cfg or not self._openai_client:
             raise RuntimeError("OpenAI config missing")
         _, model, _ = cfg
-        definitions = self._tool_registry.get_definitions(["All"])
+        definitions = await self._tool_registry.get_definitions_async(["All"])
         resp = await self._openai_client.chat.completions.create(
             model=model,
             messages=messages,

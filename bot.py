@@ -26,7 +26,6 @@ from command_registry import build_command_registry
 from dirs_ui import build_dirs_keyboard, prepare_dirs
 from session_ui import SessionUI
 from git_ops import GitOps
-from mtproto_ui import MTProtoUI
 from metrics import Metrics
 from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, update_state, clear_active_state
@@ -104,7 +103,6 @@ class BotApp:
         )
         self.agent = OrchestratorRunner(self.config)
         set_approval_callback(self._request_command_approval)
-        self.mtproto = MTProtoUI(self.config, self._send_message)
         self.git = GitOps(
             self.config,
             self.manager,
@@ -420,31 +418,20 @@ class BotApp:
             f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\\n"
             f"Resume: {'есть' if session.resume_token else 'нет'} | Источник анонса: {summary_source}"
         )
-        if dest.get("kind") == "mtproto":
-            peer = dest.get("peer")
-            if peer is not None:
-                # MTProto output handled отдельно для задач с файлом.
-                pass
-        else:
-            chat_id = dest.get("chat_id")
-            if chat_id is not None:
-                await self._send_message(context, chat_id=chat_id, text=header)
-                if preview:
-                    await self._send_message(context, chat_id=chat_id, text=preview)
+        chat_id = dest.get("chat_id")
+        if chat_id is not None:
+            await self._send_message(context, chat_id=chat_id, text=header)
+            if preview:
+                await self._send_message(context, chat_id=chat_id, text=preview)
 
         html_text = ansi_to_html(output)
         path = make_html_file(html_text, self.config.defaults.html_filename_prefix)
         try:
-            if dest.get("kind") == "mtproto":
-                # MTProto output handled отдельно для задач с файлом.
-                pass
-            else:
-                chat_id = dest.get("chat_id")
-                if chat_id is not None:
-                    with open(path, "rb") as f:
-                        ok = await self._send_document(context, chat_id=chat_id, document=f)
-                    if not ok:
-                        logging.error("Не удалось отправить файл с выводом инструмента.")
+            if chat_id is not None:
+                with open(path, "rb") as f:
+                    ok = await self._send_document(context, chat_id=chat_id, document=f)
+                if not ok:
+                    logging.error("Не удалось отправить файл с выводом инструмента.")
         finally:
             try:
                 os.remove(path)
@@ -478,10 +465,7 @@ class BotApp:
             image_path = dest.get("image_path")
             try:
                 output = await session.run_prompt(prompt, image_path=image_path)
-                if dest.get("kind") == "mtproto" and dest.get("file_path"):
-                    await self._send_mtproto_result(session, dest, output, context, error=None)
-                else:
-                    await self.send_output(session, dest, output, context)
+                await self.send_output(session, dest, output, context)
                 forced = getattr(session, "headless_forced_stop", None)
                 if forced:
                     chat_id = dest.get("chat_id")
@@ -492,12 +476,9 @@ class BotApp:
                     session.headless_forced_stop = None
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
-                if dest.get("kind") == "mtproto" and dest.get("file_path"):
-                    await self._send_mtproto_result(session, dest, "", context, error=str(e))
-                else:
-                    chat_id = dest.get("chat_id")
-                    if chat_id is not None:
-                        await self._send_message(context, chat_id=chat_id, text=f"Ошибка выполнения: {e}")
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text=f"Ошибка выполнения: {e}")
             finally:
                 session.busy = False
                 if image_path and dest.get("cleanup_image"):
@@ -670,12 +651,6 @@ class BotApp:
             return
         text = update.message.text
         if await self.session_ui.handle_pending_message(chat_id, text, context):
-            return
-        mtproto_pending = await self.mtproto.consume_pending(chat_id, text, context)
-        if mtproto_pending is not None:
-            if mtproto_pending.get("cancelled"):
-                return
-            await self._dispatch_mtproto_task(chat_id, mtproto_pending, context)
             return
         if chat_id in self.pending_dir_create:
             base = self.pending_dir_create.pop(chat_id)
@@ -970,26 +945,6 @@ class BotApp:
         except Exception:
             return
 
-    async def _dispatch_mtproto_task(self, chat_id: int, payload: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
-        session = await self.ensure_active_session(chat_id, context)
-        if not session:
-            return
-        file_path = self._mtproto_output_path(session.workdir)
-        dest = {
-            "kind": "mtproto",
-            "peer": payload.get("peer"),
-            "title": payload.get("title"),
-            "chat_id": chat_id,
-            "file_path": file_path,
-        }
-        prompt = self._mtproto_prompt(payload.get("message", ""), file_path)
-        await self._send_message(
-            context,
-            chat_id=chat_id,
-            text=f"Задача принята. Ожидаю файл результата: {os.path.basename(file_path)}",
-        )
-        await self._handle_cli_input(session, prompt, chat_id, context, dest=dest)
-
     async def _handle_cli_input(
         self,
         session: Session,
@@ -1116,89 +1071,6 @@ class BotApp:
             task.cancel()
         payload = "\n\n".join(parts)
         await self._handle_user_input(session, payload, chat_id, context)
-
-    def _mtproto_output_path(self, workdir: str) -> str:
-        base = self.config.defaults.mtproto_output_dir
-        if os.path.isabs(base):
-            out_dir = base
-        else:
-            out_dir = os.path.join(workdir, base)
-        os.makedirs(out_dir, exist_ok=True)
-        self._cleanup_mtproto_dir(out_dir)
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        return os.path.join(out_dir, f"result_{stamp}.md")
-
-    def _mtproto_prompt(self, text: str, file_path: str) -> str:
-        return (
-            f"{text}\n\n"
-            "Сформируй результат в Markdown и сохрани в файл по пути:\n"
-            f"{file_path}\n"
-            "Если файл существует — перезапиши его. "
-            "Не отправляй содержимое файла в stdout."
-        )
-
-    async def _send_mtproto_result(
-        self,
-        session: Session,
-        dest: dict,
-        output: str,
-        context: ContextTypes.DEFAULT_TYPE,
-        error: Optional[str] = None,
-    ) -> None:
-        chat_id = dest.get("chat_id")
-        file_path = dest.get("file_path")
-        peer = dest.get("peer")
-        if not file_path or peer is None:
-            if chat_id is not None:
-                await self._send_message(context, chat_id=chat_id, text="MTProto: не задан путь результата.")
-            return
-        content = ""
-        file_exists = False
-        for _ in range(3):
-            if os.path.isfile(file_path):
-                try:
-                    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-                        content = f.read()
-                    if content:
-                        file_exists = True
-                        break
-                except Exception as e:
-                    logging.exception(f"tool failed {str(e)}")
-            await asyncio.sleep(0.5)
-        if file_exists:
-            if len(content) > 12000:
-                content = content[:12000]
-            err = await self.mtproto.send_text(peer, content)
-            if err and chat_id is not None:
-                await self._send_message(context, chat_id=chat_id, text=err)
-            status = "Результат отправлен в MTProto чат."
-        else:
-            status = "CLI не создал файл результата."
-        if error and file_exists:
-            status = "CLI завершился с ошибкой, но файл найден и отправлен."
-        if chat_id is not None:
-            await self._send_message(context, chat_id=chat_id, text=status)
-
-    def _cleanup_mtproto_dir(self, out_dir: str) -> None:
-        try:
-            days = int(self.config.defaults.mtproto_cleanup_days)
-        except Exception:
-            days = 5
-        if days <= 0:
-            return
-        cutoff = time.time() - days * 86400
-        try:
-            for name in os.listdir(out_dir):
-                if not name.endswith(".md"):
-                    continue
-                path = os.path.join(out_dir, name)
-                try:
-                    if os.path.getmtime(path) < cutoff:
-                        os.remove(path)
-                except Exception:
-                    continue
-        except Exception:
-            pass
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -1797,8 +1669,6 @@ class BotApp:
             await query.edit_message_text(f"Отправляю задачу: {code}")
             await self._handle_cli_input(session, prompt, chat_id, context)
             return
-        if await self.mtproto.handle_callback(query, chat_id, context):
-            return
         if await self.git.handle_callback(query, chat_id, context):
             return
         if await self.session_ui.handle_callback(query, chat_id, context):
@@ -2330,25 +2200,12 @@ class BotApp:
                 for t in tools
             ]
         )
-        await self._send_message(context, 
+        await self._send_message(
+            context,
             chat_id=chat_id,
             text="Выберите инструмент для просмотра /команд:",
             reply_markup=keyboard,
         )
-
-    async def cmd_mtproto(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        chat_id = update.effective_chat.id
-        if not self.is_allowed(chat_id):
-            return
-        if not context.args:
-            await self.mtproto.request_task(chat_id, context)
-            return
-        task = " ".join(context.args).strip()
-        if task in ("-", "отмена", "Отмена"):
-            await self._send_message(context, chat_id=chat_id, text="Отмена.")
-            return
-        await self.mtproto.show_menu(chat_id, context)
-        self.mtproto.pending_task[chat_id] = task
 
     async def cmd_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id

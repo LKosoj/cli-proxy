@@ -1,6 +1,6 @@
 import dataclasses
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -43,8 +43,6 @@ class DefaultsConfig:
     jina_api_key: Optional[str] = None
     github_token: Optional[str] = None
     log_path: str = "bot.log"
-    mtproto_output_dir: str = ".mtproto"
-    mtproto_cleanup_days: int = 5
     image_temp_dir: str = ".attachments"
     image_max_mb: int = 10
     memory_max_kb: int = 32
@@ -70,27 +68,29 @@ class DefaultsConfig:
 
 
 @dataclasses.dataclass
-class MTProtoTarget:
-    title: str
-    peer: Union[int, str]
-
-
-@dataclasses.dataclass
-class MTProtoConfig:
-    enabled: bool = False
-    api_id: Optional[int] = None
-    api_hash: Optional[str] = None
-    session_string: Optional[str] = None
-    session_path: str = "mtproto.session"
-    targets: List[MTProtoTarget] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass
 class MCPConfig:
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 8765
     token: Optional[str] = None
+
+
+@dataclasses.dataclass
+class MCPClientServerConfig:
+    """
+    Configuration for connecting to external MCP servers (client-side).
+    Transport currently supported: stdio.
+    """
+
+    name: str
+    enabled: bool = True
+    transport: str = "stdio"  # stdio | http
+    cmd: List[str] = dataclasses.field(default_factory=list)
+    url: Optional[str] = None
+    cwd: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
+    headers: Optional[Dict[str, str]] = None
+    timeout_ms: int = 30_000
 
 
 @dataclasses.dataclass
@@ -104,8 +104,8 @@ class AppConfig:
     telegram: TelegramConfig
     tools: Dict[str, ToolConfig]
     defaults: DefaultsConfig
-    mtproto: MTProtoConfig
     mcp: MCPConfig
+    mcp_clients: List[MCPClientServerConfig]
     presets: List[PresetConfig]
     path: str
 
@@ -117,7 +117,6 @@ def load_config(path: str) -> AppConfig:
     telegram_raw = raw.get("telegram", {})
     tools_raw = raw.get("tools", {})
     defaults_raw = raw.get("defaults", {})
-    mtproto_raw = raw.get("mtproto", {})
 
     telegram = TelegramConfig(
         token=str(telegram_raw.get("token", "")),
@@ -156,8 +155,6 @@ def load_config(path: str) -> AppConfig:
         jina_api_key=defaults_raw.get("jina_api_key"),
         github_token=defaults_raw.get("github_token"),
         log_path=str(defaults_raw.get("log_path", "bot.log")),
-        mtproto_output_dir=str(defaults_raw.get("mtproto_output_dir", ".mtproto")),
-        mtproto_cleanup_days=int(defaults_raw.get("mtproto_cleanup_days", 5)),
         image_temp_dir=str(defaults_raw.get("image_temp_dir", ".attachments")),
         image_max_mb=int(defaults_raw.get("image_max_mb", 10)),
         memory_max_kb=int(defaults_raw.get("memory_max_kb", 32)),
@@ -171,34 +168,6 @@ def load_config(path: str) -> AppConfig:
         ),
     )
 
-    targets: List[MTProtoTarget] = []
-    for entry in mtproto_raw.get("targets", []) or []:
-        title = str(entry.get("title") or entry.get("name") or "").strip()
-        peer_val = entry.get("peer", entry.get("id", entry.get("username")))
-        if title and peer_val is not None:
-            if isinstance(peer_val, str) and peer_val.lstrip("-").isdigit():
-                peer: Union[int, str] = int(peer_val)
-            else:
-                peer = peer_val
-            targets.append(MTProtoTarget(title=title, peer=peer))
-
-    api_id_raw = mtproto_raw.get("api_id")
-    api_id = None
-    if api_id_raw is not None:
-        try:
-            api_id = int(api_id_raw)
-        except Exception:
-            api_id = None
-
-    mtproto = MTProtoConfig(
-        enabled=bool(mtproto_raw.get("enabled", False)),
-        api_id=api_id,
-        api_hash=mtproto_raw.get("api_hash"),
-        session_string=mtproto_raw.get("session_string"),
-        session_path=str(mtproto_raw.get("session_path", "mtproto.session")),
-        targets=targets,
-    )
-
     mcp_raw = raw.get("mcp", {})
     mcp = MCPConfig(
         enabled=bool(mcp_raw.get("enabled", False)),
@@ -206,6 +175,56 @@ def load_config(path: str) -> AppConfig:
         port=int(mcp_raw.get("port", 8765)),
         token=mcp_raw.get("token"),
     )
+
+    mcp_clients_raw = raw.get("mcp_clients", []) or []
+    mcp_clients: List[MCPClientServerConfig] = []
+    for entry in mcp_clients_raw:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "")).strip()
+        if not name:
+            continue
+        cmd = entry.get("cmd", []) or []
+        if isinstance(cmd, str):
+            cmd = [cmd]
+        if not isinstance(cmd, list):
+            cmd = []
+        mcp_clients.append(
+            MCPClientServerConfig(
+                name=name,
+                enabled=bool(entry.get("enabled", True)),
+                transport=str(entry.get("transport", "stdio")),
+                cmd=[str(x) for x in cmd if str(x).strip()],
+                url=str(entry.get("url")) if entry.get("url") is not None else None,
+                cwd=str(entry.get("cwd")) if entry.get("cwd") is not None else None,
+                env=entry.get("env") if isinstance(entry.get("env"), dict) else None,
+                headers=entry.get("headers") if isinstance(entry.get("headers"), dict) else None,
+                timeout_ms=int(entry.get("timeout_ms", 30_000)),
+            )
+        )
+
+    # Optional alternative input format (like Claude Desktop): mcp_servers.<name>.url
+    mcp_servers_raw = raw.get("mcp_servers", {}) or {}
+    if isinstance(mcp_servers_raw, dict):
+        for server_name, entry in mcp_servers_raw.items():
+            if not isinstance(server_name, str) or not isinstance(entry, dict):
+                continue
+            url = entry.get("url")
+            if not url:
+                continue
+            mcp_clients.append(
+                MCPClientServerConfig(
+                    name=server_name,
+                    enabled=bool(entry.get("enabled", True)),
+                    transport=str(entry.get("transport", "http")),
+                    cmd=[],
+                    url=str(url),
+                    cwd=None,
+                    env=None,
+                    headers=entry.get("headers") if isinstance(entry.get("headers"), dict) else None,
+                    timeout_ms=int(entry.get("timeout_ms", 30_000)),
+                )
+            )
 
     presets_raw = raw.get("presets", []) or []
     presets: List[PresetConfig] = []
@@ -215,7 +234,15 @@ def load_config(path: str) -> AppConfig:
         if name and prompt:
             presets.append(PresetConfig(name=name, prompt=prompt))
 
-    return AppConfig(telegram=telegram, tools=tools, defaults=defaults, mtproto=mtproto, mcp=mcp, presets=presets, path=path)
+    return AppConfig(
+        telegram=telegram,
+        tools=tools,
+        defaults=defaults,
+        mcp=mcp,
+        mcp_clients=mcp_clients,
+        presets=presets,
+        path=path,
+    )
 
 
 def save_config(config: AppConfig) -> None:
@@ -240,8 +267,6 @@ def save_config(config: AppConfig) -> None:
             "jina_api_key": config.defaults.jina_api_key,
             "github_token": config.defaults.github_token,
             "log_path": config.defaults.log_path,
-            "mtproto_output_dir": config.defaults.mtproto_output_dir,
-            "mtproto_cleanup_days": config.defaults.mtproto_cleanup_days,
             "image_temp_dir": config.defaults.image_temp_dir,
             "image_max_mb": config.defaults.image_max_mb,
             "memory_max_kb": config.defaults.memory_max_kb,
@@ -249,22 +274,26 @@ def save_config(config: AppConfig) -> None:
             "clarification_enabled": config.defaults.clarification_enabled,
             "clarification_keywords": config.defaults.clarification_keywords,
         },
-        "mtproto": {
-            "enabled": config.mtproto.enabled,
-            "api_id": config.mtproto.api_id,
-            "api_hash": config.mtproto.api_hash,
-            "session_string": config.mtproto.session_string,
-            "session_path": config.mtproto.session_path,
-            "targets": [
-                {"title": t.title, "peer": t.peer} for t in config.mtproto.targets
-            ],
-        },
         "mcp": {
             "enabled": config.mcp.enabled,
             "host": config.mcp.host,
             "port": config.mcp.port,
             "token": config.mcp.token,
         },
+        "mcp_clients": [
+            {
+                "name": s.name,
+                "enabled": s.enabled,
+                "transport": s.transport,
+                "cmd": s.cmd,
+                "url": s.url,
+                "cwd": s.cwd,
+                "env": s.env,
+                "headers": s.headers,
+                "timeout_ms": s.timeout_ms,
+            }
+            for s in (config.mcp_clients or [])
+        ],
         "presets": [{"name": p.name, "prompt": p.prompt} for p in config.presets],
     }
 

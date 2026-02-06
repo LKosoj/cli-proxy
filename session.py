@@ -1,5 +1,6 @@
 import asyncio
 import os
+import errno
 import signal
 import time
 from collections import deque
@@ -95,42 +96,90 @@ class Session:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
             proc.stdin.close()
-        communicate_task = asyncio.create_task(proc.communicate())
-        missing_count = 0
+
+        # В headless-режиме нельзя завязываться на communicate()/EOF stdout:
+        # некоторые CLI/обёртки/дочерние процессы могут удерживать пайп открытым,
+        # из-за чего communicate() "висит" даже после завершения основного процесса.
+        #
+        # Источник истины: proc.wait() (и, как fallback, проверка PID).
+        out_buf = bytearray()
+
+        async def _drain_stdout() -> None:
+            if not proc.stdout:
+                return
+            try:
+                while True:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    out_buf.extend(chunk)
+                    try:
+                        self._update_activity(chunk.decode(errors="ignore"))
+                    except Exception:
+                        pass
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("tool failed stdout drain")
+
+        def _pid_exists(pid: int) -> bool:
+            try:
+                os.kill(pid, 0)
+                return True
+            except OSError as e:
+                return e.errno != errno.ESRCH
+
+        wait_task = asyncio.create_task(proc.wait())
+        drain_task = asyncio.create_task(_drain_stdout())
+
+        forced_reason: Optional[str] = None
         while True:
-            done, _ = await asyncio.wait({communicate_task}, timeout=2)
+            done, _ = await asyncio.wait({wait_task}, timeout=2)
             if done:
-                out, _ = communicate_task.result()
                 break
-            if proc.returncode is not None:
-                missing_count += 1
-            else:
-                missing_count = 0
-            if missing_count >= 2:
-                # Процесс уже завершился, но communicate завис из-за незакрытого stdout/pipe.
-                try:
-                    if proc.stdout:
-                        out = await asyncio.wait_for(proc.stdout.read(), timeout=2)
-                    else:
-                        out = b""
-                except Exception:
-                    out = b""
-                try:
-                    communicate_task.cancel()
-                except Exception:
-                    pass
-                text = (out or b"").decode(errors="ignore")
-                if not text:
-                    text = "⚠️ CLI завершился, но не вернул вывод (stdout не закрыт)."
-                self.headless_forced_stop = "CLI завершился без корректного завершения вывода"
-                self.current_proc = None
-                self._headless_interrupt_flag = False
-                self._update_activity(text)
-                self._maybe_update_resume(text)
-                return text
+            # Fallback: если asyncio не получил событие завершения, но PID уже отсутствует,
+            # считаем процесс завершенным, чтобы не держать сессию busy бесконечно.
+            if proc.pid and not _pid_exists(proc.pid):
+                forced_reason = "PID отсутствует, но ожидание завершения не сработало"
+                break
+
+        # Даем короткий grace на дочитывание хвоста вывода. Если stdout не закрывается — прекращаем чтение.
+        grace_sec = 1.0
+        try:
+            await asyncio.wait_for(drain_task, timeout=grace_sec)
+        except asyncio.TimeoutError:
+            forced_reason = forced_reason or "stdout не закрылся после завершения процесса"
+            try:
+                drain_task.cancel()
+            except Exception:
+                pass
+            # Закрываем наш read-end пайпа, чтобы не держать ресурсы.
+            try:
+                transport = getattr(proc.stdout, "_transport", None) if proc.stdout else None
+                if transport is not None:
+                    transport.close()
+            except Exception:
+                pass
+        except Exception:
+            forced_reason = forced_reason or "ошибка при ожидании stdout после завершения процесса"
+            try:
+                drain_task.cancel()
+            except Exception:
+                pass
+
+        if not wait_task.done():
+            try:
+                wait_task.cancel()
+            except Exception:
+                pass
+
         self.current_proc = None
         self._headless_interrupt_flag = False
-        text = (out or b"").decode(errors="ignore")
+        text = bytes(out_buf).decode(errors="ignore")
+        if forced_reason:
+            self.headless_forced_stop = forced_reason
+            if not text:
+                text = "⚠️ CLI завершился, но бот не смог корректно дочитать вывод (stdout не закрыт)."
         self._update_activity(text)
         self._maybe_update_resume(text)
         return text
