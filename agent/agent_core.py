@@ -293,6 +293,7 @@ class ReActAgent:
         blocked_count = 0
         tool_facts: List[Dict[str, Any]] = []
         iterations_done = 0
+        consecutive_all_failed = 0
 
         def _text_preview(v: Any, max_chars: int = 2000) -> str:
             try:
@@ -415,10 +416,32 @@ class ReActAgent:
                 final_status = "error"
                 break
             if all_failed and not (content or "").strip():
-                _log.warning("ReAct iter=%d all tools failed, stopping", iteration + 1)
-                final_response = "Не могу выполнить без инструментов, уточните."
-                final_status = "error"
-                break
+                # Tool errors are generally recoverable: the LLM should see the failure and
+                # choose an alternative (different tool, different command, missing dependency, etc).
+                consecutive_all_failed += 1
+                _log.warning(
+                    "ReAct iter=%d all tools failed (consecutive=%d), continuing",
+                    iteration + 1,
+                    consecutive_all_failed,
+                )
+                if consecutive_all_failed >= 3:
+                    last_err = ""
+                    try:
+                        last = next((t for t in reversed(tool_facts) if not bool(t.get("success"))), None)
+                        if last:
+                            last_err = str(last.get("error") or "")
+                    except Exception:
+                        last_err = ""
+                    final_response = (
+                        "Инструменты возвращают ошибки и прогресс остановился. "
+                        "Последняя ошибка инструмента: "
+                        + (last_err[:600] if last_err else "(нет деталей)")
+                    )
+                    final_status = "error"
+                    break
+                # Let the next iteration attempt recovery.
+                continue
+            consecutive_all_failed = 0
             if blocked_count >= AGENT_MAX_BLOCKED:
                 _log.warning("ReAct iter=%d blocked_count=%d, stopping", iteration + 1, blocked_count)
                 final_response = "🚫 Stopped: Multiple blocked commands detected. The requested actions are not allowed for security reasons."
