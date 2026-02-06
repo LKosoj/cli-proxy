@@ -190,6 +190,27 @@ class ToolRegistry:
                 raise
         return commands
 
+    def any_awaiting_input(self, chat_id: int) -> bool:
+        """Return True if any plugin is currently waiting for free-text input from the user."""
+        for plugin in self.plugins.values():
+            try:
+                if plugin.awaiting_input(chat_id):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def cancel_all_inputs(self, chat_id: int) -> int:
+        """Cancel pending input dialogs in all plugins. Returns number of cancelled dialogs."""
+        cancelled = 0
+        for plugin in self.plugins.values():
+            try:
+                if plugin.cancel_input(chat_id):
+                    cancelled += 1
+            except Exception:
+                continue
+        return cancelled
+
     def get_message_handlers(self, allowed_tools: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         names = self._filter_allowed(allowed_tools)
         handlers: List[Dict[str, Any]] = []
@@ -224,13 +245,31 @@ class ToolRegistry:
                 raise
         return handlers
 
-    def build_bot_commands(self, allowed_tools: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
+    def build_bot_commands(self, allowed_tools: Optional[List[str]] = None) -> Dict[str, Any]:
+        names = self._filter_allowed(allowed_tools)
         plugin_commands = self.get_plugin_commands(allowed_tools)
         menu_entries: List[Dict[str, Any]] = []
         for cmd in plugin_commands:
             if cmd.get("add_to_menu") and cmd.get("command") and cmd.get("description"):
                 menu_entries.append({"command": cmd["command"], "description": cmd["description"], "plugin_name": cmd.get("plugin_name")})
-        return {"plugin_commands": plugin_commands, "menu_entries": menu_entries}
+
+        # Two-level plugin menu: collect plugins that declare get_menu_label/get_menu_actions.
+        plugin_menu: List[Dict[str, Any]] = []
+        seen_pids: set = set()
+        for name in names:
+            plugin = self.plugins.get(name)
+            if not plugin:
+                continue
+            pid = plugin.get_plugin_id()
+            if pid in seen_pids:
+                continue
+            label = plugin.get_menu_label()
+            actions = plugin.get_menu_actions()
+            if label and actions:
+                seen_pids.add(pid)
+                plugin_menu.append({"plugin_id": pid, "label": label, "actions": actions, "plugin": plugin})
+
+        return {"plugin_commands": plugin_commands, "menu_entries": menu_entries, "plugin_menu": plugin_menu}
 
     def build_bot_ui(self, allowed_tools: Optional[List[str]] = None) -> Dict[str, Any]:
         build = self.build_bot_commands(allowed_tools)

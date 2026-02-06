@@ -64,6 +64,7 @@ class BotApp:
         self._setup_logging()
         self._configure_agent_sandbox()
         self.manager = SessionManager(config)
+        self.manager.on_session_change = self._on_session_change
         self.metrics = Metrics()
         self.pending: Dict[int, PendingInput] = {}
         self.state_menu: Dict[int, list] = {}
@@ -80,7 +81,7 @@ class BotApp:
         self.pending_dir_create: Dict[int, str] = {}
         self.pending_git_clone: Dict[int, str] = {}
         self.pending_agent_project: Dict[int, str] = {}
-        self.agent_plugin_commands: Dict[int, Dict[str, Dict[str, object]]] = {}
+        # (removed: agent_plugin_commands cache -- replaced by two-level plugin menu)
         self.toolhelp_menu: Dict[int, list] = {}
         self.restore_offered: Dict[int, bool] = {}
         self.files_menu: Dict[int, list] = {}
@@ -172,6 +173,34 @@ class BotApp:
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
+
+    def _plugin_awaiting_input(self, chat_id: int) -> bool:
+        """Check if any plugin is waiting for free-text input from the user."""
+        registry = getattr(self, "_tool_registry", None)
+        if registry is None:
+            return False
+        try:
+            return registry.any_awaiting_input(chat_id)
+        except Exception:
+            return False
+
+    def _cancel_plugin_dialogs(self, chat_id: int) -> None:
+        """Cancel all pending plugin dialogs for the given chat."""
+        registry = getattr(self, "_tool_registry", None)
+        if registry:
+            try:
+                registry.cancel_all_inputs(chat_id)
+            except Exception:
+                pass
+
+    def _on_session_change(self) -> None:
+        """Called by SessionManager when the active session changes (create/switch/close).
+
+        Cancels any active plugin dialogs for all whitelisted chats so that
+        stale dialogs never block message processing after session transitions.
+        """
+        for chat_id in self.config.telegram.whitelist_chat_ids:
+            self._cancel_plugin_dialogs(chat_id)
 
     def _setup_logging(self) -> None:
         import datetime as _dt
@@ -787,6 +816,19 @@ class BotApp:
             return
         if await self.git.handle_pending_commit_message(chat_id, text, context):
             return
+        # If a plugin dialog is waiting for input, let the plugin handler
+        # in group -1 process the message; don't forward it to the CLI session.
+        # Cancel / exit is handled inside each plugin's own handler, not here.
+        if self._plugin_awaiting_input(chat_id):
+            # Safety net: if the agent was turned off while a dialog was active,
+            # the plugin handler in group -1 won't fire (_AgentEnabledFilter blocks it).
+            # Detect this and clean up so the user isn't stuck.
+            session = self.manager.active()
+            if not session or not getattr(session, "agent_enabled", False):
+                self._cancel_plugin_dialogs(chat_id)
+                # Fall through to normal on_message processing below.
+            else:
+                return
         session = await self.ensure_active_session(chat_id, context)
         if not session:
             return
@@ -1158,6 +1200,12 @@ class BotApp:
                     self.manager._persist_sessions()
                 except Exception:
                     pass
+                # When the agent is turned off, cancel any pending plugin
+                # dialogs so that on_message doesn't silently swallow text.
+                if not session.agent_enabled:
+                    cb_chat_id = query.message.chat_id if query.message else None
+                    if cb_chat_id:
+                        self._cancel_plugin_dialogs(cb_chat_id)
                 status = "включен" if session.agent_enabled else "выключен"
                 await query.edit_message_text(f"Агент {status}.")
                 return
@@ -1212,46 +1260,60 @@ class BotApp:
                     return
                 try:
                     from agent.profiles import build_default_profile
-                    profile = build_default_profile(self.config)
-                    commands = self.agent.get_plugin_commands(profile)
-                    menu_entries = commands.get("menu_entries") or []
-                    if not menu_entries:
-                        await query.edit_message_text("Нет доступных команд плагинов.")
+                    tool_registry = getattr(self, "_tool_registry", None)
+                    if tool_registry is None:
+                        await query.edit_message_text("Реестр инструментов недоступен.")
                         return
-                    self.agent_plugin_commands[chat_id] = {
-                        c["command"]: c
-                        for c in (commands.get("plugin_commands") or [])
-                        if isinstance(c, dict) and c.get("command")
-                    }
+                    profile = build_default_profile(self.config, tool_registry)
+                    commands = self.agent.get_plugin_commands(profile)
+                    plugin_menu = commands.get("plugin_menu") or []
+                    if not plugin_menu:
+                        await query.edit_message_text("Нет доступных плагинов.")
+                        return
                     rows = [
-                        [InlineKeyboardButton(f"/{c['command']}", callback_data=f"agent_plugin_cmd:{c['command']}")]
-                        for c in menu_entries
+                        [InlineKeyboardButton(entry["label"], callback_data=f"agent_plugin:{entry['plugin_id']}")]
+                        for entry in plugin_menu
                     ]
                     rows.append([InlineKeyboardButton("Назад", callback_data="agent_cancel")])
-                    await query.edit_message_text("Команды плагинов:", reply_markup=InlineKeyboardMarkup(rows))
+                    await query.edit_message_text("Плагины:", reply_markup=InlineKeyboardMarkup(rows))
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
-                    await query.edit_message_text("Не удалось получить команды плагинов.")
+                    await query.edit_message_text("Не удалось получить список плагинов.")
                 return
-            if query.data.startswith("agent_plugin_cmd:"):
-                cmd_name = query.data.split(":", 1)[1]
-                cmd_map = self.agent_plugin_commands.get(chat_id, {})
-                entry = cmd_map.get(cmd_name)
-                if not entry:
-                    await query.edit_message_text("Команда недоступна.")
+            if query.data.startswith("agent_plugin:"):
+                pid = query.data.split(":", 1)[1]
+                session = self.manager.active()
+                if not session or not getattr(session, "agent_enabled", False):
+                    await query.edit_message_text("Агент не активен.")
                     return
-                if entry.get("args"):
-                    await query.edit_message_text(f"Команда требует параметры: {entry.get('args')}")
-                    return
-                handler = entry.get("handler")
-                kwargs = entry.get("handler_kwargs") or {}
                 try:
-                    result = handler(update, context, **kwargs)
-                    if asyncio.iscoroutine(result):
-                        await result
+                    from agent.profiles import build_default_profile
+                    tool_registry = getattr(self, "_tool_registry", None)
+                    if tool_registry is None:
+                        await query.edit_message_text("Реестр инструментов недоступен.")
+                        return
+                    profile = build_default_profile(self.config, tool_registry)
+                    commands = self.agent.get_plugin_commands(profile)
+                    plugin_menu = commands.get("plugin_menu") or []
+                    entry = next((e for e in plugin_menu if e["plugin_id"] == pid), None)
+                    if not entry:
+                        await query.edit_message_text("Плагин недоступен.")
+                        return
+                    plugin = entry.get("plugin")
+                    actions = entry.get("actions") or []
+                    rows = []
+                    for act in actions:
+                        if plugin and hasattr(plugin, "action_button"):
+                            btn = plugin.action_button(act["label"], act["action"])
+                        else:
+                            btn = InlineKeyboardButton(act["label"], callback_data=f"cb:{pid}:{act['action']}")
+                        rows.append([btn])
+                    rows.append([InlineKeyboardButton("Назад к плагинам", callback_data="agent_plugin_commands")])
+                    label = entry.get("label", pid)
+                    await query.edit_message_text(f"{label}:", reply_markup=InlineKeyboardMarkup(rows))
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
-                    await query.edit_message_text("Ошибка при выполнении команды.")
+                    await query.edit_message_text("Ошибка при загрузке плагина.")
                 return
             if query.data.startswith("state_pick:"):
                 idx = int(query.data.split(":", 1)[1])
@@ -1945,7 +2007,7 @@ class BotApp:
                 rows.append([InlineKeyboardButton("Отключить проект", callback_data="agent_project_disconnect")])
             else:
                 rows.append([InlineKeyboardButton("Подключить проект", callback_data="agent_project_connect")])
-            rows.append([InlineKeyboardButton("Команды плагинов", callback_data="agent_plugin_commands")])
+            rows.append([InlineKeyboardButton("Плагины", callback_data="agent_plugin_commands")])
             rows.append([InlineKeyboardButton("Очистить песочницу (кроме служебных)", callback_data="agent_clean_all")])
             rows.append([InlineKeyboardButton("Очистить текущую сессию (кроме служебных)", callback_data="agent_clean_session")])
             rows.append([InlineKeyboardButton("Отмена", callback_data="agent_cancel")])
@@ -2491,6 +2553,7 @@ def build_app(config: AppConfig) -> Application:
         from agent.profiles import build_default_profile
 
         tool_registry = get_tool_registry(config)
+        bot_app._tool_registry = tool_registry
         profile = build_default_profile(config, tool_registry)
         ui = bot_app.agent.get_plugin_ui(profile)
         plugin_commands = ui.get("plugin_commands") or []
@@ -2551,21 +2614,28 @@ def build_app(config: AppConfig) -> Application:
 
             app.add_handler(CommandHandler(command_name, _cmd_wrap, filters=filters.COMMAND))
 
-        # 3) Message handlers declared by plugins.
-        for cfg in message_handlers:
-            handler_obj = cfg.get("handler")
-            if handler_obj is None:
-                continue
-            try:
-                # Ready-to-register handler (e.g. ConversationHandler).
-                app.add_handler(handler_obj)
-                continue
-            except TypeError:
-                # Not a handler instance, fall through.
-                pass
+        # 3) Message handlers declared by plugins (via DialogMixin or dict configs).
+        #
+        # Plugin handlers go into group=-1 (before core handlers in group 0).
+        # When a plugin is actively waiting for user input (awaiting_input() == True),
+        # the handler processes the message and raises ApplicationHandlerStop to prevent
+        # the core on_message from also processing it.
+        # When no plugin is waiting, the filter won't match and the update falls
+        # through to on_message in group 0.
+        from telegram.ext import ApplicationHandlerStop
 
-        # Back-compat dict configs: {"filters": filters.X, "handler": callable, "handler_kwargs": {...}}
+        _PLUGIN_GROUP = -1
+
+        class _AgentEnabledFilter(filters.BaseFilter):
+            """Only match when the active session has agent_enabled=True."""
+            def filter(self, message) -> bool:
+                session = bot_app.manager.active()
+                return bool(session and getattr(session, "agent_enabled", False))
+
+        _agent_filter = _AgentEnabledFilter()
+
         for cfg in message_handlers:
+            # Dict configs: {"filters": filters.X, "handler": callable, "handler_kwargs": {...}}
             if "filters" not in cfg:
                 continue
             filter_obj = cfg.get("filters")
@@ -2578,17 +2648,16 @@ def build_app(config: AppConfig) -> Application:
                 chat_id = update.effective_chat.id if update.effective_chat else None
                 if not chat_id or not bot_app.is_allowed(chat_id):
                     return
-                session = bot_app.manager.active()
-                if not session or not getattr(session, "agent_enabled", False):
-                    return
                 try:
                     res = _fn(update, context, **(_kw or {}))
                     if asyncio.iscoroutine(res):
                         await res
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
+                # Plugin handled the message — stop propagation to on_message.
+                raise ApplicationHandlerStop()
 
-            app.add_handler(MessageHandler(filter_obj, _msg_wrap))
+            app.add_handler(MessageHandler(_agent_filter & filter_obj, _msg_wrap), group=_PLUGIN_GROUP)
 
         # 4) Inline handlers (if any) follow the same pattern; left for later expansion.
         _ = inline_handlers

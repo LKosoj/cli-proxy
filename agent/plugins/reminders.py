@@ -6,16 +6,16 @@ import logging
 import re
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from agent.plugins.base import ToolPlugin
+from agent.plugins.base import DialogMixin, ToolPlugin
 from agent.tooling.spec import ToolSpec
 
 
-class RemindersTool(ToolPlugin):
+class RemindersTool(DialogMixin, ToolPlugin):
     def get_source_name(self) -> str:
         return "Reminders"
 
@@ -38,38 +38,35 @@ class RemindersTool(ToolPlugin):
             timeout_ms=30_000,
         )
 
-    def get_commands(self) -> List[Dict[str, Any]]:
+    # -- menu & commands ----------------------------------------------------
+
+    def get_menu_label(self):
+        return "Напоминания"
+
+    def get_menu_actions(self):
         return [
-            {
-                "command": "list_reminders",
-                "description": "Показать активные напоминания (инлайн-меню)",
-                "handler": self.cmd_list_reminders,
-                "handler_kwargs": {},
-                "add_to_menu": True,
-            },
-            {
-                "command": "set_reminder",
-                "description": "Создать напоминание. Формат: /set_reminder YYYY-MM-DD HH:MM текст",
-                "args": "YYYY-MM-DD HH:MM <текст>",
-                "handler": self.cmd_set_reminder,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "command": "delete_reminder",
-                "description": "Удалить напоминание. Формат: /delete_reminder <id>",
-                "args": "<id>",
-                "handler": self.cmd_delete_reminder,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "callback_query_handler": self.handle_reminder_callback,
-                "callback_pattern": r"^reminder:",
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
+            {"label": "Список", "action": "list"},
+            {"label": "Создать", "action": "set"},
         ]
+
+    def get_commands(self) -> List[Dict[str, Any]]:
+        return self._dialog_callback_commands()
+
+    # -- DialogMixin contract -----------------------------------------------
+
+    def dialog_steps(self):
+        return {"wait_reminder_input": self._on_reminder_text}
+
+    def callback_handlers(self) -> Dict[str, Callable]:
+        return {
+            "list": self._cb_list,
+            "set": self._cb_set,
+            "delete": self._cb_delete,
+            "view": self._cb_view,
+            "close_menu": self._cb_close_menu,
+        }
+
+    # -- helpers ------------------------------------------------------------
 
     def _get_user_chat(self, update: Update) -> Tuple[Optional[int], Optional[int]]:
         chat_id = update.effective_chat.id if update.effective_chat else None
@@ -83,36 +80,149 @@ class RemindersTool(ToolPlugin):
     def _scheduler_tasks(self) -> Dict[str, Dict[str, Any]]:
         return self.services.setdefault("scheduler_tasks", {})
 
-    async def cmd_set_reminder(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id, chat_id = self._get_user_chat(update)
+    def _build_reminder_keyboard(self, user_id: int) -> List[list]:
+        scheduler_tasks = self._scheduler_tasks()
+        user_set = self._user_task_ids(user_id)
+        keyboard = []
+        for rid in sorted(user_set):
+            t = scheduler_tasks.get(rid)
+            if not t:
+                continue
+            when = t.get("when", "")
+            content = (t.get("content") or "")[:60]
+            keyboard.append([
+                self.action_button(f"{when} | {content}", "view", rid),
+                self.action_button("Удалить", "delete", rid),
+            ])
+        keyboard.append([self.action_button("Закрыть", "close_menu")])
+        return keyboard
+
+    # -- callback handlers --------------------------------------------------
+
+    async def _cb_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
+            return
+        user_set = self._user_task_ids(user_id)
+        if not user_set:
+            if query.message:
+                await query.message.reply_text("Нет активных напоминаний.")
+            return
+        keyboard = self._build_reminder_keyboard(user_id)
+        if query.message:
+            await query.message.reply_text(
+                "Активные напоминания:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+
+    async def _cb_set(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
         if not user_id or not chat_id:
             return
-        message = update.effective_message
-        text = (message.text or "").strip() if message else ""
-        parts = text.split(maxsplit=3)
-        if len(parts) < 4:
-            await message.reply_text("Использование: /set_reminder YYYY-MM-DD HH:MM текст")
+        self.start_dialog(chat_id, "wait_reminder_input", data={}, user_id=user_id)
+        if query and query.message:
+            await query.message.reply_text(
+                "Создание напоминания.\n"
+                "Отправьте строку в формате:\n"
+                "YYYY-MM-DD HH:MM текст напоминания\n\n"
+                "Пример: 2026-02-06 15:00 Позвонить маме\n\n"
+                "Для отмены — кнопка ниже или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
+            )
+
+    async def _cb_delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
             return
-        _, date_s, time_s, msg = parts
+        rid = payload
+        scheduler_tasks = self._scheduler_tasks()
+        user_set = self._user_task_ids(user_id)
+        t = scheduler_tasks.get(rid)
+        if not t or rid not in user_set:
+            await query.answer("Напоминание не найдено", show_alert=True)
+            return
+        scheduler_tasks.pop(rid, None)
+        user_set.discard(rid)
+        await query.answer("Удалено")
+        if not user_set:
+            await query.edit_message_text("Нет активных напоминаний.")
+            return
+        keyboard = self._build_reminder_keyboard(user_id)
+        await query.edit_message_text(
+            "Активные напоминания:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _cb_view(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
+            return
+        rid = payload
+        scheduler_tasks = self._scheduler_tasks()
+        user_set = self._user_task_ids(user_id)
+        t = scheduler_tasks.get(rid)
+        if not t or rid not in user_set:
+            await query.answer("Напоминание не найдено", show_alert=True)
+            return
+        when = t.get("when", "")
+        content = t.get("content", "")
+        await query.answer(f"{when}\n{content}", show_alert=True, cache_time=0)
+
+    async def _cb_close_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        if not query:
+            return
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+
+    # -- dialog step handler ------------------------------------------------
+
+    async def _on_reminder_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Parse 'YYYY-MM-DD HH:MM message' and create a reminder."""
+        msg = update.effective_message
+        if not msg:
+            return
+        user_id = update.effective_user.id if update.effective_user else None
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if not user_id or not chat_id:
+            return
+
+        text = (msg.text or "").strip()
+        parts = text.split(maxsplit=2)
+        if len(parts) < 3:
+            await msg.reply_text(
+                "Нужно: YYYY-MM-DD HH:MM текст\n"
+                "Пример: 2026-02-06 15:00 Позвонить маме"
+            )
+            return
+
+        date_s, time_s, reminder_msg = parts
         when = f"{date_s} {time_s}"
-        msg = msg.strip()
+        reminder_msg = reminder_msg.strip()
         try:
             dt = _dt.datetime.strptime(when, "%Y-%m-%d %H:%M")
         except Exception:
-            await message.reply_text("Неверный формат времени. Нужно YYYY-MM-DD HH:MM")
+            await msg.reply_text("Неверный формат времени. Нужно YYYY-MM-DD HH:MM")
             return
 
         delay_sec = int((dt - _dt.datetime.now()).total_seconds())
         if delay_sec <= 0:
-            await message.reply_text("Время напоминания должно быть в будущем.")
+            await msg.reply_text("Время напоминания должно быть в будущем.")
             return
         if delay_sec > 24 * 60 * 60:
-            await message.reply_text("Максимальная задержка: 24 часа.")
+            await msg.reply_text("Максимальная задержка: 24 часа.")
             return
 
         user_set = self._user_task_ids(user_id)
         if len(user_set) >= 5:
-            await message.reply_text("Максимум 5 активных напоминаний на пользователя.")
+            await msg.reply_text("Максимум 5 активных напоминаний на пользователя.")
             return
 
         reminder_id = f"rem_{int(time.time())}_{uuid.uuid4().hex[:4]}"
@@ -121,7 +231,7 @@ class RemindersTool(ToolPlugin):
             "user_id": user_id,
             "chat_id": chat_id,
             "type": "message",
-            "content": msg,
+            "content": reminder_msg,
             "execute_at": time.time() + delay_sec,
             "when": when,
         }
@@ -136,132 +246,15 @@ class RemindersTool(ToolPlugin):
             scheduler_tasks.pop(reminder_id, None)
             self._user_task_ids(user_id).discard(reminder_id)
             try:
-                await message.reply_text(f"⏰ Напоминание: {msg}")
+                await msg.reply_text(f"⏰ Напоминание: {reminder_msg}")
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
 
         asyncio.create_task(_job())
-        await message.reply_text(f"✅ Напоминание создано\nID: {reminder_id}\nВремя: {when}")
+        self.end_dialog(chat_id)
+        await msg.reply_text(f"✅ Напоминание создано\nID: {reminder_id}\nВремя: {when}")
 
-    async def cmd_list_reminders(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id, _chat_id = self._get_user_chat(update)
-        message = update.effective_message
-        if not user_id or not message:
-            return
-
-        scheduler_tasks = self._scheduler_tasks()
-        user_set = self._user_task_ids(user_id)
-        if not user_set:
-            await message.reply_text("Нет активных напоминаний.")
-            return
-
-        keyboard = []
-        for rid in sorted(user_set):
-            t = scheduler_tasks.get(rid)
-            if not t:
-                continue
-            when = t.get("when", "")
-            content = (t.get("content") or "")[:60]
-            keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        text=f"{when} | {content}",
-                        callback_data=f"reminder:view:{rid}",
-                    ),
-                    InlineKeyboardButton(
-                        text="Удалить",
-                        callback_data=f"reminder:delete:{rid}",
-                    ),
-                ]
-            )
-        keyboard.append([InlineKeyboardButton("Закрыть", callback_data="reminder:close_menu:")])
-        await message.reply_text("Активные напоминания:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    async def cmd_delete_reminder(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id, _chat_id = self._get_user_chat(update)
-        message = update.effective_message
-        if not user_id or not message:
-            return
-        args = context.args or []
-        if not args:
-            await message.reply_text("Использование: /delete_reminder <id>")
-            return
-        rid = args[0].strip()
-        scheduler_tasks = self._scheduler_tasks()
-        t = scheduler_tasks.get(rid)
-        if not t:
-            await message.reply_text("Напоминание не найдено.")
-            return
-        if int(t.get("user_id") or 0) != int(user_id):
-            await message.reply_text("Нельзя удалить чужое напоминание.")
-            return
-        scheduler_tasks.pop(rid, None)
-        self._user_task_ids(user_id).discard(rid)
-        await message.reply_text(f"🗑️ Удалено: {rid}")
-
-    async def handle_reminder_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        query = update.callback_query
-        if not query or not query.data:
-            return
-        try:
-            _action, command, rid = query.data.split(":", 2)
-        except Exception:
-            return
-        user_id = query.from_user.id if query.from_user else None
-        if not user_id:
-            return
-        scheduler_tasks = self._scheduler_tasks()
-        user_set = self._user_task_ids(user_id)
-
-        if command == "close_menu":
-            try:
-                await query.answer("Ок")
-            except Exception:
-                pass
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            return
-
-        if command == "view":
-            t = scheduler_tasks.get(rid)
-            if not t or rid not in user_set:
-                await query.answer("Напоминание не найдено", show_alert=True)
-                return
-            when = t.get("when", "")
-            content = t.get("content", "")
-            await query.answer(f"{when}\n{content}", show_alert=True, cache_time=0)
-            return
-
-        if command == "delete":
-            t = scheduler_tasks.get(rid)
-            if not t or rid not in user_set:
-                await query.answer("Напоминание не найдено", show_alert=True)
-                return
-            scheduler_tasks.pop(rid, None)
-            user_set.discard(rid)
-            await query.answer("Удалено")
-            # Update keyboard.
-            if not user_set:
-                await query.edit_message_text("Нет активных напоминаний.")
-                return
-            keyboard = []
-            for r2 in sorted(user_set):
-                t2 = scheduler_tasks.get(r2)
-                if not t2:
-                    continue
-                when = t2.get("when", "")
-                content = (t2.get("content") or "")[:60]
-                keyboard.append(
-                    [
-                        InlineKeyboardButton(text=f"{when} | {content}", callback_data=f"reminder:view:{r2}"),
-                        InlineKeyboardButton(text="Удалить", callback_data=f"reminder:delete:{r2}"),
-                    ]
-                )
-            keyboard.append([InlineKeyboardButton("Закрыть", callback_data="reminder:close_menu:")])
-            await query.edit_message_text("Активные напоминания:", reply_markup=InlineKeyboardMarkup(keyboard))
-            return
+    # -- execute (agent API) ------------------------------------------------
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         action = args.get("action")

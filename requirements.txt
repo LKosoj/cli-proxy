@@ -11,3 +11,7 @@ linkify-it-py==2.0.3
 duckduckgo-search==7.5.2
 gTTS==2.5.4
 youtube-transcript-api==1.2.2
+httpx>=0.25.0
+beautifulsoup4>=4.12.0
+trafilatura>=1.6.0
+pdfminer.six>=20221105

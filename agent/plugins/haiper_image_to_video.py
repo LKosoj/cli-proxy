@@ -9,24 +9,21 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from agent.plugins.base import ToolPlugin
+from agent.plugins.base import DialogMixin, ToolPlugin
 from agent.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
 from telegram import Update
 from telegram.ext import (
-    CommandHandler,
     ContextTypes,
-    ConversationHandler,
-    MessageHandler,
     filters,
 )
 
 
-class HaiperImageToVideoTool(ToolPlugin):
+class HaiperImageToVideoTool(DialogMixin, ToolPlugin):
     API_URL = "https://api.vsegpt.ru/v1/video"
-    _ST_WAIT_IMAGE = 1
-    _ST_WAIT_PROMPT = 2
+    # Video generation can take up to 45 minutes; extend dialog timeout.
+    DIALOG_TIMEOUT = 60 * 60  # 1 hour
 
     def get_source_name(self) -> str:
         return "HaiperImageToVideo"
@@ -48,67 +45,73 @@ class HaiperImageToVideoTool(ToolPlugin):
             timeout_ms=3_000_000,
         )
 
+    def get_menu_label(self):
+        return "Haiper (видео)"
+
+    def get_menu_actions(self):
+        return [{"label": "Создать видео", "action": "start"}]
+
     def get_commands(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "command": "haiper",
-                "description": "Диалог: изображение -> видео (Haiper)",
-                "handler": self.cmd_haiper_help,
-                "handler_kwargs": {},
-                "add_to_menu": True,
-            }
-        ]
+        return self._dialog_callback_commands()
 
-    def get_message_handlers(self) -> List[Dict[str, Any]]:
-        # The actual dialog is implemented as a ConversationHandler so we can safely intercept
-        # only while the user is inside the flow.
-        conv = ConversationHandler(
-            entry_points=[CommandHandler("haiper", self._start)],
-            states={
-                self._ST_WAIT_IMAGE: [
-                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, self._on_image),
-                ],
-                self._ST_WAIT_PROMPT: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_prompt),
-                ],
-            },
-            fallbacks=[CommandHandler("cancel", self._cancel)],
-            name="haiper_image_to_video",
-            persistent=False,
-        )
-        return [{"handler": conv}]
+    def callback_handlers(self):
+        return {"start": self._cb_start}
 
-    async def cmd_haiper_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        # Menu entry: point user to /haiper which starts the ConversationHandler.
-        msg = update.effective_message
-        if not msg:
-            return
-        await msg.reply_text("Для запуска диалога отправьте команду /haiper")
+    async def _cb_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Autonomous callback: start the image-to-video dialog."""
+        query = update.callback_query
+        chat_id = query.message.chat_id if query and query.message else 0
+        self.start_dialog(chat_id, "wait_image")
+        if query and query.message:
+            await query.message.reply_text(
+                "Отправьте изображение (фото или документ-картинку).\n"
+                "Для выхода — кнопка ниже или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
+            )
+
+    # -- DialogMixin contract -----------------------------------------------
+
+    def dialog_steps(self):
+        return {
+            "wait_image": self._on_image_step,
+            "wait_prompt": self._on_prompt_step,
+        }
+
+    def step_hint(self, step: str) -> Optional[str]:
+        if step == "wait_image":
+            return "Сейчас жду изображение. Отправьте картинку или напишите «отмена» / «cancel» / «-» для выхода."
+        return None
+
+    def extra_message_filters(self) -> Any:
+        """Accept photos and image documents in addition to text."""
+        return filters.PHOTO | filters.Document.IMAGE
+
+    # get_message_handlers is provided by DialogMixin.
+
+    # -- dialog entry -------------------------------------------------------
 
     def _ui_root(self) -> str:
         return os.getenv("AGENT_SANDBOX_ROOT") or os.getcwd()
 
-    async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        msg = update.effective_message
-        try:
-            bot_app = context.application.bot_data.get("bot_app")
-            session = bot_app.manager.active() if bot_app else None
-            if not session or not getattr(session, "agent_enabled", False):
-                if msg:
-                    await msg.reply_text("Агент не активен.")
-                return ConversationHandler.END
-        except Exception:
-            pass
-        if msg:
-            await msg.reply_text("Отправьте изображение (фото или документ-картинку). /cancel чтобы отменить.")
-        context.user_data.pop("haiper_image_path", None)
-        return self._ST_WAIT_IMAGE
+    # -- step handlers ------------------------------------------------------
 
-    async def _on_image(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def _on_image_step(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step wait_image: expect a photo/document-image."""
         msg = update.effective_message
         if not msg:
-            return self._ST_WAIT_IMAGE
+            return
         chat_id = update.effective_chat.id if update.effective_chat else 0
+
+        # If this is a text message (not photo), show hint.
+        has_photo = update.message and (update.message.photo or (
+            update.message.document and update.message.document.mime_type
+            and update.message.document.mime_type.startswith("image/")
+        ))
+        if not has_photo:
+            hint = self.step_hint("wait_image")
+            if hint:
+                await msg.reply_text(hint)
+            return
 
         data = None
         suffix = ".jpg"
@@ -132,11 +135,11 @@ class HaiperImageToVideoTool(ToolPlugin):
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
             await msg.reply_text(f"Не удалось скачать изображение: {e}")
-            return self._ST_WAIT_IMAGE
+            return
 
         if not data:
             await msg.reply_text("Не удалось прочитать изображение.")
-            return self._ST_WAIT_IMAGE
+            return
 
         root = self._ui_root()
         out_dir = os.path.join(root, "_shared", "haiper", str(chat_id))
@@ -144,46 +147,58 @@ class HaiperImageToVideoTool(ToolPlugin):
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=out_dir) as f:
             img_path = f.name
             f.write(bytes(data))
-        context.user_data["haiper_image_path"] = img_path
-        await msg.reply_text("Ок. Теперь отправьте промпт для анимации (или '-' для значения по умолчанию).")
-        return self._ST_WAIT_PROMPT
 
-    async def _on_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        self.set_step(chat_id, "wait_prompt", data={"image_path": img_path})
+        await msg.reply_text(
+            "Ок. Теперь отправьте промпт для анимации.\n"
+            "Для выхода — кнопка ниже или текст: отмена, cancel, выход, -",
+            reply_markup=self.cancel_markup(),
+        )
+
+    async def _on_prompt_step(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step wait_prompt: receive text prompt and generate video."""
         msg = update.effective_message
+        chat_id = update.effective_chat.id if update.effective_chat else 0
         if not msg:
-            return ConversationHandler.END
-        img_path = context.user_data.get("haiper_image_path")
+            self.end_dialog(chat_id)
+            return
+
+        # Ignore non-text updates (e.g. accidental photo on the prompt step).
+        if not msg.text:
+            await msg.reply_text(
+                "Сейчас жду текстовый промпт. Отправьте текст или напишите «отмена» / «cancel» / «-» для выхода."
+            )
+            return
+
+        state = self.get_dialog(chat_id)
+        img_path = (state.data.get("image_path") if state else None) or ""
         if not img_path:
             await msg.reply_text("Изображение не найдено. Начните заново: /haiper")
-            return ConversationHandler.END
+            self.end_dialog(chat_id)
+            return
+
         prompt = (msg.text or "").strip()
-        if prompt == "-":
-            prompt = ""
         await msg.reply_text("Генерирую видео, это может занять несколько минут...")
 
         ctx = {"cwd": self._ui_root()}
         res = await self.execute({"image_path": img_path, "prompt": prompt, "model": "haiper-2.0"}, ctx)
         if not res.get("success"):
             await msg.reply_text(str(res.get("error") or "Ошибка генерации"))
-            return ConversationHandler.END
+            self.end_dialog(chat_id)
+            return
 
         out_path = str(res.get("output") or "")
         if not out_path or not os.path.exists(out_path):
             await msg.reply_text("Видео создано, но файл не найден.")
-            return ConversationHandler.END
+            self.end_dialog(chat_id)
+            return
         try:
             with open(out_path, "rb") as f:
                 await msg.reply_document(document=f, filename=os.path.basename(out_path))
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
             await msg.reply_text(f"Не удалось отправить видео: {e}")
-        return ConversationHandler.END
-
-    async def _cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        msg = update.effective_message
-        if msg:
-            await msg.reply_text("Отменено.")
-        return ConversationHandler.END
+        self.end_dialog(chat_id)
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         image_path = (args.get("image_path") or "").strip()

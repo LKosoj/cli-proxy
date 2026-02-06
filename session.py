@@ -358,6 +358,9 @@ class SessionManager:
         self.sessions: Dict[str, Session] = {}
         self.active_session_id: Optional[str] = None
         self._counter = 0
+        # Optional callback invoked whenever the active session changes
+        # (create, switch, close).  Signature: callback() -> None
+        self.on_session_change: Optional[Callable[[], None]] = None
         self._restore_sessions()
 
     def create(self, tool_name: str, workdir: str) -> Session:
@@ -387,6 +390,7 @@ class SessionManager:
         except Exception:
             pass
         self._persist_sessions()
+        self._fire_session_change()
         return session
 
     def get(self, session_id: str) -> Optional[Session]:
@@ -406,6 +410,7 @@ class SessionManager:
             except Exception:
                 pass
             self._persist_sessions()
+            self._fire_session_change()
             return True
         return False
 
@@ -432,7 +437,17 @@ class SessionManager:
                 save_sessions(self.config.defaults.state_path, sessions)
         except Exception:
             pass
+        self._fire_session_change()
         return True
+
+    def _fire_session_change(self) -> None:
+        """Invoke the on_session_change callback if registered."""
+        cb = self.on_session_change
+        if cb:
+            try:
+                cb()
+            except Exception:
+                logging.exception("on_session_change callback failed")
 
     def _persist_sessions(self) -> None:
         try:

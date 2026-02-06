@@ -2,22 +2,45 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
-from agent.plugins.base import ToolPlugin
+from telegram import InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+
+from agent.plugins.base import DialogMixin, ToolPlugin
 from agent.tooling.spec import ToolSpec
 from agent.tooling.helpers import MEMORY_FILE
 
 
-class MemoryTool(ToolPlugin):
-    def get_commands(self) -> List[Dict[str, Any]]:
+class MemoryTool(DialogMixin, ToolPlugin):
+    # -- menu & commands ----------------------------------------------------
+
+    def get_menu_label(self):
+        return "Память"
+
+    def get_menu_actions(self):
         return [
-            {
-                "command": "memory",
-                "description": "Показать память агента",
-                "handler": self._handle_memory_command,
-            }
+            {"label": "Показать", "action": "read"},
+            {"label": "Добавить запись", "action": "append"},
+            {"label": "Очистить", "action": "clear"},
         ]
+
+    def get_commands(self) -> List[Dict[str, Any]]:
+        return self._dialog_callback_commands()
+
+    # -- DialogMixin contract -----------------------------------------------
+
+    def dialog_steps(self):
+        return {"wait_content": self._on_content}
+
+    def callback_handlers(self) -> Dict[str, Callable]:
+        return {
+            "read": self._cb_read,
+            "append": self._cb_append,
+            "clear": self._cb_clear,
+        }
+
+    # -- spec ---------------------------------------------------------------
 
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
@@ -33,6 +56,84 @@ class MemoryTool(ToolPlugin):
             },
             parallelizable=False,
         )
+
+    # -- helpers ------------------------------------------------------------
+
+    def _memory_path(self) -> str:
+        if self.config:
+            state_root = os.path.join(self.config.defaults.workdir, "_sandbox")
+        else:
+            state_root = os.getenv("AGENT_SANDBOX_ROOT") or os.getcwd()
+        return os.path.join(state_root, MEMORY_FILE)
+
+    # -- callback handlers --------------------------------------------------
+
+    async def _cb_read(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        if not query:
+            return
+        path = self._memory_path()
+        if not os.path.exists(path):
+            if query.message:
+                await query.message.reply_text("(память пуста)")
+            return
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read().strip() or "(память пуста)"
+        except Exception:
+            if query.message:
+                await query.message.reply_text("Не удалось прочитать память.")
+            return
+        if query.message:
+            await query.message.reply_text(content[:3500])
+
+    async def _cb_append(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
+        if not user_id or not chat_id:
+            return
+        self.start_dialog(chat_id, "wait_content", data={}, user_id=user_id)
+        if query and query.message:
+            await query.message.reply_text(
+                "Отправьте текст для записи в память.\n\n"
+                "Для отмены — кнопка ниже или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
+            )
+
+    async def _cb_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        if not query:
+            return
+        path = self._memory_path()
+        if os.path.exists(path):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("")
+        if query.message:
+            await query.message.reply_text("Память очищена.")
+
+    # -- dialog step handler ------------------------------------------------
+
+    async def _on_content(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        msg = update.effective_message
+        if not msg:
+            return
+        chat_id = update.effective_chat.id if update.effective_chat else 0
+        text = (msg.text or "").strip()
+        if not text:
+            await msg.reply_text("Текст не может быть пустым. Попробуйте ещё раз.")
+            return
+
+        path = self._memory_path()
+        timestamp = time.strftime("%Y-%m-%d %H:%M")
+        entry = f"- {timestamp}: {text}\n"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(entry)
+        self.end_dialog(chat_id)
+        await msg.reply_text("✅ Запись добавлена в память.")
+
+    # -- execute (agent API) ------------------------------------------------
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         action = args.get("action")
@@ -60,23 +161,3 @@ class MemoryTool(ToolPlugin):
                     f.write("")
             return {"success": True, "output": "Memory cleared"}
         return {"success": False, "error": f"Unknown action: {action}"}
-
-    async def _handle_memory_command(self, update: Any, context: Any, **kwargs: Any) -> None:
-        chat_id = update.effective_chat.id if update and update.effective_chat else None
-        if not chat_id:
-            return
-        if not self.config:
-            await context.bot.send_message(chat_id=chat_id, text="Память недоступна: нет конфигурации.")
-            return
-        state_root = os.path.join(self.config.defaults.workdir, "_sandbox")
-        path = os.path.join(state_root, MEMORY_FILE)
-        if not os.path.exists(path):
-            await context.bot.send_message(chat_id=chat_id, text="(память пуста)")
-            return
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                content = f.read().strip() or "(память пуста)"
-        except Exception:
-            await context.bot.send_message(chat_id=chat_id, text="Не удалось прочитать память.")
-            return
-        await context.bot.send_message(chat_id=chat_id, text=content[:3500])

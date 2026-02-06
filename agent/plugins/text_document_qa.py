@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 from openai import AsyncOpenAI
 
-from agent.plugins.base import ToolPlugin
+from agent.plugins.base import DialogMixin, ToolPlugin
 from agent.tooling.spec import ToolSpec
-from agent.tooling import helpers
 
-from telegram import Update
+from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 
-class TextDocumentQATool(ToolPlugin):
+class TextDocumentQATool(DialogMixin, ToolPlugin):
     def get_source_name(self) -> str:
         return "TextDocumentQA"
 
@@ -39,108 +37,272 @@ class TextDocumentQATool(ToolPlugin):
             timeout_ms=120_000,
         )
 
-    def get_commands(self) -> List[Dict[str, Any]]:
+    # -- menu & commands ----------------------------------------------------
+
+    def get_menu_label(self):
+        return "Документы"
+
+    def get_menu_actions(self):
         return [
-            {
-                "command": "list_documents",
-                "description": "Показать список загруженных документов",
-                "handler": self.cmd_list_documents,
-                "handler_kwargs": {},
-                "add_to_menu": True,
-            },
-            {
-                "command": "upload_document",
-                "description": "Загрузить документ. Формат: /upload_document <имя> <текст>",
-                "args": "<имя> <текст>",
-                "handler": self.cmd_upload_document,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "command": "ask_question",
-                "description": "Вопрос по документу. Формат: /ask_question <doc_id> <вопрос>",
-                "args": "<doc_id> <вопрос>",
-                "handler": self.cmd_ask_question,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "command": "delete_document",
-                "description": "Удалить документ. Формат: /delete_document <doc_id>",
-                "args": "<doc_id>",
-                "handler": self.cmd_delete_document,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
+            {"label": "Список", "action": "list"},
+            {"label": "Загрузить", "action": "upload"},
+            {"label": "Задать вопрос", "action": "ask"},
         ]
+
+    def get_commands(self) -> List[Dict[str, Any]]:
+        return self._dialog_callback_commands()
+
+    # -- DialogMixin contract -----------------------------------------------
+
+    def dialog_steps(self):
+        return {
+            "wait_name": self._on_name,
+            "wait_content": self._on_content,
+            "wait_doc_select": {"callback": self._on_doc_select_button},
+            "wait_query": self._on_query,
+        }
+
+    def callback_handlers(self) -> Dict[str, Callable]:
+        return {
+            "list": self._cb_list,
+            "upload": self._cb_upload,
+            "ask": self._cb_ask,
+            "delete": self._cb_delete,
+            "ask_doc": self._cb_ask_doc,
+        }
+
+    # -- helpers ------------------------------------------------------------
 
     def _storage_dir(self, state_root: str) -> str:
         return os.path.join(state_root, "text_document_qa")
 
     def _ui_state_root(self) -> str:
-        # Bot sets AGENT_SANDBOX_ROOT to a safe storage root.
-        return os.getenv("AGENT_SANDBOX_ROOT") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "workdir", None) or os.getcwd()
+        return os.getenv("AGENT_SANDBOX_ROOT") or getattr(
+            getattr(self, "config", None), "defaults", None
+        ) and getattr(self.config.defaults, "workdir", None) or os.getcwd()
 
-    async def cmd_list_documents(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        message = update.effective_message
-        if not message:
-            return
-        ctx = {"state_root": self._ui_state_root(), "cwd": os.getcwd()}
-        res = await self.execute({"action": "list"}, ctx)
-        if res.get("success"):
-            await message.reply_text(str(res.get("output") or ""))
-        else:
-            await message.reply_text(str(res.get("error") or "Ошибка"))
+    def _list_documents(self) -> List[Dict[str, str]]:
+        base = self._storage_dir(self._ui_state_root())
+        os.makedirs(base, exist_ok=True)
+        docs = []
+        for fn in sorted(os.listdir(base)):
+            if not fn.endswith(".txt"):
+                continue
+            doc_id = fn[:-4]
+            meta = os.path.join(base, f"{doc_id}.meta")
+            title = ""
+            try:
+                if os.path.exists(meta):
+                    title = open(meta, "r", encoding="utf-8", errors="replace").read().strip()
+            except Exception:
+                title = ""
+            docs.append({"id": doc_id, "title": title})
+        return docs
 
-    async def cmd_upload_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        message = update.effective_message
-        if not message:
-            return
-        text = (message.text or "").strip()
-        parts = text.split(maxsplit=2)
-        if len(parts) < 3:
-            await message.reply_text("Использование: /upload_document <имя> <текст>")
-            return
-        _, name, content = parts
-        ctx = {"state_root": self._ui_state_root(), "cwd": os.getcwd()}
-        res = await self.execute({"action": "upload", "file_name": name, "file_content": content}, ctx)
-        if res.get("success"):
-            await message.reply_text(str(res.get("output") or ""))
-        else:
-            await message.reply_text(str(res.get("error") or "Ошибка"))
+    def _build_doc_list_keyboard(self, docs: List[Dict[str, str]]) -> List[list]:
+        """Build inline keyboard showing documents with Delete and Ask buttons."""
+        keyboard = []
+        for doc in docs:
+            did = doc["id"]
+            title = (doc["title"] or did)[:40]
+            keyboard.append([
+                self.action_button(f"📄 {title}", "ask_doc", did),
+                self.action_button("🗑", "delete", did),
+            ])
+        return keyboard
 
-    async def cmd_ask_question(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        message = update.effective_message
-        if not message:
-            return
-        text = (message.text or "").strip()
-        parts = text.split(maxsplit=2)
-        if len(parts) < 3:
-            await message.reply_text("Использование: /ask_question <doc_id> <вопрос>")
-            return
-        _, doc_id, query = parts
-        ctx = {"state_root": self._ui_state_root(), "cwd": os.getcwd()}
-        res = await self.execute({"action": "ask", "document_id": doc_id, "query": query}, ctx)
-        if res.get("success"):
-            await message.reply_text(str(res.get("output") or ""))
-        else:
-            await message.reply_text(str(res.get("error") or "Ошибка"))
+    # -- callback handlers --------------------------------------------------
 
-    async def cmd_delete_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        message = update.effective_message
-        if not message:
+    async def _cb_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Show document list with action buttons."""
+        query = update.callback_query
+        if not query:
             return
-        args = context.args or []
-        if not args:
-            await message.reply_text("Использование: /delete_document <doc_id>")
+        docs = self._list_documents()
+        if not docs:
+            if query.message:
+                await query.message.reply_text("Документов нет.")
             return
-        doc_id = args[0]
+        keyboard = self._build_doc_list_keyboard(docs)
+        if query.message:
+            await query.message.reply_text(
+                "Документы (нажмите 📄 для вопроса, 🗑 для удаления):",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+
+    async def _cb_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Start upload dialog."""
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
+        if not user_id or not chat_id:
+            return
+        self.start_dialog(chat_id, "wait_name", data={"mode": "upload"}, user_id=user_id)
+        if query and query.message:
+            await query.message.reply_text(
+                "Загрузка документа.\n"
+                "Отправьте имя документа (одно слово или короткая фраза).\n\n"
+                "Для отмены — кнопка ниже или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
+            )
+
+    async def _cb_ask(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Show document list for selecting which to ask a question about."""
+        query = update.callback_query
+        docs = self._list_documents()
+        if not docs:
+            if query and query.message:
+                await query.message.reply_text("Документов нет. Сначала загрузите документ.")
+            return
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
+        if not user_id or not chat_id:
+            return
+        self.start_dialog(chat_id, "wait_doc_select", data={}, user_id=user_id)
+        keyboard = []
+        for doc in docs:
+            did = doc["id"]
+            title = (doc["title"] or did)[:40]
+            keyboard.append([self.dialog_button(f"📄 {title}", did)])
+        keyboard.append([self.dialog_button("Отмена", "_cancel")])
+        if query and query.message:
+            await query.message.reply_text(
+                "Выберите документ для вопроса:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+
+    async def _cb_ask_doc(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Direct 'ask question' on a specific doc from the list view."""
+        query = update.callback_query
+        doc_id = payload
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
+        if not user_id or not chat_id:
+            return
+        self.start_dialog(chat_id, "wait_query", data={"doc_id": doc_id}, user_id=user_id)
+        if query and query.message:
+            await query.message.reply_text(
+                f"Задайте вопрос по документу {doc_id}.\n\n"
+                "Для отмены — кнопка ниже или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
+            )
+
+    async def _cb_delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Delete a document by its ID (payload)."""
+        query = update.callback_query
+        if not query:
+            return
+        doc_id = payload
         ctx = {"state_root": self._ui_state_root(), "cwd": os.getcwd()}
         res = await self.execute({"action": "delete", "document_id": doc_id}, ctx)
         if res.get("success"):
-            await message.reply_text(str(res.get("output") or ""))
+            await query.answer("Удалено")
         else:
-            await message.reply_text(str(res.get("error") or "Ошибка"))
+            await query.answer(res.get("error", "Ошибка"), show_alert=True)
+            return
+        # Refresh the list.
+        docs = self._list_documents()
+        if not docs:
+            await query.edit_message_text("Документов нет.")
+            return
+        keyboard = self._build_doc_list_keyboard(docs)
+        await query.edit_message_text(
+            "Документы (нажмите 📄 для вопроса, 🗑 для удаления):",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    # -- dialog step handlers -----------------------------------------------
+
+    async def _on_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step wait_name: user sends the document name."""
+        msg = update.effective_message
+        if not msg:
+            return
+        chat_id = update.effective_chat.id if update.effective_chat else 0
+        name = (msg.text or "").strip()
+        if not name:
+            await msg.reply_text("Имя не может быть пустым. Попробуйте ещё раз.")
+            return
+        self.set_step(chat_id, "wait_content", data={"file_name": name})
+        await msg.reply_text(
+            f"Имя: {name}\n"
+            "Теперь отправьте содержимое документа (текст).\n\n"
+            "Для отмены — кнопка ниже или текст: отмена, cancel, выход, -",
+            reply_markup=self.cancel_markup(),
+        )
+
+    async def _on_content(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step wait_content: user sends the document content."""
+        msg = update.effective_message
+        if not msg:
+            return
+        chat_id = update.effective_chat.id if update.effective_chat else 0
+        content = (msg.text or "").strip()
+        if not content:
+            await msg.reply_text("Содержимое не может быть пустым. Попробуйте ещё раз.")
+            return
+
+        state = self.get_dialog(chat_id)
+        file_name = state.data.get("file_name", "untitled") if state else "untitled"
+
+        ctx = {"state_root": self._ui_state_root(), "cwd": os.getcwd()}
+        res = await self.execute({"action": "upload", "file_name": file_name, "file_content": content}, ctx)
+        self.end_dialog(chat_id)
+        if res.get("success"):
+            await msg.reply_text(str(res.get("output") or "Загружено."))
+        else:
+            await msg.reply_text(str(res.get("error") or "Ошибка загрузки."))
+
+    async def _on_doc_select_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step wait_doc_select callback: user picks a doc button."""
+        doc_id = self.parse_callback_payload(update)
+        query = update.callback_query
+        chat_id = query.message.chat_id if query and query.message else 0
+        if not chat_id:
+            return
+
+        if doc_id == "_cancel":
+            self.end_dialog(chat_id)
+            if query and query.message:
+                await query.message.reply_text("Отменено.")
+            return
+
+        self.set_step(chat_id, "wait_query", data={"doc_id": doc_id})
+        if query and query.message:
+            await query.message.reply_text(
+                f"Задайте вопрос по документу {doc_id}.\n\n"
+                "Для отмены — кнопка ниже или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
+            )
+
+    async def _on_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step wait_query: user sends the question text."""
+        msg = update.effective_message
+        if not msg:
+            return
+        chat_id = update.effective_chat.id if update.effective_chat else 0
+        question = (msg.text or "").strip()
+        if not question:
+            await msg.reply_text("Вопрос не может быть пустым.")
+            return
+
+        state = self.get_dialog(chat_id)
+        doc_id = state.data.get("doc_id", "") if state else ""
+        if not doc_id:
+            self.end_dialog(chat_id)
+            await msg.reply_text("Документ не выбран. Попробуйте снова.")
+            return
+
+        await msg.reply_text("⏳ Ищу ответ...")
+        ctx = {"state_root": self._ui_state_root(), "cwd": os.getcwd()}
+        res = await self.execute({"action": "ask", "document_id": doc_id, "query": question}, ctx)
+        self.end_dialog(chat_id)
+        if res.get("success"):
+            await msg.reply_text(str(res.get("output") or "Нет ответа."))
+        else:
+            await msg.reply_text(str(res.get("error") or "Ошибка."))
+
+    # -- execute (agent API) ------------------------------------------------
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         action = args.get("action")
@@ -214,7 +376,6 @@ class TextDocumentQATool(ToolPlugin):
             if not api_key:
                 return {"success": False, "error": "Не задан OPENAI_API_KEY"}
 
-            # Ограничиваем контекст: агенту не надо тащить весь документ.
             context_text = text[:12000]
             client = AsyncOpenAI(api_key=api_key, base_url=(base_url or None))
             try:

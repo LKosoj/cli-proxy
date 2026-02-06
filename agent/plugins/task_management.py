@@ -10,15 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    filters,
-)
+from telegram import InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
-from agent.plugins.base import ToolPlugin
+from agent.plugins.base import DialogMixin, ToolPlugin
 from agent.tooling.spec import ToolSpec
 
 
@@ -117,34 +112,16 @@ class _NotifyPolicy:
     overdue_repeat_sec: int = 60 * 60
 
 
-class TaskManagementTool(ToolPlugin):
+class TaskManagementTool(DialogMixin, ToolPlugin):
     """
     User-level task manager with Telegram UI and a periodic deadline checker (implemented in bot.py).
     Storage: AGENT_SANDBOX_ROOT/_shared/tasks.json
     """
 
     _policy = _NotifyPolicy()
-    _ST_ADD_TEXT = 1
 
-    def _dialog_state(self) -> Dict[int, Dict[str, Any]]:
-        # chat_id -> dialog data
-        return self.services.setdefault("task_dialog_state", {})
-
-    def _dialog_active_filter(self):
-        # Custom filter that matches only when dialog is active for this chat.
-        tool = self
-
-        class _Active(filters.BaseFilter):
-            def filter(self, message) -> bool:
-                try:
-                    chat_id = getattr(message, "chat_id", None)
-                    if not chat_id:
-                        return False
-                    return bool(tool._dialog_state().get(int(chat_id)))
-                except Exception:
-                    return False
-
-        return _Active()
+    def dialog_steps(self):
+        return {"wait_text": self._on_add_text}
 
     def get_source_name(self) -> str:
         return "TaskManagement"
@@ -171,72 +148,29 @@ class TaskManagementTool(ToolPlugin):
             timeout_ms=30_000,
         )
 
-    def get_commands(self) -> List[Dict[str, Any]]:
+    def get_menu_label(self):
+        return "Задачи"
+
+    def get_menu_actions(self):
         return [
-            {
-                "command": "tasks",
-                "description": "Задачи: список и меню",
-                "handler": self.cmd_tasks,
-                "handler_kwargs": {},
-                "add_to_menu": True,
-            },
-            {
-                "command": "task_add",
-                "description": "Добавить задачу. Формат: /task_add <priority> [YYYY-MM-DD HH:MM] <title>",
-                "args": "<priority> [YYYY-MM-DD HH:MM] <title>",
-                "handler": self.cmd_task_add,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "command": "task_add_dialog",
-                "description": "Добавить задачу через диалог (кнопка в /tasks).",
-                "handler": self._start_add_from_command,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "command": "task_update",
-                "description": "Обновить задачу. Формат: /task_update <id> status=<pending|in_progress|completed|cancelled> priority=<high|medium|low> deadline='YYYY-MM-DD HH:MM'",
-                "args": "<id> key=value ...",
-                "handler": self.cmd_task_update,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "command": "task_delete",
-                "description": "Удалить задачу. Формат: /task_delete <id>",
-                "args": "<id>",
-                "handler": self.cmd_task_delete,
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "callback_query_handler": self.handle_task_callback,
-                # Keep this handler narrow so conversation entry-points (e.g. task:add) can work.
-                "callback_pattern": r"^task:(refresh|view|del|next)(:|$)",
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "callback_query_handler": self._start_add_from_button,
-                "callback_pattern": r"^task:add$",
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
-            {
-                "callback_query_handler": self._cancel_add_dialog_from_button,
-                "callback_pattern": r"^task:add_cancel$",
-                "handler_kwargs": {},
-                "add_to_menu": False,
-            },
+            {"label": "Список", "action": "refresh"},
+            {"label": "Добавить", "action": "add"},
         ]
 
-    def get_message_handlers(self) -> List[Dict[str, Any]]:
-        # Avoid ConversationHandler here: it produces PTB warnings for callback entry points with per_message defaults.
-        # We keep a lightweight dialog state inside ToolRegistry services and match only when active.
-        active = self._dialog_active_filter()
-        return [{"filters": active & filters.TEXT & ~filters.COMMAND, "handler": self._on_add_text}]
+    def get_commands(self) -> List[Dict[str, Any]]:
+        return self._dialog_callback_commands()
+
+    def callback_handlers(self) -> Dict[str, Any]:
+        return {
+            "add": self._cb_start_add,
+            "refresh": self._cb_refresh,
+            "view": self._cb_view,
+            "view_help": self._cb_view_help,
+            "del": self._cb_del,
+            "next": self._cb_next,
+        }
+
+    # get_message_handlers is provided by DialogMixin.
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         action = args.get("action")
@@ -346,144 +280,20 @@ class TaskManagementTool(ToolPlugin):
 
         return {"success": False, "error": f"Unknown action: {action}"}
 
-    async def cmd_tasks(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = update.effective_message
-        if not msg:
-            return
-        user_id = update.effective_user.id if update.effective_user else None
-        if not user_id:
-            return
-        text, markup = self._build_tasks_menu(user_id)
-        await msg.reply_text(text, reply_markup=markup)
-
-    async def cmd_task_add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = update.effective_message
-        if not msg:
-            return
-        user_id = update.effective_user.id if update.effective_user else None
-        chat_id = update.effective_chat.id if update.effective_chat else None
-        if not user_id or not chat_id:
-            return
-        raw = (msg.text or "").strip()
-        parts = raw.split(maxsplit=3)
-        if len(parts) < 3:
-            await msg.reply_text("Использование: /task_add <priority> [YYYY-MM-DD HH:MM] <title>")
-            return
-        # /task_add <priority> <...>
-        _cmd = parts[0]
-        priority = parts[1].strip().lower()
-        if priority not in ("high", "medium", "low"):
-            await msg.reply_text("priority должен быть high|medium|low")
-            return
-        title = ""
-        deadline = None
-        if len(parts) == 3:
-            # no deadline, title is rest
-            title = parts[2]
-        else:
-            # maybe has deadline
-            tail = parts[2:]
-            # deadline may be two tokens: YYYY-MM-DD HH:MM
-            if len(tail) >= 2 and len(tail[0]) == 10 and ":" in tail[1]:
-                deadline = f"{tail[0]} {tail[1]}"
-                title = tail[2] if len(tail) >= 3 else ""
-                if len(tail) > 3:
-                    title = " ".join(tail[2:])
-            else:
-                title = " ".join(tail)
-        title = title.strip()
-        if not title:
-            await msg.reply_text("title обязателен")
-            return
-        dl_ts, dl_err = _parse_deadline(deadline)
-        if dl_err:
-            await msg.reply_text(dl_err)
-            return
-        task_id = f"tsk_{int(_now_ts())}_{uuid.uuid4().hex[:4]}"
-        task = {
-            "id": task_id,
-            "user_id": str(user_id),
-            "chat_id": chat_id,
-            "title": title,
-            "description": "",
-            "priority": priority,
-            "status": "pending",
-            "created_at": datetime.now().isoformat(),
-            "deadline": deadline,
-            "deadline_ts": dl_ts,
-            "tags": [],
-            "last_updated": datetime.now().isoformat(),
-            "notify": {},
-        }
-        all_tasks = _load_all_tasks()
-        bucket = all_tasks.setdefault(str(user_id), {})
-        bucket[task_id] = task
-        _save_all_tasks(all_tasks)
-        await msg.reply_text(f"✅ Добавлено: {_format_task_line(task)}")
-
-    async def cmd_task_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = update.effective_message
-        if not msg:
-            return
-        user_id = update.effective_user.id if update.effective_user else None
-        if not user_id:
-            return
-        text = (msg.text or "").strip()
-        parts = text.split(maxsplit=2)
-        if len(parts) < 2:
-            await msg.reply_text("Использование: /task_update <id> key=value ...")
-            return
-        task_id = parts[1].strip()
-        kv = parts[2] if len(parts) >= 3 else ""
-        updates: Dict[str, Any] = {"action": "update", "task_id": task_id}
-        if kv:
-            for token in kv.split():
-                if "=" not in token:
-                    continue
-                k, v = token.split("=", 1)
-                k = k.strip().lower()
-                v = v.strip().strip("\"'")
-                if k in ("status", "priority", "deadline", "description"):
-                    updates[k] = v
-        res = await self.execute(updates, {"chat_id": int(user_id)})
-        if res.get("success"):
-            await msg.reply_text(str(res.get("output") or ""))
-        else:
-            await msg.reply_text(str(res.get("error") or "Ошибка"))
-
-    async def cmd_task_delete(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = update.effective_message
-        if not msg:
-            return
-        user_id = update.effective_user.id if update.effective_user else None
-        if not user_id:
-            return
-        args = context.args or []
-        if not args:
-            await msg.reply_text("Использование: /task_delete <id>")
-            return
-        task_id = args[0].strip()
-        res = await self.execute({"action": "delete", "task_id": task_id}, {"chat_id": int(user_id)})
-        if res.get("success"):
-            await msg.reply_text(str(res.get("output") or ""))
-        else:
-            await msg.reply_text(str(res.get("error") or "Ошибка"))
-
     def _build_tasks_menu(self, user_id: int) -> Tuple[str, Optional[InlineKeyboardMarkup]]:
         all_tasks = _load_all_tasks()
         bucket = all_tasks.get(str(user_id), {})
         items = list(bucket.values()) if isinstance(bucket, dict) else []
         if not items:
             rows = [
-                [InlineKeyboardButton("Добавить", callback_data="task:add")],
-                [InlineKeyboardButton("Как добавить (команда)", callback_data="task:view_help")],
+                [self.action_button("Добавить", "add")],
             ]
-            text = "Задач нет.\n\nДобавить:\n- кнопкой ниже (диалог)\n- или командой: /task_add <priority> [YYYY-MM-DD HH:MM] <title>\n- или: /task_add_dialog"
+            text = "Задач нет.\n\nНажмите «Добавить», чтобы создать задачу."
             return text, InlineKeyboardMarkup(rows)
         # show up to 12 tasks in menu
         items = items[:12]
         rows = []
-        rows.append([InlineKeyboardButton("Добавить", callback_data="task:add")])
+        rows.append([self.action_button("Добавить", "add")])
         for t in items:
             tid = t.get("id")
             title = (t.get("title") or "").strip()[:30]
@@ -492,38 +302,22 @@ class TaskManagementTool(ToolPlugin):
             label = f"[{pr}] {title} ({_human_status(st)})"
             rows.append(
                 [
-                    InlineKeyboardButton("Статус", callback_data=f"task:next:{tid}"),
-                    InlineKeyboardButton("Удалить", callback_data=f"task:del:{tid}"),
+                    self.action_button("Статус", "next", tid),
+                    self.action_button("Удалить", "del", tid),
                 ]
             )
-            rows.append([InlineKeyboardButton(label, callback_data=f"task:view:{tid}")])
-        rows.append([InlineKeyboardButton("Обновить", callback_data="task:refresh:")])
+            rows.append([self.action_button(label, "view", tid)])
+        rows.append([self.action_button("Обновить", "refresh")])
         return "Задачи:", InlineKeyboardMarkup(rows)
 
-    def _ensure_agent_enabled(self, context: ContextTypes.DEFAULT_TYPE) -> bool:
-        try:
-            bot_app = context.application.bot_data.get("bot_app")
-            session = bot_app.manager.active() if bot_app else None
-            return bool(session and getattr(session, "agent_enabled", False))
-        except Exception:
-            return False
-
-    async def _start_add_from_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def _cb_start_add(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        """Autonomous callback: start the add-task dialog from a button."""
         query = update.callback_query
-        if query:
-            try:
-                await query.answer()
-            except Exception:
-                pass
-        if not self._ensure_agent_enabled(context):
-            if query and query.message:
-                await query.message.reply_text("Агент не активен.")
-            return
         user_id = query.from_user.id if query and query.from_user else None
         chat_id = query.message.chat_id if query and query.message else None
         if not user_id or not chat_id:
             return
-        self._dialog_state()[int(chat_id)] = {"mode": "add", "user_id": int(user_id), "ts": int(_now_ts())}
+        self.start_dialog(chat_id, "wait_text", data={"mode": "add"}, user_id=user_id)
         if query and query.message:
             await query.message.reply_text(
                 "Добавление задачи.\n"
@@ -531,35 +325,9 @@ class TaskManagementTool(ToolPlugin):
                 "1) high Сделать важное\n"
                 "2) medium 2026-02-06 10:00 Созвон\n"
                 "3) low 2026-02-06 10:00 Купить молоко\n\n"
-                "Кнопка Отмена ниже, чтобы выйти из диалога.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("Отмена", callback_data="task:add_cancel")]]
-                ),
+                "Кнопка Отмена или текст: отмена, cancel, выход, -",
+                reply_markup=self.cancel_markup(),
             )
-        return
-
-    async def _start_add_from_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = update.effective_message
-        if not self._ensure_agent_enabled(context):
-            if msg:
-                await msg.reply_text("Агент не активен.")
-            return
-        user_id = update.effective_user.id if update.effective_user else None
-        chat_id = update.effective_chat.id if update.effective_chat else None
-        if not user_id or not chat_id:
-            return
-        self._dialog_state()[int(chat_id)] = {"mode": "add", "user_id": int(user_id), "ts": int(_now_ts())}
-        if msg:
-            await msg.reply_text(
-                "Добавление задачи.\n"
-                "Отправьте строку: <priority> [YYYY-MM-DD HH:MM] <title>\n"
-                "Пример: high 2026-02-06 10:00 Созвон\n\n"
-                "Напишите текст задачи следующим сообщением. Для отмены нажмите кнопку ниже.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("Отмена", callback_data="task:add_cancel")]]
-                ),
-            )
-        return
 
     def _parse_add_input(self, text: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
         raw = (text or "").strip()
@@ -586,15 +354,16 @@ class TaskManagementTool(ToolPlugin):
         return priority, deadline, title, None
 
     async def _on_add_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Step handler for wait_text: parse task input and save.
+
+        Cancel words are already handled by DialogMixin.handle_message.
+        """
         msg = update.effective_message
         if not msg:
             return
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
         if not user_id or not chat_id:
-            return
-        st = self._dialog_state().get(int(chat_id)) or {}
-        if st.get("mode") != "add":
             return
         priority, deadline, title, err = self._parse_add_input(msg.text or "")
         if err:
@@ -622,99 +391,87 @@ class TaskManagementTool(ToolPlugin):
         bucket = all_tasks.setdefault(str(user_id), {})
         bucket[task_id] = task
         _save_all_tasks(all_tasks)
-        self._dialog_state().pop(int(chat_id), None)
+        self.end_dialog(chat_id)
         await msg.reply_text(f"✅ Добавлено: {_format_task_line(task)}\nОткройте /tasks чтобы увидеть меню.")
         return
 
-    async def _cancel_add_dialog_from_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        query = update.callback_query
-        if not query:
-            return
-        try:
-            await query.answer()
-        except Exception:
-            pass
-        chat_id = query.message.chat_id if query.message else None
-        if chat_id:
-            self._dialog_state().pop(int(chat_id), None)
-        if query.message:
-            await query.message.reply_text("Отменено.")
+    # -- autonomous callback handlers (routed by DialogMixin._dispatch_callback) --
 
-    async def handle_task_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def _cb_refresh(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
         query = update.callback_query
-        if not query or not query.data:
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
             return
-        try:
-            await query.answer()
-        except Exception:
-            pass
-        user_id = query.from_user.id if query.from_user else None
-        if not user_id:
+        text, markup = self._build_tasks_menu(int(user_id))
+        await query.edit_message_text(text, reply_markup=markup)
+
+    async def _cb_view_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        if query:
+            await query.answer("Нажмите кнопку «Добавить» для создания задачи.", show_alert=True)
+
+    async def _cb_view(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
             return
-        data = query.data
-        parts = data.split(":", 2)
-        if len(parts) < 2:
+        tid = payload
+        all_tasks = _load_all_tasks()
+        bucket = all_tasks.get(str(user_id), {})
+        task = bucket.get(tid) if isinstance(bucket, dict) else None
+        if not task:
+            await query.answer("Не найдено", show_alert=True)
             return
-        cmd = parts[1]
-        arg = parts[2] if len(parts) >= 3 else ""
-        if cmd == "refresh":
-            text, markup = self._build_tasks_menu(int(user_id))
-            await query.edit_message_text(text, reply_markup=markup)
+        lines = [
+            f"ID: {task.get('id')}",
+            f"Заголовок: {task.get('title')}",
+            f"Статус: {_human_status(task.get('status') or 'pending')}",
+            f"Приоритет: {(task.get('priority') or 'low').upper()}",
+        ]
+        if task.get("deadline"):
+            lines.append(f"Дедлайн: {task.get('deadline')}")
+        if task.get("description"):
+            lines.append(f"Описание: {task.get('description')}")
+        await query.answer("\n".join(lines)[:200], show_alert=True, cache_time=0)
+
+    async def _cb_del(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
             return
-        if cmd == "view_help":
-            await query.answer("Используйте /task_add или кнопку Добавить.", show_alert=True)
-            return
-        if cmd == "view":
-            tid = arg
-            all_tasks = _load_all_tasks()
-            bucket = all_tasks.get(str(user_id), {})
-            task = bucket.get(tid) if isinstance(bucket, dict) else None
-            if not task:
-                await query.answer("Не найдено", show_alert=True)
-                return
-            lines = [
-                f"ID: {task.get('id')}",
-                f"Заголовок: {task.get('title')}",
-                f"Статус: {_human_status(task.get('status') or 'pending')}",
-                f"Приоритет: {(task.get('priority') or 'low').upper()}",
-            ]
-            if task.get("deadline"):
-                lines.append(f"Дедлайн: {task.get('deadline')}")
-            if task.get("description"):
-                lines.append(f"Описание: {task.get('description')}")
-            await query.answer("\n".join(lines)[:200], show_alert=True, cache_time=0)
-            return
-        if cmd == "del":
-            tid = arg
-            all_tasks = _load_all_tasks()
-            bucket = all_tasks.get(str(user_id), {})
-            if isinstance(bucket, dict) and tid in bucket:
-                bucket.pop(tid, None)
-                all_tasks[str(user_id)] = bucket
-                _save_all_tasks(all_tasks)
-            text, markup = self._build_tasks_menu(int(user_id))
-            await query.edit_message_text(text, reply_markup=markup)
-            return
-        if cmd == "next":
-            tid = arg
-            all_tasks = _load_all_tasks()
-            bucket = all_tasks.get(str(user_id), {})
-            task = bucket.get(tid) if isinstance(bucket, dict) else None
-            if not task:
-                await query.answer("Не найдено", show_alert=True)
-                return
-            cur = task.get("status") or "pending"
-            task["status"] = _next_status(cur)
-            task["last_updated"] = datetime.now().isoformat()
-            # Reset overdue notify when completing/uncompleting.
-            if task["status"] in ("completed", "cancelled"):
-                task.setdefault("notify", {})["overdue_sent_at"] = None
-            bucket[tid] = task
+        tid = payload
+        all_tasks = _load_all_tasks()
+        bucket = all_tasks.get(str(user_id), {})
+        if isinstance(bucket, dict) and tid in bucket:
+            bucket.pop(tid, None)
             all_tasks[str(user_id)] = bucket
             _save_all_tasks(all_tasks)
-            text, markup = self._build_tasks_menu(int(user_id))
-            await query.edit_message_text(text, reply_markup=markup)
+        text, markup = self._build_tasks_menu(int(user_id))
+        await query.edit_message_text(text, reply_markup=markup)
+
+    async def _cb_next(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
+        query = update.callback_query
+        user_id = query.from_user.id if query and query.from_user else None
+        if not user_id or not query:
             return
+        tid = payload
+        all_tasks = _load_all_tasks()
+        bucket = all_tasks.get(str(user_id), {})
+        task = bucket.get(tid) if isinstance(bucket, dict) else None
+        if not task:
+            await query.answer("Не найдено", show_alert=True)
+            return
+        cur = task.get("status") or "pending"
+        task["status"] = _next_status(cur)
+        task["last_updated"] = datetime.now().isoformat()
+        # Reset overdue notify when completing/uncompleting.
+        if task["status"] in ("completed", "cancelled"):
+            task.setdefault("notify", {})["overdue_sent_at"] = None
+        bucket[tid] = task
+        all_tasks[str(user_id)] = bucket
+        _save_all_tasks(all_tasks)
+        text, markup = self._build_tasks_menu(int(user_id))
+        await query.edit_message_text(text, reply_markup=markup)
 
 
 async def run_task_deadline_checker(application: Any, is_allowed_cb) -> None:
