@@ -1,81 +1,73 @@
 # config_example.yaml
 
-Конфигурационный файл задаёт параметры Telegram-бота, взаимодействующего с ИИ-инструментами через командную строку. Включает настройки подключения к Telegram, конфигурацию инструментов (codex, claude, gemini, qwen), пути по умолчанию, переменные окружения, а также опциональные модули — MTProto-клиент для пересылки сообщений и MCP-сервер для внешнего взаимодействия.
+Конфигурационный файл задаёт параметры работы Telegram-бота для взаимодействия с различными языковыми моделями. Включает настройки аутентификации, команды запуска инструментов, переменные окружения, пути к файлам, поведение бота и поддержку нескольких LLM-провайдеров. Поддерживается интеграция с внешними MCP-серверами и использование пресетов для упрощения запуска типовых задач.
 
 Секции и ключи
 
-telegram — настройки интеграции с Telegram<br>
-telegram.token — токен Telegram-бота для авторизации в API<br>
-telegram.whitelist_chat_ids — список разрешённых chat_id, с которыми может взаимодействовать бот<br>
-tools — конфигурация внешних ИИ-инструментов<br>
-tools.codex — настройки инструмента codex<br>
-tools.codex.mode — режим работы (например, headless)<br>
-tools.codex.cmd — базовая команда запуска codex<br>
-tools.codex.interactive_cmd — команда для интерактивного режима<br>
-tools.codex.resume_cmd — команда с шаблонами для возобновления сессии<br>
-tools.codex.image_cmd — аргументы команды, добавляемые при наличии изображения<br>
-tools.codex.resume_regex — регулярное выражение для извлечения thread_id из вывода<br>
-tools.codex.help_cmd — команда, отправляемая инструменту для получения справки<br>
-tools.codex.auto_commands — команды, автоматически отправляемые при старте сессии<br>
-tools.codex.env — переменные окружения, передаваемые инструменту<br>
-tools.claude — настройки инструмента claude<br>
-tools.claude.mode — режим работы<br>
-tools.claude.cmd — команда запуска с шаблонами<br>
-tools.claude.interactive_cmd — команда для интерактивного режима<br>
-tools.claude.help_cmd — команда получения справки<br>
-tools.claude.env — переменные окружения для claude<br>
-tools.gemini — настройки инструмента gemini<br>
-tools.gemini.mode — режим работы<br>
-tools.gemini.cmd — команда запуска с параметрами<br>
-tools.gemini.interactive_cmd — команда для интерактивного режима<br>
-tools.gemini.help_cmd — команда получения справки<br>
-tools.gemini.env — переменные окружения для gemini<br>
-tools.qwen — настройки инструмента qwen<br>
-tools.qwen.mode — режим работы<br>
-tools.qwen.cmd — команда запуска с шаблонами<br>
-tools.qwen.interactive_cmd — команда для интерактивного режима<br>
-tools.qwen.help_cmd — команда получения справки<br>
-tools.qwen.env — переменные окружения для qwen<br>
-defaults — параметры по умолчанию для работы бота<br>
-defaults.workdir — рабочая директория для выполнения команд<br>
-defaults.idle_timeout_sec — таймаут бездействия (в секундах) перед завершением сессии<br>
-defaults.summary_max_chars — максимальное количество символов в итоговом отчёте<br>
-defaults.html_filename_prefix — префикс имени HTML-файла с выводом команд<br>
-defaults.state_path — путь к файлу состояния сессии<br>
-defaults.toolhelp_path — путь к файлу с описанием команд инструментов<br>
-defaults.openai_api_key — ключ API OpenAI (если используется)<br>
+telegram — настройки интеграции с Telegram, включая токен бота и список разрешённых chat_id<br>
+telegram.token — токен Telegram-бота для авторизации через Bot API<br>
+telegram.whitelist_chat_ids — список идентификаторов чатов, которым разрешено использовать бота<br>
+tools — конфигурация инструментов для взаимодействия с различными LLM<br>
+tools.codex — параметры инструмента Codex, включая команды, режим работы и переменные окружения<br>
+tools.claude — параметры инструмента Claude, включая команды и переменные окружения<br>
+tools.gemini — параметры инструмента Gemini, включая команды и переменные окружения<br>
+tools.qwen — параметры инструмента Qwen, включая команды и переменные окружения<br>
+tools.<имя>.mode — режим работы инструмента (например, headless)<br>
+tools.<имя>.cmd — команда для запуска инструмента с подстановкой параметров<br>
+tools.<имя>.interactive_cmd — команда для запуска интерактивного режима<br>
+tools.<имя>.resume_cmd — команда с подстановкой для возобновления сессии<br>
+tools.<имя>.image_cmd — шаблон команды для обработки изображений<br>
+tools.<имя>.resume_regex — регулярное выражение для извлечения thread_id из вывода<br>
+tools.<имя>.help_cmd — команда, отправляемая инструменту для получения справки<br>
+tools.<имя>.auto_commands — список команд, автоматически отправляемых при старте<br>
+tools.<имя>.env — переменные окружения, передаваемые инструменту<br>
+defaults — значения по умолчанию для различных параметров системы<br>
+defaults.workdir — рабочая директория по умолчанию для выполнения команд<br>
+defaults.idle_timeout_sec — таймаут бездействия в секундах перед остановкой сессии<br>
+defaults.summary_max_chars — максимальное количество символов в сводке выполнения<br>
+defaults.html_filename_prefix — префикс имени файла для сохранения HTML-вывода<br>
+defaults.state_path — путь к файлу сохранения состояния сессии<br>
+defaults.toolhelp_path — путь к файлу с описанием инструментов<br>
+defaults.openai_api_key — ключ API для OpenAI (если не задан, используется null)<br>
 defaults.openai_model — модель OpenAI по умолчанию<br>
 defaults.openai_base_url — базовый URL для API OpenAI<br>
-defaults.github_token — токен GitHub для доступа к репозиториям<br>
+defaults.big_model_to_use — модель, используемая для сложных задач<br>
+defaults.zai_api_key — ключ API для Zai<br>
+defaults.tavily_api_key — ключ API для Tavily<br>
+defaults.jina_api_key — ключ API для Jina<br>
+defaults.github_token — токен для доступа к GitHub<br>
 defaults.log_path — путь к файлу логов<br>
-defaults.mtproto_output_dir — директория для временных файлов MTProto<br>
-defaults.mtproto_cleanup_days — возраст (в днях), после которого файлы удаляются<br>
-defaults.image_temp_dir — директория для временных изображений<br>
+defaults.image_temp_dir — временная директория для хранения изображений<br>
 defaults.image_max_mb — максимальный размер изображения в мегабайтах<br>
-mtproto — настройки MTProto-клиента для Telegram<br>
-mtproto.enabled — включён ли MTProto-клиент<br>
-mtproto.api_id — идентификатор приложения Telegram<br>
-mtproto.api_hash — хеш приложения Telegram<br>
-mtproto.session_string — строка сессии (альтернатива файлу)<br>
-mtproto.session_path — путь к файлу сессии<br>
-mtproto.targets — список целевых чатов для пересылки<br>
-mtproto.targets.title — отображаемое имя цели<br>
-mtproto.targets.peer — идентификатор чата (например, "me")<br>
-mcp — настройки MCP-сервера (модуль взаимодействия)<br>
+defaults.memory_max_kb — максимальный объём памяти для хранения контекста в КБ<br>
+defaults.memory_compact_target_kb — целевой объём памяти после компрессии в КБ<br>
+defaults.clarification_enabled — включена ли функция уточнения запросов<br>
+defaults.clarification_keywords — список ключевых слов, при которых бот запрашивает уточнение<br>
+mcp — настройки встроенного MCP-сервера<br>
 mcp.enabled — включён ли MCP-сервер<br>
-mcp.host — хост для прослушивания<br>
-mcp.port — порт сервера<br>
-mcp.token — токен для аутентификации на сервере<br>
-presets — предустановленные команды<br>
+mcp.host — хост, на котором запускается MCP-сервер<br>
+mcp.port — порт MCP-сервера<br>
+mcp.token — токен для аутентификации на MCP-сервере<br>
+mcp_clients — список внешних MCP-клиентов, подключаемых через stdio<br>
+mcp_clients.name — имя MCP-клиента<br>
+mcp_clients.enabled — включён ли клиент<br>
+mcp_clients.transport — тип транспорта (например, stdio)<br>
+mcp_clients.cmd — команда для запуска клиента<br>
+mcp_clients.cwd — рабочая директория клиента<br>
+mcp_clients.env — переменные окружения для клиента<br>
+mcp_clients.timeout_ms — таймаут ожидания ответа от клиента в миллисекундах<br>
+mcp_servers — список внешних MCP-серверов, доступных по HTTP<br>
+mcp_servers.<имя>.url — URL MCP-сервера<br>
+presets — список пресетов команд, доступных для быстрого запуска<br>
 presets.name — имя пресета<br>
-presets.prompt — текст запроса, отправляемый инструменту
+presets.prompt — текст запроса, отправляемый при активации пресета
 
 Важные параметры
 
-telegram.token — обязательный параметр; без него бот не сможет подключиться к Telegram<br>
-telegram.whitelist_chat_ids — критически важен для безопасности, ограничивает доступ только доверенным пользователям<br>
-tools.codex.resume_regex — должен точно соответствовать формату вывода codex для корректного извлечения thread_id<br>
-defaults.workdir — определяет, где будут выполняться команды; должен указывать на актуальный рабочий каталог<br>
-defaults.openai_api_key — необходим для инструментов, использующих OpenAI, например codex<br>
-mtproto.enabled — включение может потребовать дополнительной настройки и повышает поверхность атаки<br>
-mcp.enabled — включение открывает сетевой порт; требует аутентификации через token для безопасности
+telegram.token — обязательный параметр для подключения бота к Telegram<br>
+tools.codex.resume_regex — критически важен для извлечения идентификатора сессии из вывода Codex<br>
+defaults.workdir — определяет рабочую директорию, где будут выполняться все команды<br>
+defaults.clarification_enabled — управляет поведением бота при неоднозначных запросах<br>
+mcp.enabled — включение этой опции позволяет подключать внешние MCP-инструменты<br>
+mcp_servers — позволяет интегрировать сторонние серверы без запуска локальных процессов<br>
+presets — ускоряют выполнение типовых задач через предопределённые команды

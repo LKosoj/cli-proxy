@@ -20,6 +20,8 @@ markdown_extensions:
       format: !!python/name:mermaid2.fence_mermaid ''
 nav:
 - Главная: index.md
+- Обзор:
+  - Обзор проекта: overview.md
 - Архитектура: architecture.md
 - Запуск: runtime.md
 - Зависимости: dependencies.md
@@ -28,11 +30,79 @@ nav:
 - Глоссарий: glossary.md
 - Конфигурация проекта:
   - Обзор: configs/index.md
+  - /agent:
+    - /approvals:
+      - blocked-patterns.json: configs/files/agent/approvals/blocked-patterns__json.md
   - config_example.yaml: configs/files/config_example__yaml.md
   - toolhelp.json: configs/files/toolhelp__json.md
 - Модули:
   - Обзор: modules/index.md
-  - bot.py: modules/bot__py.md
+  - /agent:
+    - /mcp:
+      - __init__.py: modules/agent/mcp/__init____py.md
+      - http_client.py: modules/agent/mcp/http_client__py.md
+      - jsonrpc.py: modules/agent/mcp/jsonrpc__py.md
+      - manager.py: modules/agent/mcp/manager__py.md
+      - stdio_client.py: modules/agent/mcp/stdio_client__py.md
+    - /plugins:
+      - __init__.py: modules/agent/plugins/__init____py.md
+      - ask_user.py: modules/agent/plugins/ask_user__py.md
+      - auto_tts.py: modules/agent/plugins/auto_tts__py.md
+      - base.py: modules/agent/plugins/base__py.md
+      - chief.py: modules/agent/plugins/chief__py.md
+      - codeinterpreter.py: modules/agent/plugins/codeinterpreter__py.md
+      - ddg_image_search.py: modules/agent/plugins/ddg_image_search__py.md
+      - delete_file.py: modules/agent/plugins/delete_file__py.md
+      - edit_file.py: modules/agent/plugins/edit_file__py.md
+      - fetch_page.py: modules/agent/plugins/fetch_page__py.md
+      - github_analysis.py: modules/agent/plugins/github_analysis__py.md
+      - gtts_text_to_speech.py: modules/agent/plugins/gtts_text_to_speech__py.md
+      - haiper_image_to_video.py: modules/agent/plugins/haiper_image_to_video__py.md
+      - list_directory.py: modules/agent/plugins/list_directory__py.md
+      - manage_message.py: modules/agent/plugins/manage_message__py.md
+      - manage_tasks.py: modules/agent/plugins/manage_tasks__py.md
+      - memory.py: modules/agent/plugins/memory__py.md
+      - movie_info.py: modules/agent/plugins/movie_info__py.md
+      - prompt_perfect.py: modules/agent/plugins/prompt_perfect__py.md
+      - read_file.py: modules/agent/plugins/read_file__py.md
+      - reminders.py: modules/agent/plugins/reminders__py.md
+      - run_command.py: modules/agent/plugins/run_command__py.md
+      - schedule_task.py: modules/agent/plugins/schedule_task__py.md
+      - search_files.py: modules/agent/plugins/search_files__py.md
+      - search_text.py: modules/agent/plugins/search_text__py.md
+      - search_web.py: modules/agent/plugins/search_web__py.md
+      - send_file.py: modules/agent/plugins/send_file__py.md
+      - show_me_diagrams.py: modules/agent/plugins/show_me_diagrams__py.md
+      - stable_diffusion.py: modules/agent/plugins/stable_diffusion__py.md
+      - task_management.py: modules/agent/plugins/task_management__py.md
+      - text_document_qa.py: modules/agent/plugins/text_document_qa__py.md
+      - use_cli.py: modules/agent/plugins/use_cli__py.md
+      - web_research.py: modules/agent/plugins/web_research__py.md
+      - website_content.py: modules/agent/plugins/website_content__py.md
+      - wolfram_alpha.py: modules/agent/plugins/wolfram_alpha__py.md
+      - write_file.py: modules/agent/plugins/write_file__py.md
+      - youtube_transcript.py: modules/agent/plugins/youtube_transcript__py.md
+    - /tooling:
+      - __init__.py: modules/agent/tooling/__init____py.md
+      - constants.py: modules/agent/tooling/constants__py.md
+      - helpers.py: modules/agent/tooling/helpers__py.md
+      - loader.py: modules/agent/tooling/loader__py.md
+      - mcp_plugin.py: modules/agent/tooling/mcp_plugin__py.md
+      - registry.py: modules/agent/tooling/registry__py.md
+      - spec.py: modules/agent/tooling/spec__py.md
+    - __init__.py: modules/agent/__init____py.md
+    - agent_core.py: modules/agent/agent_core__py.md
+    - contracts.py: modules/agent/contracts__py.md
+    - dispatcher.py: modules/agent/dispatcher__py.md
+    - executor.py: modules/agent/executor__py.md
+    - heuristics.py: modules/agent/heuristics__py.md
+    - memory_policy.py: modules/agent/memory_policy__py.md
+    - memory_store.py: modules/agent/memory_store__py.md
+    - openai_client.py: modules/agent/openai_client__py.md
+    - orchestrator.py: modules/agent/orchestrator__py.md
+    - planner.py: modules/agent/planner__py.md
+    - profiles.py: modules/agent/profiles__py.md
+    - session_store.py: modules/agent/session_store__py.md
   - command_registry.py: modules/command_registry__py.md
   - config.py: modules/config__py.md
   - dirs_ui.py: modules/dirs_ui__py.md

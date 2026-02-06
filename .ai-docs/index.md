@@ -2,289 +2,177 @@
 
 ## Обзор архитектуры
 
-`cli-proxy` — это автономный Telegram-бот для управления CLI-сессиями с ИИ-инструментами (Codex, Claude, Gemini, Qwen и др.). Работает в режиме polling, не требует внешних серверов или туннелей. Обеспечивает глубокую интеграцию с локальной средой: файловой системой, Git, MTProto, OpenAI.
+Проект представляет собой Telegram-бота для управления CLI-агентами (Codex, Gemini, Qwen, Claude) с поддержкой многопользовательских сессий, очередей команд и HTML-рендеринга. Основные компоненты:
 
-Ключевые особенности:
-- Управление сессиями через inline-меню
-- Поддержка headless и интерактивных режимов
-- Автовосстановление сессий после перезапуска
-- HTML-рендеринг вывода с поддержкой ANSI, Markdown, Mermaid
-- Работа с файлами и изображениями
-- Git-операции через Telegram
-- MCP-совместимость (опционально)
+- **`BotApp`** — центральный класс, координирующий сессии, команды и интеграции
+- **`SessionManager`** — управление жизненным циклом сессий
+- **`Session`** — активная сессия с атрибутами: `tool`, `workdir`, `agent_enabled`, `queue`, `busy`
+- **`SessionUI`** — интерфейс для управления сессиями через Telegram
+- **`GitOps`** — выполнение Git-операций
+- **`MCPBridge`** — TCP-сервер для внешних клиентов
+- **`Metrics`** — сбор статистики использования
 
----
+## Управление сессиями
 
-## Основные компоненты
+### Создание и выбор сессий
 
-### `BotApp`
-Центральный класс бота. Управляет:
-- Обработкой команд и сообщений
-- Сессиями через `SessionManager`
-- Интерактивными меню (`SessionUI`, `DirsUI`, `GitOps`)
-- Интеграциями: MTProto, MCP, OpenAI
+Сессии создаются через команду `/new` или `/newpath`. Каждая сессия изолирована в отдельном рабочем каталоге. Для выбора активной сессии используется `/sessions`, который отображает интерактивное меню.
 
-**Инициализация**:
 ```python
-app = BotApp(config)
-app.build_app()  # настройка обработчиков
-app.main()       # запуск polling
+# Пример создания сессии
+session = session_manager.create(tool="codex", workdir="/path/to/project")
+session_manager.set_active(session.id)
 ```
 
----
+### Интерфейс управления
 
-### `SessionManager`
-Управляет жизненным циклом сессий. Гарантирует потокобезопасность через `run_lock`.
+Класс `SessionUI` предоставляет интерактивное меню через `InlineKeyboardMarkup` с поддержкой:
 
-**Функции**:
-- Создание/удаление сессий
-- Переключение активной сессии
-- Восстановление сессий из `state.json`
-- Контроль очереди команд
+- Просмотра списка сессий (`build_sessions_menu`)
+- Выбора активной сессии
+- Переименования сессии
+- Обновления resume-токена
+- Проверки состояния
+- Закрытия сессии
 
-**Восстановление**:
-```python
-sessions = restore_sessions(config, state_path)
-```
-Загружает сессии из `state.json`, восстанавливает `resume_token`, очередь, активную сессию.
+Обработка действий осуществляется через `handle_callback()` и `handle_pending_message()`.
 
----
+### Жизненный цикл
 
-### `Session`
-Инкапсулирует состояние CLI-сессии. Работает через `pexpect` и `asyncio`.
+1. Создание сессии → `create()`
+2. Активация → `set_active()`
+3. Выполнение команд → `run_prompt()`
+4. Закрытие → `close()` с вызовом `_on_before_close` и `_on_close`
 
-**Режимы**:
-- `headless`: однократный запуск команды
-- `interactive`: постоянная сессия с поддержкой `resume`
+Состояние сессий сохраняется в `state.json` через `manager._persist_sessions()`.
 
-**Ключевые параметры**:
-- `tool`: имя инструмента (codex, claude и т.д.)
-- `workdir`: рабочая директория
-- `resume_token`: токен для возобновления
-- `image_cmd`: обработка изображений
+## Конфигурация
 
-**Обнаружение состояния**:
-- `prompt_regex` — определяет готовность сессии
-- `resume_regex` — извлекает токен из вывода
-- "Тик-токены" — активность в выводе
+### Файл config.yaml
 
----
-
-### `SessionUI`
-Предоставляет интерфейс управления сессиями через Telegram.
-
-**Функции**:
-- `build_sessions_menu()` — список сессий с индикаторами:
-  - Занятость
-  - Git-состояние
-  - Время работы
-  - Длина очереди
-- Обработка колбэков: выбор, активация, переименование, изменение `resume_token`
-- Управление очередью: просмотр, очистка
-
-**Ожидание ввода**:
-- `pending_session_rename` — ожидание нового имени
-- `pending_session_resume` — ожидание нового токена
-- Поддержка отмены: `-`, `отмена`
-
----
-
-### `GitOps`
-Интеграция Git-операций в Telegram.
-
-**Поддерживаемые операции**:
-- `status`, `log`, `diff`, `summary`
-- `fetch`, `pull` (с `--ff-only`), `push`
-- `commit` с подтверждением
-- `merge`, `rebase`, `stash`
-- Работа с конфликтами: просмотр, `abort`, `continue`
-
-**Безопасность**:
-- Аутентификация через `GIT_ASKPASS` (токен не в истории)
-- Подтверждение всех операций
-- Автоопределение upstream-ветки
-
-**Интеграции**:
-- Генерация сообщений коммита через OpenAI
-- HTML-справка из `git.md`
-
----
-
-### `MTProtoUI`
-Интерфейс для отправки сообщений в Telegram-чаты через MTProto (Telethon).
-
-**Требования**:
-```yaml
-mtproto:
-  enabled: true
-  api_id: 12345
-  api_hash: "abcde"
-  session_string: "12345:abcdef..."
-  targets:
-    - title: "Сохранённые"
-      peer: "me"
-```
-
-**Функции**:
-- `show_menu()` — выбор цели
-- `request_task()` — ввод сообщения
-- `send_text()`, `send_file()` — отправка
-- Поддержка отмены
-
----
-
-### `MCPBridge`
-TCP-сервер для внешних клиентов (MCP-совместимость).
-
-**Запрос**:
-```json
-{"token": "secret", "prompt": "ls -la", "session_id": "codex::/work"}
-```
-
-**Ответ**:
-```json
-{"ok": true, "output": "file1.txt\nfile2.txt"}
-```
-
-**Настройки**:
-```yaml
-mcp:
-  enabled: true
-  host: "127.0.0.1"
-  port: 8080
-  token: "secret"
-```
-
----
-
-## Конфигурация (`config.yaml`)
-
-### Telegram
 ```yaml
 telegram:
-  token: "BOT_TOKEN"
+  token: "YOUR_BOT_TOKEN"
   whitelist_chat_ids: [123456789]
-```
 
-### Инструменты
-```yaml
+defaults:
+  workdir: "/path/to/workdir"
+  log_path: "/path/to/logs"
+  state_path: "/path/to/state.json"
+
 tools:
   codex:
-    mode: headless
-    cmd: "codex '{prompt}'"
-    resume_cmd: "codex --thread {resume}"
-    resume_regex: "thread_id=([a-f0-9]+)"
+    cmd: "codex --headless {prompt}"
+    resume_cmd: "codex --resume {resume}"
+    image_cmd: "codex --image {image}"
     env:
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+presets:
+  tests: "Запустить тесты"
+  lint: "Проверить код линтером"
 ```
 
-### Пути и лимиты
-```yaml
-defaults:
-  workdir: "/home/user/work"
-  state_path: "state.json"
-  log_path: "bot.log"
-  image_temp_dir: "/tmp/images"
-  image_max_mb: 10
-  idle_timeout_sec: 30
+### Переменные окружения
+
+Приоритет: `env` в `tools.*` > `config.yaml` > системные переменные.
+
+Поддерживаемые переменные:
+- `TAVILY_API_KEY` — для поиска
+- `JINA_API_KEY` — для веб-поиска
+- `GITHUB_TOKEN` — для Git-операций
+- `OPENAI_API_KEY` — для LLM
+
+## Основные команды
+
+### Основные (в меню)
+- `/new`, `/sessions`, `/interrupt`, `/git`, `/files`, `/tools`, `/toolhelp`
+
+### Скрытые
+- `/dirs`, `/newpath`, `/use`, `/cwd`, `/setprompt`, `/send`, `/resume`, `/close`, `/status`, `/rename`, `/state`, `/clearqueue`, `/queue`, `/preset`, `/metrics`
+
+### Прямой ввод
+- Через `/send` или префикс `>`
+
+## Git-интеграция
+
+Класс `GitOps` предоставляет интерфейс для Git-операций:
+
+- Просмотр состояния: `Status`, `Log`, `Diff`
+- Синхронизация: `Fetch`, `Pull`
+- Коммиты: `Commit`, `Push`
+- Слияние: `Merge`, `Rebase`
+- Работа с конфликтами
+
+Требует `github_token` в конфиге для приватных репозиториев. Операции выполняются в очереди при занятой сессии.
+
+## MCP-сервер
+
+Класс `MCPBridge` реализует TCP-сервер для взаимодействия с ботом:
+
+```json
+// Запрос
+{"token": "токен", "prompt": "текст запроса", "session_id": "идентификатор"}
+
+// Ответ
+{"ok": true, "output": "результат"}
+{"ok": false, "error": "описание ошибки"}
 ```
 
-### MTProto
-```yaml
-mtproto:
-  enabled: false
-  api_id: 12345
-  api_hash: "abcde"
-  session_string: "..."
-  targets:
-    - title: "Me"
-      peer: "me"
-```
-
-### MCP
+Настройки в `config.yaml`:
 ```yaml
 mcp:
-  enabled: false
+  enabled: true
   host: "127.0.0.1"
-  port: 8080
-  token: "secret"
+  port: 8765
+  token: "optional_token"
 ```
 
-### Presets
-```yaml
-presets:
-  tests: "Run all tests"
-  lint: "Check code style"
-```
+## Файловый менеджер
 
----
+Поддержка работы с файлами:
+- Загрузка текстовых файлов до 500 КБ
+- Загрузка изображений (с обработкой при наличии `image_cmd`)
+- Просмотр и отправка файлов через `/files`
+- Навигация по каталогам с пагинацией
 
-## Работа с файлами
+## Плагины и инструменты
 
-### Поддерживаемые типы
-- **Текстовые** (до 300 КБ): вставляются в промпт
-- **Изображения**: обрабатываются через `image_cmd`, запрос из подписи
+### Реестр инструментов
 
-### Безопасность
-- Проверка `is_within_root()` — защита от выхода за пределы `workdir`
-- Ограничение размера: `image_max_mb`
-- Проверка MIME-типов
+`ToolRegistry` управляет плагинами:
+- Автоматическая загрузка из директории `plugins`
+- Регистрация через `register()`
+- Выполнение через `execute()`
+- Фильтрация по `allowed_tools`
 
----
+### Поддерживаемые инструменты
 
-## Обработка вывода
+- `read_file`, `write_file`, `delete_file` — работа с файлами
+- `list_directory`, `search_files` — навигация
+- `run_command` — выполнение shell-команд
+- `ask_user` — взаимодействие с пользователем
+- `search_web`, `fetch_page` — веб-поиск
+- `youtube_transcript` — субтитры с YouTube
+- `code_interpreter` — выполнение Python-кода
 
-### ANSI → HTML
-- Цвета, жирный текст через `<span>`
-- Использует `ansi2html`
+## Безопасность
 
-### Markdown → HTML
-- Поддержка списков, таблиц, tasklists
-- Через `markdown-it-py`
+### Фильтрация команд
 
-### Mermaid
-- Блоки ```mermaid``` → SVG через `https://mermaid.ink/svg/`
-- Таймаут 10 сек
+Блокировка опасных паттернов:
+- Утечка переменных окружения
+- Доступ к чувствительным файлам
+- Сетевое сканирование
+- Выполнение вредоносных операций
 
-### Буферизация
-- Длинные сообщения буферизуются
-- Отправка с задержкой через `_flush_after_delay`
-- Полный вывод — как временный HTML-файл
-
----
-
-## Состояние и данные
-
-### `state.json`
-Хранит:
-- Сессии: `{tool}::{workdir}` → `SessionState`
-- Активную сессию: `_active`
-- Дополнительные данные: `_sessions`
-
-**Поля `SessionState`**:
-- `tool`, `workdir`, `resume_token`, `name`
-- `summary`, `updated_at`
-
-### `toolhelp.json`
-Кэш справки по инструментам:
-```json
-{
-  "codex": {
-    "tool": "codex",
-    "content": "/help, /status, /reset...",
-    "updated_at": 1712345678
-  }
-}
-```
-
----
+### Ограничения
+- Максимальный размер файла: 50 МБ
+- Ограничение вывода: 3000 символов
+- Таймауты выполнения: 30-120 секунд
+- Проверка путей на выход за пределы `workdir`
 
 ## Запуск и тестирование
-
-### Установка зависимостей
-```bash
-pip install -r requirements.txt
-```
 
 ### Запуск
 ```bash
@@ -296,32 +184,11 @@ python bot.py
 pytest -q
 ```
 
----
+## Логирование
 
-## Безопасность
+Централизованное логирование с `TimedRotatingFileHandler`:
+- Общий лог: `log_path`
+- Ошибки: `error_log_path`
+- Лог агента: `agent_log_path`
 
-- Доступ только по `whitelist_chat_ids`
-- Проверка путей: `is_within_root()`
-- Ограничение размера вложений
-- Токены в переменных окружения: `${GITHUB_TOKEN}`
-- MTProto: сессия хранится зашифрованно
-
----
-
-## Дорожная карта
-
-### Фаза 1: Надёжность
-- Блокировка сессий
-- Приоритизация команд
-- Единый журнал событий
-- Разделение статусов CLI/Git
-
-### Фаза 2: Интеграции
-- MCP-бридж
-- Git-шаблоны (PR, коммиты)
-- Preset-кнопки: тесты, линтинг
-
-### Фаза 3: Масштабирование
-- Профили (dev/prod)
-- Метрики и мониторинг
-- Аудит и контроль команд
+Ротация в 03:00 UTC, `backupCount=1`.

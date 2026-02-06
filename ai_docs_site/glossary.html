@@ -1,358 +1,657 @@
 <!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="img/favicon.ico">
+        <title>Глоссарий - cli-proxy</title>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <link href="css/fontawesome.min.css" rel="stylesheet">
+        <link href="css/brands.min.css" rel="stylesheet">
+        <link href="css/solid.min.css" rel="stylesheet">
+        <link href="css/v4-font-face.min.css" rel="stylesheet">
+        <link href="css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
 
-<html data-bs-theme="light" lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta content="IE=edge" http-equiv="X-UA-Compatible"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<link href="img/favicon.ico" rel="shortcut icon"/>
-<title>Глоссарий - cli-proxy</title>
-<link href="css/bootstrap.min.css" rel="stylesheet"/>
-<link href="css/fontawesome.min.css" rel="stylesheet"/>
-<link href="css/brands.min.css" rel="stylesheet"/>
-<link href="css/solid.min.css" rel="stylesheet"/>
-<link href="css/v4-font-face.min.css" rel="stylesheet"/>
-<link href="css/base.css" rel="stylesheet"/>
-<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" id="hljs-light" rel="stylesheet"/>
-<link disabled="" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" id="hljs-dark" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
-<script>hljs.highlightAll();</script>
-</head>
-<body>
-<div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
-<div class="container">
-<a class="navbar-brand" href="index.html">cli-proxy</a>
-<!-- Expander button -->
-<button aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation" class="navbar-toggler" data-bs-target="#navbar-collapse" data-bs-toggle="collapse" type="button">
-<span class="navbar-toggler-icon"></span>
-</button>
-<!-- Expanded navigation -->
-<div class="navbar-collapse collapse" id="navbar-collapse">
-<!-- Main navigation -->
-<ul class="nav navbar-nav">
-<li class="nav-item">
-<a class="nav-link" href="index.html">Главная</a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="architecture.html">Архитектура</a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="runtime.html">Запуск</a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="dependencies.html">Зависимости</a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="testing.html">Тестирование</a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="conventions.html">Соглашения</a>
-</li>
-<li class="nav-item">
-<a aria-current="page" class="nav-link active" href="glossary.html">Глоссарий</a>
-</li>
-<li class="nav-item dropdown">
-<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Конфигурация проекта</a>
-<ul class="dropdown-menu">
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="index.html">cli-proxy</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Обзор</a>
+                                <ul class="dropdown-menu">
+                                    
 <li>
-<a class="dropdown-item" href="configs/index.html">Обзор</a>
+    <a href="overview.html" class="dropdown-item">Обзор проекта</a>
 </li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="testing.html" class="nav-link">Тестирование</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="glossary.html" class="nav-link active" aria-current="page">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
+                                <ul class="dropdown-menu">
+                                    
 <li>
-<a class="dropdown-item" href="configs/files/config_example__yaml.html">config_example.yaml</a>
+    <a href="configs/index.html" class="dropdown-item">Обзор</a>
 </li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/agent</a>
+    <ul class="dropdown-menu">
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/approvals</a>
+    <ul class="dropdown-menu">
+            
 <li>
-<a class="dropdown-item" href="configs/files/toolhelp__json.html">toolhelp.json</a>
+    <a href="configs/files/agent/approvals/blocked-patterns__json.html" class="dropdown-item">blocked-patterns.json</a>
 </li>
-</ul>
-</li>
-<li class="nav-item dropdown">
-<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Модули</a>
-<ul class="dropdown-menu">
+    </ul>
+  </li>
+    </ul>
+  </li>
+                                    
 <li>
-<a class="dropdown-item" href="modules/index.html">Обзор</a>
+    <a href="configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
 </li>
+                                    
 <li>
-<a class="dropdown-item" href="modules/bot__py.html">bot.py</a>
+    <a href="configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
 </li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
 <li>
-<a class="dropdown-item" href="modules/command_registry__py.html">command_registry.py</a>
+    <a href="modules/index.html" class="dropdown-item">Обзор</a>
 </li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/agent</a>
+    <ul class="dropdown-menu">
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/mcp</a>
+    <ul class="dropdown-menu">
+            
 <li>
-<a class="dropdown-item" href="modules/config__py.html">config.py</a>
+    <a href="modules/agent/mcp/__init____py.html" class="dropdown-item">__init__.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/dirs_ui__py.html">dirs_ui.py</a>
+    <a href="modules/agent/mcp/http_client__py.html" class="dropdown-item">http_client.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/git_ops__py.html">git_ops.py</a>
+    <a href="modules/agent/mcp/jsonrpc__py.html" class="dropdown-item">jsonrpc.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/mcp_bridge__py.html">mcp_bridge.py</a>
+    <a href="modules/agent/mcp/manager__py.html" class="dropdown-item">manager.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/metrics__py.html">metrics.py</a>
+    <a href="modules/agent/mcp/stdio_client__py.html" class="dropdown-item">stdio_client.py</a>
 </li>
+    </ul>
+  </li>
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/plugins</a>
+    <ul class="dropdown-menu">
+            
 <li>
-<a class="dropdown-item" href="modules/mtproto_ui__py.html">mtproto_ui.py</a>
+    <a href="modules/agent/plugins/__init____py.html" class="dropdown-item">__init__.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/session__py.html">session.py</a>
+    <a href="modules/agent/plugins/ask_user__py.html" class="dropdown-item">ask_user.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/session_ui__py.html">session_ui.py</a>
+    <a href="modules/agent/plugins/auto_tts__py.html" class="dropdown-item">auto_tts.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/state__py.html">state.py</a>
+    <a href="modules/agent/plugins/base__py.html" class="dropdown-item">base.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/summary__py.html">summary.py</a>
+    <a href="modules/agent/plugins/chief__py.html" class="dropdown-item">chief.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/toolhelp__py.html">toolhelp.py</a>
+    <a href="modules/agent/plugins/codeinterpreter__py.html" class="dropdown-item">codeinterpreter.py</a>
 </li>
+            
 <li>
-<a class="dropdown-item" href="modules/utils__py.html">utils.py</a>
+    <a href="modules/agent/plugins/ddg_image_search__py.html" class="dropdown-item">ddg_image_search.py</a>
 </li>
-</ul>
+            
+<li>
+    <a href="modules/agent/plugins/delete_file__py.html" class="dropdown-item">delete_file.py</a>
 </li>
-<li class="nav-item">
-<a class="nav-link" href="changes.html">Изменения</a>
+            
+<li>
+    <a href="modules/agent/plugins/edit_file__py.html" class="dropdown-item">edit_file.py</a>
 </li>
-</ul>
-<ul class="nav navbar-nav ms-md-auto">
-<li class="nav-item">
-<a class="nav-link" data-bs-target="#mkdocs_search_modal" data-bs-toggle="modal" href="#">
-<i class="fa fa-search"></i> Search
+            
+<li>
+    <a href="modules/agent/plugins/fetch_page__py.html" class="dropdown-item">fetch_page.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/github_analysis__py.html" class="dropdown-item">github_analysis.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/gtts_text_to_speech__py.html" class="dropdown-item">gtts_text_to_speech.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/haiper_image_to_video__py.html" class="dropdown-item">haiper_image_to_video.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/list_directory__py.html" class="dropdown-item">list_directory.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/manage_message__py.html" class="dropdown-item">manage_message.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/manage_tasks__py.html" class="dropdown-item">manage_tasks.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/memory__py.html" class="dropdown-item">memory.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/movie_info__py.html" class="dropdown-item">movie_info.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/prompt_perfect__py.html" class="dropdown-item">prompt_perfect.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/read_file__py.html" class="dropdown-item">read_file.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/reminders__py.html" class="dropdown-item">reminders.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/run_command__py.html" class="dropdown-item">run_command.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/schedule_task__py.html" class="dropdown-item">schedule_task.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/search_files__py.html" class="dropdown-item">search_files.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/search_text__py.html" class="dropdown-item">search_text.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/search_web__py.html" class="dropdown-item">search_web.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/send_file__py.html" class="dropdown-item">send_file.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/show_me_diagrams__py.html" class="dropdown-item">show_me_diagrams.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/stable_diffusion__py.html" class="dropdown-item">stable_diffusion.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/task_management__py.html" class="dropdown-item">task_management.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/text_document_qa__py.html" class="dropdown-item">text_document_qa.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/use_cli__py.html" class="dropdown-item">use_cli.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/web_research__py.html" class="dropdown-item">web_research.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/website_content__py.html" class="dropdown-item">website_content.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/wolfram_alpha__py.html" class="dropdown-item">wolfram_alpha.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/write_file__py.html" class="dropdown-item">write_file.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/plugins/youtube_transcript__py.html" class="dropdown-item">youtube_transcript.py</a>
+</li>
+    </ul>
+  </li>
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/tooling</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="modules/agent/tooling/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/tooling/constants__py.html" class="dropdown-item">constants.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/tooling/helpers__py.html" class="dropdown-item">helpers.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/tooling/loader__py.html" class="dropdown-item">loader.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/tooling/mcp_plugin__py.html" class="dropdown-item">mcp_plugin.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/tooling/registry__py.html" class="dropdown-item">registry.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/tooling/spec__py.html" class="dropdown-item">spec.py</a>
+</li>
+    </ul>
+  </li>
+            
+<li>
+    <a href="modules/agent/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/agent_core__py.html" class="dropdown-item">agent_core.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/contracts__py.html" class="dropdown-item">contracts.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/dispatcher__py.html" class="dropdown-item">dispatcher.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/executor__py.html" class="dropdown-item">executor.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/heuristics__py.html" class="dropdown-item">heuristics.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/memory_store__py.html" class="dropdown-item">memory_store.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/openai_client__py.html" class="dropdown-item">openai_client.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/orchestrator__py.html" class="dropdown-item">orchestrator.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/planner__py.html" class="dropdown-item">planner.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/profiles__py.html" class="dropdown-item">profiles.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/session_store__py.html" class="dropdown-item">session_store.py</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="modules/command_registry__py.html" class="dropdown-item">command_registry.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/config__py.html" class="dropdown-item">config.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/git_ops__py.html" class="dropdown-item">git_ops.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/metrics__py.html" class="dropdown-item">metrics.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/session__py.html" class="dropdown-item">session.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/session_ui__py.html" class="dropdown-item">session_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/state__py.html" class="dropdown-item">state.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/utils__py.html" class="dropdown-item">utils.py</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
                             </a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="conventions.html" rel="prev">
-<i class="fa fa-arrow-left"></i> Previous
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="conventions.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
                                 </a>
-</li>
-<li class="nav-item">
-<a class="nav-link" href="configs/index.html" rel="next">
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="configs/index.html" class="nav-link">
                                     Next <i class="fa fa-arrow-right"></i>
-</a>
-</li>
-</ul>
-</div>
-</div>
-</div>
-<div class="container">
-<div class="row">
-<div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
-<div class="navbar-header">
-<button class="navbar-toggler collapsed" data-bs-target="#toc-collapse" data-bs-toggle="collapse" title="Table of Contents" type="button">
-<span class="fa fa-angle-down"></span>
-</button>
-</div>
-<div class="navbar-collapse collapse card bg-body-tertiary" id="toc-collapse">
-<ul class="nav flex-column">
-<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_1">Глоссарий</a>
-<ul class="nav flex-column">
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_2">Сессия</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#sessionmanager">SessionManager</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#sessionui">SessionUI</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#gitops">GitOps</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#mtproto">MTProto</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#mcpbridge">MCPBridge</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#state">State (состояние)</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#toolhelp">ToolHelp</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#preset">Preset</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#inline-">Inline-меню</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#resume-">Resume-токен</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#headless-">Headless-режим</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#ansi-html">ANSI → HTML</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#mermaid-">Mermaid-рендеринг</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_3">Буферизация сообщений</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#whitelist">Whitelist</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#git-">Git-конфликт</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#tick-">Tick-токен</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#mcp-model-context-protocol">MCP (Model Context Protocol)</a>
-<ul class="nav flex-column">
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</div>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#_1" class="nav-link">Глоссарий</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#agent" class="nav-link">Агент (Agent)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_2" class="nav-link">Активная сессия</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#cli-" class="nav-link">CLI-агент</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#git-" class="nav-link">Git-операции</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#mcp-model-control-protocol" class="nav-link">MCP (Model Control Protocol)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#mcp-" class="nav-link">MCP-инструмент</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Очередь команд</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#sandbox" class="nav-link">Песочница (Sandbox)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#plugin" class="nav-link">Плагин (Plugin)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#preset" class="nav-link">Пресет (Preset)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_4" class="nav-link">Сессия</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_5" class="nav-link">Состояние сессии</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#resume-token" class="nav-link">Токен возобновления (Resume Token)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#toolregistry" class="nav-link">ToolRegistry</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#ui-" class="nav-link">UI-действие</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#-" class="nav-link">Веб-поиск</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#memorymd" class="nav-link">Файл памяти (MEMORY.md)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
 </div></div>
-<div class="col-md-9" role="main">
+                    <div class="col-md-9" role="main">
+
 <h1 id="_1">Глоссарий</h1>
-<h2 id="_2">Сессия</h2>
-<p>Изолированный контекст выполнения CLI-инструмента (например, Codex, Claude). Содержит рабочую директорию, очередь команд, состояние процесса и токен возобновления. Сохраняется в <code>state.json</code> и восстанавливается после перезапуска бота.</p>
-<h2 id="sessionmanager">SessionManager</h2>
-<p>Центральный компонент управления сессиями. Обеспечивает создание, активацию, сохранение и восстановление сессий. Гарантирует потокобезопасность через <code>run_lock</code>. Восстанавливает сессии из <code>state.json</code> при старте.</p>
-<h2 id="sessionui">SessionUI</h2>
-<p>Класс, реализующий интерфейс управления сессиями через Telegram. Формирует inline-клавиатуры, обрабатывает колбэки и текстовые сообщения. Поддерживает: выбор сессии, переименование, изменение resume-токена, просмотр статуса.</p>
-<h2 id="gitops">GitOps</h2>
-<p>Модуль для выполнения Git-операций через Telegram. Поддерживает: <code>pull</code>, <code>push</code>, <code>commit</code>, <code>merge</code>, <code>rebase</code>, <code>stash</code>. Использует <code>github_token</code> через <code>GIT_ASKPASS</code> для безопасной аутентификации. Работает асинхронно, блокирует параллельные операции через <code>git_busy</code>.</p>
-<h2 id="mtproto">MTProto</h2>
-<p>Интеграция с Telegram API через библиотеку Telethon. Позволяет отправлять сообщения и файлы в указанные чаты (<code>targets</code>) без участия бота. Требует <code>api_id</code>, <code>api_hash</code>, <code>session_string</code>. Управляется через <code>MTProtoUI</code>.</p>
-<h2 id="mcpbridge">MCPBridge</h2>
-<p>TCP-сервер, принимающий JSON-запросы от внешних клиентов. Проверяет токен, передаёт промпт в <code>BotApp</code>, возвращает результат. Формат: <code>{"token": "...", "prompt": "...", "session_id": "..."}</code>. Включается через <code>mcp.enabled</code>.</p>
-<h2 id="state">State (состояние)</h2>
-<p>Файл <code>state.json</code>, хранящий:
-- Сохранённые сессии: <code>{tool}::{workdir}</code> → <code>SessionState</code>
-- Активную сессию: <code>_active</code> → <code>ActiveState</code>
-- Дополнительные данные: <code>_sessions</code></p>
-<p>Управление: <code>load_state()</code>, <code>save_state()</code>, <code>update_state()</code>, <code>get_state()</code>.</p>
-<h2 id="toolhelp">ToolHelp</h2>
-<p>Кэш справочной информации об инструментах. Хранится в <code>toolhelp.json</code>. Структура: <code>tool_name</code> → <code>ToolHelpEntry</code> (content, updated_at). Обновляется командой <code>/toolhelp</code>.</p>
-<h2 id="preset">Preset</h2>
-<p>Предустановленный промпт, доступный через <code>/preset</code>. Определяется в <code>config.yaml</code> в секции <code>presets</code>. Пример: <code>tests: "Запусти тесты и покажи результат"</code>.</p>
-<h2 id="inline-">Inline-меню</h2>
-<p>Интерактивные клавиатуры в Telegram. Используются для:
-- Навигации по сессиям (<code>/sessions</code>)
-- Выбора директорий (<code>/dirs</code>)
-- Управления Git-операциями
-- Подтверждения действий</p>
-<p>Реализованы через <code>InlineKeyboardMarkup</code> и <code>callback_data</code>.</p>
-<h2 id="resume-">Resume-токен</h2>
-<p>Идентификатор для возобновления сессии (например, <code>thread_id</code> в OpenAI). Сохраняется в <code>SessionState.resume_token</code>. Используется при перезапуске инструмента через <code>resume_cmd</code>.</p>
-<h2 id="headless-">Headless-режим</h2>
-<p>Режим выполнения без интерактивного ввода. Команда запускается с <code>{prompt}</code>, вывод обрабатывается полностью. Противопоставляется интерактивному режиму.</p>
-<h2 id="ansi-html">ANSI → HTML</h2>
-<p>Преобразование цветного терминального вывода в HTML с помощью <code>ansi2html</code>. Поддерживает цвета, жирный текст, списки задач. Используется для отправки форматированного лога в Telegram.</p>
-<h2 id="mermaid-">Mermaid-рендеринг</h2>
-<p>Конвертация блоков Mermaid в SVG через <code>https://mermaid.ink/svg/</code>. Встраивается в HTML-вывод. Таймаут: 10 сек.</p>
-<h2 id="_3">Буферизация сообщений</h2>
-<p>Отложенная отправка длинных сообщений через <code>message_buffer</code>. Сообщения группируются и отправляются пачками с задержкой, чтобы избежать лимитов Telegram.</p>
-<h2 id="whitelist">Whitelist</h2>
-<p>Список разрешённых <code>chat_id</code> в <code>config.yaml</code>. Проверяется через <code>is_allowed()</code>. Ограничивает доступ к боту.</p>
-<h2 id="git-">Git-конфликт</h2>
-<p>Состояние, при котором операция <code>merge</code> или <code>rebase</code> завершается с конфликтами. Отслеживается через <code>git_conflict_files</code>. Пользователю предлагается: <code>Abort</code>, <code>Continue</code>, <code>Просмотр diff</code>, <code>Помощь агента</code>.</p>
-<h2 id="tick-">Tick-токен</h2>
-<p>Специальная метка в выводе инструмента (например, <code>&gt;&gt;&gt; tick</code>), сигнализирующая об активности. Используется для определения завершения вывода при <code>idle_timeout_sec</code>.</p>
-<h2 id="mcp-model-context-protocol">MCP (Model Context Protocol)</h2>
-<p>Протокол обмена данными с внешними клиентами. Реализован через <code>MCPBridge</code> как TCP-сервер с JSON-интерфейсом. Позволяет интегрировать бота в сторонние системы.</p></div>
-</div>
-</div>
-<footer class="col-md-12">
-<hr/>
-<p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
-</footer>
-<script src="js/bootstrap.bundle.min.js"></script>
-<script>
+<h2 id="agent">Агент (Agent)</h2>
+<p>Автономный компонент, использующий LLM для выполнения задач по принципу ReAct (Reasoning + Action). Работает в изолированной песочнице, вызывает инструменты, управляет памятью и чат-историей. Активируется командой <code>/agent</code>.</p>
+<h2 id="_2">Активная сессия</h2>
+<p>Сессия, с которой в данный момент взаимодействует пользователь. Управление осуществляется через <code>/use</code>, <code>/sessions</code>. Данные хранятся в <code>state.json</code> под ключом <code>_active</code>.</p>
+<h2 id="cli-">CLI-агент</h2>
+<p>Внешний инструмент (Codex, Gemini, Claude, Qwen), запускаемый в headless- или интерактивном режиме. Управляется через сессии, поддерживает <code>resume</code>-токены и собственные команды.</p>
+<h2 id="git-">Git-операции</h2>
+<p>Интерактивные действия с репозиторием: <code>status</code>, <code>pull</code>, <code>commit</code>, <code>merge</code>, <code>rebase</code>, <code>push</code>. Выполняются через <code>/git</code> с поддержкой разрешения конфликтов.</p>
+<h2 id="mcp-model-control-protocol">MCP (Model Control Protocol)</h2>
+<p>Протокол для интеграции внешних инструментов. Поддерживает транспорты <code>stdio</code> и <code>http</code>. Сервер запускается при <code>mcp.enabled: true</code>, клиенты подключаются через <code>mcp_clients</code>.</p>
+<h2 id="mcp-">MCP-инструмент</h2>
+<p>Функция, доступная через MCP-сервер. Регистрируется в <code>ToolRegistry</code>, вызывается агентом. Пример: <code>context7</code>, <code>notebooklm</code>.</p>
+<h2 id="_3">Очередь команд</h2>
+<p>Механизм управления выполнением запросов. Предотвращает перегрузку сессии. Просмотр — <code>/queue</code>, очистка — <code>/clearqueue</code>.</p>
+<h2 id="sandbox">Песочница (Sandbox)</h2>
+<p>Изолированная рабочая среда агента. Располагается в <code>workdir/sandbox</code>. Ограничивает доступ к файловой системе и системным ресурсам.</p>
+<h2 id="plugin">Плагин (Plugin)</h2>
+<p>Расширение функциональности через <code>ToolPlugin</code>. Автоматически загружается из директории <code>plugins/</code>. Поддерживает диалоги, команды и UI.</p>
+<h2 id="preset">Пресет (Preset)</h2>
+<p>Шаблон задачи с предустановленным промптом. Настраивается в <code>config.yaml</code> в секции <code>presets</code>. Запускается через <code>/preset</code>.</p>
+<h2 id="_4">Сессия</h2>
+<p>Контекст выполнения CLI-агента. Характеризуется инструментом, рабочей директорией, <code>resume</code>-токеном. Управляется через <code>/new</code>, <code>/sessions</code>, <code>/close</code>.</p>
+<h2 id="_5">Состояние сессии</h2>
+<p>Данные о сессии, сохраняемые в <code>state.json</code>. Включает <code>tool</code>, <code>workdir</code>, <code>resume_token</code>, <code>description</code>, <code>updated_at</code>. Ключ формируется как <code>{tool}::{workdir}</code>.</p>
+<h2 id="resume-token">Токен возобновления (Resume Token)</h2>
+<p>Идентификатор сессии CLI-агента (например, <code>thread_id</code>, <code>conversation_id</code>), позволяющий восстановить контекст после перезапуска.</p>
+<h2 id="toolregistry">ToolRegistry</h2>
+<p>Центральный реестр инструментов. Управляет локальными плагинами и MCP-инструментами. Обеспечивает выполнение, валидацию и фильтрацию по <code>allowed_tools</code>.</p>
+<h2 id="ui-">UI-действие</h2>
+<p>Callback-запрос от inline-кнопки. Формат: <code>action:key:values</code>. Обрабатывается <code>SessionUI</code>, <code>GitOps</code>, <code>DialogMixin</code>.</p>
+<h2 id="-">Веб-поиск</h2>
+<p>Интеграция с внешними сервисами: Tavily, Jina, Z.AI. Используется для получения актуальной информации. Требует API-ключей в окружении.</p>
+<h2 id="memorymd">Файл памяти (MEMORY.md)</h2>
+<p>Текстовый файл в формате Markdown для хранения долговременной памяти агента. Располагается в <code>_sandbox/</code>. Управляется через <code>MemoryTool</code>.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script>
             var base_url = ".",
                 shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
         </script>
-<script src="js/base.js"></script>
-<script src="search/main.js"></script>
-<div aria-hidden="true" aria-labelledby="searchModalLabel" class="modal" id="mkdocs_search_modal" role="dialog" tabindex="-1">
-<div class="modal-dialog modal-lg">
-<div class="modal-content">
-<div class="modal-header">
-<h4 class="modal-title" id="searchModalLabel">Search</h4>
-<button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
+        <script src="js/base.js"></script>
+        <script src="search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
 </div>
-<div class="modal-body">
-<p>From here you can search these documents. Enter your search terms below.</p>
-<form>
-<div class="form-group">
-<input class="form-control" id="mkdocs-search-query" placeholder="Search..." title="Type search term here" type="search"/>
-</div>
-</form>
-<div data-no-results-text="No results found" id="mkdocs-search-results"></div>
-</div>
-<div class="modal-footer">
-</div>
-</div>
-</div>
-</div><div aria-hidden="true" aria-labelledby="keyboardModalLabel" class="modal" id="mkdocs_keyboard_modal" role="dialog" tabindex="-1">
-<div class="modal-dialog">
-<div class="modal-content">
-<div class="modal-header">
-<h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
-<button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
-</div>
-<div class="modal-body">
-<table class="table">
-<thead>
-<tr>
-<th style="width: 20%;">Keys</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="help shortcut"><kbd>?</kbd></td>
-<td>Open this help</td>
-</tr>
-<tr>
-<td class="next shortcut"><kbd>n</kbd></td>
-<td>Next page</td>
-</tr>
-<tr>
-<td class="prev shortcut"><kbd>p</kbd></td>
-<td>Previous page</td>
-</tr>
-<tr>
-<td class="search shortcut"><kbd>s</kbd></td>
-<td>Search</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="modal-footer">
-</div>
-</div>
-</div>
-</div>
-</body>
+
+    </body>
 </html>

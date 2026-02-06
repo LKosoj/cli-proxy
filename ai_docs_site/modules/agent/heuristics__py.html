@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>heuristics.py - cli-proxy</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../index.html">cli-proxy</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Обзор</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../../overview.html" class="dropdown-item">Обзор проекта</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../testing.html" class="nav-link">Тестирование</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../../configs/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/agent</a>
+    <ul class="dropdown-menu">
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/approvals</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="../../configs/files/agent/approvals/blocked-patterns__json.html" class="dropdown-item">blocked-patterns.json</a>
+</li>
+    </ul>
+  </li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../../configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
+</li>
+                                    
+<li>
+    <a href="../../configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/agent</a>
+    <ul class="dropdown-menu">
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/mcp</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="mcp/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="mcp/http_client__py.html" class="dropdown-item">http_client.py</a>
+</li>
+            
+<li>
+    <a href="mcp/jsonrpc__py.html" class="dropdown-item">jsonrpc.py</a>
+</li>
+            
+<li>
+    <a href="mcp/manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="mcp/stdio_client__py.html" class="dropdown-item">stdio_client.py</a>
+</li>
+    </ul>
+  </li>
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/plugins</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="plugins/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="plugins/ask_user__py.html" class="dropdown-item">ask_user.py</a>
+</li>
+            
+<li>
+    <a href="plugins/auto_tts__py.html" class="dropdown-item">auto_tts.py</a>
+</li>
+            
+<li>
+    <a href="plugins/base__py.html" class="dropdown-item">base.py</a>
+</li>
+            
+<li>
+    <a href="plugins/chief__py.html" class="dropdown-item">chief.py</a>
+</li>
+            
+<li>
+    <a href="plugins/codeinterpreter__py.html" class="dropdown-item">codeinterpreter.py</a>
+</li>
+            
+<li>
+    <a href="plugins/ddg_image_search__py.html" class="dropdown-item">ddg_image_search.py</a>
+</li>
+            
+<li>
+    <a href="plugins/delete_file__py.html" class="dropdown-item">delete_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/edit_file__py.html" class="dropdown-item">edit_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/fetch_page__py.html" class="dropdown-item">fetch_page.py</a>
+</li>
+            
+<li>
+    <a href="plugins/github_analysis__py.html" class="dropdown-item">github_analysis.py</a>
+</li>
+            
+<li>
+    <a href="plugins/gtts_text_to_speech__py.html" class="dropdown-item">gtts_text_to_speech.py</a>
+</li>
+            
+<li>
+    <a href="plugins/haiper_image_to_video__py.html" class="dropdown-item">haiper_image_to_video.py</a>
+</li>
+            
+<li>
+    <a href="plugins/list_directory__py.html" class="dropdown-item">list_directory.py</a>
+</li>
+            
+<li>
+    <a href="plugins/manage_message__py.html" class="dropdown-item">manage_message.py</a>
+</li>
+            
+<li>
+    <a href="plugins/manage_tasks__py.html" class="dropdown-item">manage_tasks.py</a>
+</li>
+            
+<li>
+    <a href="plugins/memory__py.html" class="dropdown-item">memory.py</a>
+</li>
+            
+<li>
+    <a href="plugins/movie_info__py.html" class="dropdown-item">movie_info.py</a>
+</li>
+            
+<li>
+    <a href="plugins/prompt_perfect__py.html" class="dropdown-item">prompt_perfect.py</a>
+</li>
+            
+<li>
+    <a href="plugins/read_file__py.html" class="dropdown-item">read_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/reminders__py.html" class="dropdown-item">reminders.py</a>
+</li>
+            
+<li>
+    <a href="plugins/run_command__py.html" class="dropdown-item">run_command.py</a>
+</li>
+            
+<li>
+    <a href="plugins/schedule_task__py.html" class="dropdown-item">schedule_task.py</a>
+</li>
+            
+<li>
+    <a href="plugins/search_files__py.html" class="dropdown-item">search_files.py</a>
+</li>
+            
+<li>
+    <a href="plugins/search_text__py.html" class="dropdown-item">search_text.py</a>
+</li>
+            
+<li>
+    <a href="plugins/search_web__py.html" class="dropdown-item">search_web.py</a>
+</li>
+            
+<li>
+    <a href="plugins/send_file__py.html" class="dropdown-item">send_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/show_me_diagrams__py.html" class="dropdown-item">show_me_diagrams.py</a>
+</li>
+            
+<li>
+    <a href="plugins/stable_diffusion__py.html" class="dropdown-item">stable_diffusion.py</a>
+</li>
+            
+<li>
+    <a href="plugins/task_management__py.html" class="dropdown-item">task_management.py</a>
+</li>
+            
+<li>
+    <a href="plugins/text_document_qa__py.html" class="dropdown-item">text_document_qa.py</a>
+</li>
+            
+<li>
+    <a href="plugins/use_cli__py.html" class="dropdown-item">use_cli.py</a>
+</li>
+            
+<li>
+    <a href="plugins/web_research__py.html" class="dropdown-item">web_research.py</a>
+</li>
+            
+<li>
+    <a href="plugins/website_content__py.html" class="dropdown-item">website_content.py</a>
+</li>
+            
+<li>
+    <a href="plugins/wolfram_alpha__py.html" class="dropdown-item">wolfram_alpha.py</a>
+</li>
+            
+<li>
+    <a href="plugins/write_file__py.html" class="dropdown-item">write_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/youtube_transcript__py.html" class="dropdown-item">youtube_transcript.py</a>
+</li>
+    </ul>
+  </li>
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/tooling</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="tooling/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="tooling/constants__py.html" class="dropdown-item">constants.py</a>
+</li>
+            
+<li>
+    <a href="tooling/helpers__py.html" class="dropdown-item">helpers.py</a>
+</li>
+            
+<li>
+    <a href="tooling/loader__py.html" class="dropdown-item">loader.py</a>
+</li>
+            
+<li>
+    <a href="tooling/mcp_plugin__py.html" class="dropdown-item">mcp_plugin.py</a>
+</li>
+            
+<li>
+    <a href="tooling/registry__py.html" class="dropdown-item">registry.py</a>
+</li>
+            
+<li>
+    <a href="tooling/spec__py.html" class="dropdown-item">spec.py</a>
+</li>
+    </ul>
+  </li>
+            
+<li>
+    <a href="__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="agent_core__py.html" class="dropdown-item">agent_core.py</a>
+</li>
+            
+<li>
+    <a href="contracts__py.html" class="dropdown-item">contracts.py</a>
+</li>
+            
+<li>
+    <a href="dispatcher__py.html" class="dropdown-item">dispatcher.py</a>
+</li>
+            
+<li>
+    <a href="executor__py.html" class="dropdown-item">executor.py</a>
+</li>
+            
+<li>
+    <a href="heuristics__py.html" class="dropdown-item active" aria-current="page">heuristics.py</a>
+</li>
+            
+<li>
+    <a href="memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
+</li>
+            
+<li>
+    <a href="memory_store__py.html" class="dropdown-item">memory_store.py</a>
+</li>
+            
+<li>
+    <a href="openai_client__py.html" class="dropdown-item">openai_client.py</a>
+</li>
+            
+<li>
+    <a href="orchestrator__py.html" class="dropdown-item">orchestrator.py</a>
+</li>
+            
+<li>
+    <a href="planner__py.html" class="dropdown-item">planner.py</a>
+</li>
+            
+<li>
+    <a href="profiles__py.html" class="dropdown-item">profiles.py</a>
+</li>
+            
+<li>
+    <a href="session_store__py.html" class="dropdown-item">session_store.py</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../command_registry__py.html" class="dropdown-item">command_registry.py</a>
+</li>
+                                    
+<li>
+    <a href="../config__py.html" class="dropdown-item">config.py</a>
+</li>
+                                    
+<li>
+    <a href="../dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../git_ops__py.html" class="dropdown-item">git_ops.py</a>
+</li>
+                                    
+<li>
+    <a href="../mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+</li>
+                                    
+<li>
+    <a href="../metrics__py.html" class="dropdown-item">metrics.py</a>
+</li>
+                                    
+<li>
+    <a href="../session__py.html" class="dropdown-item">session.py</a>
+</li>
+                                    
+<li>
+    <a href="../session_ui__py.html" class="dropdown-item">session_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../state__py.html" class="dropdown-item">state.py</a>
+</li>
+                                    
+<li>
+    <a href="../summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="../toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+</li>
+                                    
+<li>
+    <a href="../utils__py.html" class="dropdown-item">utils.py</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="executor__py.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="memory_policy__py.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#agentheuristics" class="nav-link">agent/heuristics</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="agentheuristics">agent/heuristics</h1>
+<p>Модуль предоставляет утилиты для обработки шагов плана и определения необходимости уточнения входного текста на основе конфигурации. Основные функции включают проверку текста на признаки вопросов и автоматическую нормализацию шагов, требующих уточнений. Использует конфигурацию приложения и контракт <code>PlanStep</code> для согласованной обработки.</p>
+<p>Ключевые структуры данных<br />
+PlanStep — Описание шага в плане, включающего вопрос и возможные ответы</p>
+<p>bool needs_clarification(const std::string&amp; text, const AppConfig&amp; config)<br />
+Проверяет, требует ли текст уточнения на основе конфигурации<br />
+Аргументы<br />
+text — текст для анализа<br />
+config — конфигурация приложения<br />
+Возвращает<br />
+True, если текст содержит вопрос или ключевые слова уточнения<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>void normalize_ask_step(PlanStep&amp; step)<br />
+Нормализует шаг плана, устанавливая значения по умолчанию для вопроса и вариантов ответа<br />
+Аргументы<br />
+step — изменяемый объект шага плана<br />
+Возвращает<br />
+Ничего<br />
+Исключения<br />
+Отсутствуют</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

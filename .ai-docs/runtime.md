@@ -2,77 +2,89 @@
 
 ## Запуск бота
 
-Бот запускается через основной скрипт `bot.py` в режиме polling:
+Бот запускается в режиме polling через `python-telegram-bot`. Точка входа — функция `build_app`, которая:
 
+1.  Загружает конфигурацию из `config.yaml`.
+2.  Инициализирует основные компоненты: `SessionManager`, `ToolRegistry`, `Metrics`.
+3.  Регистрирует обработчики команд, сообщений и callback-запросов.
+4.  Интегрирует плагины.
+5.  Запускает приложение с проверкой доступа по `whitelist_chat_ids`.
+
+**Команда запуска:**
 ```bash
 python bot.py
 ```
 
-При старте:
-1. Загружается конфигурация из `config.yaml`.
-2. Инициализируются компоненты: менеджер сессий, интерфейсы (SessionUI, GitOps, MTProtoUI), MCP-сервер.
-3. Устанавливаются обработчики команд и колбэков.
-4. Автоматически восстанавливаются сессии из `state.json`.
-5. Запускается polling-режим получения обновлений от Telegram.
+## Переменные окружения
 
-## Окружение
+Переменные окружения имеют приоритет над настройками в `config.yaml`.
 
-### Переменные окружения
+| Переменная | Назначение | Обязательная |
+| :--- | :--- | :--- |
+| `TELEGRAM_TOKEN` | Токен бота от @BotFather | Да |
+| `TAVILY_API_KEY` | Ключ для поиска через Tavily | Нет |
+| `JINA_API_KEY` | Ключ для веб-поиска и чтения страниц (Jina.ai) | Нет |
+| `GITHUB_TOKEN` | Токен для аутентификации в Git (HTTPS) | Для приватных репозиториев |
+| `OPENAI_API_KEY` | Ключ для доступа к OpenAI API | Для функций, требующих LLM |
+| `ZAI_API_KEY` | Ключ для доступа к Z.AI API | Для функций, требующих LLM |
+| `WOLFRAM_APP_ID` | ID приложения для WolframAlpha | Для инструмента `wolfram_alpha` |
+| `TMDB_API_KEY` | Ключ для доступа к The Movie Database | Для инструмента `movie_info` |
+| `EDAMAM_APP_ID`, `EDAMAM_APP_KEY` | Ключи для доступа к Edamam API | Для инструмента `chief` |
+| `STABLE_DIFFUSION_TOKEN` | Токен для HuggingFace Inference API | Для инструмента `image_generation` |
+| `AGENT_SANDBOX_ROOT` | Корневая директория для песочниц агентов | Нет (по умолчанию `workdir`) |
 
-Бот поддерживает подстановку переменных окружения в `config.yaml` через синтаксис `${VAR}`. Приоритет — переменные окружения выше значений в YAML.
+## Конфигурационный файл (`config.yaml`)
 
-Ключевые переменные:
-- `TELEGRAM_TOKEN` — токен бота (альтернатива `telegram.token` в config).
-- `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` — для генерации резюме и сообщений коммитов.
-- `GITHUB_TOKEN` — для доступа к приватным репозиториям (через `GIT_ASKPASS`).
-- `TELETHON_API_ID`, `TELETHON_API_HASH` — при использовании MTProto.
+Основной файл конфигурации. Пример структуры:
 
-### Файлы состояния
+```yaml
+telegram:
+  token: "YOUR_TELEGRAM_TOKEN"
+  whitelist_chat_ids: [123456789, 987654321]
 
-- `state.json` — основной файл состояния: активная сессия, токены, очереди, метаданные.
-- `toolhelp.json` — кэш справки по инструментам (результаты `/toolhelp`).
+defaults:
+  workdir: "/path/to/workdir"
+  log_path: "/path/to/bot.log"
+  state_path: "/path/to/state.json"
+  image_temp_dir: "/tmp/images"
+  image_max_mb: 10
+  idle_timeout_sec: 3600
+  memory_max_kb: 1024
+  memory_compact_target_kb: 512
+  output_max_chars: 4000
+  clarification_enabled: true
+  clarification_keywords: ["уточни", "почему", "где"]
 
-Файлы создаются автоматически при первом сохранении. Ошибки чтения/записи логируются, но не прерывают работу.
+tools:
+  codex:
+    cmd: "codex --headless --prompt '{prompt}'"
+    interactive_cmd: "codex"
+    resume_cmd: "codex --resume '{resume}'"
+    help_cmd: "codex --help"
+    prompt_regex: ".*\\$ $"
+    resume_regex: "thread_id: ([a-zA-Z0-9]+)"
+    env:
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+  # ... другие инструменты (claude, gemini, qwen)
 
-### Рабочие директории
+mcp:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8765
+  token: "your_mcp_token"
 
-- `workdir` — корневая директория сессий (настраивается в `defaults.workdir`).
-- `image_temp_dir` — временные файлы изображений (очищаются старше 24 часов).
-- `mtproto_output_dir` — результаты отправки через MTProto (очистка по `mtproto_cleanup_days`).
-- `log_path` — логи с ротацией (ежедневно в 03:00 UTC, хранится 1 архив).
+mcp_servers:
+  - name: "context7"
+    transport: "http"
+    url: "http://context7-server:8888"
+    headers:
+      Authorization: "Bearer ${MCP_CONTEXT7_TOKEN}"
+  - name: "notebooklm"
+    transport: "stdio"
+    cmd: "python -m notebooklm_mcp_server"
 
-## Зависимости
-
-Установка зависимостей:
-```bash
-pip install -r requirements.txt
+presets:
+  tests: "Запусти тесты и сообщи результат."
+  lint: "Проверь код линтером."
+  build: "Собери проект."
 ```
-
-Ключевые пакеты:
-- `python-telegram-bot` — основа бота.
-- `pexpect` — управление CLI-процессами.
-- `ansi2html` — конвертация цветного вывода.
-- `markdown-it-py[linkify,plugins]` — безопасный рендеринг Markdown.
-- `telethon` — опционально, для MTProto-интеграции.
-- `pytest` — тестирование (`pytest -q`).
-
-## Тестирование
-
-Запуск тестов:
-```bash
-pytest -q
-```
-
-Тесты проверяют:
-- Обработку команд и колбэков.
-- Работу сессий и очередей.
-- Корректность генерации интерфейсов.
-- Парсинг конфигурации и состояния.
-
-## Особенности запуска
-
-- **Автовосстановление**: после перезапуска бот восстанавливает все сессии из `state.json`.
-- **Безопасность**: доступ только по `whitelist_chat_ids`, проверка путей через `is_within_root()`.
-- **MTProto**: при отсутствии `session_string` требуется ручная авторизация (однократно).
-- **MCP-сервер**: запускается только при `mcp.enabled: true`, слушает указанный хост/порт.
-- **Буферизация**: длинные сообщения отправляются асинхронно с отложенной отправкой.

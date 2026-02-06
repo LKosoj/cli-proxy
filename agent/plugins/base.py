@@ -17,8 +17,16 @@ class ToolPlugin(ABC):
     def get_plugin_id(self) -> str:
         return self.plugin_id or self.__class__.__name__
 
-    def get_function_prefix(self) -> str:
-        return self.function_prefix or self.get_plugin_id()
+    def get_function_prefix(self) -> Optional[str]:
+        """
+        Optional function name prefix for ToolRegistry.
+
+        IMPORTANT: OpenAI tool/function names are best kept simple (letters/digits/_/-)
+        to avoid provider-side restrictions and reduce hallucinated name mismatches.
+        Therefore, prefixing is opt-in: unless a plugin explicitly sets
+        ``self.function_prefix``, no prefix is applied.
+        """
+        return self.function_prefix
 
     def initialize(self, config: Any = None, services: Optional[Dict[str, Any]] = None) -> None:
         self.config = config

@@ -33,6 +33,14 @@
 <li class="nav-item">
 <a class="nav-link" href="index.html">Главная</a>
 </li>
+<li class="nav-item dropdown">
+<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Обзор</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="overview.html">Обзор проекта</a>
+</li>
+</ul>
+</li>
 <li class="nav-item">
 <a aria-current="page" class="nav-link active" href="architecture.html">Архитектура</a>
 </li>
@@ -57,6 +65,19 @@
 <li>
 <a class="dropdown-item" href="configs/index.html">Обзор</a>
 </li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/agent</a>
+<ul class="dropdown-menu">
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/approvals</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="configs/files/agent/approvals/blocked-patterns__json.html">blocked-patterns.json</a>
+</li>
+</ul>
+</li>
+</ul>
+</li>
 <li>
 <a class="dropdown-item" href="configs/files/config_example__yaml.html">config_example.yaml</a>
 </li>
@@ -71,8 +92,211 @@
 <li>
 <a class="dropdown-item" href="modules/index.html">Обзор</a>
 </li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/agent</a>
+<ul class="dropdown-menu">
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/mcp</a>
+<ul class="dropdown-menu">
 <li>
-<a class="dropdown-item" href="modules/bot__py.html">bot.py</a>
+<a class="dropdown-item" href="modules/agent/mcp/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/http_client__py.html">http_client.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/jsonrpc__py.html">jsonrpc.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/manager__py.html">manager.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/stdio_client__py.html">stdio_client.py</a>
+</li>
+</ul>
+</li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/plugins</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/ask_user__py.html">ask_user.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/auto_tts__py.html">auto_tts.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/base__py.html">base.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/chief__py.html">chief.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/codeinterpreter__py.html">codeinterpreter.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/ddg_image_search__py.html">ddg_image_search.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/delete_file__py.html">delete_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/edit_file__py.html">edit_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/fetch_page__py.html">fetch_page.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/github_analysis__py.html">github_analysis.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/gtts_text_to_speech__py.html">gtts_text_to_speech.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/haiper_image_to_video__py.html">haiper_image_to_video.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/list_directory__py.html">list_directory.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/manage_message__py.html">manage_message.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/manage_tasks__py.html">manage_tasks.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/memory__py.html">memory.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/movie_info__py.html">movie_info.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/prompt_perfect__py.html">prompt_perfect.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/read_file__py.html">read_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/reminders__py.html">reminders.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/run_command__py.html">run_command.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/schedule_task__py.html">schedule_task.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/search_files__py.html">search_files.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/search_text__py.html">search_text.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/search_web__py.html">search_web.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/send_file__py.html">send_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/show_me_diagrams__py.html">show_me_diagrams.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/stable_diffusion__py.html">stable_diffusion.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/task_management__py.html">task_management.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/text_document_qa__py.html">text_document_qa.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/use_cli__py.html">use_cli.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/web_research__py.html">web_research.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/website_content__py.html">website_content.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/wolfram_alpha__py.html">wolfram_alpha.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/write_file__py.html">write_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/youtube_transcript__py.html">youtube_transcript.py</a>
+</li>
+</ul>
+</li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/tooling</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/constants__py.html">constants.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/helpers__py.html">helpers.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/loader__py.html">loader.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/mcp_plugin__py.html">mcp_plugin.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/registry__py.html">registry.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/spec__py.html">spec.py</a>
+</li>
+</ul>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/agent_core__py.html">agent_core.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/contracts__py.html">contracts.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/dispatcher__py.html">dispatcher.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/executor__py.html">executor.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/heuristics__py.html">heuristics.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/memory_policy__py.html">memory_policy.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/memory_store__py.html">memory_store.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/openai_client__py.html">openai_client.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/orchestrator__py.html">orchestrator.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/planner__py.html">planner.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/profiles__py.html">profiles.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/session_store__py.html">session_store.py</a>
+</li>
+</ul>
 </li>
 <li>
 <a class="dropdown-item" href="modules/command_registry__py.html">command_registry.py</a>
@@ -91,9 +315,6 @@
 </li>
 <li>
 <a class="dropdown-item" href="modules/metrics__py.html">metrics.py</a>
-</li>
-<li>
-<a class="dropdown-item" href="modules/mtproto_ui__py.html">mtproto_ui.py</a>
 </li>
 <li>
 <a class="dropdown-item" href="modules/session__py.html">session.py</a>
@@ -126,7 +347,7 @@
                             </a>
 </li>
 <li class="nav-item">
-<a class="nav-link" href="index.html" rel="prev">
+<a class="nav-link" href="overview.html" rel="prev">
 <i class="fa fa-arrow-left"></i> Previous
                                 </a>
 </li>
@@ -163,11 +384,11 @@
 <ul class="nav flex-column">
 </ul>
 </li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_5">Хранение и конфигурация</a>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_5">Безопасность и ограничения</a>
 <ul class="nav flex-column">
 </ul>
 </li>
-<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_6">Безопасность</a>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_6">Конфигурация и состояние</a>
 <ul class="nav flex-column">
 </ul>
 </li>
@@ -179,140 +400,135 @@
 <div class="col-md-9" role="main">
 <h1 id="_1">Архитектура</h1>
 <div class="mermaid">graph TD
-    A[Telegram-бот] --&gt; B[BotApp]
-    B --&gt; C[SessionManager]
-    C --&gt; D[Session]
-    D --&gt; E[CLI-инструменты]
-    B --&gt; F[SessionUI]
-    B --&gt; G[GitOps]
-    B --&gt; H[MTProtoUI]
-    B --&gt; I[MCPBridge]
-    B --&gt; J[Metrics]
-    C --&gt; K[State Storage]
-    K --&gt; L[state.json]
-    M[config.yaml] --&gt; B
-    M --&gt; C
-    M --&gt; G
-    M --&gt; H
-    M --&gt; I
-    N[toolhelp.json] --&gt; O[ToolHelp]
-    B --&gt; O
-    P[Пользователь] --&gt; A
-    A --&gt; P
-    F --&gt; A
-    G --&gt; A
-    H --&gt; A
-    I --&gt; A
-    J --&gt; A
-    style A fill:#4CAF50,stroke:#388E3C,color:white
-    style B fill:#2196F3,stroke:#1976D2,color:white
-    style C fill:#FF9800,stroke:#F57C00,color:white
-    style D fill:#FF9800,stroke:#F57C00,color:white
-    style E fill:#9E9E9E,stroke:#616161,color:white
-    style F fill:#673AB7,stroke:#512DA8,color:white
-    style G fill:#00BCD4,stroke:#00ACC1,color:white
-    style H fill:#E91E63,stroke:#C2185B,color:white
-    style I fill:#3F51B5,stroke:#303F9F,color:white
-    style J fill:#795548,stroke:#5D4037,color:white
-    style K fill:#8BC34A,stroke:#689F38,color:white
-    style L fill:#8BC34A,stroke:#689F38,color:white
-    style M fill:#607D8B,stroke:#455A64,color:white
-    style N fill:#8BC34A,stroke:#689F38,color:white
-    style O fill:#673AB7,stroke:#512DA8,color:white
-    style P fill:#FFEB3B,stroke:#FBC02D,color:black
+    subgraph "Telegram Interface"
+        A[Telegram Bot] --> B[SessionUI]
+        A --> C[DirsUI]
+        A --> D[Plugin Menus]
+    end
+
+    subgraph "Core Application"
+        B --> E[SessionManager]
+        C --> E
+        D --> F[ToolRegistry]
+        E --> G[Session]
+        G --> H[OrchestratorRunner]
+        H --> I[Executor]
+        I --> J[AgentRunner]
+        J --> K[ReActAgent]
+        F --> L[MCPManager]
+        L --> M[HttpMCPClient]
+        L --> N[StdioMCPClient]
+        F --> O[PluginLoader]
+    end
+
+    subgraph "State &amp; Configuration"
+        P[config.yaml] --> E
+        P --> F
+        P --> L
+        Q[state.json] --> E
+        R[toolhelp.json] --> F
+        S[tasks.json] --> F
+        T[MEMORY.md] --> J
+    end
+
+    subgraph "External Services"
+        K --> U[OpenAI API]
+        K --> V[Tavily Search]
+        K --> W[Jina Reader]
+        M --> X[External MCP Server]
+        N --> Y[Local MCP Server]
+    end
+
+    subgraph "Persistence &amp; Utils"
+        Z[read_json_locked] --> Q
+        AA[write_json_locked] --> Q
+        AB[ansi_to_html] --> AC[HTML Output]
+        AD[make_html_file] --> AC
+    end
+
+    E --> Z
+    E --> AA
+    G --> AB
+    G --> AD
+    H --> AB
+    J --> AB
+    K --> AB
+
+    style A fill:#4CAF50,stroke:#388E3C
+    style B fill:#2196F3,stroke:#1976D2
+    style E fill:#2196F3,stroke:#1976D2
+    style F fill:#2196F3,stroke:#1976D2
+    style G fill:#FF9800,stroke:#F57C00
+    style K fill:#9C27B0,stroke:#7B1FA2
+    style P fill:#607D8B,stroke:#455A64
+    style Q fill:#607D8B,stroke:#455A64
+    style U fill:#FF5722,stroke:#D84315
+    style X fill:#795548,stroke:#5D4037
+    style Y fill:#795548,stroke:#5D4037
 </div>
 <h1 id="_2">Архитектура</h1>
-<p>Архитектура Telegram-бота построена вокруг центрального класса <code>BotApp</code>, управляющего жизненным циклом сессий, обработкой команд и интеграцией с внешними системами. Все компоненты взаимодействуют асинхронно через Telegram API и внутренние состояния.</p>
+<p>Система представляет собой Telegram-бота с поддержкой многопользовательских сессий, CLI-агентов и интеграции с внешними сервисами. Архитектура построена вокруг центрального класса <code>BotApp</code>, координирующего взаимодействие между компонентами.</p>
 <h2 id="_3">Основные компоненты</h2>
-<h3 id="botapp"><code>BotApp</code></h3>
-<p>Центральный узел приложения. Инициализирует:
-- Обработчики команд (<code>CommandHandler</code>, <code>MessageHandler</code>, <code>CallbackQueryHandler</code>)
-- Загрузку конфигурации из <code>config.yaml</code>
-- Восстановление сессий через <code>SessionManager</code>
-- Запуск <code>MCPBridge</code> при включённой опции
-- Установку команд в Telegram через <code>set_bot_commands</code></p>
-<h3 id="sessionmanager"><code>SessionManager</code></h3>
-<p>Управляет всеми сессиями:
-- Создание, активация, переключение
-- Восстановление из <code>state.json</code> при старте
-- Потокобезопасный доступ через <code>run_lock</code>
-- Контроль активной сессии</p>
-<h3 id="session"><code>Session</code></h3>
-<p>Инкапсулирует одну сессию CLI-инструмента:
-- Запуск процесса через <code>pexpect.spawn</code>
-- Обработка вывода: ANSI → HTML, Mermaid → SVG
-- Поддержка режимов: <code>headless</code>, <code>interactive</code>, <code>resume</code>
-- Обнаружение приглашений (<code>prompt_regex</code>) и токенов активности
-- Очередь команд и автоматические команды при старте</p>
+<h3 id="sessionmanager-session"><code>SessionManager</code> и <code>Session</code></h3>
+<p><code>SessionManager</code> управляет жизненным циклом сессий, обеспечивая создание, активацию, восстановление и сохранение состояния. Каждая сессия (<code>Session</code>) изолирована в отдельной рабочей директории и содержит:
+- Ссылку на <code>ToolConfig</code> (CLI-агент: Codex, Gemini и др.)
+- Рабочую директорию (<code>workdir</code>)
+- Токен возобновления (<code>resume_token</code>)
+- Очередь команд и состояние занятости</p>
+<p>Сессии сохраняются в <code>state.json</code> с помощью потокобезопасных операций <code>read_json_locked</code>/<code>write_json_locked</code>. При старте приложения активные сессии восстанавливаются из файла.</p>
 <h3 id="sessionui"><code>SessionUI</code></h3>
-<p>Предоставляет интерфейс управления сессиями:
-- Построение меню сессий через <code>build_sessions_menu</code>
-- Обработка колбэков: выбор, переименование, изменение токена
-- Обработка текстовых сообщений при ожидании ввода
-- Отображение статуса: занятость, git-состояние, время работы</p>
-<h3 id="gitops"><code>GitOps</code></h3>
-<p>Интеграция с Git:
-- Асинхронное выполнение команд через <code>asyncio.create_subprocess_exec</code>
-- Интерактивное разрешение конфликтов (merge/rebase)
-- Безопасная аутентификация через <code>GIT_ASKPASS</code> с <code>github_token</code>
-- Автоматическое <code>git add -A</code> и генерация сообщений коммита (с OpenAI)</p>
-<h3 id="mtprotoui"><code>MTProtoUI</code></h3>
-<p>Отправка результатов в Telegram-чаты:
-- Использует <code>Telethon</code> с <code>api_id</code>, <code>api_hash</code>, <code>session_string</code>
-- Выбор цели из <code>mtproto.targets</code>
-- Отправка текста и файлов через <code>send_text</code>, <code>send_file</code>
-- Поддержка отмены операций</p>
-<h3 id="mcpbridge"><code>MCPBridge</code></h3>
-<p>TCP-сервер для внешних клиентов:
-- Слушает на <code>mcp.host:port</code>
-- Принимает JSON-запросы с <code>token</code>, <code>prompt</code>, <code>session_id</code>
-- Возвращает JSON-ответ с результатом
-- Проверяет токен, если задан</p>
-<h3 id="state-storage"><code>State Storage</code></h3>
-<p>Файловое хранилище состояния:
-- <code>state.json</code> — сохранение сессий, активной сессии, метаданных
-- Ключи: <code>{tool}::{workdir}</code>, <code>_active</code>, <code>_sessions</code>
-- Функции: <code>load_state</code>, <code>save_state</code>, <code>update_state</code>, <code>get_state</code></p>
-<h3 id="toolhelp"><code>ToolHelp</code></h3>
-<p>Кэширование справки по инструментам:
-- Хранение в <code>toolhelp.json</code>
-- <code>load_toolhelp</code>, <code>save_toolhelp</code>, <code>update_toolhelp</code>
-- Используется для команд <code>/toolhelp</code>, <code>/tools</code></p>
-<h3 id="metrics"><code>Metrics</code></h3>
-<p>Сбор статистики:
-- Счётчики: команды, сообщения, ошибки
-- <code>observe_output</code> — объём и время вывода
-- <code>snapshot()</code> — текстовый отчёт для <code>/metrics</code></p>
+<p>Обеспечивает интерактивное управление сессиями через Telegram. Генерирует меню с помощью <code>build_sessions_menu()</code> и обрабатывает действия:
+- Выбор/активация сессии
+- Переименование (<code>sess_rename:</code>)
+- Обновление resume-токена (<code>sess_resume:</code>)
+- Проверка состояния (<code>sess_state:</code>)
+- Очистка очереди (<code>sess_clearqueue</code>)
+- Закрытие сессии с вызовом <code>_on_before_close</code> и <code>_on_close</code></p>
+<p>Ввод данных (имя, токен) обрабатывается в <code>handle_pending_message()</code> с поддержкой отмены через "отмена", "-", "Отмена".</p>
+<h3 id="toolregistry"><code>ToolRegistry</code> и плагины</h3>
+<p>Центральный реестр инструментов, управляющий локальными плагинами и удалёнными MCP-инструментами. Ключевые функции:
+- Автоматическая загрузка плагинов из директории <code>plugins/</code> через <code>PluginLoader</code>
+- Регистрация инструментов с валидацией по <code>ToolSpec</code>
+- Фильтрация по <code>allowed_tools</code> ("All", "None")
+- Выполнение через <code>execute()</code> с таймаутом <code>TOOL_TIMEOUT_MS</code>
+- Поддержка параллельного выполнения (<code>execute_parallel_or_sequential</code>)</p>
+<p>Плагины реализуют интерфейс <code>ToolPlugin</code> и могут включать диалоги через <code>DialogMixin</code>.</p>
+<h3 id="orchestratorrunner-executor"><code>OrchestratorRunner</code> и <code>Executor</code></h3>
+<p>Оркестратор (<code>OrchestratorRunner</code>) управляет выполнением задач:
+1. Планирование через <code>plan_steps()</code> с генерацией <code>PlanStep</code>
+2. Упорядочивание шагов с учётом зависимостей (<code>_order_steps_safely</code>)
+3. Параллельное выполнение безопасных операций (<code>_next_batch</code>)
+4. Обработка результатов и обновление памяти (<code>_apply_step_result</code>, <code>_maybe_update_memory</code>)</p>
+<p><code>Executor</code> запускает <code>AgentRunner</code>, который инициирует цикл ReAct-агента с вызовом инструментов из <code>ToolRegistry</code>.</p>
+<h3 id="mcpmanager"><code>MCPManager</code></h3>
+<p>Управляет подключением к MCP-серверам через два транспорта:
+- <code>stdio</code>: запуск локального сервера через <code>StdioMCPClient</code>
+- <code>http</code>: подключение к внешнему серверу через <code>HttpMCPClient</code></p>
+<p>Инструменты кэшируются в <code>_shared/mcp_tools_cache.json</code> для ускорения инициализации. Поддерживает <code>list_tools()</code> и <code>call()</code> с валидацией аргументов.</p>
 <h2 id="_4">Потоки данных</h2>
 <ol>
-<li><strong>Пользователь → Бот</strong>: команда <code>/new</code>, <code>/use</code>, <code>/send</code>, колбэк из меню</li>
-<li><strong>Бот → SessionManager</strong>: создание/активация сессии</li>
-<li><strong>Session → CLI-инструмент</strong>: запуск команды через <code>pexpect</code></li>
-<li><strong>CLI → Session</strong>: вывод (ANSI, Markdown, Mermaid)</li>
-<li><strong>Session → BotApp</strong>: обработка вывода (HTML, SVG)</li>
-<li><strong>BotApp → Пользователь</strong>: отправка результата (текст, файл)</li>
-<li><strong>GitOps → Git</strong>: выполнение команд с подтверждением</li>
-<li><strong>MTProtoUI → Telegram API</strong>: отправка в указанные чаты</li>
-<li><strong>MCPBridge ← Внешний клиент</strong>: приём JSON-запроса</li>
-<li><strong>MCPBridge → BotApp</strong>: выполнение промпта</li>
-<li><strong>BotApp → MCPBridge → Клиент</strong>: возврат результата</li>
+<li><strong>Пользователь → Бот</strong>: команда <code>/sessions</code> → <code>SessionUI.build_sessions_menu()</code> → отправка меню</li>
+<li><strong>Пользователь → Сессия</strong>: выбор сессии → <code>SessionManager.set_active()</code> → обновление <code>_active</code> в <code>state.json</code></li>
+<li><strong>Агент → Инструмент</strong>: <code>ReActAgent</code> вызывает инструмент → <code>ToolRegistry.execute()</code> → выполнение плагина</li>
+<li><strong>Вывод → Пользователь</strong>: ANSI-вывод → <code>ansi_to_html()</code> → <code>make_html_file()</code> → отправка HTML-файла</li>
 </ol>
-<h2 id="_5">Хранение и конфигурация</h2>
+<h2 id="_5">Безопасность и ограничения</h2>
 <ul>
-<li><strong><code>config.yaml</code></strong>: основная конфигурация, приоритет ниже переменных окружения</li>
-<li><strong><code>state.json</code></strong>: состояние сессий, сохраняется при <code>/close</code>, <code>/rename</code>, <code>/state</code></li>
-<li><strong><code>toolhelp.json</code></strong>: кэш справки, обновляется при <code>/toolhelp update</code></li>
-<li><strong>Временные файлы</strong>: HTML-логи, изображения — автоматическая очистка по таймауту</li>
+<li><strong>Изоляция</strong>: все операции выполняются в пределах <code>workdir</code>, проверка через <code>is_within_root()</code></li>
+<li><strong>Блокировка команд</strong>: <code>check_command()</code> с <code>BLOCKED_PATTERNS_PATH</code> предотвращает выполнение опасных операций</li>
+<li><strong>Таймауты</strong>: <code>TOOL_TIMEOUT_MS</code> (120 сек), <code>GREP_TIMEOUT_MS</code> (30 сек), <code>WEB_FETCH_TIMEOUT_MS</code> (90 сек)</li>
+<li><strong>Ограничение вывода</strong>: <code>OUTPUT_TRIM_LEN</code> (3000 символов), <code>OUTPUT_HEAD_LEN</code> (1500), <code>OUTPUT_TAIL_LEN</code> (1000)</li>
+<li><strong>Память</strong>: <code>MEMORY.md</code> сжимается по приоритету тегов (<code>PREF > DECISION > CONFIG > AGREEMENT</code>)</li>
 </ul>
-<h2 id="_6">Безопасность</h2>
+<h2 id="_6">Конфигурация и состояние</h2>
 <ul>
-<li>Проверка <code>chat_id</code> по <code>whitelist_chat_ids</code></li>
-<li>Защита от выхода за пределы <code>workdir</code> через <code>is_within_root</code></li>
-<li>Ограничение размера вложений (до 45 МБ)</li>
-<li>Безопасная передача <code>github_token</code> через <code>GIT_ASKPASS</code></li>
-<li>Опциональная авторизация для MCP и MTProto</li>
+<li><code>config.yaml</code>: глобальные настройки (<code>telegram.token</code>, <code>defaults.workdir</code>, <code>tools.*</code>, <code>mcp.*</code>)</li>
+<li><code>state.json</code>: состояние сессий и активной сессии</li>
+<li><code>toolhelp.json</code>: справка по CLI-инструментам</li>
+<li><code>tasks.json</code>: задачи пользователя</li>
+<li><code>MEMORY.md</code>: долговременная память агента</li>
 </ul>
-<p>Архитектура обеспечивает автономность, отказоустойчивость и глубокую интеграцию с локальной средой, позволяя управлять CLI-инструментами, Git и файлами через Telegram.</p></div>
+<p>Переменные окружения имеют приоритет над <code>config.yaml</code> (например, <code>TAVILY_API_KEY</code>, <code>JINA_API_KEY</code>, <code>GITHUB_TOKEN</code>).</p></div>
 </div>
 </div>
 <footer class="col-md-12">

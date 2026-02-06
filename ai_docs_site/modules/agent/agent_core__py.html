@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>agent_core.py - cli-proxy</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../index.html">cli-proxy</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Обзор</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../../overview.html" class="dropdown-item">Обзор проекта</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../testing.html" class="nav-link">Тестирование</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Конфигурация проекта</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../../configs/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/agent</a>
+    <ul class="dropdown-menu">
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/approvals</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="../../configs/files/agent/approvals/blocked-patterns__json.html" class="dropdown-item">blocked-patterns.json</a>
+</li>
+    </ul>
+  </li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../../configs/files/config_example__yaml.html" class="dropdown-item">config_example.yaml</a>
+</li>
+                                    
+<li>
+    <a href="../../configs/files/toolhelp__json.html" class="dropdown-item">toolhelp.json</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/agent</a>
+    <ul class="dropdown-menu">
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/mcp</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="mcp/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="mcp/http_client__py.html" class="dropdown-item">http_client.py</a>
+</li>
+            
+<li>
+    <a href="mcp/jsonrpc__py.html" class="dropdown-item">jsonrpc.py</a>
+</li>
+            
+<li>
+    <a href="mcp/manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="mcp/stdio_client__py.html" class="dropdown-item">stdio_client.py</a>
+</li>
+    </ul>
+  </li>
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/plugins</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="plugins/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="plugins/ask_user__py.html" class="dropdown-item">ask_user.py</a>
+</li>
+            
+<li>
+    <a href="plugins/auto_tts__py.html" class="dropdown-item">auto_tts.py</a>
+</li>
+            
+<li>
+    <a href="plugins/base__py.html" class="dropdown-item">base.py</a>
+</li>
+            
+<li>
+    <a href="plugins/chief__py.html" class="dropdown-item">chief.py</a>
+</li>
+            
+<li>
+    <a href="plugins/codeinterpreter__py.html" class="dropdown-item">codeinterpreter.py</a>
+</li>
+            
+<li>
+    <a href="plugins/ddg_image_search__py.html" class="dropdown-item">ddg_image_search.py</a>
+</li>
+            
+<li>
+    <a href="plugins/delete_file__py.html" class="dropdown-item">delete_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/edit_file__py.html" class="dropdown-item">edit_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/fetch_page__py.html" class="dropdown-item">fetch_page.py</a>
+</li>
+            
+<li>
+    <a href="plugins/github_analysis__py.html" class="dropdown-item">github_analysis.py</a>
+</li>
+            
+<li>
+    <a href="plugins/gtts_text_to_speech__py.html" class="dropdown-item">gtts_text_to_speech.py</a>
+</li>
+            
+<li>
+    <a href="plugins/haiper_image_to_video__py.html" class="dropdown-item">haiper_image_to_video.py</a>
+</li>
+            
+<li>
+    <a href="plugins/list_directory__py.html" class="dropdown-item">list_directory.py</a>
+</li>
+            
+<li>
+    <a href="plugins/manage_message__py.html" class="dropdown-item">manage_message.py</a>
+</li>
+            
+<li>
+    <a href="plugins/manage_tasks__py.html" class="dropdown-item">manage_tasks.py</a>
+</li>
+            
+<li>
+    <a href="plugins/memory__py.html" class="dropdown-item">memory.py</a>
+</li>
+            
+<li>
+    <a href="plugins/movie_info__py.html" class="dropdown-item">movie_info.py</a>
+</li>
+            
+<li>
+    <a href="plugins/prompt_perfect__py.html" class="dropdown-item">prompt_perfect.py</a>
+</li>
+            
+<li>
+    <a href="plugins/read_file__py.html" class="dropdown-item">read_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/reminders__py.html" class="dropdown-item">reminders.py</a>
+</li>
+            
+<li>
+    <a href="plugins/run_command__py.html" class="dropdown-item">run_command.py</a>
+</li>
+            
+<li>
+    <a href="plugins/schedule_task__py.html" class="dropdown-item">schedule_task.py</a>
+</li>
+            
+<li>
+    <a href="plugins/search_files__py.html" class="dropdown-item">search_files.py</a>
+</li>
+            
+<li>
+    <a href="plugins/search_text__py.html" class="dropdown-item">search_text.py</a>
+</li>
+            
+<li>
+    <a href="plugins/search_web__py.html" class="dropdown-item">search_web.py</a>
+</li>
+            
+<li>
+    <a href="plugins/send_file__py.html" class="dropdown-item">send_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/show_me_diagrams__py.html" class="dropdown-item">show_me_diagrams.py</a>
+</li>
+            
+<li>
+    <a href="plugins/stable_diffusion__py.html" class="dropdown-item">stable_diffusion.py</a>
+</li>
+            
+<li>
+    <a href="plugins/task_management__py.html" class="dropdown-item">task_management.py</a>
+</li>
+            
+<li>
+    <a href="plugins/text_document_qa__py.html" class="dropdown-item">text_document_qa.py</a>
+</li>
+            
+<li>
+    <a href="plugins/use_cli__py.html" class="dropdown-item">use_cli.py</a>
+</li>
+            
+<li>
+    <a href="plugins/web_research__py.html" class="dropdown-item">web_research.py</a>
+</li>
+            
+<li>
+    <a href="plugins/website_content__py.html" class="dropdown-item">website_content.py</a>
+</li>
+            
+<li>
+    <a href="plugins/wolfram_alpha__py.html" class="dropdown-item">wolfram_alpha.py</a>
+</li>
+            
+<li>
+    <a href="plugins/write_file__py.html" class="dropdown-item">write_file.py</a>
+</li>
+            
+<li>
+    <a href="plugins/youtube_transcript__py.html" class="dropdown-item">youtube_transcript.py</a>
+</li>
+    </ul>
+  </li>
+            
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">/tooling</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="tooling/__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="tooling/constants__py.html" class="dropdown-item">constants.py</a>
+</li>
+            
+<li>
+    <a href="tooling/helpers__py.html" class="dropdown-item">helpers.py</a>
+</li>
+            
+<li>
+    <a href="tooling/loader__py.html" class="dropdown-item">loader.py</a>
+</li>
+            
+<li>
+    <a href="tooling/mcp_plugin__py.html" class="dropdown-item">mcp_plugin.py</a>
+</li>
+            
+<li>
+    <a href="tooling/registry__py.html" class="dropdown-item">registry.py</a>
+</li>
+            
+<li>
+    <a href="tooling/spec__py.html" class="dropdown-item">spec.py</a>
+</li>
+    </ul>
+  </li>
+            
+<li>
+    <a href="__init____py.html" class="dropdown-item">__init__.py</a>
+</li>
+            
+<li>
+    <a href="agent_core__py.html" class="dropdown-item active" aria-current="page">agent_core.py</a>
+</li>
+            
+<li>
+    <a href="contracts__py.html" class="dropdown-item">contracts.py</a>
+</li>
+            
+<li>
+    <a href="dispatcher__py.html" class="dropdown-item">dispatcher.py</a>
+</li>
+            
+<li>
+    <a href="executor__py.html" class="dropdown-item">executor.py</a>
+</li>
+            
+<li>
+    <a href="heuristics__py.html" class="dropdown-item">heuristics.py</a>
+</li>
+            
+<li>
+    <a href="memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
+</li>
+            
+<li>
+    <a href="memory_store__py.html" class="dropdown-item">memory_store.py</a>
+</li>
+            
+<li>
+    <a href="openai_client__py.html" class="dropdown-item">openai_client.py</a>
+</li>
+            
+<li>
+    <a href="orchestrator__py.html" class="dropdown-item">orchestrator.py</a>
+</li>
+            
+<li>
+    <a href="planner__py.html" class="dropdown-item">planner.py</a>
+</li>
+            
+<li>
+    <a href="profiles__py.html" class="dropdown-item">profiles.py</a>
+</li>
+            
+<li>
+    <a href="session_store__py.html" class="dropdown-item">session_store.py</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../command_registry__py.html" class="dropdown-item">command_registry.py</a>
+</li>
+                                    
+<li>
+    <a href="../config__py.html" class="dropdown-item">config.py</a>
+</li>
+                                    
+<li>
+    <a href="../dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../git_ops__py.html" class="dropdown-item">git_ops.py</a>
+</li>
+                                    
+<li>
+    <a href="../mcp_bridge__py.html" class="dropdown-item">mcp_bridge.py</a>
+</li>
+                                    
+<li>
+    <a href="../metrics__py.html" class="dropdown-item">metrics.py</a>
+</li>
+                                    
+<li>
+    <a href="../session__py.html" class="dropdown-item">session.py</a>
+</li>
+                                    
+<li>
+    <a href="../session_ui__py.html" class="dropdown-item">session_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../state__py.html" class="dropdown-item">state.py</a>
+</li>
+                                    
+<li>
+    <a href="../summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="../toolhelp__py.html" class="dropdown-item">toolhelp.py</a>
+</li>
+                                    
+<li>
+    <a href="../utils__py.html" class="dropdown-item">utils.py</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="__init____py.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="contracts__py.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#agentagent_core" class="nav-link">agent/agent_core</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="agentagent_core">agent/agent_core</h1>
+<p>Агентная система, реализующая архитектуру ReAct (Reasoning + Action) для взаимодействия с инструментами и генерации ответов через LLM. Поддерживает асинхронное выполнение, управление сессиями, историей чата, памятью и ограничениями на инструменты. Состояние сессии сохраняется в файловой системе с потокобезопасными операциями. Агент взаимодействует с OpenAI API и поддерживает корреляцию запросов, трассировку и логирование.</p>
+<p>Ключевые структуры данных<br />
+AgentState — Состояние агента, включая историю действий, итерации и блокировки<br />
+AgentRunResult — Результат выполнения агента, включает финальный ответ, статус, факты о вызванных инструментах и метрики выполнения</p>
+<p>@dataclass<br />
+AgentState<br />
+Состояние агента, включая историю действий, итерации и блокировки.<br />
+Поля<br />
+history — История действий агента в формате списка словарей<br />
+iteration — Текущий номер итерации в цикле ReAct<br />
+blocked — Счётчик блокировок (например, при превышении лимитов)<br />
+last_action — Последнее выполненное действие (название инструмента или "Thought", "Answer")<br />
+last_result — Результат последнего действия (вывод инструмента или ответ)</p>
+<hr />
+<p>class ReActAgent<br />
+Агент, использующий архитектуру ReAct (Reasoning + Action) для взаимодействия с инструментами и генерации ответов через LLM.<br />
+Поля<br />
+config — Конфигурация приложения (AppConfig)<br />
+_tool_registry — Реестр инструментов, используемый для выполнения действий<br />
+_openai_client — Асинхронный клиент OpenAI для взаимодействия с моделью<br />
+_sessions — Кэш сессий агента, индексированный по ключу состояния<br />
+_openai_cfg — Кортеж с конфигурацией OpenAI (ключ, модель, URL)<br />
+Методы<br />
+<strong>init</strong>(self, config: AppConfig, tool_registry: PluginToolRegistry) — Инициализирует агента с конфигурацией и реестром инструментов<br />
+record_message(self, chat_id: int, message_id: int) — Регистрирует отправленное сообщение в реестре инструментов<br />
+resolve_question(self, question_id: str, answer: str) -&gt; bool — Разрешает ожидающий вопрос с заданным идентификатором<br />
+_load_system_prompt(self, cwd: str, chat_id: Optional[int]) -&gt; str — Формирует системный промпт с подстановкой контекста (память, история, инструменты)<br />
+_load_session(self, state_root: str) -&gt; Dict[str, Any] — Загружает состояние сессии из файла SESSION.json<br />
+_save_session(self, state_root: str, session: Dict[str, Any]) -&gt; None — Сохраняет состояние сессии в файл с блокировкой<br />
+_reset_session(self, state_root: str) -&gt; None — Сбрасывает состояние сессии, удаляя файл состояния<br />
+_execute_step(self, session: Dict[str, Any], prompt: str, cwd: str, chat_id: Optional[int]) -&gt; Tuple[str, bool] — Выполняет один шаг агента: генерация действия и его выполнение<br />
+run(self, prompt: str, cwd: str, chat_id: Optional[int] = None) -&gt; str — Основной метод запуска агента; выполняет цикл ReAct до достижения результата или лимита итераций</p>
+<hr />
+<p>save_chat_message(username: str, text: str, is_bot: bool = False, chat_id: Optional[int] = None) -&gt; None<br />
+Сохраняет сообщение в файл истории чата с ограничением по длине и количеству сообщений.<br />
+Аргументы<br />
+username — Имя пользователя, отправившего сообщение<br />
+text — Текст сообщения<br />
+is_bot — Флаг, указывающий, является ли сообщение ответом бота<br />
+chat_id — Идентификатор чата; если None, используется глобальный чат<br />
+Исключения<br />
+Не выбрасывает исключения, все ошибки подавляются</p>
+<hr />
+<p>get_chat_history(chat_id: Optional[int]) -&gt; Optional[str]<br />
+Возвращает содержимое истории чата, ограниченное по размеру и количеству сообщений.<br />
+Аргументы<br />
+chat_id — Идентификатор чата; если None, возвращается глобальный чат<br />
+Возвращает<br />
+Текст истории чата или None, если история отсутствует или пуста<br />
+Исключения<br />
+Не выбрасывает исключения, все ошибки подавляются</p>
+<hr />
+<p>log_global(user_id: str, action: str, details: Optional[str] = None) -&gt; None<br />
+Записывает запись в глобальный лог активности с временной меткой и деталями.<br />
+Аргументы<br />
+user_id — Идентификатор пользователя<br />
+action — Описание действия<br />
+details — Дополнительные детали (ограничиваются по длине)<br />
+Исключения<br />
+Не выбрасывает исключения, все ошибки подавляются</p>
+<hr />
+<p>get_memory_for_prompt(cwd: str) -&gt; Optional[str]<br />
+Читает содержимое файла памяти (MEMORY.md) из указанной директории и возвращает его, ограничивая по длине.<br />
+Аргументы<br />
+cwd — Текущая рабочая директория, в которой ищется файл памяти<br />
+Возвращает<br />
+Содержимое памяти как строку или None, если файл отсутствует или пуст<br />
+Исключения<br />
+Не выбрасывает исключения, все ошибки подавляются</p>
+<hr />
+<p>_get_openai_config(config: Optional[AppConfig] = None) -&gt; Optional[Tuple[str, str, str]]<br />
+Извлекает конфигурацию OpenAI из переменных окружения или конфигурационного файла.<br />
+Аргументы<br />
+config — Опциональный объект конфигурации приложения<br />
+Возвращает<br />
+Кортеж (api_key, model, base_url) или None, если ключ или модель не заданы<br />
+Исключения<br />
+Не выбрасывает исключения</p>
+<hr />
+<p>read_json_locked(path: str, default: Any = None) -&gt; Any<br />
+Читает JSON-файл с потокобезопасной блокировкой.<br />
+Аргументы<br />
+path — Путь к файлу для чтения<br />
+default — Значение по умолчанию, если файл не существует или поврежён<br />
+Возвращает<br />
+Содержимое файла в виде объекта Python или значение по умолчанию<br />
+Исключения<br />
+Может выбрасывать исключения при ошибках десериализации или ввода-вывода</p>
+<hr />
+<p>write_json_locked(path: str, data: Any) -&gt; None<br />
+Сохраняет данные в JSON-файл с потокобезопасной блокировкой.<br />
+Аргументы<br />
+path — Путь к файлу для записи<br />
+data — Объект Python для сериализации в JSON<br />
+Исключения<br />
+Может выбрасывать исключения при ошибках сериализации или ввода-вывода</p>
+<hr />
+<p>sandbox_root(workdir: str) -&gt; str<br />
+Формирует путь к корневой директории песочницы на основе рабочей директории.<br />
+Аргументы<br />
+workdir — Базовая рабочая директория<br />
+Возвращает<br />
+Путь к директории _sandbox внутри workdir</p>
+<hr />
+<p>_load_session(self, state_root: str) -&gt; Dict[str, Any]<br />
+Загружает состояние сессии из SESSION.json с обработкой устаревшего формата.<br />
+Аргументы<br />
+state_root — Корневая директория для хранения сессии<br />
+Возвращает<br />
+Словарь с данными сессии, включая history_by_task<br />
+Исключения<br />
+Не выбрасывает исключения, возвращает значение по умолчанию при ошибках</p>
+<hr />
+<p>_save_session(self, state_root: str, session: Dict[str, Any]) -&gt; None<br />
+Сохраняет состояние сессии в файл SESSION.json.<br />
+Аргументы<br />
+state_root — Корневая директория для сохранения<br />
+session — Объект состояния сессии для записи</p>
+<hr />
+<p>_load_system_prompt(self, cwd: str, chat_id: Optional[int]) -&gt; str<br />
+Загружает системный промпт из файловой системы или возвращает стандартный.<br />
+Аргументы<br />
+cwd — Текущая рабочая директория<br />
+chat_id — Идентификатор чата (опционально)<br />
+Возвращает<br />
+Текст системного промпта</p>
+<hr />
+<p>_build_messages(self, session: Dict[str, Any], user_message: str, cwd: str, chat_id: Optional[int], working: List[Dict[str, Any]], task_id: Optional[str], request_context: Optional[str], constraints: Optional[str], corr_id: Optional[str]) -&gt; List[Dict[str, Any]]<br />
+Формирует цепочку сообщений для отправки в LLM, включая системный промпт, контекст, историю и текущий ввод.<br />
+Аргументы<br />
+session — Текущее состояние сессии<br />
+user_message — Сообщение от пользователя<br />
+cwd — Текущая рабочая директория<br />
+chat_id — Идентификатор чата<br />
+working — Промежуточные сообщения текущей итерации<br />
+task_id — Идентификатор задачи для выбора истории<br />
+request_context — Дополнительный контекст запроса<br />
+constraints — Ограничения на поведение агента<br />
+corr_id — Идентификатор корреляции для логирования<br />
+Возвращает<br />
+Список сообщений в формате OpenAI API</p>
+<hr />
+<p>async _call_openai(self, messages: List[Dict[str, Any]], allowed_tools: Optional[List[str]]) -&gt; Dict[str, Any]<br />
+Выполняет асинхронный вызов OpenAI API с поддержкой инструментов.<br />
+Аргументы<br />
+messages — Список сообщений для модели<br />
+allowed_tools — Список разрешённых инструментов (или ["All"])<br />
+Возвращает<br />
+Ответ модели в виде словаря (model_dump)<br />
+Исключения<br />
+RuntimeError — Если конфигурация OpenAI не инициализирована</p>
+<hr />
+<p>async run(self, session_id: str, user_message: str, session_obj: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str], task_id: Optional[str], allowed_tools: Optional[List[str]] = None, request_context: Optional[str] = None, constraints: Optional[str] = None, corr_id: Optional[str] = None) -&gt; AgentRunResult<br />
+Запускает цикл агента: итеративно вызывает LLM, обрабатывает инструменты, собирает результат.<br />
+Аргументы<br />
+session_id — Уникальный идентификатор сессии<br />
+user_message — Ввод от пользователя<br />
+session_obj — Объект сессии (с workdir)<br />
+bot — Объект бота (Telegram/Discord и т.п.)<br />
+context — Контекст выполнения (например, aiogram)<br />
+chat_id — Идентификатор чата<br />
+chat_type — Тип чата (личный, группа и т.п.)<br />
+task_id — Идентификатор задачи для сегментации истории<br />
+allowed_tools — Ограничение набора доступных инструментов<br />
+request_context — Дополнительный контекст запроса<br />
+constraints — Ограничения на поведение агента<br />
+corr_id — Идентификатор корреляции для трейсинга<br />
+Возвращает<br />
+Объект AgentRunResult с результатом выполнения<br />
+Исключения<br />
+RuntimeError — При отсутствии конфигурации OpenAI</p>
+<hr />
+<p>class AgentRunResult<br />
+Результат выполнения агента, включающий вывод, статус и список вызовов инструментов.<br />
+Поля<br />
+output — Текстовый ответ агента<br />
+status — Статус выполнения: "ok", "error", "partial", "blocked", "timeout"<br />
+tool_calls — Список словарей с информацией о вызовах инструментов, включая имя, аргументы, успех и ошибки</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

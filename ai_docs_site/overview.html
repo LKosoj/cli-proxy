@@ -1,0 +1,2457 @@
+<!DOCTYPE html>
+
+<html data-bs-theme="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="IE=edge" http-equiv="X-UA-Compatible"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="img/favicon.ico" rel="shortcut icon"/>
+<title>Обзор проекта - cli-proxy</title>
+<link href="css/bootstrap.min.css" rel="stylesheet"/>
+<link href="css/fontawesome.min.css" rel="stylesheet"/>
+<link href="css/brands.min.css" rel="stylesheet"/>
+<link href="css/solid.min.css" rel="stylesheet"/>
+<link href="css/v4-font-face.min.css" rel="stylesheet"/>
+<link href="css/base.css" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" id="hljs-light" rel="stylesheet"/>
+<link disabled="" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" id="hljs-dark" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+</head>
+<body>
+<div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+<div class="container">
+<a class="navbar-brand" href="index.html">cli-proxy</a>
+<!-- Expander button -->
+<button aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation" class="navbar-toggler" data-bs-target="#navbar-collapse" data-bs-toggle="collapse" type="button">
+<span class="navbar-toggler-icon"></span>
+</button>
+<!-- Expanded navigation -->
+<div class="navbar-collapse collapse" id="navbar-collapse">
+<!-- Main navigation -->
+<ul class="nav navbar-nav">
+<li class="nav-item">
+<a class="nav-link" href="index.html">Главная</a>
+</li>
+<li class="nav-item dropdown">
+<a aria-current="page" aria-expanded="false" class="nav-link dropdown-toggle active" data-bs-toggle="dropdown" href="#" role="button">Обзор</a>
+<ul class="dropdown-menu">
+<li>
+<a aria-current="page" class="dropdown-item active" href="overview.html">Обзор проекта</a>
+</li>
+</ul>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="architecture.html">Архитектура</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="runtime.html">Запуск</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="dependencies.html">Зависимости</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="testing.html">Тестирование</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="conventions.html">Соглашения</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="glossary.html">Глоссарий</a>
+</li>
+<li class="nav-item dropdown">
+<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Конфигурация проекта</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="configs/index.html">Обзор</a>
+</li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/agent</a>
+<ul class="dropdown-menu">
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/approvals</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="configs/files/agent/approvals/blocked-patterns__json.html">blocked-patterns.json</a>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<a class="dropdown-item" href="configs/files/config_example__yaml.html">config_example.yaml</a>
+</li>
+<li>
+<a class="dropdown-item" href="configs/files/toolhelp__json.html">toolhelp.json</a>
+</li>
+</ul>
+</li>
+<li class="nav-item dropdown">
+<a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Модули</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="modules/index.html">Обзор</a>
+</li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/agent</a>
+<ul class="dropdown-menu">
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/mcp</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/http_client__py.html">http_client.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/jsonrpc__py.html">jsonrpc.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/manager__py.html">manager.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/mcp/stdio_client__py.html">stdio_client.py</a>
+</li>
+</ul>
+</li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/plugins</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/ask_user__py.html">ask_user.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/auto_tts__py.html">auto_tts.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/base__py.html">base.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/chief__py.html">chief.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/codeinterpreter__py.html">codeinterpreter.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/ddg_image_search__py.html">ddg_image_search.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/delete_file__py.html">delete_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/edit_file__py.html">edit_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/fetch_page__py.html">fetch_page.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/github_analysis__py.html">github_analysis.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/gtts_text_to_speech__py.html">gtts_text_to_speech.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/haiper_image_to_video__py.html">haiper_image_to_video.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/list_directory__py.html">list_directory.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/manage_message__py.html">manage_message.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/manage_tasks__py.html">manage_tasks.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/memory__py.html">memory.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/movie_info__py.html">movie_info.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/prompt_perfect__py.html">prompt_perfect.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/read_file__py.html">read_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/reminders__py.html">reminders.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/run_command__py.html">run_command.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/schedule_task__py.html">schedule_task.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/search_files__py.html">search_files.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/search_text__py.html">search_text.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/search_web__py.html">search_web.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/send_file__py.html">send_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/show_me_diagrams__py.html">show_me_diagrams.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/stable_diffusion__py.html">stable_diffusion.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/task_management__py.html">task_management.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/text_document_qa__py.html">text_document_qa.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/use_cli__py.html">use_cli.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/web_research__py.html">web_research.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/website_content__py.html">website_content.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/wolfram_alpha__py.html">wolfram_alpha.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/write_file__py.html">write_file.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/plugins/youtube_transcript__py.html">youtube_transcript.py</a>
+</li>
+</ul>
+</li>
+<li class="dropdown-submenu">
+<a class="dropdown-item" href="#">/tooling</a>
+<ul class="dropdown-menu">
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/constants__py.html">constants.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/helpers__py.html">helpers.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/loader__py.html">loader.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/mcp_plugin__py.html">mcp_plugin.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/registry__py.html">registry.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/tooling/spec__py.html">spec.py</a>
+</li>
+</ul>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/__init____py.html">__init__.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/agent_core__py.html">agent_core.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/contracts__py.html">contracts.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/dispatcher__py.html">dispatcher.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/executor__py.html">executor.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/heuristics__py.html">heuristics.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/memory_policy__py.html">memory_policy.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/memory_store__py.html">memory_store.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/openai_client__py.html">openai_client.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/orchestrator__py.html">orchestrator.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/planner__py.html">planner.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/profiles__py.html">profiles.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/agent/session_store__py.html">session_store.py</a>
+</li>
+</ul>
+</li>
+<li>
+<a class="dropdown-item" href="modules/command_registry__py.html">command_registry.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/config__py.html">config.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/dirs_ui__py.html">dirs_ui.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/git_ops__py.html">git_ops.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/mcp_bridge__py.html">mcp_bridge.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/metrics__py.html">metrics.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/session__py.html">session.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/session_ui__py.html">session_ui.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/state__py.html">state.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/summary__py.html">summary.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/toolhelp__py.html">toolhelp.py</a>
+</li>
+<li>
+<a class="dropdown-item" href="modules/utils__py.html">utils.py</a>
+</li>
+</ul>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="changes.html">Изменения</a>
+</li>
+</ul>
+<ul class="nav navbar-nav ms-md-auto">
+<li class="nav-item">
+<a class="nav-link" data-bs-target="#mkdocs_search_modal" data-bs-toggle="modal" href="#">
+<i class="fa fa-search"></i> Search
+                            </a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="index.html" rel="prev">
+<i class="fa fa-arrow-left"></i> Previous
+                                </a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="architecture.html" rel="next">
+                                    Next <i class="fa fa-arrow-right"></i>
+</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="container">
+<div class="row">
+<div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+<div class="navbar-header">
+<button class="navbar-toggler collapsed" data-bs-target="#toc-collapse" data-bs-toggle="collapse" title="Table of Contents" type="button">
+<span class="fa fa-angle-down"></span>
+</button>
+</div>
+<div class="navbar-collapse collapse card bg-body-tertiary" id="toc-collapse">
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_1">Обзор проекта</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#sessionui">Класс SessionUI</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_2">Основные компоненты</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_3">Ключевые методы</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_4">Поддерживаемые действия</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_5">Интеграции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#telegram-cli-">Резюме: Telegram-бот для управления CLI-агентами</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_6">Основные возможности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_7">Основные сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#configyaml">Настройки (config.yaml)</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#config">Переменные окружения (приоритет выше config)</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_8">Команды</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_9">Тестирование</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_10">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#git-telegram">Git-бот в Telegram: Краткое резюме</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_11">Основные функции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_12">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_13">Ограничения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_14">Рекомендации</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#telegram-yaml">Конфигурационный файл Telegram-бота (YAML)</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_15">Основные секции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_16">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#telegram-">Telegram-бот для управления сессиями и агентами</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_17">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_18">Основные компоненты</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_19">Функциональность</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_25">Интеграции и расширения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_26">Настройки</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_27">Логирование и метрики</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_28">Запуск и инициализация</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_29">Резюме модуля</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#gitops-git-telegram-">Класс GitOps — Работа с Git в Telegram-боте</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_30">Основные возможности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_31">Ключевые сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_32">Основные методы</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_33">Обработка событий</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_34">Безопасность и настройки</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_35">Зависимости</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#ansi-markdown-mermaid">Резюме: Утилиты обработки текста с ANSI, Markdown и Mermaid</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_36">Основные возможности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_37">Вспомогательные функции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_38">Зависимости и особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_39">Обзор модуля управления сессиями</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_40">Основные сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_41">Интеграции и зависимости</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_42">Дополнительные функции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_43">Резюме: Политика безопасности и ограничений</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#react">ReAct Агент — Краткое резюме</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_44">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_45">Основные компоненты</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_46">Управление состоянием</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_47">Конфигурация</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_48">Системный промпт</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_49">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_50">Статусы выполнения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_51">Назначение классов</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_52">Оркестратор выполнения задач — Краткое резюме</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_53">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_54">Ключевые сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_55">Основные функции и методы</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_56">Хранение и безопасность</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_57">Настройки и ограничения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_58">Особенности поведения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_59">Конфигурация фильтрации команд — краткое резюме</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_60">Основные категории угроз</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_61">Ключевые параметры правил</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_62">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_63">Резюме: Назначение и функциональность файла</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_64">Основные функции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_65">Интеграции и внешние сервисы</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_66">Настройки и параметры</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_67">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_68">Краткое резюме</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#toolregistry">ToolRegistry — Реестр инструментов и менеджер плагинов</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_69">Основные функции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_70">Состояние и сервисы</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_71">Важные компоненты</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_72">Настройки и поведение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_73">Утилиты</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_74">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#dialogmixin-telegram-">DialogMixin — Миксин для управления диалогами в Telegram-ботах</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_75">Основные возможности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_76">Ключевые методы и сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_82">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_83">Рекомендации по использованию</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#textdocumentqatool">TextDocumentQATool — Документация</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_84">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_85">Основные функции</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_86">Хранение данных</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_87">Диалоговый интерфейс</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#llm">Интеграция с LLM</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_88">Ответы</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_89">Интерфейс</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_90">Ограничения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_91">Зависимости</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_92">Резюме: Плагинная система с поддержкой диалогов</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_93">Основные методы и контракт</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#dialogmixin">Диалоги и интерактивность (DialogMixin)</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#callback-_1">Callback-система</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_96">Меню и команды</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_97">Обработка ввода</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_98">Жизненный цикл и интеграция</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_99">Регистрация плагинов</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_100">Рекомендации</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_101">Пример функциональности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#taskmanagementtool-telegram-">TaskManagementTool — Управление задачами в Telegram-боте</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_102">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_103">Ключевые сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_104">Функциональность</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_notifypolicy">Настройки уведомлений (_NotifyPolicy)</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_105">Технические особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#haiper-image-to-video-tool">Haiper Image-to-Video Tool — Краткое резюме</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#_106">Краткое резюме</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#reminderstool-telegram-">RemindersTool — Управление напоминаниями в Telegram-боте</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_107">Назначение</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_108">Основные возможности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_109">Ключевые сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#execute">Поддерживаемые действия (execute)</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_110">Ограничения</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_111">Технические особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_112">Интеграция</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+<li class="nav-item" data-bs-level="1"><a class="nav-link" href="#webresearchtool">WebResearchTool — Краткое резюме</a>
+<ul class="nav flex-column">
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_113">Основные возможности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_114">Ключевые сущности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_115">Настройки</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_116">Особенности</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+<li class="nav-item" data-bs-level="2"><a class="nav-link" href="#_117">Выходные данные</a>
+<ul class="nav flex-column">
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div></div>
+<div class="col-md-9" role="main">
+<h1 id="_1">Обзор проекта</h1>
+<h1 id="sessionui">Класс <code>SessionUI</code></h1>
+<p>Класс <code>SessionUI</code> обеспечивает пользовательский интерфейс для управления сессиями Telegram-бота. Предоставляет интерактивное меню через <code>InlineKeyboardMarkup</code> и обрабатывает действия пользователя, такие как выбор, переименование, обновление resume-токена, проверка состояния и закрытие сессий.</p>
+<h2 id="_2">Основные компоненты</h2>
+<ul>
+<li><strong><code>manager</code></strong> — управляет активными сессиями, их состоянием и сохранением.</li>
+<li><strong><code>config</code></strong> — хранит и сохраняет конфигурацию приложения.</li>
+<li><strong><code>pending_session_rename</code></strong>, <strong><code>pending_session_resume</code></strong> — словари для отслеживания пользователей, ожидающих ввода имени или resume-токена.</li>
+</ul>
+<h2 id="_3">Ключевые методы</h2>
+<ul>
+<li><code>build_sessions_menu()</code> — генерирует клавиатуру со списком сессий.</li>
+<li><code>handle_callback()</code> — обрабатывает callback-запросы (выбор, активация, статус, переименование, resume, очистка очереди, закрытие).</li>
+<li><code>handle_pending_message()</code> — обрабатывает текстовые сообщения при ожидании ввода (имя сессии, resume-токен), поддерживает отмену через "отмена", "-", "Отмена".</li>
+</ul>
+<h2 id="_4">Поддерживаемые действия</h2>
+<ul>
+<li>Просмотр и редактирование resume-токена (<code>sess_resume:</code>).</li>
+<li>Отображение состояния сессии (<code>sess_state:</code>).</li>
+<li>Проверка и очистка очереди сообщений (<code>sess_queue</code>, <code>sess_clearqueue</code>).</li>
+<li>Закрытие сессии с вызовом колбэков <code>_on_before_close</code> и <code>_on_close</code>.</li>
+<li>Сохранение изменений через <code>manager._persist_sessions()</code>.</li>
+</ul>
+<h2 id="_5">Интеграции</h2>
+<ul>
+<li>Отправка и редактирование сообщений: <code>send_message</code>, <code>edit_message_text</code>.</li>
+<li>Форматирование временных меток: <code>format_ts</code>.</li>
+<li>Колбэки: <code>on_close</code>, <code>on_before_close</code> при завершении сессии.</li>
+</ul>
+<p>Класс обеспечивает полный цикл управления сессиями с сохранением состояния и реактивным взаимодействием через Telegram-интерфейс.</p>
+<h1 id="telegram-cli-">Резюме: Telegram-бот для управления CLI-агентами</h1>
+<p>Telegram-бот предоставляет удобный интерфейс для взаимодействия с CLI-агентами (Codex, Gemini, Qwen, Claude) через Telegram, поддерживая многопользовательские сессии, очереди команд, HTML-вывод и интеграцию с внешними сервисами.</p>
+<h2 id="_6">Основные возможности</h2>
+<ul>
+<li><strong>Управление сессиями</strong>: каждая сессия изолирована в отдельном рабочем каталоге, поддерживается восстановление после перезапуска.</li>
+<li><strong>Очередь команд</strong>: контроль выполнения, предотвращение перегрузки.</li>
+<li><strong>HTML-рендеринг</strong>: отображение результата с поддержкой Markdown, ANSI-цветов и mermaid-диаграмм (в SVG).</li>
+<li><strong>Кэширование</strong>: справка по инструментам сохраняется в <code>toolhelp.json</code>.</li>
+<li><strong>Сохранение состояния</strong>: активные сессии, prompt, resume-токены и пути хранятся в <code>state.json</code>.</li>
+<li><strong>Шаблоны задач</strong>: настройка через <code>/preset</code> и секцию <code>presets</code> в <code>config.yaml</code>.</li>
+<li><strong>Работа с файлами</strong>: загрузка текстовых файлов до 500 КБ и изображений (с обработкой при наличии <code>image_cmd</code>).</li>
+</ul>
+<h2 id="_7">Основные сущности</h2>
+<ul>
+<li><strong>Сессии CLI</strong> — в изолированных каталогах.</li>
+<li><strong>Очередь запросов</strong> — с контролем занятости.</li>
+<li><strong>Git-интеграция</strong> — интерактивные операции (<code>/git</code>): status, pull, merge, rebase, commit, разрешение конфликтов.</li>
+<li><strong>Файловый менеджер</strong> — просмотр и отправка файлов через <code>/files</code>.</li>
+<li><strong>Переменные окружения</strong> — подстановка через <code>${VAR}</code>, приоритет: <code>env</code> в <code>tools.*</code> &gt; <code>config.yaml</code> &gt; системные переменные.</li>
+</ul>
+<h2 id="configyaml">Настройки (<code>config.yaml</code>)</h2>
+<ul>
+<li><code>telegram.token</code>, <code>whitelist_chat_ids</code> — авторизация и ограничение доступа.</li>
+<li><code>defaults.workdir</code> — базовый путь для сессий.</li>
+<li><code>defaults.log_path</code> — логирование с ротацией (ошибки в <code>*_error.log</code>).</li>
+<li><code>image_temp_dir</code>, <code>image_max_mb</code> — обработка изображений.</li>
+<li><code>tools.*</code> — конфигурация агентов: команды, режимы (<code>yolo</code>, <code>--approval-mode</code>), <code>resume_cmd</code>, <code>image_cmd</code>, <code>env</code>.</li>
+<li><code>presets</code> — шаблоны задач (название + prompt).</li>
+<li><code>mcp</code> — TCP-мост для внешних клиентов.</li>
+<li>Интеграции: <code>openai_*</code>, <code>zai_api_key</code>, <code>tavily_api_key</code>, <code>jina_api_key</code>, <code>github_token</code>.</li>
+</ul>
+<h2 id="config">Переменные окружения (приоритет выше config)</h2>
+<ul>
+<li><code>TAVILY_API_KEY</code> — для поиска через Tavily.</li>
+<li><code>JINA_API_KEY</code> — для веб-поиска и чтения страниц (Jina.ai).</li>
+<li><code>GITHUB_TOKEN</code> — для аутентификации в Git (HTTPS, без интерактивного ввода).</li>
+</ul>
+<h2 id="_8">Команды</h2>
+<ul>
+<li><strong>Основные (в меню)</strong>: <code>/new</code>, <code>/sessions</code>, <code>/interrupt</code>, <code>/git</code>, <code>/files</code>, <code>/tools</code>, <code>/toolhelp</code>.</li>
+<li><strong>Скрытые</strong>: <code>/dirs</code>, <code>/newpath</code>, <code>/use</code>, <code>/cwd</code>, <code>/setprompt</code>, <code>/send</code>, <code>/resume</code>, <code>/close</code>, <code>/status</code>, <code>/rename</code>, <code>/state</code>, <code>/clearqueue</code>, <code>/queue</code>, <code>/preset</code>, <code>/metrics</code>.</li>
+<li><strong>Прямой ввод</strong>: через <code>/send</code> или префикс <code>&gt;</code>.</li>
+</ul>
+<h2 id="_9">Тестирование</h2>
+<ul>
+<li>Запуск: <code>pytest -q</code></li>
+</ul>
+<h2 id="_10">Особенности</h2>
+<ul>
+<li>Автоопределение prompt и resume-токена.</li>
+<li>Поддержка вложений: текст — до 500 КБ, изображения — с обработкой по подписи.</li>
+<li>Переменные окружения подставляются динамически.</li>
+</ul>
+<p>Файл содержит справочную информацию о доступных slash-командах в различных CLI-инструментах, связанных с ИИ-ассистентами (Codex, Claude, Gemini, Qwen). Каждая запись включает название инструмента, тип (<code>tool</code>), текстовое описание с перечнем команд и временной меткой обновления. Основное назначение — быстрое ознакомление с функционалом командной строки каждого инструмента. Ключевые сущности: <code>codex</code>, <code>claude</code>, <code>gemini</code>, <code>qwen</code>. Важные команды: <code>/help</code>, <code>/status</code>, <code>/new</code>, <code>/exit</code>, <code>/quit</code>, <code>/clear</code>, <code>/settings</code>, <code>/auth</code>, <code>/chat</code>, <code>/model</code>, <code>/mcp</code>. Для получения справки в большинстве случаев используется <code>/help</code> или <code>/?</code>.</p>
+<h1 id="git-telegram">Git-бот в Telegram: Краткое резюме</h1>
+<p>Git-бот предоставляет упрощённый интерфейс для работы с Git через Telegram, позволяя выполнять основные операции без знания командной строки. Бот запускает стандартные git-команды и отображает их результат.</p>
+<h2 id="_11">Основные функции</h2>
+<ul>
+<li><strong>Просмотр состояния</strong>: <code>Status</code>, <code>Log</code>, <code>Diff</code>, <code>Summary</code></li>
+<li><strong>Синхронизация</strong>: <code>Fetch</code>, <code>Pull</code> (с <code>--ff-only</code> для безопасности)</li>
+<li><strong>Коммиты и отправка</strong>: <code>Commit</code>, <code>Push</code></li>
+<li><strong>Управление изменениями</strong>: <code>Stash</code></li>
+<li><strong>Слияние веток</strong>: <code>Merge</code>, <code>Rebase</code></li>
+<li><strong>Работа с конфликтами</strong>: отображение конфликтующих файлов, кнопки <code>Abort</code>, <code>Continue</code>, <code>Позвать агента</code></li>
+</ul>
+<h2 id="_12">Особенности</h2>
+<ul>
+<li>Автоматическое определение upstream-ветки</li>
+<li>Поддержка приватных репозиториев через <strong>Personal Access Token</strong></li>
+<li>Токен задаётся в <code>config.yaml</code> → <code>defaults.github_token</code></li>
+<li>Операции выполняются в очереди при занятой сессии</li>
+</ul>
+<h2 id="_13">Ограничения</h2>
+<ul>
+<li>Нет автоматического разрешения конфликтов (требуется ручное редактирование меток <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>)</li>
+<li>Зависимость от текущего состояния репозитория</li>
+<li>Отсутствие "умного" автомержа</li>
+</ul>
+<h2 id="_14">Рекомендации</h2>
+<ul>
+<li>Начинайте с команды <code>Status</code></li>
+<li>Избегайте слияний без проверки состояния</li>
+<li>Используйте <code>Abort</code> при неуверенности в действиях</li>
+<li>Убедитесь, что репозиторий находится в корректном состоянии перед операциями</li>
+</ul>
+<h1 id="telegram-yaml">Конфигурационный файл Telegram-бота (YAML)</h1>
+<p>Конфигурационный файл в формате YAML для централизованной настройки Telegram-бота с поддержкой внешних инструментов, MCP-серверов, пресетов и интеграций.</p>
+<h2 id="_15">Основные секции</h2>
+<ul>
+<li>
+<p><strong><code>telegram</code></strong><br/>
+  Параметры подключения к Telegram: <code>token</code>, список разрешённых <code>chat_id</code>.</p>
+</li>
+<li>
+<p><strong><code>tools</code></strong><br/>
+  Описание внешних инструментов (команд). Поддержка режимов <code>headless</code> и <code>interactive</code>, команд, переменных окружения, регулярных выражений для определения приглашений.</p>
+</li>
+<li>
+<p><strong><code>defaults</code></strong><br/>
+  Глобальные настройки:</p>
+</li>
+<li><code>workdir</code> — рабочая директория выполнения команд.</li>
+<li>Таймауты: <code>idle_timeout_sec</code>.</li>
+<li>Лимиты: <code>memory_max_kb</code>, <code>memory_compact_target_kb</code>, <code>output_max_chars</code>.</li>
+<li>Пути: <code>state_file</code>, <code>log_file</code>.</li>
+<li>API-ключи: OpenAI, ZAI, Tavily, Jina, GitHub.</li>
+<li>
+<p>Логирование и уточнения: <code>clarification_enabled</code>, <code>clarification_keywords</code>.</p>
+</li>
+<li>
+<p><strong><code>mcp</code></strong><br/>
+  Настройки встроенного MCP-сервера: <code>enabled</code>, <code>host</code>, <code>port</code>, <code>token</code>.</p>
+</li>
+<li>
+<p><strong><code>mcp_clients</code></strong> / <strong><code>mcp_servers</code></strong><br/>
+  Подключение к внешним MCP-серверам. Поддержка транспорта: <code>stdio</code>, <code>http</code>. Параметры: <code>cmd</code>, <code>url</code>, <code>env</code>, <code>headers</code>, <code>timeout</code>.</p>
+</li>
+<li>
+<p><strong><code>presets</code></strong><br/>
+  Именованные промпты для упрощения взаимодействия.</p>
+</li>
+</ul>
+<h2 id="_16">Особенности</h2>
+<ul>
+<li>Файл загружается и сохраняется через <code>load_config</code> / <code>save_config</code>.</li>
+<li>Путь к файлу хранится в <code>path</code>.</li>
+<li>Поддержка кириллицы: <code>allow_unicode=False</code>.</li>
+<li>Обеспечивает гибкую интеграцию с LLM, поисковыми системами и внешними сервисами.</li>
+</ul>
+<p>Файл предоставляет функциональность для управления состоянием сессий и активных сессий через чтение/запись JSON-файлов. Основное назначение — хранение и обновление данных о запущенных инструментах (tools), рабочих директориях, токенах возобновления, описаниях сессий и активных состояниях.</p>
+<p>Ключевые сущности:
+- <code>SessionState</code> — данные сохранённой сессии: инструмент, рабочая директория, токен возобновления, сводка, временная метка обновления и необязательное имя.
+- <code>ActiveState</code> — данные активной сессии: инструмент, рабочая директория, идентификатор сессии и временная метка.</p>
+<p>Файл работает с JSON-файлом по указанному пути, где хранит:
+- Записи сессий по ключу вида <code>{tool}::{workdir}</code>.
+- Специальную запись <code>_active</code> для хранения активной сессии.
+- Специальную запись <code>_sessions</code> для хранения дополнительных сессионных данных.</p>
+<p>Ключевые функции:
+- <code>load_state</code>, <code>save_state</code> — загрузка и сохранение состояний сессий.
+- <code>update_state</code>, <code>get_state</code>, <code>delete_state</code> — управление отдельными сессиями.
+- <code>load_active_state</code>, <code>set_active_state</code>, <code>clear_active_state</code> — работа с активной сессией.
+- <code>load_sessions</code>, <code>save_sessions</code> — чтение и запись дополнительных сессионных данных.
+- <code>make_key</code> — формирование уникального ключа сессии.</p>
+<p>Все операции обрабатывают ошибки чтения/записи файлов с логированием, игнорируют отсутствующие файлы и некорректные данные.</p>
+<p>Файл определяет реестр команд для бота, возвращая список словарей с описанием каждой команды. Каждая команда содержит имя (<code>name</code>), описание (<code>desc</code>), ссылку на обработчик (<code>handler</code>) и флаг видимости в меню (<code>menu</code>). Реестр используется для регистрации доступных команд в интерфейсе бота, включая как пользовательские действия (создание сессий, управление файлами, git-операции), так и служебные функции (метрики, отладка, управление очередями). Ключевые сущности — это обработчики команд из экземпляра <code>bot_app</code>, которые привязываются к текстовым командам. Настройка <code>menu=True</code> означает, что команда будет отображаться в основном меню бота.</p>
+<p>Класс <code>Metrics</code> предназначен для сбора и отслеживания метрик работы приложения в режиме реального времени. Основные сущности — счётчики событий и временные отметки. Поддерживает инкремент счётчиков по ключу, фиксацию вывода и формирование текстового снимка состояния. Ключевые счётчики: <code>messages</code>, <code>commands</code>, <code>outputs</code>, <code>errors</code>, <code>queued</code>. При каждом вызове <code>observe_output</code> обновляется количество символов последнего вывода и временная метка. Метод <code>snapshot</code> возвращает строку с общим временем работы, значениями счётчиков и информацией о последнем выводе (время, сколько прошло, размер в символах).</p>
+<p>Класс <code>MCPBridge</code> реализует асинхронный TCP-сервер для взаимодействия с ботом через текстовые JSON-запросы. Сервер ожидает подключений, принимает входящие сообщения, проверяет токен авторизации, выполняет обработку текстового запроса через <code>bot_app.run_prompt_raw</code> и возвращает результат. Поддерживает построчную передачу данных, где каждое сообщение завершается символом новой строки.</p>
+<p>Ключевые сущности:<br/>
+- <code>config.mcp.enabled</code> — включение/отключение сервера.<br/>
+- <code>config.mcp.host</code>, <code>config.mcp.port</code> — параметры привязки сервера.<br/>
+- <code>config.mcp.token</code> — опциональный токен для аутентификации.  </p>
+<p>Формат запроса:<br/>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"токен"</span><span class="p">,</span><span class="w"> </span><span class="nt">"prompt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"текст запроса"</span><span class="p">,</span><span class="w"> </span><span class="nt">"session_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"идентификатор сессии"</span><span class="p">}</span>
+</code></pre></div></p>
+<p>Формат ответа:<br/>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"ok"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"output"</span><span class="p">:</span><span class="w"> </span><span class="s2">"результат"</span><span class="p">}</span><span class="w">  </span>
+<span class="p">{</span><span class="nt">"ok"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="s2">"описание ошибки"</span><span class="p">}</span>
+</code></pre></div></p>
+<p>Сервер корректно завершает работу при вызове <code>stop()</code>, закрывая все соединения. Ошибки обработки логируются с помощью <code>logging.exception</code>.</p>
+<h1 id="telegram-">Telegram-бот для управления сессиями и агентами</h1>
+<h2 id="_17">Назначение</h2>
+<p>Файл реализует асинхронного Telegram-бота на основе <code>python-telegram-bot</code> для управления сессиями, выполнения команд, взаимодействия с агентом, навигации по файловой системе и интеграции с внешними системами (Git, MCP, плагины). Бот поддерживает интерактивный интерфейс, подтверждение действий, песочницу агента и расширенные функции взаимодействия.</p>
+<h2 id="_18">Основные компоненты</h2>
+<ul>
+<li><strong><code>BotApp</code></strong> — центральный класс, координирующий сессии, команды, интеграции и взаимодействие с Telegram.</li>
+<li><strong><code>SessionManager</code></strong> — управление жизненным циклом сессий пользователей.</li>
+<li><strong><code>Session</code></strong> — активная сессия с атрибутами: <code>tool</code>, <code>workdir</code>, <code>agent_enabled</code>, <code>queue</code>, <code>busy</code>, <code>project_root</code>.</li>
+<li><strong><code>OrchestratorRunner</code></strong> — запуск и контроль агента.</li>
+<li><strong><code>GitOps</code></strong> — выполнение Git-операций (клонирование, коммиты и т.д.).</li>
+<li><strong><code>MCPBridge</code></strong> — интеграция с внешними сервисами/протоколами.</li>
+<li><strong><code>Metrics</code></strong> — сбор и учёт метрик использования (объём вывода, производительность).</li>
+<li><strong><code>SessionUI</code>, <code>dirs_ui</code></strong> — построение интерактивных интерфейсов (клавиатуры, меню).</li>
+</ul>
+<h2 id="_19">Функциональность</h2>
+<h3 id="_20">Управление сессиями</h3>
+<ul>
+<li>Создание (<code>/create</code>), выбор (<code>/use</code>), просмотр (<code>/sessions</code>, <code>/status</code>), закрытие (<code>/close</code>).</li>
+<li>Восстановление сессий, персистентность состояния (<code>state_path</code>), таймауты неактивности.</li>
+<li>Проверка безопасности путей (<code>is_within_root</code>), защита от выхода за пределы <code>workdir</code>.</li>
+</ul>
+<h3 id="_21">Работа с агентом</h3>
+<ul>
+<li>Включение/выключение (<code>/agent</code>), привязка проекта, очистка песочницы (<code>AGENT_SANDBOX_ROOT</code>).</li>
+<li>Выполнение запросов (<code>run_prompt</code>, <code>run_agent</code>), обработка вывода с аннотациями и ANSI → HTML.</li>
+<li>Буферизация и отправка вывода с метрикой <code>observe_output</code>.</li>
+</ul>
+<h3 id="_22">Интерактивный интерфейс</h3>
+<ul>
+<li>Поддержка inline-клавиатур: навигация по состояниям, файлам, сессиям, инструментам.</li>
+<li>Пагинация (20 элементов на страницу), просмотр, выбор, удаление файлов (с подтверждением).</li>
+<li>Навигация по каталогам: вверх, ручной ввод пути, создание директорий, <code>git clone</code>.</li>
+</ul>
+<h3 id="_23">Обработка ввода</h3>
+<ul>
+<li>Приём команд (с префиксом <code>&gt;</code>), текста, изображений (до <code>image_max_mb</code>), документов (до 500 КБ).</li>
+<li>Буферизация длинных сообщений с автоматической отправкой по таймауту.</li>
+<li>Очередь ввода, отмена, lock-механизмы при занятой сессии.</li>
+</ul>
+<h3 id="_24">Команды и пресеты</h3>
+<ul>
+<li><code>/preset</code> — запуск предустановленных команд (<code>tests</code>, <code>lint</code>, <code>build</code>, <code>refactor</code>).</li>
+<li><code>/toolhelp</code> — справка по CLI-инструментам с поддержкой ANSI.</li>
+<li><code>/metrics</code> — вывод статистики использования.</li>
+<li><code>/tools</code>, <code>/new</code>, <code>/newpath</code> — управление инструментами и сессиями.</li>
+</ul>
+<h3 id="callback-">Callback-обработка</h3>
+<ul>
+<li>Подтверждение команд, ответы на вопросы, управление плагинами.</li>
+<li>Маршрутизация по формату <code>action:key:values</code>.</li>
+<li>Поддержка inline-меню: выбор сессии, навигация, настройки.</li>
+</ul>
+<h2 id="_25">Интеграции и расширения</h2>
+<ul>
+<li><strong>Плагины</strong>: поддержка <code>plugin_commands</code>, <code>message_handlers</code>, <code>inline_handlers</code> с изоляцией.</li>
+<li><strong>Git</strong>: клонирование, коммиты, статус, интеграция в сессии.</li>
+<li><strong>MCP</strong>: внешняя интеграция через <code>MCPBridge</code>.</li>
+<li><strong>HTML-рендеринг</strong>: преобразование ANSI-вывода в HTML, временные файлы.</li>
+</ul>
+<h2 id="_26">Настройки</h2>
+<ul>
+<li>Конфигурация из <code>config.yaml</code> (<code>CONFIG_PATH</code>), включая:</li>
+<li><code>telegram.whitelist_chat_ids</code></li>
+<li><code>defaults.workdir</code>, <code>state_path</code>, <code>log_path</code></li>
+<li><code>summary_max_chars</code>, <code>image_max_mb</code>, <code>idle_timeout_sec</code></li>
+<li>Песочница: <code>workdir/sandbox</code></li>
+<li>Пресеты: <code>config.presets</code></li>
+</ul>
+<h2 id="_27">Логирование и метрики</h2>
+<ul>
+<li>Централизованное логирование с <code>TimedRotatingFileHandler</code> (03:00 UTC, <code>backupCount=1</code>):</li>
+<li>Общий лог (<code>log_path</code>)</li>
+<li>Ошибки (<code>error_log_path</code>)</li>
+<li>Лог агента (<code>agent_log_path</code>)</li>
+<li>Изоляция логгера <code>agent</code>, предотвращение дублирования.</li>
+<li>Обработка исключений, сетевых ошибок, логирование в потоках.</li>
+<li>Метрики: объём вывода, время выполнения, активность.</li>
+</ul>
+<h2 id="_28">Запуск и инициализация</h2>
+<ul>
+<li>Функция <code>build_app</code>:</li>
+<li>Регистрация обработчиков команд, сообщений, колбэков.</li>
+<li>Интеграция плагинов с фильтрацией (<code>_AgentEnabledFilter</code>).</li>
+<li>Обработка ошибок через <code>_on_error</code>.</li>
+<li>Режим polling, запуск приложения с проверкой доступа (<code>is_allowed</code>).</li>
+</ul>
+<h1 id="_29">Резюме модуля</h1>
+<p>Асинхронный модуль для генерации резюме текста и сообщений коммитов с использованием OpenAI API. Основные функции:</p>
+<ul>
+<li><strong>Резюмирование текста</strong>:  </li>
+<li><code>summarize_text</code> — возвращает краткую сводку на русском языке, с акцентом на ключевую информацию из конца текста.  </li>
+<li><code>summarize_text_with_reason</code> — расширенная версия с возвратом причины при ошибке.  </li>
+<li>Использует адаптивное определение длины резюме (короткое/среднее/длинное) и ограничение по <code>max_chars</code> с пометкой об усечении.  </li>
+<li>
+<p>Извлечение финального контекста через <code>_tail_digest</code>, очистка текста от CLI-заголовков — <code>_strip_cli_preamble</code>.</p>
+</li>
+<li>
+<p><strong>Генерация сообщений коммитов</strong>:  </p>
+</li>
+<li><code>suggest_commit_message_async</code> — краткое сообщение (~80 символов).  </li>
+<li><code>suggest_commit_message_detailed_async</code> — детальное сообщение (заголовок + тело, 3–6 пунктов, упоминание файлов, изменений, статуса тестов).  </li>
+<li>Возвращает кортеж (заголовок, тело) для детального формата.</li>
+</ul>
+<p><strong>Общие особенности</strong>:
+- Поддержка русского языка.
+- Асинхронная работа через <code>_chat_completion_async</code>.
+- Конфигурация: <code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code>, <code>OPENAI_BASE_URL</code> (через окружение или <code>AppConfig</code>).
+- <code>temperature=0.2</code> — для стабильности генерации.
+- Адаптивный расчёт <code>max_tokens</code> в зависимости от входа (до 80 для кратких, 220 для детальных).
+- Очистка текста: удаление ANSI-кодов и лишних пробелов (<code>normalize_text</code> из <code>utils</code>).</p>
+<p><strong>Обработка ошибок</strong>:
+- Обрабатываются таймауты, сетевые и статусные ошибки API.
+- При сбоях возвращается <code>None</code> и краткая причина (до 120 символов, <code>_compact_reason</code>).</p>
+<p><strong>Вспомогательные функции</strong>:
+- <code>_length_bucket</code> — классификация по объёму.
+- <code>_suggest_max_tokens</code> — расчёт лимита токенов.</p>
+<h1 id="gitops-git-telegram-">Класс <code>GitOps</code> — Работа с Git в Telegram-боте</h1>
+<p>Класс <code>GitOps</code> предоставляет асинхронный интерфейс для выполнения Git-операций через Telegram-бота, интегрированный с системой сессий (<code>SessionManager</code>) и поддерживающий интерактивное взаимодействие через inline-кнопки и callback-запросы.</p>
+<h2 id="_30">Основные возможности</h2>
+<ul>
+<li>Выполнение Git-команд: <code>commit</code>, <code>fetch</code>, <code>pull</code>, <code>merge</code>, <code>rebase</code>, <code>diff</code>, <code>log</code>, <code>stash</code>, <code>push</code>.</li>
+<li>Интерактивное управление операциями: выбор веток, подтверждение действий, разрешение конфликтов.</li>
+<li>Автоматическое формирование сообщений коммита (с поддержкой OpenAI при наличии API-ключа).</li>
+<li>Отображение статуса репозитория, истории, отставания/опережения относительно upstream.</li>
+<li>Генерация HTML-отчётов и отправка справки из <code>git.md</code>.</li>
+</ul>
+<h2 id="_31">Ключевые сущности</h2>
+<ul>
+<li><code>Session</code> — активная сессия пользователя.</li>
+<li><code>SessionManager</code> — управление сессиями.</li>
+<li><code>config.github_token</code> — токен для аутентификации в Git (через <code>GIT_ASKPASS</code>).</li>
+<li>Внутренние состояния по <code>chat_id</code>:  </li>
+<li><code>git_branch_menu</code>, <code>git_pending_ref</code>, <code>git_pull_target</code>, <code>pending_git_commit</code> — хранение промежуточных данных операций.</li>
+</ul>
+<h2 id="_32">Основные методы</h2>
+<ul>
+<li><strong><code>_run_git()</code></strong> — асинхронное выполнение Git-команд с перехватом вывода.</li>
+<li><strong><code>git_env()</code></strong>, <code>_ensure_git_askpass()</code> — безопасная передача токена аутентификации.</li>
+<li><strong><code>build_git_keyboard()</code></strong> — построение основного меню и вспомогательных клавиатур (выбор ветки, подтверждение, конфликты).</li>
+<li><strong>Проверки состояния</strong>:  </li>
+<li><code>ensure_git_session()</code>, <code>ensure_git_repo()</code>, <code>ensure_git_not_busy()</code> — валидация окружения и блокировка параллельных операций.</li>
+<li><strong>Анализ репозитория</strong>:  </li>
+<li><code>_git_current_branch</code>, <code>_git_upstream</code>, <code>_git_ahead_behind</code>, <code>_git_in_progress</code>, <code>_git_conflict_files</code>.</li>
+<li><strong>Формирование отчётов</strong>:  </li>
+<li><code>_git_status_text</code>, <code>_git_commit_context</code>, <code>_build_commit_body</code>, <code>_sanitize_commit_message</code>.</li>
+</ul>
+<h2 id="_33">Обработка событий</h2>
+<ul>
+<li><code>handle_callback()</code> — обработка inline-действий: <code>git_status</code>, <code>git_fetch</code>, <code>git_pull</code>, <code>git_help</code>, <code>git_confirm_merge</code> и др.</li>
+<li><code>handle_pending_commit_message()</code> — обработка ввода сообщения коммита, включая отмену и валидацию.</li>
+<li>Поддержка разрешения конфликтов: показ <code>diff</code>, вызов агента, продолжение/отмена операции.</li>
+</ul>
+<h2 id="_34">Безопасность и настройки</h2>
+<ul>
+<li>Токен GitHub передаётся через временный <code>GIT_ASKPASS</code>-скрипт.</li>
+<li>Все операции асинхронны, не блокируют бота.</li>
+<li>Вывод команд обрезается до 4000 символов.</li>
+<li>Временные HTML-файлы удаляются после отправки.</li>
+<li>Кодировка: UTF-8 с игнорированием ошибок декодирования.</li>
+</ul>
+<h2 id="_35">Зависимости</h2>
+<ul>
+<li>Git должен быть доступен в <code>PATH</code>.</li>
+<li>Требуется <code>github_token</code> в конфиге для приватных репозиториев.</li>
+<li>Наличие файлов: <code>git.md</code> (справка), права на чтение/запись в рабочей директории.</li>
+</ul>
+<p>Файл содержит функции для работы с файловой системой в контексте Telegram-бота, позволяя пользователю навигацию по каталогам через интерфейс с кнопками. Основное назначение — безопасное отображение и выбор директорий с поддержкой пагинации и ограничением доступа к корневому каталогу.</p>
+<p>Ключевые сущности: словари <code>dirs_menu</code>, <code>dirs_base</code>, <code>dirs_page</code>, <code>dirs_root</code>, хранящие состояние каталогов для каждого <code>chat_id</code>; функции <code>prepare_dirs</code> и <code>build_dirs_keyboard</code> для подготовки списка директорий и построения интерактивной клавиатуры.</p>
+<p>Функция <code>prepare_dirs</code> проверяет доступ к каталогу, читает поддиректории, сохраняет состояние и возвращает сообщение об ошибке или <code>None</code> при успехе. Параметр <code>allow_empty</code> позволяет обрабатывать отсутствие подкаталогов без ошибки.</p>
+<p>Функция <code>build_dirs_keyboard</code> формирует <code>InlineKeyboardMarkup</code> с кнопками для выбора каталога, навигации (вверх, назад, далее), а также действиями: использовать текущий каталог, создать каталог, выполнить git clone или ввести путь вручную. Используется пагинация по 10 элементов на страницу. Каждая кнопка генерирует callback-данные для обработки в боте.</p>
+<p>Модуль для управления справочной информацией по инструментам (tool help) в формате JSON-файла. Основное назначение — хранение, обновление и чтение описаний инструментов с меткой времени последнего изменения.</p>
+<p>Ключевая сущность — <code>ToolHelpEntry</code>, dataclass, содержащий поля: <code>tool</code> (название инструмента), <code>content</code> (текст справки), <code>updated_at</code> (временная метка обновления в формате Unix time).</p>
+<p>Основные функции:
+- <code>load_toolhelp(path)</code> — загружает данные из JSON-файла по указанному пути, возвращает словарь <code>tool_name → ToolHelpEntry</code>.
+- <code>save_toolhelp(path, data)</code> — сохраняет словарь с записями в JSON-файл с отступами и поддержкой Unicode.
+- <code>update_toolhelp(path, tool, content)</code> — добавляет или обновляет запись для инструмента, автоматически устанавливая текущее время как <code>updated_at</code>.
+- <code>get_toolhelp(path, tool)</code> — возвращает объект <code>ToolHelpEntry</code> для указанного инструмента или <code>None</code>, если не найден.</p>
+<p>Файл хранится в формате JSON с ключами: <code>tool</code>, <code>content</code>, <code>updated_at</code>. При отсутствии файла или пустом содержимом возвращается пустой словарь.</p>
+<p>Список зависимостей Python-пакетов для реализации Telegram-бота с расширенными функциями обработки текста, поиска, мультимедиа и веб-контента. Основное назначение — поддержка бота, взаимодействующего с OpenAI, выполняющего парсинг веб-страниц, извлечение текста из PDF и видео (YouTube), озвучку текста, конвертацию разметки и поиск информации через DuckDuckGo.</p>
+<p>Ключевые сущности:
+- <code>python-telegram-bot</code> — основа для работы с Telegram API.
+- <code>openai</code> — интеграция с моделями OpenAI (например, GPT).
+- <code>requests</code>, <code>httpx</code>, <code>beautifulsoup4</code>, <code>trafilatura</code> — HTTP-запросы и парсинг HTML.
+- <code>pdfminer.six</code> — извлечение текста из PDF-файлов.
+- <code>youtube-transcript-api</code> — получение субтитров с YouTube.
+- <code>gTTS</code> — преобразование текста в речь.
+- <code>markdown-it-py</code> с плагинами — обработка Markdown и ссылок.
+- <code>duckduckgo-search</code> — поиск в интернете без использования Google.
+- <code>PyYAML</code> — работа с YAML-конфигурациями.
+- <code>pexpect</code> — управление интерактивными процессами.
+- <code>ansi2html</code> — конвертация ANSI-цветного вывода в HTML.
+- <code>pytest</code> — тестирование кода.</p>
+<p>Важные настройки и версии:
+- Зафиксированы версии критичных пакетов (например, <code>python-telegram-bot==20.7</code> для совместимости с асинхронным API).
+- Для <code>openai</code>, <code>httpx</code>, <code>beautifulsoup4</code>, <code>trafilatura</code>, <code>pdfminer.six</code> допускаются версии выше указанных — обеспечивается гибкость обновлений при сохранении минимальных требований.</p>
+<h1 id="ansi-markdown-mermaid">Резюме: Утилиты обработки текста с ANSI, Markdown и Mermaid</h1>
+<p>Модуль предоставляет набор вспомогательных функций для преобразования терминального вывода (с ANSI-кодами, Mermaid-диаграммами и служебными метками) в чистый, валидный HTML, готовый к отображению в браузере.</p>
+<h2 id="_36">Основные возможности</h2>
+<ul>
+<li><strong>Обработка ANSI-кодов</strong>:  </li>
+<li><code>strip_ansi()</code> — удаление ANSI-последовательностей.  </li>
+<li><code>ansi_to_html()</code> — преобразование ANSI-размеченного текста в HTML с цветами, жирным шрифтом, списками и таблицами.  </li>
+<li>Цвета (30–37, 90–97) сопоставляются с HTML-цветами через <code>_ANSI_FG_COLORS</code>.  </li>
+<li>
+<p>Используются регулярные выражения <code>_ANSI_RE</code> и <code>_LOOSE_ANSI_RE</code>.</p>
+</li>
+<li>
+<p><strong>Поддержка Mermaid</strong>:  </p>
+</li>
+<li><code>_MERMAID_BLOCK_RE</code> выделяет блоки Mermaid.  </li>
+<li>
+<p><code>_render_mermaid_svg()</code> рендерит диаграммы через внешний сервис <a href="https://mermaid.ink">mermaid.ink</a>.</p>
+</li>
+<li>
+<p><strong>Нормализация текста</strong>:  </p>
+</li>
+<li><code>normalize_text()</code> удаляет строки с префиксом <code>mcp:</code> (через <code>_MCP_LINE_RE</code>) и устраняет дублирование блоков.  </li>
+<li>
+<p><code>build_preview()</code> — обрезка текста с пометкой усечения.</p>
+</li>
+<li>
+<p><strong>Работа с HTML и файлами</strong>:  </p>
+</li>
+<li><code>escape_html_text()</code> — экранирование HTML-символов.  </li>
+<li><code>make_html_file()</code> — создание временного HTML-файла.  </li>
+<li>
+<p><code>is_within_root()</code> — проверка безопасного пути в файловой системе.</p>
+</li>
+<li>
+<p><strong>Сборка и обработка команд</strong>:  </p>
+</li>
+<li><code>build_command()</code> — подстановка значений (<code>{prompt}</code>, <code>{resume}</code>, <code>{image}</code>) в шаблон с фильтрацией неактуальных флагов.  </li>
+<li>
+<p><code>resolve_env_value()</code> — раскрытие переменных окружения.</p>
+</li>
+<li>
+<p><strong>Детекция сессий и приглашений</strong>:  </p>
+</li>
+<li><code>detect_prompt_regex()</code> — определение приглашения ввода по последним строкам.  </li>
+<li><code>detect_resume_regex()</code> — поиск идентификаторов сессии (thread_id, conversation_id и др.) по жёстко заданным шаблонам.</li>
+</ul>
+<h2 id="_37">Вспомогательные функции</h2>
+<ul>
+<li><code>sandbox_*</code> — работа с путями в песочнице.  </li>
+<li><code>_TICK_OR_TIME_RE</code> — извлечение временных меток.</li>
+</ul>
+<h2 id="_38">Зависимости и особенности</h2>
+<ul>
+<li>Модули: <code>os</code>, <code>re</code>, <code>html</code>, <code>tempfile</code>.  </li>
+<li>Глобальное состояние (<code>out</code>, <code>fg_color</code>, <code>bold</code>, <code>open_span</code>) — требует осторожности при использовании в многопоточной среде.  </li>
+<li>Регулярные выражения и шаблоны частично зашиты в код.</li>
+</ul>
+<p>Результат — структурированный HTML с инлайн-стилями, поддержкой цветов, диаграмм и безопасной подстановкой данных.</p>
+<h1 id="_39">Обзор модуля управления сессиями</h1>
+<p>Модуль реализует асинхронное управление сессиями выполнения внешних инструментов (например, CLI-агентов), поддерживая <strong>headless-</strong> и <strong>интерактивный режимы</strong> работы. Основные компоненты — <code>Session</code> и <code>SessionManager</code>.</p>
+<h2 id="_40">Основные сущности</h2>
+<h3 id="session"><code>Session</code></h3>
+<p>Представляет контекст выполнения инструмента. Управляет запуском, вводом/выводом, состоянием и жизненным циклом процесса.</p>
+<p><strong>Ключевые поля:</strong>
+- <code>tool</code>: конфигурация инструмента (<code>ToolConfig</code>)
+- <code>workdir</code>: рабочая директория
+- <code>child</code>: <code>pexpect</code>-процесс (интерактивный режим)
+- <code>current_proc</code>: <code>asyncio.subprocess</code> (headless-режим)
+- <code>resume_token</code>: токен для возобновления сессии
+- <code>idle_timeout_sec</code>: таймаут бездействия
+- <code>agent_memory</code>, <code>git_conflict</code>, <code>agent_enabled</code>: состояние агента</p>
+<p><strong>Режимы выполнения:</strong>
+- <strong>Headless</strong>: запуск через <code>asyncio.subprocess</code>, отслеживание stdout/stderr, принудительное завершение при зависании.
+- <strong>Интерактивный</strong>: эмуляция терминала через <code>pexpect</code>, синхронизация по <code>prompt_regex</code> и <code>resume_regex</code>.</p>
+<p><strong>Ключевые методы:</strong>
+- <code>run_prompt()</code>: точка входа, выбирает режим выполнения
+- <code>_run_headless()</code>: выполнение без интерактивности с таймаутами
+- <code>_run_interactive()</code>: интерактивное выполнение с ожиданием приглашения
+- <code>interrupt()</code>, <code>close()</code>: управление завершением</p>
+<p><strong>Особенности:</strong>
+- Поддержка передачи изображений (если указано в конфиге)
+- Фильтрация ANSI-кодов
+- Детекция активности по выводу, токенов продолжения и конфликтов в Git
+- Проверка активности процесса через <code>ps</code> и PID</p>
+<h3 id="sessionmanager"><code>SessionManager</code></h3>
+<p>Управляет коллекцией сессий: создание, активация, восстановление, сохранение.</p>
+<p><strong>Ключевые методы:</strong>
+- <code>create()</code>: создаёт новую сессию
+- <code>get()</code>, <code>active()</code>: получение сессии
+- <code>set_active()</code>: установка активной сессии
+- <code>close()</code>: закрытие и удаление сессии</p>
+<p><strong>Сериализация:</strong>
+- Сессии сохраняются в файл по пути <code>config.defaults.state_path</code>
+- Сериализуемые данные: ID инструмента, рабочая директория, имя, токен, очередь сообщений, состояние агента, корень проекта
+- Восстановление при старте из файла (<code>_restore_sessions</code>)
+- Ошибки чтения/записи игнорируются</p>
+<p><strong>Уведомления:</strong>
+- Колбэк <code>on_session_change</code> вызывается при изменении активной сессии (<code>_fire_session_change</code>)</p>
+<h2 id="_41">Интеграции и зависимости</h2>
+<ul>
+<li><code>pexpect</code>: интерактивные сессии, запуск <code>run_tool_help</code></li>
+<li><code>asyncio.subprocess</code>: headless-режим</li>
+<li><code>AppConfig</code>, <code>ToolConfig</code>: конфигурация инструментов и путей</li>
+<li><code>get_state</code>, <code>save_sessions</code>: работа с состоянием</li>
+</ul>
+<h2 id="_42">Дополнительные функции</h2>
+<ul>
+<li><code>run_tool_help</code>: запуск команды помощи инструмента, возврат вывода или сообщение об отсутствии</li>
+<li>Поддержка <code>auto_commands</code> (команды при старте)</li>
+<li>Управление окружением (<code>env</code>) и рабочей директорией</li>
+</ul>
+<p>Конфигурационный файл для Telegram-бота, интегрированного с различными LLM-инструментами (Codex, Claude, Gemini, Qwen). Определяет параметры подключения к Telegram, настройки инструментов, переменные окружения, режимы работы и поведение бота.</p>
+<p><strong>Telegram</strong>: задаётся токен бота и список разрешённых chat_id для доступа.<br/>
+<strong>Инструменты (tools)</strong>: для каждого LLM (codex, claude, gemini, qwen) указаны команды запуска в headless-режиме, интерактивные команды, команды продолжения сессии, шаблоны подстановки (<code>{prompt}</code>, <code>{resume}</code>, <code>{image}</code>), регулярные выражения для извлечения данных (например, thread_id), команды помощи и переменные окружения (ключи API).<br/>
+<strong>Defaults</strong>: глобальные настройки — рабочая директория, таймаут бездействия, лимиты вывода, пути к файлам состояния и логов, параметры обработки изображений и памяти, включение уточнений по ключевым словам (например, "уточни", "почему", "где").<br/>
+<strong>MCP</strong>: управление MCP-серверами — отключено по умолчанию (локальный сервер на 127.0.0.1:8765), но поддерживается подключение к внешним MCP-серверам через <code>mcp_servers</code> (например, context7, notebooklm, chrome-devtools и др.) по HTTP.<br/>
+<strong>Presets</strong>: предустановленные команды, такие как запуск тестов и линтера, с готовыми текстами запросов.  </p>
+<p>Поддерживает динамическую подстановку API-ключей через переменные окружения, работу с изображениями до 10 МБ, ограничение памяти и автоматическое резюмирование диалогов.</p>
+<p>Класс <code>Dispatcher</code> отвечает за выбор профиля исполнителя (<code>ExecutorProfile</code>) для каждого шага плана (<code>PlanStep</code>). На текущий момент поддерживается только один профиль по умолчанию, инициализируемый на основе конфигурации приложения (<code>AppConfig</code>) и реестра инструментов (<code>ToolRegistry</code>). </p>
+<p>Ключевые сущности:
+- <code>AppConfig</code> — конфигурация приложения.
+- <code>ToolRegistry</code> — реестр доступных инструментов.
+- <code>ExecutorProfile</code> — профиль исполнителя, определяющий поведение при выполнении шага.
+- <code>PlanStep</code> — шаг плана, для которого выбирается профиль.</p>
+<p>Важные настройки:
+- Инициализация профиля по умолчанию через <code>build_default_profile</code>.
+- Логирование инициализации и выбора профиля на уровне <code>INFO</code>.</p>
+<p>В будущем логику выбора профиля можно расширить в зависимости от типа шага, его параметров или других условий.</p>
+<p>Модуль отвечает за управление долговременной памятью проекта с использованием LLM. Содержит две основные функции: <code>decide_memory_save</code> — принимает решение о сохранении новой информации во внешнюю память на основе диалога, определяет категорию и форматирует запись; <code>compress_memory</code> — сжимает существующую память до заданного лимита по символам, сохраняя приоритетные данные. Используются системные промпты для контроля поведения модели: один для принятия решений о сохранении (возвращается JSON с полями <code>save</code>, <code>category</code>, <code>content</code>), другой — для сжатия памяти с сохранением форматированных записей. Категории имеют иерархию важности: preference &gt; decision &gt; config &gt; agreement. Записи помечаются тегами (PREF, DECISION и др.) и включают временную метку в формате <code>YYYY-MM-DD HH:MM</code>. Модуль зависит от <code>AppConfig</code> и асинхронного клиента OpenAI.</p>
+<p>Модуль предоставляет асинхронные функции для взаимодействия с OpenAI API через <code>AsyncOpenAI</code>. Основное назначение — выполнение запросов к модели с использованием настроек из конфигурации приложения.</p>
+<p>Ключевые сущности:
+- <code>AppConfig</code> — объект конфигурации, содержащий параметры по умолчанию.
+- <code>get_openai_config</code> — извлекает и валидирует параметры OpenAI: API-ключ, модель и базовый URL. Если ключ или модель не заданы, возвращает <code>None</code>. Базовый URL по умолчанию — <code>https://api.openai.com</code>.
+- <code>build_client</code> — создаёт асинхронного клиента <code>AsyncOpenAI</code> на основе конфигурации. Возвращает кортеж из клиента и имени модели или <code>None</code>, если конфигурация неполная.
+- <code>chat_completion</code> — выполняет запрос к чат-модели с системным и пользовательским сообщениями. Использует фиксированное значение <code>temperature=0.2</code>. Возвращает строку с ответом модели или пустую строку при ошибках или отсутствии данных.</p>
+<p>Важные настройки:
+- <code>openai_api_key</code> — обязательный API-ключ.
+- <code>openai_model</code> — обязательное имя модели (например, <code>gpt-3.5-turbo</code>).
+- <code>openai_base_url</code> — опциональный URL для кастомного эндпоинта (например, при использовании прокси).</p>
+<h1 id="_43">Резюме: Политика безопасности и ограничений</h1>
+<p>Документ описывает правила безопасного использования вычислительной среды, направленные на предотвращение выполнения ресурсоёмких, опасных или бесполезных операций. Запрещены:</p>
+<ul>
+<li>Бесконечные циклы и тяжёлые вычисления  </li>
+<li>Сетевое сканирование и атаки на сервисы  </li>
+<li>Доступ к чужим данным и системным ресурсам  </li>
+</ul>
+<p>Разрешены легальные действия: установка пакетов, запуск скриптов, управление файлами, планирование задач и корректная работа с сетью. Приведены рекомендации по запуску сервисов, использованию инструментов и эффективному расходованию памяти.</p>
+<p>Модуль отвечает за построение плана выполнения задачи пользователя в виде последовательности шагов. Использует LLM через системный промпт для генерации структурированного JSON-ответа, описывающего шаги, их типы, зависимости и возможность параллельного выполнения.</p>
+<p>Ключевые сущности:
+- <code>PlanStep</code> — модель шага плана, содержащая идентификатор, заголовок, инструкцию, тип шага (<code>task</code> или <code>ask_user</code>), зависимости, признак параллельности и данные для уточняющих вопросов.
+- <code>_PLANNER_SYSTEM</code> — системный промпт, задающий поведение LLM: формат вывода, правила построения плана, условия параллельного выполнения и уточнения у пользователя.
+- <code>plan_steps</code> — основная асинхронная функция, принимающая конфигурацию, сообщение пользователя и контекст, возвращающая список <code>PlanStep</code>.
+- <code>needs_clarification</code> и <code>normalize_ask_step</code> — вспомогательные функции из модулей <code>heuristics</code> для определения необходимости уточнения и корректной настройки шагов с вопросами.</p>
+<p>Важные настройки и поведение:
+- Если LLM возвращает некорректный JSON, используется fallback-план с одним шагом.
+- При отсутствии шагов или необходимости уточнения (по эвристике) добавляется шаг <code>ask_user</code> с вариантами ответа.
+- Идентификаторы шагов гарантируют уникальность через <code>_ensure_unique_step_ids</code>, при коллизиях генерируются новые с меткой времени и UUID.
+- Поддержка параллельного выполнения: шаги могут быть помечены как <code>parallelizable</code> с указанием <code>parallel_group</code> и причины, если выполнение безопасно.
+- Обработка ответа LLM включает извлечение JSON из текста (с удалением Markdown-разметки и поиска объекта между <code>{}</code>).</p>
+<p>Используется в цепочке обработки запроса для декомпозиции задачи перед передачей исполнителю.</p>
+<p>Файл предоставляет функции для работы с локальным файлом памяти <code>MEMORY.md</code>, используемым для хранения временных записей в формате Markdown. Основное назначение — ведение журнала событий с поддержкой тегов, дедупликацией, компрессией по приоритету и ограничением по размеру.  </p>
+<p>Ключевые сущности:<br/>
+- <code>MEMORY.md</code> — файл, хранящий записи в формате <code>- ГГГГ-ММ-ДД ЧЧ:ММ: [ТЕГ] Текст</code>.<br/>
+- Регулярное выражение <code>_ENTRY_RE</code> — парсит записи, извлекая метку времени, тег и текст.<br/>
+- Функции <code>read_memory</code>, <code>write_memory</code>, <code>append_memory</code> — чтение, запись и добавление содержимого.<br/>
+- <code>append_memory_tagged</code> — добавляет запись с тегом, избегая дубликатов (сравнение по нормализованному тексту и тегу).<br/>
+- <code>parse_entries</code> — разбирает содержимое на структурированные записи.<br/>
+- <code>compact_memory_by_priority</code> — сжимает память по заданному лимиту в байтах, сохраняя записи в порядке приоритета тегов.<br/>
+- <code>trim_for_context</code> — обрезает текст по количеству символов с пометкой о тримировании.<br/>
+- <code>memory_size_bytes</code> — возвращает размер содержимого в байтах.  </p>
+<p>Важные настройки:<br/>
+- <code>max_chars=2000</code> в <code>trim_for_context</code> — ограничение на длину контекста.<br/>
+- <code>max_bytes</code> в <code>compact_memory_by_priority</code> — лимит размера памяти при компрессии.<br/>
+- <code>priority</code> — список тегов, определяющий порядок сохранения записей при сжатии.  </p>
+<p>Функции работают с указанием рабочей директории (<code>cwd</code>), что позволяет использовать изолированные файлы памяти.</p>
+<p>Модуль предоставляет потокобезопасные операции чтения и записи JSON-файлов с использованием системных блокировок. Основное назначение — обеспечение целостности данных при одновременном доступе к файлу из нескольких процессов.</p>
+<p>Ключевые функции:
+- <code>read_json_locked</code> — читает JSON-файл под общей (shared) блокировкой, возвращает содержимое как словарь. При отсутствии файла, ошибке парсинга или пустом содержимом возвращает значение по умолчанию.
+- <code>write_json_locked</code> — записывает словарь в JSON-файл под эксклюзивной (exclusive) блокировкой с полной перезаписью содержимого.
+- <code>update_json_locked</code> — выполняет атомарное чтение, модификацию и запись JSON-файла под эксклюзивной блокировкой. Принимает функцию <code>updater</code>, которая преобразует текущие данные и возвращает новые.</p>
+<p>Все функции автоматически создают родительские директории пути при необходимости. Используется буферизация и синхронизация (<code>os.fsync</code>) для надежности записи на диск. Файлы открываются в режиме <code>a+</code>, что гарантирует создание файла, если он отсутствует.</p>
+<p>Модуль определяет структуры данных для планирования и выполнения задач в системе исполнения. Основные сущности — <code>PlanStep</code>, <code>ExecutorRequest</code> и <code>ExecutorResponse</code>.</p>
+<p><code>PlanStep</code> описывает шаг в плане выполнения: уникальный идентификатор, заголовок, инструкцию, тип шага, группу для параллельного выполнения, зависимости, признак параллелизма и дополнительные параметры (инструменты, вопросы с вариантами ответов). Зависимости (<code>depends_on</code>) обеспечивают корректное упорядочивание при параллельном выполнении.</p>
+<p><code>ExecutorRequest</code> представляет входные данные для исполнителя: идентификатор задачи, цель, контекст, входные параметры, ограничения, разрешённые инструменты, ожидаемые выходы, дедлайн и профиль исполнения. Поле <code>corr_id</code> может использоваться для корреляции запросов.</p>
+<p><code>ExecutorResponse</code> — ответ от исполнителя: статус выполнения (одно из: <code>ok</code>, <code>needs_input</code>, <code>error</code>, <code>timeout</code>, <code>blocked</code>, <code>partial</code>), краткое резюме, список выходов, вызовы инструментов и следующие вопросы (если требуется ввод).</p>
+<p>Функции <code>validate_request</code> и <code>validate_response</code> обеспечивают базовую валидацию обязательных полей и допустимых значений.</p>
+<p>Модуль предоставляет основные компоненты для работы агента: ядро исполнения, реестр инструментов и вспомогательные функции для выполнения команд. Включает класс <code>AgentRunner</code> для управления жизненным циклом агента, <code>ToolRegistry</code> для регистрации и управления инструментами, а также функции <code>execute_shell_command</code>, <code>pop_pending_command</code> и <code>set_approval_callback</code> для взаимодействия с командами оболочки и обработки подтверждений. Основное назначение — объединение логики исполнения и инструментария в единую точку доступа.</p>
+<h1 id="react">ReAct Агент — Краткое резюме</h1>
+<h2 id="_44">Назначение</h2>
+<p>Файл реализует ReAct-агента (Reasoning + Action), взаимодействующего с OpenAI API для выполнения задач с использованием инструментов, управления памятью, чат-историей и поддержкой песочницы. Агент способен рассуждать, вызывать инструменты, отслеживать контекст и сохранять состояние между сессиями.</p>
+<h2 id="_45">Основные компоненты</h2>
+<ul>
+<li><strong><code>ReActAgent</code></strong> — основной класс, управляющий циклом рассуждений и действий, вызовом инструментов и обработкой ограничений.</li>
+<li><strong><code>AgentRunner</code></strong> — фасад для запуска агента, проверяющий конфигурацию и возвращающий результат выполнения.</li>
+<li><strong><code>AgentRunResult</code></strong> — результат выполнения: <code>output</code>, <code>status</code>, <code>tool_calls</code>.</li>
+<li><strong><code>PluginToolRegistry</code></strong> — реестр инструментов, обеспечивающий их вызов и фильтрацию по <code>allowed_tools</code>.</li>
+</ul>
+<h2 id="_46">Управление состоянием</h2>
+<ul>
+<li><strong>Сессии</strong>: хранятся в <code>SESSION.json</code> в изолированной директории (<code>_sandbox</code>), восстанавливаются/сохраняются с блокировкой (<code>read_json_locked</code>/<code>write_json_locked</code>).</li>
+<li><strong>История</strong>: разделена по <code>task_id</code> (<code>history_by_task</code>), поддерживается миграция старых данных.</li>
+<li><strong>Память</strong>: хранится в <code>MEMORY.md</code>, ограничена по размеру (<code>MAX_MEMORY_CHARS</code>), включается в промпт.</li>
+<li><strong>Чат</strong>: история ограничена <code>MAX_CHAT_MESSAGES</code>, сохраняется через <code>save_chat_message</code>.</li>
+</ul>
+<h2 id="_47">Конфигурация</h2>
+<ul>
+<li><strong>OpenAI</strong>: <code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code>, <code>OPENAI_BASE_URL</code> — настраиваются через переменные окружения или <code>AppConfig</code>.</li>
+<li><strong>Пути</strong>: <code>_shared_dir</code>, <code>_chats_dir</code> — определяются на основе <code>AGENT_SANDBOX_ROOT</code>.</li>
+<li><strong>Ограничения</strong>:</li>
+<li><code>AGENT_MAX_ITERATIONS</code> — макс. число итераций.</li>
+<li><code>AGENT_MAX_BLOCKED</code> — порог блокировок до остановки.</li>
+<li><code>AGENT_MAX_HISTORY</code> — макс. длина истории.</li>
+</ul>
+<h2 id="_48">Системный промпт</h2>
+<p>Динамически формируется из <code>system.txt</code> с подстановкой:
+- <code>{{cwd}}</code>, <code>{{date}}</code>, <code>{{tools}}</code>, <code>{{userPorts}}</code>
+- Содержимое памяти, история чата, контекст (<code>request_context</code>, <code>constraints</code>, <code>corr_id</code>)</p>
+<h2 id="_49">Особенности</h2>
+<ul>
+<li>Поддержка <code>tool_choice="auto"</code> — модель решает, когда вызывать инструменты.</li>
+<li>Обработка ошибок парсинга аргументов инструментов с попыткой восстановления.</li>
+<li>Блокировка команд через префикс <code>BLOCKED:</code>, с предупреждением агенту.</li>
+<li>Логирование через <code>log_global</code> — отладка, аудит, трассировка итераций.</li>
+<li>Фильтрация инструментов по <code>allowed_tools</code> — безопасность и контроль.</li>
+</ul>
+<h2 id="_50">Статусы выполнения</h2>
+<ul>
+<li><code>ok</code> — успешно</li>
+<li><code>error</code> — ошибка (некорректная конфигурация, неизвестный инструмент)</li>
+<li><code>blocked</code> — превышено число заблокированных действий</li>
+<li><code>partial</code> — частичный успех инструментов</li>
+<li><code>timeout</code> — достигнут лимит итераций</li>
+</ul>
+<h2 id="_51">Назначение классов</h2>
+<table>
+<thead>
+<tr>
+<th>Класс</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ReActAgent</code></td>
+<td>Основная логика агента: цикл ReAct, вызов инструментов, обработка блокировок</td>
+</tr>
+<tr>
+<td><code>AgentRunner</code></td>
+<td>Точка входа, проверка конфигурации, запуск агента</td>
+</tr>
+<tr>
+<td><code>PluginToolRegistry</code></td>
+<td>Регистрация и выполнение инструментов</td>
+</tr>
+</tbody>
+</table>
+<p>Файл содержит вспомогательные функции для обработки шагов планирования и определения необходимости уточнения входного запроса. Основная логика построена на анализе текста и конфигурации приложения.</p>
+<p>Функция <code>needs_clarification</code> проверяет, требует ли текст уточнения, на основе наличия вопросительного знака или ключевых слов из конфигурации (<code>clarification_keywords</code>). Проверка активируется только при включённой опции <code>clarification_enabled</code> в <code>AppConfig</code>.</p>
+<p>Функция <code>normalize_ask_step</code> нормализует объект <code>PlanStep</code>, устанавливая значения по умолчанию для полей <code>ask_question</code> и <code>ask_options</code>, если они не заданы или содержат недостаточно вариантов ответа.</p>
+<p>Ключевые сущности: <code>AppConfig</code>, <code>PlanStep</code>.<br/>
+Важные настройки: <code>clarification_enabled</code>, <code>clarification_keywords</code> — определяют поведение механизма уточнения.</p>
+<h1 id="_52">Оркестратор выполнения задач — Краткое резюме</h1>
+<h2 id="_53">Назначение</h2>
+<p>Файл реализует оркестратор задач, управляющий пошаговым выполнением на основе пользовательского ввода, планирования, исполнения и взаимодействия с инструментами. Центральная логика сосредоточена в классе <code>OrchestratorRunner</code>.</p>
+<h2 id="_54">Ключевые сущности</h2>
+<ul>
+<li><strong><code>OrchestratorRunner</code></strong> — основной класс, управляющий жизненным циклом задачи: планирование, выполнение, состояние.</li>
+<li><strong><code>PlanStep</code></strong> — шаг плана с полями: <code>id</code>, <code>instruction</code>, <code>depends_on</code>, <code>parallelizable</code>, <code>parallel_group</code>, <code>step_type</code>, <code>ask_question</code>.</li>
+<li><strong><code>Executor</code> / <code>Dispatcher</code></strong> — компоненты для выполнения шагов и маршрутизации инструментов.</li>
+<li><strong><code>ExecutorRequest</code> / <code>ExecutorResponse</code></strong> — интерфейс взаимодействия с исполнителем.</li>
+<li><strong><code>profile</code></strong> — конфигурация профиля (инструменты, настройки).</li>
+</ul>
+<h2 id="_55">Основные функции и методы</h2>
+<ul>
+<li><strong><code>plan_steps</code></strong> — генерация плана на основе контекста и запроса.</li>
+<li><strong><code>_order_steps_safely</code></strong> — валидация и упорядочивание шагов, проверка зависимостей.</li>
+<li><strong><code>_next_batch</code></strong> — определение следующей группы исполняемых шагов с поддержкой параллелизма (по <code>parallel_group</code> и <code>parallelizable</code>).</li>
+<li><strong><code>_execute_step</code></strong> — запуск шага, обработка ответов, запросов к пользователю.</li>
+<li><strong><code>_apply_step_result</code></strong> — обновление статусов выполнения шагов.</li>
+<li><strong><code>_maybe_update_memory</code></strong> — управление памятью: сохранение, сжатие (LLM или по приоритетам), ограничение размера.</li>
+</ul>
+<h2 id="_56">Хранение и безопасность</h2>
+<ul>
+<li><strong><code>SESSION.json</code></strong> — хранение истории сессий (макс. 50 записей).</li>
+<li><strong>Память</strong> — текстовый файл в <code>cwd</code>, ограничен <code>memory_max_kb</code>, сжимается до <code>memory_compact_target_kb</code>.</li>
+<li><strong>Потокобезопасность</strong> — блокирующие операции (<code>read_json_locked</code>, <code>update_json_locked</code>).</li>
+<li><strong>Логирование</strong> — через <code>self._log</code>, с корреляцией <code>corr_id = {session.id}:{step.id}</code>.</li>
+</ul>
+<h2 id="_57">Настройки и ограничения</h2>
+<ul>
+<li><code>replan_count</code>: макс. 2 перепланирования (на уточнения от пользователя).</li>
+<li><code>max_chars=2000</code>: лимит контекста памяти.</li>
+<li><code>max_items=50</code>: макс. число записей в истории.</li>
+<li>Параллельное выполнение — только для безопасных операций (чтение), если <code>parallelizable_reason</code> не содержит "read" — запрещено для записи/редактирования.</li>
+</ul>
+<h2 id="_58">Особенности поведения</h2>
+<ul>
+<li>Динамическое выполнение графа с зависимостями (<code>depends_on</code>).</li>
+<li>При <code>ask_user</code> — запрос уточнения и возможное перепланирование.</li>
+<li>Статусы: <code>"ok"</code>, <code>"partial"</code> — успех; <code>"blocked"</code> — ошибка зависимостей или циклов.</li>
+<li>Стабильный порядок выполнения по исходному <code>order</code>.</li>
+<li>Интеграция: <code>record_message</code>, <code>resolve_question</code>, <code>clear_session_cache</code>, <code>get_plugin_commands</code>, <code>get_plugin_ui</code>.</li>
+</ul>
+<p>Определяет профиль исполнителя (<code>ExecutorProfile</code>) для управления доступом к инструментам и настройками выполнения.<br/>
+Ключевая сущность — <code>ExecutorProfile</code>, представляющая конфигурацию с именем, списком разрешённых инструментов, таймаутом (в миллисекундах) и максимальным числом попыток.<br/>
+По умолчанию создаётся профиль "default" через функцию <code>build_default_profile</code>, который включает все доступные инструменты из <code>ToolRegistry</code>.<br/>
+Использует настройки приложения (<code>AppConfig</code>) и реестр инструментов для формирования профиля.</p>
+<p>Класс <code>Executor</code> отвечает за выполнение задач агента в изолированной среде с поддержкой инструментов, обработкой ошибок и повторными попытками. Основан на <code>AgentRunner</code> и использует <code>ToolRegistry</code> для управления доступными инструментами. Поддерживает диалог с пользователем через <code>ask_user</code>, обработку таймаутов и временных сбоев с экспоненциальным отступом.</p>
+<p>Ключевые сущности:
+- <code>ExecutorRequest</code> / <code>ExecutorResponse</code> — валидируемые входные и выходные данные.
+- <code>ExecutorProfile</code> — определяет политики выполнения: <code>allowed_tools</code>, <code>max_retries</code>, <code>timeout_ms</code>.
+- <code>ToolRegistry</code> — предоставляет и выполняет инструменты, включая <code>ask_user</code>.
+- <code>AgentRunner</code> — непосредственно запускает логику агента (ReAct).</p>
+<p>Важные настройки:
+- <code>workdir</code> в конфиге — корневая директория для песочниц.
+- <code>session_workspace</code> — изолированная директория на сессию.
+- <code>max_retries</code> и <code>timeout_ms</code> из профиля — контроль устойчивости и времени выполнения.
+- Обработка <code>asyncio.TimeoutError</code>, <code>ConnectionError</code> и подобных как временных ошибок.
+- Логирование с привязкой к <code>corr_id</code> и замером времени выполнения.</p>
+<p>Методы управления:
+- <code>record_message</code>, <code>resolve_question</code>, <code>clear_session_cache</code> — работа с состоянием сессии.
+- <code>get_plugin_commands</code>, <code>get_plugin_ui</code> — интеграция с интерфейсом бота через разрешённые инструменты.</p>
+<h1 id="_59">Конфигурация фильтрации команд — краткое резюме</h1>
+<p>Конфигурационный файл предназначен для <strong>детектирования и блокировки потенциально опасных команд</strong> в shell-окружениях, CI/CD-пайплайнах и изолированных средах выполнения. Основная цель — <strong>предотвращение утечек секретов, экзфильтрации данных, повышения привилегий, обхода изоляции и выполнения вредоносных операций</strong>.</p>
+<h2 id="_60">Основные категории угроз</h2>
+<ul>
+<li><code>env_leak</code> — утечка переменных окружения (<code>env</code>, <code>printenv</code>, <code>$SECRET</code>).</li>
+<li><code>sensitive_files</code> — чтение конфиденциальных файлов (<code>.env</code>, <code>id_rsa</code>, <code>.pem</code>, <code>credentials</code>).</li>
+<li><code>docker_secrets</code> — доступ к <code>/run/secrets</code>, <code>/var/run/secrets</code>.</li>
+<li><code>exfiltration</code> — кодирование и передача данных (<code>base64</code>, <code>openssl</code>, <code>curl</code>, <code>nc</code>, DNS-экстракция).</li>
+<li><code>code_env_access</code> — доступ к секретам через код (Python: <code>os.environ</code>, <code>dotenv</code>, <code>open</code>).</li>
+<li><code>network_scan</code> — сканирование сети (<code>nmap</code>, <code>masscan</code>, <code>zmap</code>).</li>
+<li><code>dos</code> — ресурсоёмкие команды (<code>dd</code>, <code>yes</code>, <code>fallocate</code>, бесконечные циклы, Python-вычисления).</li>
+<li><code>crypto_mining</code> — запуск майнеров (<code>xmrig</code>, <code>minerd</code>).</li>
+<li><code>process_kill</code> — принудительное завершение процессов (<code>kill -9</code>, <code>xkill</code>).</li>
+<li><code>privilege</code> — попытки повышения привилегий (<code>sudo</code>, <code>apt</code>, <code>chroot</code>).</li>
+<li><code>escape</code> — побег из контейнера (<code>docker</code>, <code>nsenter</code>, <code>unshare</code>, <code>/proc</code>).</li>
+<li><code>cloud</code> — доступ к метаданным облака (169.254.169.254, <code>curl</code> к внутренним сервисам).</li>
+<li><code>obfuscation</code> — обфускация команд (<code>chr()</code>, <code>reversed</code>, <code>IFS</code>, hex-кодирование).</li>
+<li><code>filter_bypass</code> — обход фильтров (<code>/dev/tcp</code>, ANSI-C quoting, brace expansion).</li>
+<li><code>code_execution</code> — выполнение кода (<code>exec</code>, <code>eval</code>, <code>importlib</code>, <code>LD_PRELOAD</code>).</li>
+<li><code>recon</code> — разведка (<code>dig</code>, <code>nslookup</code>, <code>host</code>).</li>
+<li><code>attack_tool</code> — использование инструментов атак (SQLmap, Metasploit, Cobalt Strike).</li>
+<li><code>persistent</code> — создание персистентности (<code>crontab</code>, <code>systemctl</code>).</li>
+<li><code>large_install</code> — установка тяжёлых пакетов (TensorFlow, PyTorch, Go, Rust).</li>
+<li><code>dangerous_download</code> — загрузка и выполнение скриптов (<code>curl | bash</code>).</li>
+<li><code>cross-user</code> — доступ к чужим рабочим областям (<code>../</code>, <code>/workspace</code>, <code>_shared/</code>).</li>
+</ul>
+<h2 id="_61">Ключевые параметры правил</h2>
+<ul>
+<li><code>id</code> — уникальный идентификатор правила.</li>
+<li><code>category</code> — тип угрозы.</li>
+<li><code>pattern</code> — регулярное выражение для сопоставления.</li>
+<li><code>flags</code> — флаги (например, <code>i</code> — регистронезависимость).</li>
+<li><code>reason</code> — пояснение блокировки.</li>
+</ul>
+<h2 id="_62">Назначение</h2>
+<p>Обеспечение безопасности, стабильности и контролируемости среды выполнения за счёт централизованного управления запрещёнными паттернами. Используется в secure shell, песочницах, CI/CD и облачных платформах.</p>
+<p>Модуль реализует загрузчик плагинов <code>PluginLoader</code> для динамической подгрузки классов, наследующих <code>ToolPlugin</code>, из Python-файлов в указанной директории. Основная цель — обнаружение и инициализация плагинов, исключая системные и базовые файлы (<code>__init__.py</code>, <code>base.py</code>). Поддерживаются только <code>.py</code> файлы, из которых загружаются модули через <code>importlib.util</code>. Классы плагинов должны быть унаследованы от <code>ToolPlugin</code> и не совпадать с ним напрямую. Экземпляры успешно загруженных классов добавляются в результирующий список. Ошибки при загрузке модулей или инициализации плагинов логируются с помощью <code>logging.exception</code>. Важные настройки: путь к директории с плагинами, исключённые файлы, безопасная загрузка модулей с регистрацией в <code>sys.modules</code>.</p>
+<h1 id="_63">Резюме: Назначение и функциональность файла</h1>
+<p>Файл предназначен для безопасного выполнения shell-команд и обработки внешних запросов в изолированном рабочем окружении. Обеспечивает контроль доступа, защиту от утечек данных, проверку соответствия политикам безопасности и интеграцию с внешними сервисами.</p>
+<h2 id="_64">Основные функции</h2>
+<ul>
+<li><strong>Выполнение команд</strong>: <code>execute_shell_command</code> с таймаутами, обрезкой вывода и очисткой ANSI-кодов.</li>
+<li><strong>Проверка безопасности</strong>: </li>
+<li>Блокировка опасных паттернов (<code>check_command</code>, <code>BLOCKED_PATTERNS_PATH</code>).</li>
+<li>Защита от выхода за пределы рабочей директории (<code>_check_workspace_isolation</code>, <code>_resolve_within_workspace</code>).</li>
+<li>Обнаружение чувствительных файлов и данных (<code>_is_sensitive_file</code>, <code>_contains_dangerous_code</code>).</li>
+<li><strong>Поддержка утверждений</strong>: Хранение ожидающих команд (<code>PendingCommand</code>, <code>_PENDING_COMMANDS</code>) и callback-уведомления (<code>set_approval_callback</code>).</li>
+</ul>
+<h2 id="_65">Интеграции и внешние сервисы</h2>
+<ul>
+<li><strong>Веб-поиск</strong>: <code>search_web_impl</code> с поддержкой Tavily, Jina, Z.AI и прокси.</li>
+<li><strong>Извлечение контента</strong>: <code>fetch_page_impl</code> с резервным переключением между сервисами, возврат в формате Markdown.</li>
+<li><strong>Безопасность HTTP-запросов</strong>: Блокировка метаданных облаков (AWS/GCP/Azure), таймауты (<code>WEB_FETCH_TIMEOUT_MS</code>), прокси (<code>PROXY_URL</code>).</li>
+</ul>
+<h2 id="_66">Настройки и параметры</h2>
+<ul>
+<li><strong>Таймауты</strong>: <code>GREP_TIMEOUT_MS</code>, <code>TOOL_TIMEOUT_MS</code>, <code>WEB_FETCH_TIMEOUT_MS</code>.</li>
+<li><strong>Ограничение вывода</strong>: <code>OUTPUT_TRIM_LEN</code>, <code>OUTPUT_HEAD_LEN</code>, <code>OUTPUT_TAIL_LEN</code>.</li>
+<li><strong>Чувствительные данные</strong>: <code>SENSITIVE_FILES</code>, <code>SENSITIVE_PATTERNS</code>.</li>
+<li><strong>Ключи API</strong>: <code>TAVILY_API_KEY</code>, <code>JINA_API_KEY</code>, <code>ZAI_API_KEY</code>.</li>
+</ul>
+<h2 id="_67">Особенности</h2>
+<ul>
+<li>Возвращает структурированные ответы (<code>success</code>, <code>error</code>, <code>output</code>).</li>
+<li>Использует логирование для отладки и отказоустойчивости.</li>
+<li>Поддерживает фоновые процессы и резервные стратегии при ошибках.</li>
+<li>Результаты веб-запросов сохраняются в Markdown (например, <code>MEMORY.md</code>).</li>
+</ul>
+<p><strong>Цель</strong>: Обеспечить безопасную, контролируемую и отказоустойчивую работу с командной строкой и внешними ресурсами в изолированной среде.</p>
+<h1 id="_68">Краткое резюме</h1>
+<p>Данный документ представляет собой техническую документацию, объединяющую несколько частей, описывающих архитектуру, функциональность и использование системы. В документации рассматриваются основные компоненты системы, их взаимодействие, интерфейсы и процессы. Описаны требования, принципы работы, примеры использования и рекомендации по интеграции. Документ предназначен для разработчиков, инженеров и технических специалистов, обеспечивающих развертывание и сопровождение решения.</p>
+<p>Определяет структуры данных для описания и ответа инструментов (tools) в системе взаимодействия с ИИ-моделями.  </p>
+<p><code>ToolSpec</code> описывает спецификацию инструмента: имя, описание, параметры в формате JSON Schema, таймаут выполнения (по умолчанию 120 секунд), уровень риска (<code>low</code> по умолчанию), необходимость подтверждения (<code>requires_approval</code>), теги и возможность параллельного выполнения (<code>parallelizable</code>). Поддерживает преобразование в форматы OpenAI и Google через методы <code>to_openai_tool</code> и <code>to_google_tool</code>.  </p>
+<p><code>ToolResponse</code> представляет ответ от инструмента: флаг успеха, опциональный вывод, сообщение об ошибке и дополнительные метаданные.  </p>
+<p>Используется для стандартизации описания и обработки внешних инструментов в AI-агентах.</p>
+<h1 id="toolregistry">ToolRegistry — Реестр инструментов и менеджер плагинов</h1>
+<p>Класс <code>ToolRegistry</code> обеспечивает централизованное управление инструментами (плагинами) для агента, включая их регистрацию, хранение, валидацию, выполнение и доступ. Поддерживает локальные плагины, удалённые MCP-инструменты (Model Control Protocol), а также генерацию совместимых спецификаций для ИИ-моделей (OpenAI, Google).</p>
+<h2 id="_69">Основные функции</h2>
+<ul>
+<li><strong>Регистрация и загрузка</strong>:</li>
+<li><code>_load_plugins</code>: загружает локальные плагины из директории <code>plugins</code>.</li>
+<li><code>ensure_mcp_loaded</code>: асинхронно обнаруживает и кэширует MCP-инструменты.</li>
+<li>
+<p><code>register</code>: регистрирует плагин с проверкой уникальности имени и валидацией параметров.</p>
+</li>
+<li>
+<p><strong>Доступ к инструментам</strong>:</p>
+</li>
+<li><code>get_definitions</code>: возвращает спецификации инструментов в формате OpenAI/Google.</li>
+<li><code>get_plugin_commands</code>: извлекает команды плагинов с проверкой уникальности.</li>
+<li>
+<p><code>_filter_allowed</code>: фильтрует инструменты по списку <code>allowed_tools</code> (<code>"All"</code>, <code>"None"</code>).</p>
+</li>
+<li>
+<p><strong>Выполнение и управление</strong>:</p>
+</li>
+<li><code>execute</code>, <code>execute_many</code>: запуск инструментов с таймаутом (<code>TOOL_TIMEOUT_MS</code>) и обработкой ошибок.</li>
+<li><code>execute_parallel_or_sequential</code>: определяет режим выполнения (параллельно/последовательно) на основе флага <code>parallelizable</code>.</li>
+<li>
+<p><code>any_awaiting_input</code>, <code>cancel_all_inputs</code>: управление состоянием ожидания ввода.</p>
+</li>
+<li>
+<p><strong>Интерфейс и обработчики</strong>:</p>
+</li>
+<li><code>build_bot_commands</code>, <code>build_bot_ui</code>: формируют команды и UI-элементы бота.</li>
+<li><code>get_message_handlers</code>, <code>get_inline_handlers</code>: собирают обработчики сообщений и inline-запросов.</li>
+<li>
+<p>Поддержка callback-обработчиков через <code>callback_query_handler</code>.</p>
+</li>
+<li>
+<p><strong>Валидация и нормализация</strong>:</p>
+</li>
+<li><code>_validate_and_normalize_command</code>, <code>_validate_and_normalize_handler</code>: проверяют и дополняют метаданные.</li>
+<li><code>_validate_args</code>: валидация аргументов по JSON-схеме из <code>ToolSpec</code>.</li>
+</ul>
+<h2 id="_70">Состояние и сервисы</h2>
+<p>Плагины получают доступ к общим сервисам через <code>services</code>:
+- <code>pending_questions</code>, <code>recent_messages</code>, <code>task_store</code>, <code>scheduler_tasks</code>, <code>user_tasks</code>.</p>
+<h2 id="_71">Важные компоненты</h2>
+<ul>
+<li><code>MCPManager</code>: управление MCP-серверами и кэширование инструментов.</li>
+<li><code>PluginLoader</code>: загрузка локальных плагинов.</li>
+<li><code>MCPRemoteToolPlugin</code>: представление удалённых MCP-инструментов.</li>
+</ul>
+<h2 id="_72">Настройки и поведение</h2>
+<ul>
+<li><code>TOOL_TIMEOUT_MS</code>: глобальный таймаут выполнения инструментов.</li>
+<li>Автоматическая нормализация имён через <code>get_function_prefix</code>.</li>
+<li>Обнаружение опечаток: <code>get_missing_suggestions</code> с использованием <code>difflib</code>.</li>
+<li>Синглтон-реализация: <code>_REGISTRY_SINGLETON</code>, инициализируется через <code>get_tool_registry</code>.</li>
+</ul>
+<h2 id="_73">Утилиты</h2>
+<ul>
+<li><code>record_message</code>: хранит последние 20 ID сообщений для управления контекстом.</li>
+<li><code>resolve_question</code>: разрешает ожидающие вопросы через <code>Future</code>.</li>
+<li><code>close_all</code>: корректно завершает все плагины с логированием ошибок.</li>
+</ul>
+<h2 id="_74">Назначение</h2>
+<p><code>ToolRegistry</code> обеспечивает:
+- Единый интерфейс для всех инструментов.
+- Безопасное и контролируемое выполнение.
+- Гибкую настройку доступности и интерфейса.
+- Поддержку расширяемости через плагины и MCP.</p>
+<p>Переменные конфигурации, задающие таймауты и ограничения на объём вывода для различных операций.<br/>
+<code>TOOL_TIMEOUT_MS</code> — максимальное время выполнения инструмента (120 секунд).<br/>
+<code>GREP_TIMEOUT_MS</code> — таймаут операции поиска (30 секунд).<br/>
+<code>WEB_FETCH_TIMEOUT_MS</code> — таймаут получения данных из веба (90 секунд).<br/>
+<code>OUTPUT_TRIM_LEN</code> — максимальная длина обрезанного вывода (3000 символов).<br/>
+<code>OUTPUT_HEAD_LEN</code> — длина начальной части вывода при обрезке (1500 символов).<br/>
+<code>OUTPUT_TAIL_LEN</code> — длина конечной части вывода при обрезке (1000 символов).<br/>
+Используются для контроля производительности и объёма данных в обработке инструментов.</p>
+<p>Плагин инструмента для интеграции с удалёнными MCP-сервисами через стандартный интерфейс взаимодействия с инструментами. Обеспечивает регистрацию и выполнение вызовов к MCP-инструментам, управляемым через <code>MCPManager</code>.  </p>
+<p>Ключевые сущности:<br/>
+- <code>MCPRemoteToolPlugin</code> — реализация плагина, предоставляющего доступ к удалённому MCP-инструменту.<br/>
+- <code>MCPToolInfo</code> — описание инструмента (имя, схема ввода, описание).<br/>
+- <code>MCPManager</code> — менеджер, отвечающий за выполнение вызовов к MCP-серверам.  </p>
+<p>Особенности:<br/>
+- Использует <code>_normalize_schema</code> для приведения входной схемы к валидному JSON Schema формату с корневым типом <code>object</code>.<br/>
+- Результаты выполнения обрабатываются через <code>_render_mcp_result</code>, извлекающий текст из <code>content</code> или сериализующий ответ в JSON.<br/>
+- Идентификатор плагина формируется как <code>MCP[&lt;server_name&gt;]</code>, префиксы функций отключены для сохранения оригинальных имён инструментов.<br/>
+- Таймаут выполнения — 30 секунд, выполнение не параллелизуется.  </p>
+<p>Параметры спецификации (<code>ToolSpec</code>):<br/>
+- <code>name</code> — имя инструмента в реестре.<br/>
+- <code>description</code> — описание из <code>MCPToolInfo</code> или сгенерированное.<br/>
+- <code>parameters</code> — нормализованная схема входных данных.<br/>
+- <code>parallelizable</code> — <code>False</code>.<br/>
+- <code>timeout_ms</code> — 30000.  </p>
+<p>При сбое вызова ошибка логируется и возвращается в структурированном виде.</p>
+<p>Плагин инструмента для поиска текста или регулярных выражений в файлах с использованием <code>grep</code>. Позволяет искать определения, вхождения или паттерны кода в указанной директории или файле. Поддерживает контекст вывода, нечувствительность к регистру, фильтрацию по типу файлов и исключение чувствительных директорий и файлов (например, <code>node_modules</code>, <code>.git</code>, <code>.env</code>, ключи).  </p>
+<p>Ключевые параметры:
+- <code>pattern</code> — обязательный поисковый запрос или регулярное выражение.
+- <code>path</code> — путь для поиска (по умолчанию — текущая директория).
+- <code>context_before</code>, <code>context_after</code> — количество строк до и после совпадения.
+- <code>files_only</code> — возвращать только пути к файлам, содержащим совпадения.
+- <code>ignore_case</code> — выполнить поиск без учёта регистра.</p>
+<p>Автоматически блокирует запросы, содержащие потенциально опасные ключевые слова (например, <code>password</code>, <code>token</code>, <code>secret</code>). Использует безопасное разрешение путей в пределах рабочей области. Результат ограничивается 200 строками. Время выполнения ограничено через <code>GREP_TIMEOUT_MS</code>.</p>
+<p>Инструмент <code>show_me_diagrams</code> для генерации и рендеринга диаграмм с использованием PlantUML. Поддерживает два режима: <code>generate</code> — генерация PlantUML-кода на основе описания с помощью LLM (через OpenAI API), и <code>render</code> — прямой рендеринг переданного PlantUML-кода в PNG. Поддерживаемые типы диаграмм: <code>gantt_chart</code>, <code>mind_map</code>, <code>flowchart</code>, <code>project_timeline</code>, <code>infographic</code>, <code>org_chart</code>, <code>process_diagram</code>.</p>
+<p>Ключевые параметры:
+- <code>action</code>: <code>generate</code> или <code>render</code> (обязательный)
+- <code>diagram_type</code>: тип диаграммы (для <code>generate</code>)
+- <code>description</code>: описание диаграммы (для <code>generate</code>)
+- <code>plantuml_code</code>: PlantUML-код (для <code>render</code>)
+- <code>title</code>: заголовок диаграммы (опционально)</p>
+<p>Требуется наличие <code>plantuml.jar</code> в той же директории, что и скрипт, и установленного Java. Для генерации кода требуется <code>OPENAI_API_KEY</code>. Результат — путь к PNG-файлу и исходный PlantUML-код. Файлы сохраняются во временной директории. Таймаут выполнения — 120 секунд.</p>
+<p>Инструмент для поиска изображений и GIF-файлов через DuckDuckGo Images. Предоставляет асинхронный интерфейс выполнения запросов с последующим извлечением URL найденных изображений. Поддерживает параметры поиска: текстовый запрос, тип контента (photo/gif), регион и максимальное количество результатов. Результаты перемешиваются перед выбором случайного изображения. Использует библиотеку <code>duckduckgo-search</code>, которая должна быть установлена. В случае ошибки или отсутствия результатов возвращает соответствующее сообщение. Основные параметры: <code>query</code> (обязательный), <code>type</code>, <code>region</code>, <code>max_results</code>. Инструмент параллелизуем.</p>
+<p>Инструмент <code>read_file</code> предназначен для безопасного чтения содержимого файлов в рамках рабочей области. Позволяет читать файлы по указанному пути с возможностью задать смещение (номер начальной строки) и ограничение на количество возвращаемых строк. Перед использованием проверяет доступ к файлу: разрешает доступ только в пределах текущей рабочей директории, блокирует чтение чувствительных файлов и файлов из чужих рабочих пространств. Поддерживает чтение отсутствующих или пустых файлов с соответствующим информированием. Основные параметры: <code>path</code> (обязательный), <code>offset</code>, <code>limit</code>. Используется в цепочках инструментов, где требуется анализ исходного кода или данных перед редактированием.</p>
+<p>Плагин инструмента для асинхронного получения содержимого файлов из репозитория GitHub по указанному пути. Поддерживает выборку как отдельных файлов, так и содержимого директорий с ограничением на количество обрабатываемых файлов.  </p>
+<p>Ключевые сущности:<br/>
+- <code>GitHubAnalysisTool</code> — реализация плагина, наследующая <code>ToolPlugin</code>.<br/>
+- <code>ToolSpec</code> — описание инструмента: имя <code>github_analysis</code>, параметры <code>owner</code>, <code>repo</code>, <code>path</code>, <code>max_files</code>.<br/>
+- Обязательные параметры: <code>owner</code>, <code>repo</code>.<br/>
+- <code>max_files</code> — ограничение от 1 до 20 файлов (по умолчанию 5).  </p>
+<p>Авторизация осуществляется через токен, который берётся из переменной окружения <code>GITHUB_TOKEN</code> или из конфигурации плагина. Запросы к API GitHub выполняются синхронно в отдельном потоке через <code>asyncio.to_thread</code>.  </p>
+<p>Поддерживается декодирование контента из base64 или загрузка по <code>download_url</code>. Результат включает имена файлов и их содержимое, объединённые с разделителем. В случае ошибки возвращается сообщение об ошибке.</p>
+<p>Инструмент для выполнения запросов к WolframAlpha с получением кратких текстовых ответов. Используется для вычислений, научных данных, статистики и других точных ответов на основе структурированной базы знаний. Поддерживает выполнение через асинхронный интерфейс с синхронным вызовом API в отдельном потоке. Требует наличие переменной окружения <code>WOLFRAM_APP_ID</code>. Запросы рекомендуется передавать на английском языке для лучшей точности. Основной метод — <code>execute</code>, принимающий параметр <code>query</code>. Используется простой HTTP-запрос к <code>/v1/result</code>, возвращающий plain text. Таймаут выполнения — 60 секунд.</p>
+<h1 id="dialogmixin-telegram-"><code>DialogMixin</code> — Миксин для управления диалогами в Telegram-ботах</h1>
+<p><code>DialogMixin</code> — это базовый класс-миксин, обеспечивающий удобную реализацию многошаговых диалогов и обработку inline-кнопок в Telegram-ботах. Он интегрируется с <code>ToolPlugin</code>, расширяя его функциональность для поддержки интерактивных сценариев.</p>
+<h2 id="_75">Основные возможности</h2>
+<ul>
+<li><strong>Управление диалогами</strong>: отслеживание состояния, таймауты, автоматическая отмена.</li>
+<li><strong>Поддержка шагов</strong>: определение последовательных этапов диалога с обработкой текста и callback-запросов.</li>
+<li><strong>Автономные действия</strong>: обработка нажатий кнопок вне активного диалога.</li>
+<li><strong>Изоляция контекстов</strong>: безопасное разделение диалогов между плагинами через <code>plugin_id</code>.</li>
+<li><strong>Интеграция с <code>ToolPlugin</code></strong>: реализация методов <code>awaiting_input</code>, <code>cancel_input</code>, <code>get_commands</code>, <code>handle_message</code>, <code>handle_callback</code>.</li>
+</ul>
+<h2 id="_76">Ключевые методы и сущности</h2>
+<h3 id="_77">Диалоговые кнопки и действия</h3>
+<ul>
+<li><code>dialog_button(text, data)</code> — создаёт кнопку для перехода к следующему шагу диалога (<code>callback_data: dlg:{plugin_id}:{data}</code>).</li>
+<li><code>action_button(text, action, payload=None)</code> — кнопка для автономного действия (<code>callback_data: cb:{plugin_id}:{action}</code> или с payload).</li>
+<li><code>parse_callback_payload(callback_query)</code> — извлекает полезную нагрузку из <code>callback_data</code>.</li>
+</ul>
+<h3 id="_78">Определение логики</h3>
+<ul>
+<li><code>dialog_steps()</code> — словарь шагов диалога и их обработчиков (по сообщениям и/или колбэкам).</li>
+<li><code>callback_handlers()</code> — обработчики для автономных действий (вне диалога).</li>
+<li><code>step_hint(step)</code> — возвращает подсказку при некорректном вводе.</li>
+</ul>
+<h3 id="_79">Обработка событий</h3>
+<ul>
+<li><code>handle_message(update)</code> — обрабатывает текстовые сообщения в активном диалоге, проверяет отмену (<code>CANCEL_WORDS</code>), перенаправляет на шаг.</li>
+<li><code>handle_callback(update)</code> — обрабатывает нажатия кнопок в диалоге.</li>
+<li><code>_dispatch_callback(update)</code> — центральный маршрутизатор callback-запросов:</li>
+<li><code>dlg_cancel:{pid}</code> — отмена диалога.</li>
+<li><code>dlg:{pid}:...</code> — продолжение диалога.</li>
+<li><code>cb:{pid}:{action}</code> — вызов автономного действия.</li>
+</ul>
+<h3 id="_80">Вспомогательные методы</h3>
+<ul>
+<li><code>start_dialog(chat_id, step=None)</code> — запуск диалога.</li>
+<li><code>end_dialog(chat_id)</code> — завершение диалога.</li>
+<li><code>get_dialog(chat_id)</code> — получение текущего состояния диалога.</li>
+<li><code>set_step(chat_id, step)</code> — переход к указанному шагу.</li>
+<li><code>_on_cancel_button(update)</code> — обработка отмены, уведомление пользователя.</li>
+<li><code>_ensure_agent_enabled()</code> — проверка активности агента.</li>
+</ul>
+<h3 id="_81">Фильтрация и безопасность</h3>
+<ul>
+<li><code>_dialog_active_filter()</code> — фильтр для обработки только активных диалогов.</li>
+<li><code>extra_message_filters()</code> — расширяемый фильтр для медиа и других типов сообщений (по умолчанию — блокировка).</li>
+<li><code>get_message_handlers()</code> — возвращает обработчики сообщений при активном диалоге.</li>
+</ul>
+<h2 id="_82">Особенности</h2>
+<ul>
+<li>Использование <code>DialogState</code> для хранения состояния на уровне чата.</li>
+<li>Автоматическая отмена диалога при таймауте или отключении агента.</li>
+<li>Перехват и логирование ошибок в обработчиках; при ошибках диалог завершается.</li>
+<li>Поддержка <code>show_alert</code> при неизвестных действиях.</li>
+<li>Совместимость с системой команд бота через <code>get_commands()</code>.</li>
+</ul>
+<h2 id="_83">Рекомендации по использованию</h2>
+<ul>
+<li>Наследуйтесь от <code>DialogMixin</code> <strong>первым</strong> в списке родителей, чтобы его методы правильно переопределяли поведение <code>ToolPlugin</code>.</li>
+<li>Уникальный <code>plugin_id</code> обеспечивает изоляцию диалогов между плагинами.</li>
+</ul>
+<p>Инструмент <code>list_directory</code> предназначен для безопасного просмотра содержимого директории в рамках рабочей области агента. Поддерживает указание пути через параметр <code>path</code>, по умолчанию используется текущая директория (<code>cwd</code>). Реализует защиту от доступа к системным и привилегированным директориям, таким как <code>/etc</code>, <code>/root</code>, <code>/.ssh</code> и другим. Проверяет расположение запрашиваемого пути относительно рабочей директории, блокируя доступ к чужим пользовательским пространствам. Выполняет команду <code>ls -la</code> через <code>subprocess</code>, возвращает содержимое в случае успеха или сообщение об ошибке. Все пути нормализуются и проверяются с помощью вспомогательных функций из <code>helpers</code>. Ключевые параметры: <code>path</code> — строка с путём к директории.</p>
+<p>Инструмент <code>ask_user</code> предназначен для взаимодействия с пользователем через интерфейс с кнопками выбора. Используется, когда агенту требуется подтверждение или выбор из нескольких вариантов. Возвращает текст выбранного пользователем варианта.</p>
+<p>Ключевая сущность — <code>AskUserTool</code>, реализующая интерфейс <code>ToolPlugin</code>. Описание инструмента определяется через <code>ToolSpec</code>, включая обязательные параметры:<br/>
+- <code>question</code> (строка) — вопрос, отображаемый пользователю;<br/>
+- <code>options</code> (массив строк, от 2 до 4 элементов) — варианты ответов в виде кнопок.</p>
+<p>Инструмент не поддерживает параллельное выполнение (<code>parallelizable=False</code>).  </p>
+<p>В процессе выполнения:<br/>
+- Генерируется уникальный <code>question_id</code> на основе времени и UUID;<br/>
+- Создаётся <code>Future</code> для асинхронного ожидания ответа;<br/>
+- Отправляется запрос пользователю через <code>bot._send_ask_question</code>;<br/>
+- Ожидается ответ в течение 120 секунд; при таймауте возвращается ошибка.</p>
+<p>Состояние ожидания хранится в <code>self.services["pending_questions"]</code>, что позволяет обрабатывать ответ при его поступлении.</p>
+<h1 id="textdocumentqatool">TextDocumentQATool — Документация</h1>
+<h2 id="_84">Назначение</h2>
+<p>Инструмент <code>TextDocumentQATool</code> реализует Telegram-бота для управления текстовыми документами и диалогового взаимодействия с ними на основе LLM. Позволяет пользователям загружать, просматривать, задавать вопросы по содержимому и удалять документы.</p>
+<h2 id="_85">Основные функции</h2>
+<ul>
+<li><strong><code>upload</code></strong> — загрузка документа (имя + содержимое), сохранение в <code>.txt</code> и метаданных в <code>.meta</code>.</li>
+<li><strong><code>list</code></strong> — отображение списка доступных документов.</li>
+<li><strong><code>ask</code></strong> — задание вопроса по содержимому документа с использованием ИИ.</li>
+<li><strong><code>delete</code></strong> — удаление документа и связанного метафайла по <code>document_id</code>.</li>
+</ul>
+<h2 id="_86">Хранение данных</h2>
+<ul>
+<li>Файлы сохраняются в директории, определяемой через <code>AGENT_SANDBOX_ROOT</code>, <code>config.defaults.workdir</code> или <code>cwd</code>.</li>
+<li>Документы: <code>{doc_id}.txt</code> (содержимое), <code>{doc_id}.meta</code> (имя).</li>
+<li><code>doc_id</code> генерируется как SHA1-хеш содержимого.</li>
+</ul>
+<h2 id="_87">Диалоговый интерфейс</h2>
+<p>Интегрирован с <code>DialogMixin</code>, поддерживает пошаговый ввод:
+- <code>wait_name</code> — ввод имени документа.
+- <code>wait_content</code> — ввод текста документа.
+- <code>wait_doc_select</code> — выбор документа из списка.
+- <code>wait_query</code> — ввод вопроса.</p>
+<p>Управление состоянием через <code>set_step</code> / <code>get_dialog</code>.</p>
+<h2 id="llm">Интеграция с LLM</h2>
+<ul>
+<li>Используется <code>AsyncOpenAI</code> для асинхронных запросов.</li>
+<li>Модель: <code>gpt-4o-mini</code> (настраивается через <code>OPENAI_MODEL</code>).</li>
+<li>Ключ API: <code>OPENAI_API_KEY</code> (обязательный).</li>
+<li>Базовый URL: <code>OPENAI_BASE_URL</code> (опционально, например, для прокси).</li>
+<li>Параметры: <code>temperature=0.2</code>, <code>max_tokens=800</code>.</li>
+<li>Контекст ограничивается 12000 символами.</li>
+<li>Промпт включает системное сообщение и пользовательский вопрос.</li>
+</ul>
+<h2 id="_88">Ответы</h2>
+<p>Возвращаются в формате JSON:
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"output"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+или
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div></p>
+<h2 id="_89">Интерфейс</h2>
+<ul>
+<li>Меню с меткой «Документы».</li>
+<li>Обработка команд через callback-запросы (<code>_cb_*</code>).</li>
+<li>Формирование клавиатуры: <code>_build_doc_list_keyboard()</code>.</li>
+</ul>
+<h2 id="_90">Ограничения</h2>
+<ul>
+<li>Таймаут выполнения: 120 секунд.</li>
+<li>Нет поддержки параллельных сессий.</li>
+<li>Логика ответа на вопрос (<code>ask</code>) частично реализована.</li>
+</ul>
+<h2 id="_91">Зависимости</h2>
+<ul>
+<li>Переменные окружения: <code>OPENAI_API_KEY</code>, <code>OPENAI_BASE_URL</code>, <code>OPENAI_MODEL</code>.</li>
+<li>Асинхронная работа с OpenAI API.</li>
+</ul>
+<p>Инструмент <code>manage_message</code> позволяет агенту управлять собственными недавними сообщениями в текущем диалоге: удалять (последнее или по индексу) и редактировать последнее сообщение. Поддерживает три действия через параметр <code>action</code>: <code>delete_last</code>, <code>delete_by_index</code>, <code>edit_last</code>. Для удаления по индексу используется параметр <code>index</code>, для редактирования — <code>new_text</code>. Индексация сообщений ведётся от 0 (самое старое) до -1 (последнее). Инструмент взаимодействует с ботом через контекст (<code>bot._delete_message</code>, <code>bot._edit_message</code>) и отслеживает идентификаторы сообщений в хранилище <code>services.recent_messages</code>. Операции ограничены только сообщениями агента в текущем чате. В случае ошибок возвращает подробное описание сбоев, включая проблемы с доступом, сроком жизни сообщения или валидностью индекса.</p>
+<p>Инструмент <code>send_file</code> позволяет отправлять файлы из рабочей директории в чат. Предназначен для обмена результатами работы, например, созданными скриптами, отчётами или данными. Путь к файлу может быть относительным или абсолютным. Файл проверяется на наличие в рабочей области, его размер (не более 50 МБ), а также на чувствительность — запрещены отправка файлов с ключевыми словами вроде <code>.env</code>, <code>secrets</code>, <code>id_rsa</code> и другими, связанными с учётными данными. Перед отправкой файл проверяется на существование и ненулевой размер. Поддерживается необязательная подпись (caption). Отправка осуществляется через бота, используя метод <code>_send_document</code>. В случае ошибок возвращаются информативные сообщения, включая ограничения по правам доступа (например, запрет на отправку медиа в группе).</p>
+<p>Инструмент <code>CodeInterpreterTool</code> предоставляет возможность безопасного выполнения ограниченного Python-кода в изолированной среде без доступа к внешним модулям и файловой системе. Основное назначение — интерпретация небольших фрагментов кода, связанных с вычислениями, обработкой данных или тестированием логики, при строгих мерах безопасности.</p>
+<p>Ключевые сущности:
+- <code>ToolPlugin</code> — базовый класс для инструментов агента.
+- <code>ToolSpec</code> — описание интерфейса инструмента, включая параметры и ограничения.
+- <code>execute</code> — асинхронный метод выполнения кода с таймаутом.
+- <code>_static_block</code> — статическая проверка кода на наличие запрещённых конструкций.
+- <code>_run_sync</code> — синхронное выполнение кода в отдельном процессе.</p>
+<p>Важные настройки и ограничения:
+- Запрещены: импорты (<code>import</code>, <code>from</code>), модули <code>os</code>, <code>subprocess</code>, <code>socket</code>, <code>requests</code>, операции ввода-вывода (<code>open</code>), <code>eval</code>, <code>exec</code>, дандер-методы.
+- Код выполняется в отдельном процессе Python с ограниченным окружением.
+- Таймаут выполнения — от 1 до 60 секунд (по умолчанию 20).
+- Вывод обрезается с помощью <code>helpers._trim_output</code>.
+- Временный файл используется для запуска кода, затем удаляется.</p>
+<p>Инструмент не параллелизуется и предназначен для безопасного, контролируемого выполнения простых Python-выражений.</p>
+<h1 id="_92">Резюме: Плагинная система с поддержкой диалогов</h1>
+<p>Базовый класс <code>ToolPlugin</code> служит основой для всех плагинов, обеспечивая интеграцию с агентом и Telegram-интерфейсом. Плагины автоматически регистрируются в <code>ToolRegistry</code> и доступны как для вызова агентом, так и для взаимодействия с пользователем. Ключевые параметры: <code>plugin_id</code> (уникальный ID) и <code>function_prefix</code> (префикс инструмента). Работают в приоритетной группе хендлеров (-1) при активной сессии агента.</p>
+<h2 id="_93">Основные методы и контракт</h2>
+<ul>
+<li><code>get_spec()</code> — возвращает JSON Schema спецификации инструмента.</li>
+<li><code>execute()</code> — выполняет логику плагина, возвращает <code>{"success": bool, "output"|"error": str}</code>.</li>
+</ul>
+<h2 id="dialogmixin">Диалоги и интерактивность (<code>DialogMixin</code>)</h2>
+<p><code>DialogMixin</code> (наследуется <strong>до</strong> <code>ToolPlugin</code>) обеспечивает поддержку многошаговых диалогов:
+- Управление состоянием ввода: <code>awaiting_input(chat_id)</code>, <code>cancel_input(chat_id)</code>.
+- Обработка inline-колбэков: <code>get_inline_handlers()</code> возвращает список <code>{action, handler}</code>.
+- Диалоги привязаны к <code>chat_id</code>, позволяя параллельные сессии.</p>
+<h3 id="_94">Диалоговые шаги</h3>
+<p>Определяются в <code>dialog_steps()</code> как словарь или callable. Каждый шаг может содержать:
+- <code>"message"</code> — обработчик текстового ввода.
+- <code>"callback"</code> — обработчик колбэк-кнопок.</p>
+<p>Управление:
+- <code>start_dialog(chat_id)</code> — запуск диалога.
+- <code>set_step(chat_id, step_name)</code> — переход к шагу.
+- <code>end_dialog(chat_id)</code> — завершение.</p>
+<p>Таймаут неактивности — <code>DIALOG_TIMEOUT</code> (по умолчанию 300 сек), сбрасывается при <code>set_step()</code>.</p>
+<h2 id="callback-_1">Callback-система</h2>
+<p>Единая маршрутизация через <code>_dispatch_callback</code>, проверяющая активность агента. Поддерживаемые типы кнопок:</p>
+<table>
+<thead>
+<tr>
+<th>Тип</th>
+<th>Формат <code>callback_data</code></th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dlg:</code></td>
+<td><code>dlg:{plugin_id}:{payload}</code></td>
+<td>Кнопки внутри диалога</td>
+</tr>
+<tr>
+<td><code>cb:</code></td>
+<td><code>cb:{plugin_id}:{action}:{payload?}</code></td>
+<td>Автономные действия</td>
+</tr>
+<tr>
+<td><code>dlg_cancel:</code></td>
+<td><code>dlg_cancel:{plugin_id}</code></td>
+<td>Отмена диалога</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_95">Вспомогательные методы</h3>
+<ul>
+<li><code>dialog_button(label, payload)</code> — кнопка в диалоге.</li>
+<li><code>action_button(label, action, payload=None)</code> — автономная кнопка.</li>
+<li><code>cancel_markup()</code> — готовая кнопка «Отмена».</li>
+<li><code>parse_callback_payload(update)</code> — извлечение <code>payload</code> из <code>callback_data</code>.</li>
+</ul>
+<p>Регистрация: все колбэки объединяются в один <code>CallbackQueryHandler</code> через <code>_dialog_callback_commands()</code>, возвращаемый из <code>get_commands()</code>.</p>
+<h2 id="_96">Меню и команды</h2>
+<ul>
+<li><code>get_menu_label()</code> — метка верхнего уровня меню.</li>
+<li><code>get_menu_actions()</code> — список действий (метка + action).</li>
+<li>Команды Telegram: определяются в <code>get_commands()</code>.</li>
+</ul>
+<h2 id="_97">Обработка ввода</h2>
+<ul>
+<li>Перехват сообщений при активном диалоге.</li>
+<li>Автоотмена при вводе слов из <code>CANCEL_WORDS</code>.</li>
+<li>Поддержка медиа и других типов — через <code>extra_message_filters()</code>.</li>
+<li>Подсказки для шагов — <code>step_hint(step)</code>.</li>
+</ul>
+<h2 id="_98">Жизненный цикл и интеграция</h2>
+<ul>
+<li>Инициализация: <code>initialize(config, services)</code>.</li>
+<li>Завершение: <code>close()</code>.</li>
+<li>Доступ к сервисам: <code>services.config</code>, <code>pending_questions</code>, <code>task_store</code>, <code>scheduler_tasks</code>, <code>user_tasks</code> и др.</li>
+<li>Автоматическая очистка диалогов при смене/закрытии сессии или отключении агента.</li>
+</ul>
+<h2 id="_99">Регистрация плагинов</h2>
+<ul>
+<li>Автоматическая загрузка из <code>agent/plugins/</code> (исключая <code>__init__.py</code>, <code>base.py</code>).</li>
+<li>Имена инструментов: <code>{function_prefix}.{spec.name}</code>.</li>
+</ul>
+<h2 id="_100">Рекомендации</h2>
+<ul>
+<li>Обрабатывайте ошибки в <code>execute()</code> локально, возвращая структурированный ответ.</li>
+<li>Для длительных операций увеличьте <code>DIALOG_TIMEOUT</code>.</li>
+<li>Плагин не должен напрямую зависеть от <code>bot.py</code> — используйте абстракции <code>ToolPlugin</code>.</li>
+</ul>
+<h2 id="_101">Пример функциональности</h2>
+<p>Плагин с двухуровневым меню:
+1. Запуск диалога → выбор режима (<code>fast</code>/<code>detailed</code>) → ввод текста → преобразование в верхний регистр.
+2. Показ информации.</p>
+<p>Обработчики: <code>_cb_start</code>, <code>_cb_info</code>, <code>_on_mode_button</code>, <code>_on_mode_text</code>, <code>_on_input</code>.</p>
+<h1 id="taskmanagementtool-telegram-">TaskManagementTool — Управление задачами в Telegram-боте</h1>
+<h2 id="_102">Назначение</h2>
+<p>Инструмент для управления задачами в Telegram-боте с поддержкой создания, просмотра, обновления и удаления задач. Реализует приоритеты, статусы, дедлайны, теги и уведомления. Данные хранятся в JSON-файле <code>tasks.json</code> в директории <code>_shared</code> (определяется через <code>AGENT_SANDBOX_ROOT</code> или fallback в текущую).</p>
+<h2 id="_103">Ключевые сущности</h2>
+<ul>
+<li><strong><code>TaskManagementTool</code></strong> — основной класс, наследующий <code>DialogMixin</code> и <code>ToolPlugin</code>.</li>
+<li><strong>Задача</strong> — содержит:</li>
+<li><code>task_id</code>: уникальный ID (на основе временной метки и UUID)</li>
+<li><code>title</code>, <code>description</code> (опционально)</li>
+<li><code>priority</code>: high / medium / low</li>
+<li><code>status</code>: pending / in_progress / completed / cancelled</li>
+<li><code>deadline</code>: строка в формате "YYYY-MM-DD HH:MM"</li>
+<li><code>deadline_ts</code>: Unix-время дедлайна</li>
+<li><code>last_updated</code>: временная метка последнего изменения</li>
+<li><code>notify</code>: флаги уведомлений</li>
+<li><strong>Хранение</strong>: вложенный словарь <code>{user_id: {task_id: task_data}}</code>, где <code>user_id</code> — фактически <code>chat_id</code>.</li>
+</ul>
+<h2 id="_104">Функциональность</h2>
+<ul>
+<li><strong>Операции</strong>:</li>
+<li><code>create</code>: создание задачи (с парсингом приоритета, дедлайна и заголовка)</li>
+<li><code>list</code>: вывод до 50 задач, отсортированных по статусу, дедлайну и приоритету</li>
+<li><code>update</code>: изменение полей задачи</li>
+<li><code>delete</code>: удаление по <code>task_id</code></li>
+<li><strong>Диалоговый ввод</strong>: состояние <code>wait_text</code> для добавления задачи, отмена через команды: <code>отмена</code>, <code>cancel</code>, <code>выход</code>, <code>-</code>.</li>
+<li><strong>Интерфейс</strong>: формируется через <code>_build_tasks_menu</code> (до 12 задач с кнопками). Поддержка callback-команд: <code>add</code>, <code>refresh</code>, <code>view</code>, <code>del</code>, <code>next</code>, <code>view_help</code>.</li>
+</ul>
+<h2 id="_notifypolicy">Настройки уведомлений (<code>_NotifyPolicy</code>)</h2>
+<ul>
+<li><code>due_soon_window_sec</code>: интервал для уведомления о скором дедлайне</li>
+<li><code>overdue_repeat_sec</code>: минимальный интервал между повторами уведомлений о просрочке</li>
+<li><code>check_interval_sec</code>: частота проверки дедлайнов (реализована в <code>bot.py</code>)</li>
+<li>Уведомления отправляются однократно при входе в "скоро истекает" и с повтором при просрочке.</li>
+</ul>
+<h2 id="_105">Технические особенности</h2>
+<ul>
+<li>Все операции — асинхронные, совместимы с <code>telegram.ext</code>.</li>
+<li>Валидация: формат дедлайна, допустимые значения приоритета и статуса.</li>
+<li>Автогенерация <code>task_id</code>.</li>
+<li>Изоляция данных по <code>user_id</code>.</li>
+<li>Вспомогательные функции: <code>_load_all_tasks</code>, <code>_save_all_tasks</code>.</li>
+<li>Логирование ошибок при работе с файлом.</li>
+</ul>
+<p>Инструмент <code>MovieInfoTool</code> предоставляет доступ к информации о фильмах через API The Movie Database (TMDb). Поддерживает два действия: получение фильмов, текущих в прокате (<code>now_playing</code>), и поиск фильмов по критериям (<code>discover</code>) с возможностью фильтрации по жанру. </p>
+<p>Ключевые параметры:
+- <code>action</code> (обязательный): тип запроса — <code>now_playing</code> или <code>discover</code>.
+- <code>genre_id</code>: идентификатор жанра TMDb для фильтрации.
+- <code>count</code>: количество возвращаемых фильмов (от 1 до 30, по умолчанию 10).
+- <code>language</code>: язык локализации (по умолчанию <code>ru-RU</code>).
+- <code>region</code>: регион для фильтрации проката (по умолчанию <code>RU</code>).</p>
+<p>Требует наличие переменной окружения <code>TMDB_API_KEY</code>. Запросы к API выполняются синхронно в отдельном потоке. Результат включает название, дату выхода, рейтинг и краткое описание фильма (обрезанное до 200 символов). Вывод автоматически обрезается для соответствия ограничениям системы. Инструмент поддерживает параллельное выполнение и имеет таймаут 60 секунд.</p>
+<p>Инструмент <code>delete_file</code> предназначен для удаления файлов в пределах рабочей директории. Является частью системы плагинов инструментов агента и реализует интерфейс <code>ToolPlugin</code>. Основное назначение — безопасное удаление файлов с проверкой на принадлежность рабочему пространству.</p>
+<p>Ключевые сущности:
+- <code>ToolSpec</code> — описание инструмента, включая имя, описание и параметры.
+- <code>helpers._resolve_within_workspace</code> — проверяет и разрешает путь внутри рабочей директории.
+- <code>helpers._is_other_user_workspace</code> — блокирует доступ к файлам из чужого рабочего пространства.</p>
+<p>Параметры:
+- <code>path</code> (обязательный) — путь к удаляемому файлу, относительный или абсолютный, но должен находиться в workspace.</p>
+<p>Особенности:
+- Удаление возможно только для файлов, находящихся в текущей рабочей директории (<code>cwd</code>).
+- При отсутствии файла возвращается ошибка "File not found".
+- Попытка удалить файл вне workspace или в чужом workspace блокируется.
+- В случае успеха возвращается сообщение <code>Deleted: &lt;path&gt;</code>, иначе — описание ошибки.</p>
+<p>Инструмент <code>search_web</code> предназначен для выполнения поисковых запросов в интернете. Используется для получения актуальной информации: новости, текущие события, определения, цены, погода и другая внешняя информация. Ключевая сущность — класс <code>SearchWebTool</code>, наследующий <code>ToolPlugin</code>. Основные параметры: <code>name</code>, <code>description</code>, <code>parameters</code> (с обязательным полем <code>query</code> типа строка). Уровень риска — средний (<code>medium</code>). Выполнение делегируется вспомогательной функции <code>search_web_impl</code>, которая использует переданный <code>config</code> для настройки поиска. Требует наличия параметра <code>query</code> в аргументах.</p>
+<h1 id="haiper-image-to-video-tool">Haiper Image-to-Video Tool — Краткое резюме</h1>
+<p><strong>Назначение</strong><br/>
+Инструмент для преобразования изображения в видео с использованием внешнего API <code>api.vsegpt.ru</code>. Позволяет пользователям через Telegram загружать изображение, задавать текстовый промпт анимации и получать готовое видео в формате MP4.</p>
+<p><strong>Ключевые возможности</strong>
+- Поддержка загрузки изображений: как фото, так и документы в Telegram.
+- Пошаговый диалог через <code>DialogMixin</code>:<br/>
+  - <code>wait_image</code> — ожидание изображения.<br/>
+  - <code>wait_prompt</code> — ввод текстового описания анимации.
+- Автоматическое определение расширения и кодирование изображения в base64.
+- Генерация видео через API <code>https://api.vsegpt.ru/v1/video</code> с опросом статуса каждые 10 секунд.
+- Отправка результата пользователю как документа в Telegram.</p>
+<p><strong>Основные сущности</strong>
+- <code>HaiperImageToVideoTool</code>: основной класс, реализует <code>ToolPlugin</code> и <code>DialogMixin</code>.
+- Временные файлы хранятся в <code>_shared/haiper/&lt;chat_id&gt;</code> или <code>/tmp/video_generation</code>.</p>
+<p><strong>Параметры</strong>
+- <code>image_path</code> — путь к изображению (обязательный, JPG/PNG).
+- <code>prompt</code> — описание анимации (опционально, по умолчанию: "animate image").
+- <code>model</code> / <code>model_id</code> — версия модели (по умолчанию: <code>haiper-2.0</code>).
+- <code>aspect_ratio</code> — фиксировано <code>16:9</code>.</p>
+<p><strong>Настройки</strong>
+- <code>API_URL</code>: <code>https://api.vsegpt.ru/v1/video</code>
+- <code>DIALOG_TIMEOUT</code>: 1 час (учитывает длительность генерации).
+- <code>AGENT_SANDBOX_ROOT</code>: корень для временных файлов (по умолчанию — текущая директория).
+- <code>ZAI_API_KEY</code>: API-ключ (обязателен, передаётся через окружение или конфиг).</p>
+<p><strong>Процесс работы</strong>
+1. Проверка и разрешение пути к изображению.
+2. Кодирование изображения в base64.
+3. POST-запрос на <code>/generate</code> для запуска генерации.
+4. Опрос <code>/status</code> каждые 10 секунд (до 45 минут).
+5. Скачивание MP4 при успехе.
+6. Сохранение и возврат пути к видео.</p>
+<p><strong>Таймауты</strong>
+- Генерация: до 45 минут.
+- HTTP-таймауты: 60 сек (генерация), 30 сек (статус), 120 сек (скачивание).</p>
+<p><strong>Обработка ошибок</strong>
+- Полная обработка на всех этапах: загрузка, генерация, отправка.
+- При ошибках возвращается словарь: <code>{"success": false, "error": "описание"}</code>.</p>
+<p><strong>Особенности</strong>
+- Асинхронный вызов с синхронным выполнением в отдельном потоке.
+- Поддержка интеграции в агентские системы с песочницей.</p>
+<p>Инструмент <code>run_command</code> предназначен для выполнения shell-команд в рамках рабочей среды агента. Поддерживает операции с системой, пакетными менеджерами (git, npm, pip) и другими CLI-инструментами. Имеет встроенные механизмы безопасности.</p>
+<p>Ключевые сущности:
+- <code>ToolPlugin</code> — базовый класс плагина.
+- <code>ToolSpec</code> — описание инструмента: имя, параметры, уровень риска.
+- <code>helpers</code> — вспомогательные функции проверки и выполнения команд.</p>
+<p>Основные параметры:
+- <code>command</code> (обязательный) — строка с командой для выполнения.</p>
+<p>Уровень риска: <code>high</code>. Не поддерживает параллельное выполнение (<code>parallelizable=False</code>).</p>
+<p>Важные проверки:
+- Изоляция рабочей области (<code>_check_workspace_isolation</code>).
+- Попытка выхода за пределы рабочей директории (<code>_check_command_path_escape</code>).
+- Анализ опасности команды (<code>check_command</code>) — блокировка или запрос подтверждения для <code>rm -rf</code>, <code>sudo</code> и аналогичных.</p>
+<p>Если команда потенциально опасна, но не заблокирована — требуется подтверждение пользователя через callback <code>_APPROVAL_CALLBACK</code>. Выполнение откладывается до получения подтверждения.</p>
+<p>Результат выполнения — словарь с полями <code>success</code>, <code>output</code>/<code>error</code>, при необходимости — флаг <code>approval_required</code>.</p>
+<p>Инструмент <code>edit_file</code> позволяет редактировать файлы путём точной замены текста. Требует указания пути к файлу, текста для поиска (<code>old_text</code>) и нового текста (<code>new_text</code>). Перед редактированием выполняется ряд проверок безопасности: доступ к рабочей области, чувствительные файлы, символические ссылки, а также анализ на наличие опасного кода в новом содержимом. Поддерживает работу только в пределах рабочей директории (<code>cwd</code>), указанной в контексте. Файл должен существовать, а <code>old_text</code> — присутствовать в нём дословно. В случае успеха возвращается подтверждение, при ошибках — детализированное сообщение с возможным превью содержимого.</p>
+<h1 id="_106">Краткое резюме</h1>
+<p>Данный документ представляет собой техническую документацию, объединяющую несколько частей, описывающих архитектуру, функциональность и использование системы. В документации рассматриваются основные компоненты системы, их взаимодействие, интерфейсы и процессы. Описаны требования, принципы работы, примеры использования и рекомендации по интеграции. Документ предназначен для разработчиков, инженеров и технических специалистов, обеспечивающих развертывание и сопровождение решения.</p>
+<p>Плагин инструмента для оптимизации пользовательских промптов с использованием модели OpenAI. Назначение — улучшение формулировки исходного запроса для повышения точности и качества ответов модели. Основная сущность — класс <code>PromptPerfectTool</code>, реализующий интерфейс <code>ToolPlugin</code>.</p>
+<p>Ключевые параметры инструмента:
+- <code>original_prompt</code> (обязательный) — исходный текст промпта, который необходимо оптимизировать.
+- <code>context</code> (опциональный) — дополнительный контекст, уточняющий задачу.</p>
+<p>Инструмент использует настройки из переменных окружения или конфигурации:
+- <code>OPENAI_API_KEY</code> — API-ключ для доступа к OpenAI (обязателен).
+- <code>OPENAI_BASE_URL</code> — базовый URL для API (опционально, используется при работе с прокси или локальными эндпоинтами).
+- <code>OPENAI_MODEL</code> — модель для оптимизации (по умолчанию <code>gpt-4o-mini</code>).</p>
+<p>В процессе выполнения формируется системное сообщение с инструкцией по улучшению промпта, после чего запрос отправляется в модель. Результат — оптимизированный промпт, возвращаемый в поле <code>output</code>. При ошибках возвращается флаг <code>success: False</code> и описание проблемы.</p>
+<p>Инструмент <code>auto_tts</code> для генерации аудио из текста с использованием OpenAI TTS. Позволяет озвучивать текст с выбором голоса, модели, формата вывода и дополнительных инструкций. Результат — путь к сохранённому аудиофайлу в формате mp3, opus, aac, flac, wav или pcm.</p>
+<p>Ключевые параметры:
+- <code>text</code> — текст для озвучивания (обязательный)
+- <code>voice</code> — голос (допустимые значения: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar; по умолчанию: alloy)
+- <code>model</code> — модель TTS (по умолчанию: gpt-4o-mini-tts)
+- <code>response_format</code> — формат аудиофайла (по умолчанию: mp3)
+- <code>instructions</code> — дополнительные инструкции для голоса (опционально)</p>
+<p>Требует наличие <code>OPENAI_API_KEY</code> в переменных окружения или в конфигурации. Базовый URL для OpenAI может быть задан через <code>OPENAI_BASE_URL</code>. Аудиофайлы сохраняются во временной директории <code>/tmp/tts</code> (или аналоге для ОС). Инструмент поддерживает параллельное выполнение и имеет таймаут 120 секунд.</p>
+<p>Инструмент для генерации изображений по текстовому промпту с использованием HuggingFace Inference API. Реализован как плагин <code>ToolPlugin</code> и предоставляет методы для асинхронного выполнения через <code>execute</code>. Основан на модели Stable Diffusion, поддерживает указание кастомной модели через параметр <code>model</code> (по умолчанию — <code>HiDream-ai/HiDream-I1-Full</code>).</p>
+<p>Ключевые параметры:
+- <code>prompt</code> (обязательный) — текстовое описание изображения.
+- <code>model</code> (опциональный) — идентификатор модели в репозитории HuggingFace.</p>
+<p>Для работы требуется токен аутентификации в переменной окружения <code>STABLE_DIFFUSION_TOKEN</code>. Изображение сохраняется во временной директории <code>/tmp/image_generation</code> (или аналоге для ОС) с расширением <code>.png</code>, возвращается путь к файлу.</p>
+<p>При первой генерации для "холодной" модели выполняется повторный запрос. Таймаут операции — 300 секунд. Ошибки логируются, возвращаются в виде словаря с <code>success=False</code> и описанием проблемы.</p>
+<p>Плагин инструмента для делегирования сложных задач во внешний CLI-интерфейс (например, codex/gemini/claude code). Используется, когда задача требует полноценного цикла разработки или выходит за рамки возможностей стандартных инструментов. Основная сущность — <code>UseCliTool</code>, реализующая интерфейс <code>ToolPlugin</code>. Ключевой параметр выполнения — <code>task_text</code>, содержащий описание задачи. Для работы требуется активная сессия CLI, передаваемая через контекст (<code>ctx["session"]</code>). В случае успеха возвращает обрезанный вывод сессии, в случае ошибки — сообщение об ошибке. Вывод очищается от ANSI-кодов.</p>
+<h1 id="reminderstool-telegram-">RemindersTool — Управление напоминаниями в Telegram-боте</h1>
+<h2 id="_107">Назначение</h2>
+<p>Инструмент <code>RemindersTool</code> предоставляет функциональность создания, просмотра и удаления пользовательских напоминаний через Telegram-бота. Работает в связке с системой диалогов и обработки callback-запросов.</p>
+<h2 id="_108">Основные возможности</h2>
+<ul>
+<li><strong>Создание напоминаний</strong> по формату <code>ГГГГ-ММ-ДД ЧЧ:ММ текст</code></li>
+<li><strong>Просмотр списка</strong> активных напоминаний с отображением времени выполнения и оставшегося времени</li>
+<li><strong>Удаление</strong> напоминаний по ID с проверкой принадлежности</li>
+<li>Поддержка интерактивного интерфейса: кнопки, диалоги, клавиатуры</li>
+</ul>
+<h2 id="_109">Ключевые сущности</h2>
+<ul>
+<li><code>reminder_id</code> — уникальный идентификатор напоминания</li>
+<li><code>services["scheduler_tasks"]</code> — хранилище задач с деталями выполнения</li>
+<li><code>services["user_tasks"]</code> — привязка пользователей к их активным напоминаниям</li>
+</ul>
+<h2 id="execute">Поддерживаемые действия (<code>execute</code>)</h2>
+<ul>
+<li><code>set</code> — запуск диалога создания напоминания</li>
+<li><code>list</code> — отображение списка активных напоминаний</li>
+<li><code>delete</code> — удаление по ID</li>
+<li><code>view</code>, <code>close_menu</code> — вспомогательные действия для интерфейса</li>
+</ul>
+<h2 id="_110">Ограничения</h2>
+<ul>
+<li>Макс. длительность напоминания: <strong>24 часа (86400 сек)</strong></li>
+<li>Макс. количество на пользователя: <strong>5 активных напоминаний</strong></li>
+<li>Формат времени: строго <code>YYYY-MM-DD HH:MM</code></li>
+<li>Отмена ввода: команды <code>отмена</code>, <code>cancel</code>, <code>выход</code>, <code>-</code></li>
+</ul>
+<h2 id="_111">Технические особенности</h2>
+<ul>
+<li>Использует <code>DialogMixin</code> для пошагового ввода</li>
+<li>Асинхронное выполнение через <code>asyncio.create_task</code></li>
+<li>Автоматическая очистка после срабатывания</li>
+<li>Отправка уведомлений через <code>bot._send_message</code></li>
+<li>Таймаут инструмента: <strong>30 секунд</strong></li>
+<li>Не поддерживает параллельное выполнение (<code>parallelizable=False</code>)</li>
+</ul>
+<h2 id="_112">Интеграция</h2>
+<ul>
+<li>Доступ через меню: "Напоминания" → "Список", "Создать"</li>
+<li>Callback-действия: <code>list</code>, <code>set</code>, <code>delete</code>, <code>view</code>, <code>close_menu</code></li>
+<li>Динамическое обновление времени в описании инструмента</li>
+</ul>
+<p>Инструмент <code>write_file</code> предназначен для создания или перезаписи файлов в рабочей директории агента. Обеспечивает безопасную запись с проверкой пути и содержимого. Поддерживает разрешение путей относительно рабочей директории (<code>cwd</code>), блокирует запись в чувствительные файлы, чужие рабочие пространства и при обнаружении символических ссылок, ведущих за пределы workspace. Проверяет содержимое на наличие потенциально опасного кода (например, утечки секретов). Требует параметры <code>path</code> и <code>content</code>. При успешной записи возвращает количество записанных байт. Все операции логируются, ошибки обрабатываются с безопасным возвратом.</p>
+<p>Инструмент <code>search_files</code> предназначен для поиска файлов в проекте с использованием glob-шаблонов. Позволяет агенту исследовать структуру проекта, находя файлы по заданному пути с поддержкой рекурсии (<code>**</code>).  </p>
+<p>Ключевые параметры:
+- <code>pattern</code> — строка с glob-шаблоном (например, <code>**/*.ts</code>, <code>src/**/*.js</code>), обязательный параметр.</p>
+<p>Особенности реализации:
+- Запрещены шаблоны с выходом за пределы рабочей директории (<code>..</code>) во избежание path traversal.
+- Поиск ограничен текущей рабочей директорией (<code>ctx["cwd"]</code>), проверяется через <code>realpath</code>.
+- Исключаются пути внутри <code>node_modules</code> и <code>.git</code>.
+- Пропускаются директории — в результат попадают только файлы.
+- Максимальное количество возвращаемых файлов — 200.
+- В случае ошибки возвращается сообщение об ошибке, исключения логируются.</p>
+<p>Возвращаемый результат:
+- При успехе: <code>{"success": True, "output": "список файлов через \\n"}</code>.
+- При ошибке: <code>{"success": False, "error": "описание ошибки"}</code>.</p>
+<p>Плагин инструмента для извлечения и парсинга содержимого веб-страницы по заданному URL. Возвращает очищенный текст в формате Markdown. Основан на базовом классе <code>ToolPlugin</code> и реализует методы <code>get_spec</code> и <code>execute</code>. </p>
+<p>Ключевая сущность — <code>FetchPageTool</code>, предоставляющий спецификацию инструмента с именем <code>fetch_page</code>, обязательным параметром <code>url</code> (строка) и уровнем риска <code>medium</code>. Выполнение делегирует функции <code>fetch_page_impl</code> из модуля <code>helpers</code>, передавая URL и конфигурацию инструмента. Требует корректной настройки <code>self.config</code> для работы (например, таймауты, заголовки, политики доступа). Используется в агентских сценариях, где необходима загрузка внешнего контента.</p>
+<p>Инструмент для извлечения и очистки текстового содержимого веб-страниц по заданному URL. Использует внешний сервис <a href="https://r.jina.ai">r.jina.ai</a> для получения основного текста без HTML-разметки. В случае недоступности Jina применяется fallback-запрос напрямую к URL.</p>
+<p><strong>Ключевые параметры:</strong>
+- <code>url</code> (обязательный) — адрес целевой страницы.
+- <code>max_chars</code> (опциональный, по умолчанию 6000, ограничение от 500 до 20000) — максимальное количество символов в ответе.</p>
+<p><strong>Особенности:</strong>
+- Выполняется асинхронно с использованием <code>asyncio.to_thread</code> для синхронных HTTP-запросов.
+- Автоматически обрезает вывод с помощью <code>helpers._trim_output</code>.
+- При ошибках возвращает структурированную информацию с флагом <code>success: False</code>.
+- Поддерживает параллельное выполнение.
+- Таймаут операции — 60 секунд.</p>
+<p><strong>Зависимости:</strong> <code>requests</code>, внешний API <code>r.jina.ai</code>.</p>
+<p>Инструмент для извлечения субтитров с YouTube-видео по его <code>video_id</code>. Поддерживает выбор языка и автоматическое определение доступных транскрипций (ручные, сгенерированные). Использует библиотеку <code>youtube-transcript-api</code>, которая должна быть установлена.</p>
+<p>Ключевые параметры:
+- <code>video_id</code> (обязательный) — идентификатор видео на YouTube.
+- <code>languages</code> — приоритетный список языков (по умолчанию <code>['ru', 'en']</code>).</p>
+<p>Инструмент пытается найти транскрипцию в порядке: ручная → автоматическая → любая доступная. Возвращает текст субтитров с указанием языка и типа (ручной/автогенерированный). Поддерживает выполнение в параллельных потоках и имеет таймаут 60 секунд. Ошибки логируются, пустой или отсутствующий <code>video_id</code> приводит к ошибке выполнения.</p>
+<h1 id="webresearchtool">WebResearchTool — Краткое резюме</h1>
+<p>Плагин <code>WebResearchTool</code> предназначен для асинхронного веб-исследования по смысловому запросу: от генерации мультиязычных поисковых фраз до извлечения, очистки и анализа контента с веб-страниц и PDF.</p>
+<h2 id="_113">Основные возможности</h2>
+<ul>
+<li><strong>Мультиязычная поддержка</strong>: русский (ru), английский (en), китайский (zh).</li>
+<li><strong>Генерация поисковых запросов</strong> с помощью OpenAI (по умолчанию <code>gpt-4o-mini</code>), до 5 фраз на язык.</li>
+<li><strong>Поиск ссылок</strong> через Jina AI Search API (до <code>max_results_per_lang</code>, по умолчанию 10 на язык).</li>
+<li><strong>Загрузка и очистка контента</strong> с HTML и PDF (включая обработку редиректов и валидацию URL).</li>
+<li><strong>Извлечение текста</strong> с использованием каскада: <code>trafilatura</code> → <code>BeautifulSoup</code> → <code>Jina Reader API</code> → <code>pdfminer</code> (для PDF).</li>
+<li><strong>Анализ содержимого</strong> с помощью LLM (OpenAI), если включено (<code>analyze_content=True</code>), с ограничением в 8000 символов на статью.</li>
+</ul>
+<h2 id="_114">Ключевые сущности</h2>
+<ul>
+<li><code>JINA_SEARCH_URL</code>, <code>JINA_READER_URL</code> — API-эндпоинты Jina AI.</li>
+<li><code>LANG_QUERIES_PROMPTS</code> — шаблоны промптов для генерации запросов на разных языках.</li>
+<li><code>_download_content</code>, <code>_extract_pdf_content</code>, <code>_get_clean_text_jina</code> — основные методы обработки.</li>
+<li><code>ToolSpec</code> — описание инструмента с параметрами: <code>query</code> (обяз.), <code>max_results_per_lang</code> (1–20), <code>analyze_content</code> (bool).</li>
+</ul>
+<h2 id="_115">Настройки</h2>
+<ul>
+<li>Аутентификация: <code>JINA_API_KEY</code>, <code>OPENAI_API_KEY</code> (из окружения).</li>
+<li>Поддержка кастомных моделей: <code>OPENAI_MODEL</code>, <code>OPENAI_BIG_MODEL</code>.</li>
+<li>Таймауты: 180 сек (общий), 20 сек (HTTP), 30 сек (Jina API).</li>
+<li>Заголовки <code>enhanced_headers</code> для обхода блокировок.</li>
+</ul>
+<h2 id="_116">Особенности</h2>
+<ul>
+<li>Параллельный поиск и загрузка по языкам.</li>
+<li>Round-robin агрегация результатов.</li>
+<li>Fallback-цепочка извлечения текста для надёжности.</li>
+<li>Очистка HTML от шумных тегов (<code>script</code>, <code>style</code>, <code>nav</code>, и др.).</li>
+<li>Логирование ошибок и предупреждений через <code>logger</code>.</li>
+<li>Финальный анализ — LLM с температурой 0.3 и лимитом 2000 токенов.</li>
+</ul>
+<h2 id="_117">Выходные данные</h2>
+<ul>
+<li>Статистика по языкам (найдено/обработано статей).</li>
+<li>Список источников.</li>
+<li>Аналитическое резюме (при <code>analyze_content=True</code>).</li>
+</ul>
+<p>Инструмент <code>schedule_task</code> позволяет планировать напоминания или выполнение команд с задержкой. Поддерживает три действия: добавление задачи, просмотр списка задач пользователя и отмену задачи по ID. Максимальная задержка — 24 часа, максимум 5 задач на пользователя.</p>
+<p>Ключевые параметры:
+- <code>action</code>: действие (<code>add</code>, <code>list</code>, <code>cancel</code>)
+- <code>type</code>: тип задачи (<code>message</code> — напоминание, <code>command</code> — выполнение shell-команды)
+- <code>content</code>: текст напоминания или команда для выполнения
+- <code>delay_minutes</code>: задержка в минутах (1–1440)
+- <code>task_id</code>: идентификатор задачи (требуется для отмены)</p>
+<p>Задачи хранятся во внутренних хранилищах <code>scheduler_tasks</code> (по ID) и <code>user_tasks</code> (по пользователю). При срабатывании отправляется сообщение через бота. Команды выполняются через <code>helpers.execute_shell_command</code> с ограничением вывода до 500 символов. Задачи удаляются из хранилища после выполнения или отмены.</p>
+<p>Файл реализует инструмент долговременной памяти для агента, позволяющий сохранять, читать и очищать текстовые записи с автоматическим добавлением временных меток. Предназначен для хранения важной информации: контекста проекта, решений, задач и т.п. — с сохранением между сессиями.</p>
+<p>Ключевые сущности: <code>MemoryTool</code> — основной класс, наследующий <code>DialogMixin</code> и <code>ToolPlugin</code>, обеспечивает интеграцию с интерфейсом агента и диалоговым взаимодействием. Поддерживает три действия: <code>read</code>, <code>append</code>, <code>clear</code>.</p>
+<p>Основные настройки и параметры:
+- <code>MEMORY_FILE</code> — имя файла для хранения памяти (определяется в <code>tooling.helpers</code>).
+- Путь к файлу памяти формируется на основе <code>config.defaults.workdir</code> или переменной окружения <code>AGENT_SANDBOX_ROOT</code>.
+- Файл создаётся в подкаталоге <code>_sandbox</code> рабочей директории.</p>
+<p>Интерфейс:
+- В меню доступны действия: «Показать», «Добавить запись», «Очистить».
+- Поддержка команд через диалоговый интерфейс и API агента.
+- При добавлении записи запрашивается текст через диалог; отмена возможна по ключевым словам.</p>
+<p>API-метод <code>execute</code> позволяет использовать инструмент в автоматизированных сценариях с параметрами:
+- <code>action</code> (обязательный): <code>read</code>, <code>append</code>, <code>clear</code>.
+- <code>content</code>: текст для добавления (только для <code>append</code>).</p>
+<p>Файл обеспечивает отказоустойчивое чтение и запись с обработкой ошибок, поддерживает русский интерфейс и ограничение длины вывода (до 3500 символов).</p>
+<p>Инструмент <code>ChiefTool</code> предоставляет доступ к поиску рецептов через API Edamam по заданным ингредиентам или запросу. Поддерживает асинхронное выполнение и параллельный запуск. Для работы требует переменные окружения <code>EDAMAM_APP_ID</code> и <code>EDAMAM_APP_KEY</code>. Основной метод <code>execute</code> принимает параметры <code>query</code> (обязательный) и <code>count</code> (необязательный, от 1 до 10), возвращает найденные рецепты с названием, источником и ссылкой. Поиск выполняется синхронно в отдельном потоке через <code>asyncio.to_thread</code>. Результаты обрезаются и форматируются с помощью вспомогательной функции <code>_trim_output</code>. Ключевые параметры: <code>query</code>, <code>count</code>, <code>app_id</code>, <code>app_key</code>, <code>timeout_ms=60000</code>.</p>
+<p>Инструмент <code>manage_tasks</code> предназначен для управления списком задач в рамках сессии. Позволяет добавлять, обновлять, просматривать и очищать выполненные задачи, что полезно при планировании многоэтапных операций. Основные сущности — задачи с полями <code>id</code>, <code>content</code>, <code>status</code> и <code>created_at</code>. Задачи хранятся в <code>services.task_store</code> с привязкой к <code>session_id</code>.</p>
+<p>Поддерживаемые действия:
+- <code>add</code>: добавляет новые задачи или обновляет существующие по <code>id</code>.
+- <code>update</code>: изменяет поля <code>content</code> или <code>status</code> у существующих задач.
+- <code>list</code>: возвращает отформатированный список всех задач текущей сессии.
+- <code>clear</code>: удаляет задачи со статусами <code>completed</code> или <code>cancelled</code>.</p>
+<p>Ключевые параметры в <code>args</code>: <code>action</code> (обязательный), <code>tasks</code> (массив задач). Каждая задача должна содержать <code>id</code> и <code>content</code>. Статус по умолчанию — <code>pending</code>. Результат выполнения включает флаг <code>success</code> и поле <code>output</code> с данными или сообщением. Инструмент не поддерживает параллельное выполнение.</p>
+<p>Инструмент <code>GTTSTextToSpeechTool</code> реализует генерацию аудио из текста с использованием сервиса Google Text-to-Speech (gTTS). Является плагином инструмента для агента, позволяет асинхронно озвучивать текст на указанном языке и возвращать путь к сохранённому MP3-файлу.</p>
+<p>Ключевые сущности:
+- <code>get_spec</code> — определяет интерфейс инструмента: имя <code>gtts_text_to_speech</code>, обязательный параметр <code>text</code>, опциональный <code>lang</code> (по умолчанию <code>ru</code>), формат вывода — путь к файлу.
+- <code>execute</code> — асинхронно вызывает синхронную функцию озвучки в отдельном потоке, обрабатывает ошибки.
+- <code>_tts_sync</code> — синхронная логика: генерация речи через <code>gTTS</code>, сохранение в временной директории <code>/tmp/tts</code> (или <code>temp</code> в Windows) с уникальным именем на основе timestamp.</p>
+<p>Важные настройки:
+- Таймаут выполнения — 90 секунд.
+- Поддержка параллельного выполнения (<code>parallelizable=True</code>).
+- Файлы сохраняются во временной директории ОС в подкаталоге <code>tts</code>.
+- Требуется установленный пакет <code>gTTS</code> (<code>pip install gTTS</code>).</p>
+<p>Клиент для взаимодействия с MCP (Model Control Protocol) через HTTP, использующий JSON-RPC 2.0 для обмена сообщениями. Предназначен для асинхронного вызова инструментов (tools), их перечисления и инициализации соединения с MCP-сервером.</p>
+<p>Основные сущности:
+- <code>HttpMCPClientConfig</code> — конфигурация клиента: имя, URL сервера, таймаут, заголовки и версия протокола.
+- <code>HttpMCPClient</code> — основной класс клиента, реализующий логику соединения, отправки запросов и обработки ответов.</p>
+<p>Ключевые методы:
+- <code>start()</code> — инициализирует HTTP-клиент и выполняет <code>initialize</code> и <code>initialized</code> вызовы.
+- <code>stop()</code> — закрывает соединение.
+- <code>list_tools()</code> — возвращает список доступных инструментов с их описанием и схемой входных данных.
+- <code>call_tool()</code> — вызывает указанный инструмент с заданными аргументами.</p>
+<p>Особенности:
+- Использует <code>httpx.AsyncClient</code> для асинхронных HTTP-запросов.
+- Поддерживает JSON-RPC 2.0, включая уведомления (без <code>id</code>).
+- Автоматически обрабатывает ошибки и пустые ответы.
+- При инициализации отправляет <code>initialize</code> и <code>notifications/initialized</code>, что совместимо с MCP-шлюзом на <code>127.0.0.1:8888</code>.</p>
+<p>Конфигурационные параметры (<code>HttpMCPClientConfig</code>):
+- <code>name</code> — логическое имя клиента.
+- <code>url</code> — адрес MCP-сервера.
+- <code>timeout_ms</code> — таймаут запроса в миллисекундах (по умолчанию 30 000).
+- <code>headers</code> — дополнительные HTTP-заголовки.
+- <code>protocol_version</code> — версия MCP-протокола (по умолчанию "2024-11-05").</p>
+<p>Клиент для взаимодействия с MCP (Model Control Protocol) сервером через стандартные потоки ввода-вывода. Реализует асинхронное взаимодействие по протоколу JSON-RPC, поддерживает инициализацию, вызов инструментов и получение списка доступных инструментов.</p>
+<p>Основные сущности:
+- <code>StdioMCPClient</code> — основной класс клиента, управляющий подключением к MCP-серверу, отправкой запросов и обработкой ответов.
+- <code>MCPToolInfo</code> — дата-класс, описывающий метаданные инструмента: имя, описание и схему входных параметров.
+- <code>JsonRpcStream</code> — обёртка для чтения/записи JSON-RPC сообщений через <code>stdin</code>/<code>stdout</code>.</p>
+<p>Ключевые функции:
+- <code>start()</code> — запускает процесс MCP-сервера и инициирует handshake (инициализацию).
+- <code>stop()</code> — останавливает процесс и завершает соединение.
+- <code>list_tools()</code> — возвращает список доступных инструментов.
+- <code>call_tool()</code> — вызывает указанный инструмент с заданными аргументами.</p>
+<p>Параметры инициализации:
+- <code>name</code> — имя клиента (для логирования).
+- <code>cmd</code> — команда для запуска MCP-сервера.
+- <code>cwd</code> — рабочая директория процесса.
+- <code>env</code> — переменные окружения.
+- <code>timeout_ms</code> — таймаут ожидания ответа от сервера.
+- <code>protocol_version</code> — версия MCP-протокола (по умолчанию "2024-11-05").</p>
+<p>Внутренние механизмы:
+- Используется <code>asyncio</code> для асинхронного обмена сообщениями.
+- <code>_reader_loop</code> — фоновая задача, обрабатывающая входящие JSON-RPC сообщения.
+- <code>_pending</code> — словарь ожидающих ответов, сопоставляющий <code>id</code> запроса с <code>Future</code>.
+- <code>_lock</code> — обеспечивает потокобезопасность при генерации идентификаторов запросов.</p>
+<p>Особенности:
+- При неудачной инициализации клиент продолжает работу, полагая, что сервер может поддерживать базовые методы.
+- Логирование ошибок выполняется через стандартный модуль <code>logging</code>.</p>
+<p>Класс <code>JsonRpcStream</code> обеспечивает чтение и запись JSON-RPC сообщений с поддержкой двух форматов фрейминга: LSP-совместимого (на основе заголовка <code>Content-Length</code>) и NDJSON (по одному JSON-объекту на строку). Используется для обмена сообщениями в асинхронных клиент-серверных взаимодействиях, например, с Language Server Protocol.</p>
+<p>Основные сущности:
+- <code>reader</code> и <code>writer</code> — объекты <code>asyncio.StreamReader</code> и <code>asyncio.StreamWriter</code> для работы с потоком ввода-вывода.
+- <code>write()</code> — отправляет JSON-объект, используя по умолчанию <code>Content-Length</code> фрейминг (если <code>prefer_content_length=True</code>), иначе — в формате NDJSON.
+- <code>read()</code> — читает следующее сообщение, автоматически определяя формат по первому блоку данных: если строка начинается с <code>Content-Length:</code>, применяется LSP-фрейминг, иначе — ожидается NDJSON.</p>
+<p>Ключевые особенности:
+- При чтении <code>Content-Length</code> обрабатываются заголовки до пустой строки, затем читается тело указанной длины.
+- Некорректные JSON-сообщения или заголовки игнорируются, возвращается <code>None</code>.
+- Логирование ошибок парсинга выполняется через модуль <code>logging</code>.
+- Функция <code>encode_content_length_message</code> формирует корректный заголовок <code>Content-Length</code> и тело сообщения в соответствии с LSP.</p>
+<p>Модуль обеспечивает интеграцию MCP-клиента с внешними инструментальными серверами. Предназначен для управления подключением, отправки запросов и обработки ответов от внешних инструментов через MCP (Model Communication Protocol). Ключевые сущности включают клиентское соединение, обработчики инструментов и маршрутизацию запросов. Поддерживает настройку URL сервера, тайм-аутов соединения, аутентификации (при наличии) и списка доступных инструментов. Основные параметры: <code>server_url</code>, <code>timeout</code>, <code>headers</code>, <code>tools</code>. Используется для расширения функциональности системы за счёт внешних сервисов — например, баз данных, API или вычислительных модулей.</p>
+<p>Класс <code>MCPManager</code> управляет подключением и взаимодействием с MCP-серверами (Model Control Protocol), обеспечивая запуск клиентов, кэширование инструментов и вызов методов. Поддерживает два типа транспорта: <code>stdio</code> и <code>http</code>. Инициализация клиентов происходит лениво и защищена блокировкой. Инструменты кэшируются в JSON-файле по пути <code>_shared/mcp_tools_cache.json</code> для ускорения последующих запусков. Методы <code>list_all_tools</code>, <code>call</code> и <code>build_registry_name</code> позволяют получать доступные инструменты, вызывать их и формировать имена, совместимые с ограничениями OpenAI. Ключевые параметры: <code>enabled</code>, <code>transport</code>, <code>cmd</code>, <code>url</code>, <code>timeout_ms</code>, <code>headers</code> — задаются через конфигурацию <code>AppConfig</code>.</p></div>
+</div>
+</div>
+<footer class="col-md-12">
+<hr/>
+<p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+</footer>
+<script src="js/bootstrap.bundle.min.js"></script>
+<script>
+            var base_url = ".",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+<script src="js/base.js"></script>
+<script src="search/main.js"></script>
+<div aria-hidden="true" aria-labelledby="searchModalLabel" class="modal" id="mkdocs_search_modal" role="dialog" tabindex="-1">
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+<div class="modal-header">
+<h4 class="modal-title" id="searchModalLabel">Search</h4>
+<button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
+</div>
+<div class="modal-body">
+<p>From here you can search these documents. Enter your search terms below.</p>
+<form>
+<div class="form-group">
+<input class="form-control" id="mkdocs-search-query" placeholder="Search..." title="Type search term here" type="search"/>
+</div>
+</form>
+<div data-no-results-text="No results found" id="mkdocs-search-results"></div>
+</div>
+<div class="modal-footer">
+</div>
+</div>
+</div>
+</div><div aria-hidden="true" aria-labelledby="keyboardModalLabel" class="modal" id="mkdocs_keyboard_modal" role="dialog" tabindex="-1">
+<div class="modal-dialog">
+<div class="modal-content">
+<div class="modal-header">
+<h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+<button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
+</div>
+<div class="modal-body">
+<table class="table">
+<thead>
+<tr>
+<th style="width: 20%;">Keys</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="help shortcut"><kbd>?</kbd></td>
+<td>Open this help</td>
+</tr>
+<tr>
+<td class="next shortcut"><kbd>n</kbd></td>
+<td>Next page</td>
+</tr>
+<tr>
+<td class="prev shortcut"><kbd>p</kbd></td>
+<td>Previous page</td>
+</tr>
+<tr>
+<td class="search shortcut"><kbd>s</kbd></td>
+<td>Search</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="modal-footer">
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
