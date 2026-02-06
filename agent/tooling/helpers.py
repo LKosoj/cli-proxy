@@ -139,6 +139,21 @@ def _trim_output(text: str) -> str:
     return f"{head}\n\n...(truncated {len(text) - OUTPUT_TRIM_LEN} chars)...\n\n{tail}"
 
 
+FETCH_MAX_CHARS = 80_000
+
+
+def _trim_fetch_output(text: str, *, reason: str = "превышен лимит") -> str:
+    """Hard cap fetch outputs to avoid blowing up the next LLM turn."""
+    if not text:
+        return text
+    if len(text) <= FETCH_MAX_CHARS:
+        return text
+    suffix = f"\n\n...(обрезано до {FETCH_MAX_CHARS} символов: {reason}, было {len(text)} символов)...\n"
+    if len(suffix) + 50 >= FETCH_MAX_CHARS:
+        return text[:FETCH_MAX_CHARS]
+    return text[: FETCH_MAX_CHARS - len(suffix)] + suffix
+
+
 async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
     if not command:
         return {"success": False, "error": "Command required"}
@@ -411,6 +426,7 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
     tavily_key = os.getenv("TAVILY_API_KEY") or (config.defaults.tavily_api_key if config else None)
     jina_key = os.getenv("JINA_API_KEY") or (config.defaults.jina_api_key if config else None)
     timeout_sec = int(WEB_FETCH_TIMEOUT_MS / 1000)
+    # The agent LLM will see tool outputs in the *next* turn. Keep fetch results bounded.
     try:
         providers: List[tuple[str, Any]] = []
         if proxy_url:
@@ -443,7 +459,7 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                     if desc:
                         output += f"> {desc}\n\n"
                     output += content
-                    return {"success": True, "output": output}
+                    return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page proxy")}
                 if name == "tavily":
                     r = requests.post(
                         "https://api.tavily.com/extract",
@@ -463,7 +479,7 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                         raise RuntimeError("No content returned")
                     title = item.get("title") or ""
                     output = f"# {title}\n\n{content}" if title else content
-                    return {"success": True, "output": output}
+                    return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page tavily")}
                 if name == "jina":
                     r = requests.get(
                         f"https://r.jina.ai/{url}",
@@ -475,7 +491,7 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                     content = r.text or ""
                     if not content.strip():
                         raise RuntimeError("No content returned")
-                    return {"success": True, "output": content}
+                    return {"success": True, "output": _trim_fetch_output(content, reason="fetch_page jina")}
                 if name == "zai":
                     r = requests.post(
                         "https://api.z.ai/api/paas/v4/reader",
@@ -497,7 +513,7 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                     if desc:
                         output += f"> {desc}\n\n"
                     output += content
-                    return {"success": True, "output": output}
+                    return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page zai")}
             except Exception as e:
                 # Ожидаемые нефатальные ошибки (провайдер вернул пусто, 4xx/5xx и т.п.)
                 # не должны заспамливать ERROR-трейсами в логе.
@@ -531,8 +547,8 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                     extracted = None
             # Fallback: return raw HTML (trimmed) if extractor fails.
             if extracted and extracted.strip():
-                return {"success": True, "output": extracted.strip()}
-            return {"success": True, "output": html_text[:20000]}
+                return {"success": True, "output": _trim_fetch_output(extracted.strip(), reason="fetch_page direct+trafilatura")}
+            return {"success": True, "output": _trim_fetch_output(html_text[:20000], reason="fetch_page direct")}
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": last_error or str(e) or "Fetch failed"}
