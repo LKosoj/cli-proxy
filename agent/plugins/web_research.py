@@ -107,7 +107,12 @@ class WebResearchTool(ToolPlugin):
         defaults = getattr(cfg, "defaults", None) if cfg else None
         
         if big:
-            return os.getenv("OPENAI_BIG_MODEL") or (getattr(defaults, "big_model_to_use", None) if defaults else None) or "gpt-4o"
+            return (
+                os.getenv("OPENAI_BIG_MODEL")
+                or (getattr(defaults, "openai_big_model", None) if defaults else None)
+                or (getattr(defaults, "big_model_to_use", None) if defaults else None)
+                or "gpt-4o"
+            )
         return os.getenv("OPENAI_MODEL") or (getattr(defaults, "openai_model", None) if defaults else None) or "gpt-4o-mini"
 
     async def _call_openai_for_queries(self, user_prompt: str, system_prompt: Optional[str] = None) -> List[str]:

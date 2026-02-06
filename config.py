@@ -37,7 +37,10 @@ class DefaultsConfig:
     toolhelp_path: str = "toolhelp.json"
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
+    openai_big_model: Optional[str] = None
     openai_base_url: Optional[str] = None
+    # Backward-compat alias for older configs. Prefer openai_big_model.
+    big_model_to_use: Optional[str] = None
     zai_api_key: Optional[str] = None
     tavily_api_key: Optional[str] = None
     jina_api_key: Optional[str] = None
@@ -149,7 +152,9 @@ def load_config(path: str) -> AppConfig:
         toolhelp_path=str(defaults_raw.get("toolhelp_path", "toolhelp.json")),
         openai_api_key=defaults_raw.get("openai_api_key"),
         openai_model=defaults_raw.get("openai_model"),
+        openai_big_model=defaults_raw.get("openai_big_model"),
         openai_base_url=defaults_raw.get("openai_base_url"),
+        big_model_to_use=defaults_raw.get("big_model_to_use"),
         zai_api_key=defaults_raw.get("zai_api_key"),
         tavily_api_key=defaults_raw.get("tavily_api_key"),
         jina_api_key=defaults_raw.get("jina_api_key"),
@@ -261,7 +266,9 @@ def save_config(config: AppConfig) -> None:
             "toolhelp_path": config.defaults.toolhelp_path,
             "openai_api_key": config.defaults.openai_api_key,
             "openai_model": config.defaults.openai_model,
+            "openai_big_model": config.defaults.openai_big_model,
             "openai_base_url": config.defaults.openai_base_url,
+            "big_model_to_use": config.defaults.big_model_to_use,
             "zai_api_key": config.defaults.zai_api_key,
             "tavily_api_key": config.defaults.tavily_api_key,
             "jina_api_key": config.defaults.jina_api_key,

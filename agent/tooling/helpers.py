@@ -484,10 +484,43 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                     output += content
                     return {"success": True, "output": output}
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                # Ожидаемые нефатальные ошибки (провайдер вернул пусто, 4xx/5xx и т.п.)
+                # не должны заспамливать ERROR-трейсами в логе.
+                msg = str(e)
+                if isinstance(e, RuntimeError) and msg == "No content returned":
+                    logging.warning("tool failed %s", msg)
+                elif isinstance(e, RuntimeError) and (msg.startswith("Tavily") or msg.startswith("Proxy") or msg.startswith("Jina") or msg.startswith("Z.AI")):
+                    logging.warning("tool failed %s", msg)
+                else:
+                    logging.exception(f"tool failed {msg}")
                 last_error = str(e)
                 continue
-        return {"success": False, "error": last_error or "Fetch failed"}
+
+        # Last resort: direct fetch + extraction (no extra config required).
+        try:
+            r = requests.get(url, timeout=timeout_sec, headers={"User-Agent": "cli-proxy/1.0"})
+            if not r.ok:
+                raise RuntimeError(f"Direct fetch error: {r.status_code}")
+            html_text = r.text or ""
+            if not html_text.strip():
+                raise RuntimeError("No content returned")
+            try:
+                import trafilatura  # type: ignore
+            except Exception:
+                trafilatura = None
+            extracted = None
+            if trafilatura:
+                try:
+                    extracted = trafilatura.extract(html_text, include_comments=False, include_tables=True)
+                except Exception:
+                    extracted = None
+            # Fallback: return raw HTML (trimmed) if extractor fails.
+            if extracted and extracted.strip():
+                return {"success": True, "output": extracted.strip()}
+            return {"success": True, "output": html_text[:20000]}
+        except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
+            return {"success": False, "error": last_error or str(e) or "Fetch failed"}
     except Exception as e:
         logging.exception(f"tool failed {str(e)}")
         return {"success": False, "error": str(e)}

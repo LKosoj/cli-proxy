@@ -47,8 +47,9 @@ defaults:
   toolhelp_path: "toolhelp.json"
   openai_api_key: null
   openai_model: null
+  openai_big_model: null
   openai_base_url: "https://api.openai.com"
-  big_model_to_use: "gpt-4o"
+  big_model_to_use: null
   zai_api_key: null
   tavily_api_key: null
   jina_api_key: null

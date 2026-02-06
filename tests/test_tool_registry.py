@@ -36,3 +36,13 @@ def test_search_web_executes_via_helpers(monkeypatch):
     out = asyncio.run(tool.execute({"query": "silver price"}, {"cwd": cfg.defaults.workdir}))
     assert out["success"] is True
     assert out["output"] == "ok"
+
+
+def test_codeinterpreter_static_block_never_raises_regex_error():
+    # Regression: internal regex patterns must never crash the tool.
+    from agent.plugins.codeinterpreter import CodeInterpreterTool
+
+    tool = CodeInterpreterTool()
+    blocked, reason = tool._static_block("print('hello')")  # noqa: SLF001 (internal regression test)
+    assert blocked is False
+    assert reason == ""

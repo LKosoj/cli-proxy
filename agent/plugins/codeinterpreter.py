@@ -55,19 +55,24 @@ class CodeInterpreterTool(ToolPlugin):
     def _static_block(self, code: str) -> tuple[bool, str]:
         # Консервативный фильтр: этот инструмент не должен превращаться в RCE/эксфильтрацию.
         bad = [
-            (r"\\bimport\\b", "imports запрещены"),
-            (r"\\bfrom\\b", "imports запрещены"),
-            (r"\\bos\\b|os\\.", "os запрещен"),
-            (r"\\bsubprocess\\b|subprocess\\.", "subprocess запрещен"),
-            (r"\\bsocket\\b|socket\\.", "socket запрещен"),
-            (r"\\brequests\\b|requests\\.", "requests запрещен"),
-            (r"\\bopen\\s*\\(", "file io запрещен"),
-            (r"__\\w+__", "dunder запрещен"),
-            (r"\\beval\\s*\\(|\\bexec\\s*\\(", "eval/exec запрещены"),
+            (r"\bimport\b", "imports запрещены"),
+            (r"\bfrom\b", "imports запрещены"),
+            (r"\bos\b|os\.", "os запрещен"),
+            (r"\bsubprocess\b|subprocess\.", "subprocess запрещен"),
+            (r"\bsocket\b|socket\.", "socket запрещен"),
+            (r"\brequests\b|requests\.", "requests запрещен"),
+            (r"\bopen\s*\(", "file io запрещен"),
+            (r"__\w+__", "dunder запрещен"),
+            (r"\beval\s*\(|\bexec\s*\(", "eval/exec запрещены"),
         ]
         for pat, why in bad:
-            if re.search(pat, code, re.I):
-                return True, why
+            try:
+                if re.search(pat, code, re.I):
+                    return True, why
+            except re.error as e:
+                # Никогда не валим инструмент из-за внутренней ошибки regex.
+                logging.exception(f"tool failed invalid internal regex: {pat}: {e}")
+                continue
         return False, ""
 
     def _run_sync(self, code: str, timeout: int) -> str:
