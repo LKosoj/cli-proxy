@@ -464,14 +464,23 @@ class BotApp:
         return InlineKeyboardMarkup(rows)
 
     async def send_output(self, session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+        _so_log = logging.getLogger("bot.send_output")
+        _so_log.info("[send_output] start session=%s output_len=%d", session.id, len(output))
         summary_error = None
         try:
-            summary, summary_error = await summarize_text_with_reason(
-                strip_ansi(output), config=self.config
+            summary, summary_error = await asyncio.wait_for(
+                summarize_text_with_reason(strip_ansi(output), config=self.config),
+                timeout=30,
             )
+        except asyncio.TimeoutError:
+            _so_log.warning("[send_output] summarize timed out after 30s")
+            summary = None
+            summary_error = "таймаут суммаризации (30с)"
         except Exception:
+            _so_log.exception("[send_output] summarize exception")
             summary = None
             summary_error = "неизвестная ошибка"
+        _so_log.info("[send_output] summary ready: has_summary=%s error=%s", summary is not None, summary_error)
         if summary:
             preview = summary
             summary_source = "OpenAI"
@@ -492,19 +501,22 @@ class BotApp:
             if preview:
                 await self._send_message(context, chat_id=chat_id, text=preview)
 
-        html_text = ansi_to_html(output)
-        path = make_html_file(html_text, self.config.defaults.html_filename_prefix)
+        _so_log.info("[send_output] generating HTML (in thread)...")
+        html_text = await asyncio.to_thread(ansi_to_html, output)
+        path = await asyncio.to_thread(make_html_file, html_text, self.config.defaults.html_filename_prefix)
+        _so_log.info("[send_output] HTML ready, sending document...")
         try:
             if chat_id is not None:
                 with open(path, "rb") as f:
                     ok = await self._send_document(context, chat_id=chat_id, document=f)
                 if not ok:
-                    logging.error("Не удалось отправить файл с выводом инструмента.")
+                    _so_log.error("[send_output] failed to send document")
         finally:
             try:
                 os.remove(path)
             except Exception:
                 pass
+        _so_log.info("[send_output] document sent, updating state...")
         self.metrics.observe_output(len(output))
         try:
             update_state(
@@ -521,6 +533,7 @@ class BotApp:
             self.manager._persist_sessions()
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
+        _so_log.info("[send_output] done session=%s", session.id)
 
     async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
         _rp_log = logging.getLogger("bot.run_prompt")
@@ -611,8 +624,8 @@ class BotApp:
                             chat_id=chat_id,
                             text=f"{preview}\n\nПолный вывод во вложении (HTML).",
                         )
-                        html_text = ansi_to_html(output)
-                        path = make_html_file(html_text, self.config.defaults.html_filename_prefix)
+                        html_text = await asyncio.to_thread(ansi_to_html, output)
+                        path = await asyncio.to_thread(make_html_file, html_text, self.config.defaults.html_filename_prefix)
                         try:
                             with open(path, "rb") as f:
                                 ok = await self._send_document(context, chat_id=chat_id, document=f)
@@ -2549,10 +2562,10 @@ class BotApp:
         if preview:
             await self._send_message(context, chat_id=chat_id, text=preview)
         if has_ansi(content):
-            html_text = ansi_to_html(content)
+            html_text = await asyncio.to_thread(ansi_to_html, content)
             if suffix not in strip_ansi(content):
                 html_text = f"{html_text}<br><br>{html.escape(suffix)}"
-            path = make_html_file(html_text, "toolhelp")
+            path = await asyncio.to_thread(make_html_file, html_text, "toolhelp")
             try:
                 with open(path, "rb") as f:
                     ok = await self._send_document(context, chat_id=chat_id, document=f)
