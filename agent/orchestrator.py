@@ -70,22 +70,51 @@ class OrchestratorRunner:
         session_data = self._load_session(cwd)
         ctx_summary += self._build_orchestrator_context(session_data, task_key)
         replan_count = 0
+        # Auto-replan after each executed step to adapt based on intermediate results.
+        # We keep a small global map of prior step results by task_id so replans do not repeat work.
+        prior_step_results: Dict[str, Dict[str, Any]] = {}
+        appended_step_ids: set[str] = set()
+        results: List[str] = []
+        step_results: List[Dict[str, Any]] = []
+
+        def _seed_completed_sets(steps: List[PlanStep]) -> tuple[set[str], set[str]]:
+            ok: set[str] = set()
+            fail: set[str] = set()
+            for s in steps:
+                prev = prior_step_results.get(s.id)
+                if not prev:
+                    continue
+                st = str(prev.get("status") or "")
+                if self._is_success_status(st):
+                    ok.add(s.id)
+                else:
+                    fail.add(s.id)
+            return ok, fail
+
+        def _progress_context() -> str:
+            # Keep the context bounded: include only the last N step summaries.
+            tail = step_results[-25:]
+            try:
+                payload = json.dumps(tail, ensure_ascii=False)
+            except Exception:
+                payload = ""
+            if not payload:
+                return ""
+            return f"\nstep_results_so_far:\n{payload}"
+
         while True:
             self._log.info("--- planning (attempt %d) ---", replan_count + 1)
-            steps = await plan_steps(self._config, user_text, ctx_summary)
+            steps = await plan_steps(self._config, user_text, ctx_summary + _progress_context())
             steps = self._order_steps_safely(steps)
             self._log.info("plan ready: %d step(s) -> %s",
                            len(steps),
                            ", ".join(f"{s.id}({s.step_type})" for s in steps))
-            results: List[str] = []
-            step_results: List[Dict[str, Any]] = []
             restart = False
             # Dynamic graph execution:
             # - respects depends_on
             # - only executes dependents if their deps succeeded (ok/partial)
             # - parallelizes only explicitly-marked steps
-            completed_ok: set[str] = set()
-            completed_fail: set[str] = set()
+            completed_ok, completed_fail = _seed_completed_sets(steps)
 
             while True:
                 batch, skipped = self._next_batch(steps, completed_ok, completed_fail, session_id=session.id)
@@ -93,15 +122,18 @@ class OrchestratorRunner:
                     self._log.info("skipped %d step(s): %s", len(skipped),
                                    ", ".join(f"{r.task_id}({r.status})" for r in skipped))
                 for r in skipped:
-                    results.append(r.summary)
-                    step_results.append(
-                        {
+                    # Record skipped once (across replans).
+                    if r.task_id not in appended_step_ids:
+                        appended_step_ids.add(r.task_id)
+                        results.append(r.summary)
+                        entry = {
                             "task_id": r.task_id,
                             "status": r.status,
                             "summary": r.summary,
                             "tool_calls": r.tool_calls,
                         }
-                    )
+                        step_results.append(entry)
+                        prior_step_results[r.task_id] = entry
                 if not batch:
                     self._log.info("no more steps to execute, finishing")
                     break
@@ -125,15 +157,28 @@ class OrchestratorRunner:
                                 return "⚠️ Слишком много уточнений. Остановлено."
                             restart = True
                             break
-                    results.append(resp.summary)
-                    step_results.append(
-                        {
+                    # Record result once (across replans).
+                    if resp.task_id not in appended_step_ids:
+                        appended_step_ids.add(resp.task_id)
+                        results.append(resp.summary)
+                        entry = {
                             "task_id": resp.task_id,
                             "status": resp.status,
                             "summary": resp.summary,
                             "tool_calls": resp.tool_calls,
                         }
-                    )
+                        step_results.append(entry)
+                        prior_step_results[resp.task_id] = entry
+
+                    # Auto-replan after each executed step if there is remaining work in this plan.
+                    remaining = [s for s in steps if s.id not in completed_ok and s.id not in completed_fail]
+                    if remaining:
+                        replan_count += 1
+                        if replan_count > 25:
+                            self._log.warning("too many replans (%d), stopping replanning", replan_count)
+                        else:
+                            restart = True
+                            break
                     continue
 
                 async def _run_one(s: PlanStep):
@@ -153,16 +198,30 @@ class OrchestratorRunner:
                 for s, r in zip(batch, group_results):
                     self._apply_step_result(s, r, completed_ok, completed_fail)
                     self._log.info("parallel step %s finished: status=%s", s.id, getattr(r, "status", "?"))
-                results.extend([r.summary for r in group_results if getattr(r, "summary", None)])
                 for r in group_results:
-                    step_results.append(
-                        {
-                            "task_id": r.task_id,
-                            "status": r.status,
-                            "summary": r.summary,
-                            "tool_calls": r.tool_calls,
-                        }
-                    )
+                    if r.task_id in appended_step_ids:
+                        continue
+                    appended_step_ids.add(r.task_id)
+                    if getattr(r, "summary", None):
+                        results.append(r.summary)
+                    entry = {
+                        "task_id": r.task_id,
+                        "status": r.status,
+                        "summary": r.summary,
+                        "tool_calls": r.tool_calls,
+                    }
+                    step_results.append(entry)
+                    prior_step_results[r.task_id] = entry
+
+                # Auto-replan after each batch if there is remaining work in this plan.
+                remaining = [s for s in steps if s.id not in completed_ok and s.id not in completed_fail]
+                if remaining:
+                    replan_count += 1
+                    if replan_count > 25:
+                        self._log.warning("too many replans (%d), stopping replanning", replan_count)
+                    else:
+                        restart = True
+                        break
 
             if restart:
                 continue
