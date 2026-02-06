@@ -25,6 +25,7 @@ from .memory_store import (
     write_memory,
 )
 from .planner import plan_steps
+from .openai_client import chat_completion
 
 
 class OrchestratorRunner:
@@ -76,6 +77,145 @@ class OrchestratorRunner:
         appended_step_ids: set[str] = set()
         results: List[str] = []
         step_results: List[Dict[str, Any]] = []
+        step_title_by_id: Dict[str, str] = {}
+
+        def _compact_outputs(outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            compacted: List[Dict[str, Any]] = []
+            for o in outputs or []:
+                if not isinstance(o, dict):
+                    continue
+                t = str(o.get("type") or "")
+                if t == "text":
+                    content = str(o.get("content") or "")
+                    compacted.append(
+                        {
+                            "type": "text",
+                            "content_len": len(content),
+                            "content_preview": (content[:5000] + "...(truncated)") if len(content) > 5000 else content,
+                        }
+                    )
+                    continue
+                # Preserve non-text outputs as-is (e.g., file/image/audio references).
+                compacted.append(dict(o))
+            return compacted
+
+        def _collect_artifacts_from_outputs(outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            artifacts: List[Dict[str, Any]] = []
+            for o in outputs or []:
+                if not isinstance(o, dict):
+                    continue
+                t = str(o.get("type") or "")
+                # Convention: {"type": "...", "path": "...", "name": "..."}.
+                path = o.get("path") or o.get("file_path")
+                if not path:
+                    continue
+                if t not in ("file", "document", "image", "audio", "video"):
+                    # Keep it permissive: any output with a path is a candidate artifact.
+                    t = "file"
+                artifacts.append({"type": t, "path": str(path), "name": str(o.get("name") or "")})
+            return artifacts
+
+        async def _compose_final_answer_text(
+            *,
+            user_query: str,
+            plan_steps_local: List[PlanStep],
+            step_results_local: List[Dict[str, Any]],
+        ) -> str:
+            # Keep context bounded to avoid blowing up the model input.
+            steps_payload: List[Dict[str, Any]] = []
+            for s in plan_steps_local:
+                steps_payload.append(
+                    {
+                        "id": s.id,
+                        "title": s.title,
+                        "step_type": s.step_type,
+                        "depends_on": s.depends_on or [],
+                    }
+                )
+            payload = {
+                "user_query": user_query,
+                "plan": steps_payload,
+                "step_results": step_results_local[-25:],
+            }
+            try:
+                raw = json.dumps(payload, ensure_ascii=False)
+            except Exception:
+                raw = ""
+            if len(raw) > 40000:
+                raw = raw[:40000] + "...(truncated)"
+            system = (
+                "Ты — оркестратор. Сформируй итоговый ответ пользователю по собранным материалам.\n"
+                "Правила:\n"
+                "- Не описывай внутренние шаги/инструменты/логи, только результат.\n"
+                "- Если часть шагов завершилась ошибкой/blocked, кратко перечисли, что не удалось сделать.\n"
+                "- Если есть допущения, явно отметь их.\n"
+                "- Формат: Markdown, с короткими заголовками и списками.\n"
+            )
+            out = await chat_completion(self._config, system, f"Материалы (JSON):\n{raw}")
+            return (out or "").strip()
+
+        async def _send_final_answer(
+            *,
+            user_query: str,
+            plan_steps_local: List[PlanStep],
+            step_results_local: List[Dict[str, Any]],
+        ) -> str:
+            chat_id = dest.get("chat_id")
+            if chat_id is None or bot is None:
+                # No transport: fall back to returning a textual response to the caller.
+                return "\n\n".join([r.get("summary") for r in step_results_local if r.get("summary")]) or "(empty response)"
+
+            corr_id = f"{session.id}:compose_final_answer"
+            self._log.info("step start corr_id=%s step_type=%s", corr_id, "compose_final_answer")
+            try:
+                final_text = await _compose_final_answer_text(
+                    user_query=user_query,
+                    plan_steps_local=plan_steps_local,
+                    step_results_local=step_results_local,
+                )
+                if not final_text:
+                    final_text = "\n\n".join([r.get("summary") for r in step_results_local if r.get("summary")]) or "(empty response)"
+
+                # Collect artifacts before sending the main answer (but send them after the main HTML+summary).
+                artifacts: List[Dict[str, Any]] = []
+                for r in step_results_local:
+                    artifacts.extend(_collect_artifacts_from_outputs(r.get("outputs") or []))
+
+                # 1) Short ready message
+                try:
+                    await bot._send_message(context, chat_id=chat_id, text="Готово. Результат ниже.")
+                except Exception as e:
+                    self._log.exception("compose_final_answer: failed to send ready message: %s", e)
+
+                # 2) One HTML+summary via send_output (no header)
+                try:
+                    await bot.send_output(
+                        session,
+                        dest,
+                        final_text,
+                        context,
+                        send_header=False,
+                        force_html=True,
+                    )
+                except Exception as e:
+                    self._log.exception("compose_final_answer: failed to send final output: %s", e)
+
+                # 3) Additional materials as separate messages
+                for a in artifacts:
+                    path = a.get("path") or ""
+                    if not path or not os.path.exists(path):
+                        continue
+                    try:
+                        with open(path, "rb") as f:
+                            await bot._send_document(context, chat_id=chat_id, document=f)
+                    except Exception as e:
+                        self._log.exception("compose_final_answer: failed to send artifact %r: %s", path, e)
+
+                self._log.info("step end corr_id=%s status=%s", corr_id, "ok")
+                return final_text
+            except Exception as e:
+                self._log.exception("step end corr_id=%s status=error err=%s", corr_id, e)
+                return "\n\n".join([r.get("summary") for r in step_results_local if r.get("summary")]) or "(empty response)"
 
         def _seed_completed_sets(steps: List[PlanStep]) -> tuple[set[str], set[str]]:
             ok: set[str] = set()
@@ -106,6 +246,7 @@ class OrchestratorRunner:
             self._log.info("--- planning (attempt %d) ---", replan_count + 1)
             steps = await plan_steps(self._config, user_text, ctx_summary + _progress_context())
             steps = self._order_steps_safely(steps)
+            step_title_by_id = {s.id: s.title for s in steps if s.id}
             self._log.info("plan ready: %d step(s) -> %s",
                            len(steps),
                            ", ".join(f"{s.id}({s.step_type})" for s in steps))
@@ -130,6 +271,8 @@ class OrchestratorRunner:
                             "task_id": r.task_id,
                             "status": r.status,
                             "summary": r.summary,
+                            "title": step_title_by_id.get(r.task_id),
+                            "outputs": _compact_outputs(r.outputs or []),
                             "tool_calls": r.tool_calls,
                         }
                         step_results.append(entry)
@@ -165,6 +308,8 @@ class OrchestratorRunner:
                             "task_id": resp.task_id,
                             "status": resp.status,
                             "summary": resp.summary,
+                            "title": step_title_by_id.get(resp.task_id),
+                            "outputs": _compact_outputs(resp.outputs or []),
                             "tool_calls": resp.tool_calls,
                         }
                         step_results.append(entry)
@@ -208,6 +353,8 @@ class OrchestratorRunner:
                         "task_id": r.task_id,
                         "status": r.status,
                         "summary": r.summary,
+                        "title": step_title_by_id.get(r.task_id),
+                        "outputs": _compact_outputs(r.outputs or []),
                         "tool_calls": r.tool_calls,
                     }
                     step_results.append(entry)
@@ -226,7 +373,11 @@ class OrchestratorRunner:
             if restart:
                 continue
 
-            final_response = "\n\n".join([r for r in results if r]) or "(empty response)"
+            final_response = await _send_final_answer(
+                user_query=user_text,
+                plan_steps_local=steps,
+                step_results_local=step_results,
+            )
             self._log.info("=== orchestrator run END session=%s ok=%d fail=%d response_len=%d ===",
                            session.id, len(completed_ok), len(completed_fail), len(final_response))
             try:

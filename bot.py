@@ -42,6 +42,7 @@ from utils import (
     sandbox_shared_dir,
     strip_ansi,
 )
+from tg_markdown import to_markdown_v2
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
 from agent.plugins.task_management import run_task_deadline_checker
@@ -370,6 +371,14 @@ class BotApp:
     async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
         for attempt in range(5):
             try:
+                # Most bot outputs should be MarkdownV2. Default to md2=True for safety:
+                # it escapes special characters so arbitrary text (including exceptions/paths)
+                # does not break parsing or message delivery.
+                md2 = bool(kwargs.pop("md2", True))
+                if md2 and "text" in kwargs and kwargs.get("text") is not None:
+                    # Telegram MarkdownV2 requires escaping many characters. Use md2tgmd if available.
+                    kwargs["text"] = to_markdown_v2(str(kwargs.get("text")))
+                    kwargs.setdefault("parse_mode", "MarkdownV2")
                 message = await context.bot.send_message(**kwargs)
                 chat_id = kwargs.get("chat_id")
                 if chat_id and message:
@@ -418,9 +427,17 @@ class BotApp:
         except Exception:
             return False
 
-    async def _edit_message(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, text: str) -> bool:
+    async def _edit_message(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, text: str, *, md2: bool = True) -> bool:
         try:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            if md2:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=to_markdown_v2(text),
+                    parse_mode="MarkdownV2",
+                )
+            else:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
             return True
         except Exception:
             return False
@@ -466,7 +483,17 @@ class BotApp:
             rows.append(nav)
         return InlineKeyboardMarkup(rows)
 
-    async def send_output(self, session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def send_output(
+        self,
+        session: Session,
+        dest: dict,
+        output: str,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        send_header: bool = True,
+        header_override: Optional[str] = None,
+        force_html: bool = False,
+    ) -> None:
         _so_log = logging.getLogger("bot.send_output")
         _so_log.info("[send_output] start session=%s output_len=%d", session.id, len(output))
         # Serialize output sending per session to avoid interleaving when we pipeline CLI execution.
@@ -474,8 +501,8 @@ class BotApp:
             chat_id = dest.get("chat_id")
             self.metrics.observe_output(len(output))
 
-            # Fast path for small outputs: just send text.
-            if chat_id is not None and len(output) <= 3900:
+            # Fast path for small outputs: just send text (unless forced to render HTML).
+            if not force_html and chat_id is not None and len(output) <= 3900:
                 await self._send_message(context, chat_id=chat_id, text=output)
                 try:
                     session.state_summary = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
@@ -485,16 +512,17 @@ class BotApp:
                     logging.exception(f"tool failed {str(e)}")
                 return
 
-            header = (
-                f"[{session.id}|{session.name or session.tool.name}] "
-                f"Сессия: {session.id} | Инструмент: {session.tool.name}\n"
-                f"Каталог: {session.workdir}\n"
-                f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\n"
-                f"Resume: {'есть' if session.resume_token else 'нет'}\n"
-                "Сначала отправлю полный вывод во вложении (HTML), затем пришлю summary."
-            )
-            if chat_id is not None:
-                await self._send_message(context, chat_id=chat_id, text=header)
+            if send_header:
+                header = header_override or (
+                    f"[{session.id}|{session.name or session.tool.name}] "
+                    f"Сессия: {session.id} | Инструмент: {session.tool.name}\n"
+                    f"Каталог: {session.workdir}\n"
+                    f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\n"
+                    f"Resume: {'есть' if session.resume_token else 'нет'}\n"
+                    "Сначала отправлю полный вывод во вложении (HTML), затем пришлю summary."
+                )
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text=header)
 
             async def _render_html_to_file() -> str:
                 _so_log.info("[send_output] generating HTML (in thread)...")
@@ -540,10 +568,10 @@ class BotApp:
             preview = summary or build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
             if chat_id is not None and preview:
                 if summary:
-                    await self._send_message(context, chat_id=chat_id, text=preview)
+                    await self._send_message(context, chat_id=chat_id, text=preview, md2=True)
                 else:
                     suffix = f" (summary недоступна: {summary_error})" if summary_error else ""
-                    await self._send_message(context, chat_id=chat_id, text=f"{preview}\n\n{suffix}".strip())
+                    await self._send_message(context, chat_id=chat_id, text=f"{preview}\n\n{suffix}".strip(), md2=True)
 
             _so_log.info("[send_output] updating state...")
             try:
@@ -644,31 +672,8 @@ class BotApp:
                 session.last_output_ts = now
                 session.last_tick_ts = now
                 session.tick_seen = (session.tick_seen or 0) + 1
-                chat_id = dest.get("chat_id")
-                if chat_id is not None:
-                    # Telegram hard limit is 4096 chars per message. Instead of failing or silently truncating
-                    # elsewhere, always send a readable preview and attach the full output as HTML if needed.
-                    if len(output) <= 3900:
-                        await self._send_message(context, chat_id=chat_id, text=output)
-                    else:
-                        preview = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
-                        await self._send_message(
-                            context,
-                            chat_id=chat_id,
-                            text=f"{preview}\n\nПолный вывод во вложении (HTML).",
-                        )
-                        html_text = await asyncio.to_thread(ansi_to_html, output)
-                        path = await asyncio.to_thread(make_html_file, html_text, self.config.defaults.html_filename_prefix)
-                        try:
-                            with open(path, "rb") as f:
-                                ok = await self._send_document(context, chat_id=chat_id, document=f)
-                            if not ok:
-                                logging.error("Не удалось отправить HTML с полным выводом агента.")
-                        finally:
-                            try:
-                                os.remove(path)
-                            except Exception:
-                                pass
+                # Success output of the orchestrator is not user-facing:
+                # a dedicated orchestrator step must format and send the final answer (e.g. via send_output()).
                 try:
                     preview = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
                     session.state_summary = preview
