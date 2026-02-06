@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from dotenv_loader import load_dotenv_near
 
 @dataclasses.dataclass
 class TelegramConfig:
@@ -114,6 +115,13 @@ class AppConfig:
 
 
 def load_config(path: str) -> AppConfig:
+    # Load environment variables from .env near the config file so all plugins/tools can use them.
+    # Do not override already provided env vars (e.g. from systemd/docker).
+    try:
+        load_dotenv_near(path, filename=".env", override=False)
+    except Exception:
+        pass
+
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 

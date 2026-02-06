@@ -4,7 +4,7 @@ from typing import Callable, Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from state import get_state, update_state
+from state import get_state
 
 
 class SessionUI:
@@ -52,14 +52,6 @@ class SessionUI:
                 await self._send_message(context, chat_id=chat_id, text="Сессия не найдена.")
                 return True
             session.name = name
-            update_state(
-                self.config.defaults.state_path,
-                session.tool.name,
-                session.workdir,
-                session.resume_token,
-                None,
-                name=session.name,
-            )
             self.manager._persist_sessions()
             await self._send_message(context, chat_id=chat_id, text="Имя сессии обновлено.")
             return True
@@ -74,14 +66,6 @@ class SessionUI:
                 await self._send_message(context, chat_id=chat_id, text="Сессия не найдена.")
                 return True
             session.resume_token = token
-            update_state(
-                self.config.defaults.state_path,
-                session.tool.name,
-                session.workdir,
-                session.resume_token,
-                None,
-                name=session.name,
-            )
             self.manager._persist_sessions()
             await self._send_message(context, chat_id=chat_id, text="Resume обновлен.")
             return True
@@ -189,12 +173,13 @@ class SessionUI:
             if not session:
                 await query.edit_message_text("Сессия не найдена.")
                 return True
-            st = get_state(self.config.defaults.state_path, session.tool.name, session.workdir)
+            st = get_state(self.config.defaults.state_path, session.tool.name, session.workdir, session_id=session.id)
             if not st:
                 await self._send_message(context, chat_id=chat_id, text="Состояние не найдено.")
                 await query.answer()
                 return True
             text = (
+                f"Session: {st.session_id or 'нет'}\n"
                 f"Инструмент: {st.tool}\n"
                 f"Каталог: {st.workdir}\n"
                 f"Resume: {st.resume_token or 'нет'}\n"

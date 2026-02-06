@@ -13,7 +13,7 @@ import subprocess
 import shlex
 
 from config import AppConfig, ToolConfig, save_config
-from state import delete_state, get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
+from state import get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
 from utils import build_command, detect_prompt_regex, detect_resume_regex, extract_tick_tokens, resolve_env_value, strip_ansi
 
 
@@ -28,6 +28,7 @@ class Session:
     busy: bool = False
     queue: Deque[Dict[str, Any]] = field(default_factory=deque)
     run_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     child: Optional[pexpect.spawn] = None
     current_proc: Optional[asyncio.subprocess.Process] = None
     _headless_interrupt_flag: bool = False
@@ -45,6 +46,10 @@ class Session:
     agent_enabled: bool = False
     agent_memory: Dict[str, Any] = field(default_factory=dict)
     project_root: Optional[str] = None
+    # Per-session "state" (previously stored by tool+workdir). This avoids collisions when
+    # multiple sessions share the same tool/workdir.
+    state_summary: Optional[str] = None
+    state_updated_at: Optional[float] = None
     headless_forced_stop: Optional[str] = None
 
     async def run_prompt(self, prompt: str, image_path: Optional[str] = None) -> str:
@@ -405,14 +410,7 @@ class SessionManager:
             config=self.config,
         )
         session.name = f"{tool.name}@{workdir}"
-        try:
-            st = get_state(self.config.defaults.state_path, tool.name, workdir)
-            if st and st.resume_token:
-                session.resume_token = st.resume_token
-            if st and st.name:
-                session.name = st.name
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+        # Do not load state by (tool, workdir): it is ambiguous when multiple sessions share them.
         self.sessions[sid] = session
         self.active_session_id = sid
         try:
@@ -457,10 +455,6 @@ class SessionManager:
                 pass
         self._persist_sessions()
         try:
-            delete_state(self.config.defaults.state_path, session.tool.name, session.workdir)
-        except Exception:
-            pass
-        try:
             sessions = load_sessions(self.config.defaults.state_path)
             if session_id in sessions:
                 del sessions[session_id]
@@ -497,6 +491,8 @@ class SessionManager:
                     "workdir": s.workdir,
                     "name": s.name,
                     "resume_token": s.resume_token,
+                    "summary": getattr(s, "state_summary", None),
+                    "updated_at": getattr(s, "state_updated_at", None),
                     "queue": queue_items,
                     "agent_enabled": bool(getattr(s, "agent_enabled", False)),
                     "agent_memory": getattr(s, "agent_memory", {}),
@@ -527,16 +523,14 @@ class SessionManager:
             )
             session.name = val.get("name") or f"{tool}@{workdir}"
             session.resume_token = val.get("resume_token")
+            session.state_summary = val.get("summary")
+            try:
+                session.state_updated_at = float(val.get("updated_at")) if val.get("updated_at") is not None else None
+            except Exception:
+                session.state_updated_at = None
             session.agent_enabled = bool(val.get("agent_enabled", False))
             session.agent_memory = val.get("agent_memory", {}) or {}
             session.project_root = val.get("project_root")
-            if not session.resume_token:
-                try:
-                    st = get_state(self.config.defaults.state_path, tool, workdir)
-                    if st and st.resume_token:
-                        session.resume_token = st.resume_token
-                except Exception:
-                    pass
             raw_queue = val.get("queue", [])
             queue_items: list[Dict[str, Any]] = []
             for item in raw_queue:

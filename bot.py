@@ -20,6 +20,7 @@ from telegram.ext import (
 )
 
 from config import AppConfig, ToolConfig, load_config
+from dotenv_loader import load_dotenv_near
 from session import Session, SessionManager, run_tool_help
 from summary import summarize_text_with_reason
 from command_registry import build_command_registry
@@ -28,7 +29,7 @@ from session_ui import SessionUI
 from git_ops import GitOps
 from metrics import Metrics
 from mcp_bridge import MCPBridge
-from state import get_state, load_active_state, update_state, clear_active_state
+from state import get_state, load_active_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import (
     ansi_to_html,
@@ -93,7 +94,9 @@ class BotApp:
         self.buffer_tasks: Dict[int, asyncio.Task] = {}
         self.pending_questions: Dict[str, Dict[str, object]] = {}
         self.context_by_chat: Dict[int, ContextTypes.DEFAULT_TYPE] = {}
-        self.agent_tasks: Dict[int, asyncio.Task] = {}
+        # Agent task is scoped per session, not per chat.
+        # Multiple sessions may exist in the same chat; interrupt/close must only affect its own session.
+        self.agent_tasks: Dict[str, asyncio.Task] = {}
         self.session_ui = SessionUI(
             self.config,
             self.manager,
@@ -466,74 +469,93 @@ class BotApp:
     async def send_output(self, session: Session, dest: dict, output: str, context: ContextTypes.DEFAULT_TYPE) -> None:
         _so_log = logging.getLogger("bot.send_output")
         _so_log.info("[send_output] start session=%s output_len=%d", session.id, len(output))
-        summary_error = None
-        try:
-            summary, summary_error = await asyncio.wait_for(
-                summarize_text_with_reason(strip_ansi(output), config=self.config),
-                timeout=30,
-            )
-        except asyncio.TimeoutError:
-            _so_log.warning("[send_output] summarize timed out after 30s")
-            summary = None
-            summary_error = "таймаут суммаризации (30с)"
-        except Exception:
-            _so_log.exception("[send_output] summarize exception")
-            summary = None
-            summary_error = "неизвестная ошибка"
-        _so_log.info("[send_output] summary ready: has_summary=%s error=%s", summary is not None, summary_error)
-        if summary:
-            preview = summary
-            summary_source = "OpenAI"
-        else:
-            preview = build_preview(output, self.config.defaults.summary_max_chars)
-            summary_source = "preview"
-            if summary_error:
-                summary_source = f"{summary_source} ({summary_error})"
-        header = (
-            f"[{session.id}|{session.name or session.tool.name}] Сессия: {session.id} | Инструмент: {session.tool.name}\\n"
-            f"Каталог: {session.workdir}\\n"
-            f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\\n"
-            f"Resume: {'есть' if session.resume_token else 'нет'} | Источник анонса: {summary_source}"
-        )
-        chat_id = dest.get("chat_id")
-        if chat_id is not None:
-            await self._send_message(context, chat_id=chat_id, text=header)
-            if preview:
-                await self._send_message(context, chat_id=chat_id, text=preview)
+        # Serialize output sending per session to avoid interleaving when we pipeline CLI execution.
+        async with session.send_lock:
+            chat_id = dest.get("chat_id")
+            self.metrics.observe_output(len(output))
 
-        _so_log.info("[send_output] generating HTML (in thread)...")
-        html_text = await asyncio.to_thread(ansi_to_html, output)
-        path = await asyncio.to_thread(make_html_file, html_text, self.config.defaults.html_filename_prefix)
-        _so_log.info("[send_output] HTML ready, sending document...")
-        try:
-            if chat_id is not None:
-                with open(path, "rb") as f:
-                    ok = await self._send_document(context, chat_id=chat_id, document=f)
-                if not ok:
-                    _so_log.error("[send_output] failed to send document")
-        finally:
-            try:
-                os.remove(path)
-            except Exception:
-                pass
-        _so_log.info("[send_output] document sent, updating state...")
-        self.metrics.observe_output(len(output))
-        try:
-            update_state(
-                self.config.defaults.state_path,
-                session.tool.name,
-                session.workdir,
-                session.resume_token,
-                preview,
-                name=session.name,
+            # Fast path for small outputs: just send text.
+            if chat_id is not None and len(output) <= 3900:
+                await self._send_message(context, chat_id=chat_id, text=output)
+                try:
+                    session.state_summary = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
+                    session.state_updated_at = time.time()
+                    self.manager._persist_sessions()
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                return
+
+            header = (
+                f"[{session.id}|{session.name or session.tool.name}] "
+                f"Сессия: {session.id} | Инструмент: {session.tool.name}\n"
+                f"Каталог: {session.workdir}\n"
+                f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\n"
+                f"Resume: {'есть' if session.resume_token else 'нет'}\n"
+                "Сначала отправлю полный вывод во вложении (HTML), затем пришлю summary."
             )
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
-        try:
-            self.manager._persist_sessions()
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
-        _so_log.info("[send_output] done session=%s", session.id)
+            if chat_id is not None:
+                await self._send_message(context, chat_id=chat_id, text=header)
+
+            async def _render_html_to_file() -> str:
+                _so_log.info("[send_output] generating HTML (in thread)...")
+                html_text_local = await asyncio.to_thread(ansi_to_html, output)
+                return await asyncio.to_thread(make_html_file, html_text_local, self.config.defaults.html_filename_prefix)
+
+            async def _summarize() -> tuple[Optional[str], Optional[str]]:
+                try:
+                    s, err = await asyncio.wait_for(
+                        summarize_text_with_reason(strip_ansi(output), config=self.config),
+                        timeout=30,
+                    )
+                    return s, err
+                except asyncio.TimeoutError:
+                    _so_log.warning("[send_output] summarize timed out after 30s")
+                    return None, "таймаут суммаризации (30с)"
+                except Exception:
+                    _so_log.exception("[send_output] summarize exception")
+                    return None, "неизвестная ошибка"
+
+            # Start both heavy computations in parallel.
+            html_task = asyncio.create_task(_render_html_to_file())
+            summary_task = asyncio.create_task(_summarize())
+
+            # 1) Full output first (HTML attachment)
+            path = await html_task
+            _so_log.info("[send_output] HTML ready, sending document...")
+            try:
+                if chat_id is not None:
+                    with open(path, "rb") as f:
+                        ok = await self._send_document(context, chat_id=chat_id, document=f)
+                    if not ok:
+                        _so_log.error("[send_output] failed to send document")
+            finally:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
+            # 2) Summary after HTML (may be slow; do not block CLI)
+            summary, summary_error = await summary_task
+
+            preview = summary or build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
+            if chat_id is not None and preview:
+                if summary:
+                    await self._send_message(context, chat_id=chat_id, text=preview)
+                else:
+                    suffix = f" (summary недоступна: {summary_error})" if summary_error else ""
+                    await self._send_message(context, chat_id=chat_id, text=f"{preview}\n\n{suffix}".strip())
+
+            _so_log.info("[send_output] updating state...")
+            try:
+                session.state_summary = preview
+                session.state_updated_at = time.time()
+            except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
+            try:
+                self.manager._persist_sessions()
+            except Exception as e:
+                logging.exception(f"tool failed {str(e)}")
+            _so_log.info("[send_output] done session=%s", session.id)
 
     async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
         _rp_log = logging.getLogger("bot.run_prompt")
@@ -551,7 +573,18 @@ class BotApp:
                 _rp_log.info("[run_prompt] calling session.run_prompt session=%s", session.id)
                 output = await session.run_prompt(prompt, image_path=image_path)
                 _rp_log.info("[run_prompt] session.run_prompt returned session=%s output_len=%d", session.id, len(output))
-                await self.send_output(session, dest, output, context)
+                # Don't block further CLI execution on slow HTML generation/upload/summarization.
+                task = asyncio.create_task(self.send_output(session, dest, output, context))
+
+                def _cb(t: asyncio.Task) -> None:
+                    try:
+                        t.result()
+                    except asyncio.CancelledError:
+                        return
+                    except Exception as e:
+                        logging.getLogger("bot.send_output").exception("[send_output] task failed: %s", e)
+
+                task.add_done_callback(_cb)
                 forced = getattr(session, "headless_forced_stop", None)
                 if forced:
                     chat_id = dest.get("chat_id")
@@ -638,14 +671,8 @@ class BotApp:
                                 pass
                 try:
                     preview = build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
-                    update_state(
-                        self.config.defaults.state_path,
-                        session.tool.name,
-                        session.workdir,
-                        session.resume_token,
-                        preview,
-                        name=session.name,
-                    )
+                    session.state_summary = preview
+                    session.state_updated_at = time.time()
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
                 try:
@@ -721,7 +748,7 @@ class BotApp:
         if not session:
             return
         session.interrupt()
-        task = self.agent_tasks.get(chat_id)
+        task = self.agent_tasks.get(session_id)
         if task and not task.done():
             task.cancel()
 
@@ -1393,6 +1420,7 @@ class BotApp:
                     await query.edit_message_text("Состояние не найдено.")
                     return
                 text = (
+                    f"Session: {st.session_id or 'нет'}\\n"
                     f"Tool: {st.tool}\\n"
                     f"Workdir: {st.workdir}\\n"
                     f"Resume: {st.resume_token or 'нет'}\\n"
@@ -2095,21 +2123,25 @@ class BotApp:
             await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
         s.interrupt()
-        task = self.agent_tasks.get(chat_id)
+        task = self.agent_tasks.get(s.id)
         if task and not task.done():
             task.cancel()
         await self._send_message(context, chat_id=chat_id, text="Прерывание отправлено.")
 
     def _start_agent_task(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        existing = self.agent_tasks.get(session.id)
+        if existing and not existing.done():
+            # Session already has a running agent task; don't start a duplicate.
+            return
         task = asyncio.create_task(self.run_agent(session, prompt, dest, context))
         chat_id = dest.get("chat_id")
         if chat_id is not None:
-            self.agent_tasks[chat_id] = task
+            self.agent_tasks[session.id] = task
 
-            def _cleanup(_task: asyncio.Task, cid: int = chat_id) -> None:
-                current = self.agent_tasks.get(cid)
+            def _cleanup(_task: asyncio.Task, sid: str = session.id) -> None:
+                current = self.agent_tasks.get(sid)
                 if current is _task:
-                    self.agent_tasks.pop(cid, None)
+                    self.agent_tasks.pop(sid, None)
 
             task.add_done_callback(_cleanup)
 
@@ -2156,14 +2188,6 @@ class BotApp:
             await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
         session.name = name.strip()
-        update_state(
-            self.config.defaults.state_path,
-            session.tool.name,
-            session.workdir,
-            session.resume_token,
-            None,
-            name=session.name,
-        )
         self.manager._persist_sessions()
         await self._send_message(context, chat_id=chat_id, text="Имя сессии обновлено.")
 
@@ -2247,14 +2271,7 @@ class BotApp:
             return
         token = " ".join(context.args).strip()
         s.resume_token = token
-        update_state(
-            self.config.defaults.state_path,
-            s.tool.name,
-            s.workdir,
-            s.resume_token,
-            None,
-            name=s.name,
-        )
+        self.manager._persist_sessions()
         await self._send_message(context, chat_id=chat_id, text="Resume сохранен.")
 
     async def cmd_state(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2262,17 +2279,27 @@ class BotApp:
         if not self.is_allowed(chat_id):
             return
         s = self.manager.active()
-        if context.args and len(context.args) >= 2:
-            tool = context.args[0]
-            workdir = " ".join(context.args[1:])
-            st = get_state(self.config.defaults.state_path, tool, workdir)
+        if context.args:
+            # Prefer session_id to avoid ambiguity when multiple sessions share tool/workdir.
+            st = None
+            sid = context.args[0]
+            if sid in self.manager.sessions:
+                s0 = self.manager.get(sid)
+                if s0:
+                    st = get_state(self.config.defaults.state_path, s0.tool.name, s0.workdir, session_id=s0.id)
+            if not st and len(context.args) >= 2:
+                tool = context.args[0]
+                workdir = " ".join(context.args[1:])
+                st = get_state(self.config.defaults.state_path, tool, workdir)
             if not st:
-                await self._send_message(context, chat_id=chat_id, text="Состояние не найдено.")
+                await self._send_message(context, chat_id=chat_id, text="Состояние не найдено (используйте /state <session_id>).")
                 return
             text = (
+                f"Session: {st.session_id or 'нет'}\\n"
                 f"Tool: {st.tool}\\n"
                 f"Workdir: {st.workdir}\\n"
                 f"Resume: {st.resume_token or 'нет'}\\n"
+                f"Name: {st.name or 'нет'}\\n"
                 f"Summary: {st.summary or 'нет'}\\n"
                 f"Updated: {self._format_ts(st.updated_at)}"
             )
@@ -2739,6 +2766,13 @@ def build_app(config: AppConfig) -> Application:
 
 
 def main() -> None:
+    # Ensure .env is loaded early for the whole process (plugins may read os.environ).
+    # load_config() also loads .env near config, but this keeps behavior robust if config
+    # path changes or config loading is refactored.
+    try:
+        load_dotenv_near(CONFIG_PATH, filename=".env", override=False)
+    except Exception:
+        pass
     config = load_config(CONFIG_PATH)
     app = build_app(config)
     app.run_polling()
