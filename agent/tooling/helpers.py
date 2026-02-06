@@ -172,12 +172,27 @@ async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
             encoding="utf-8",
             timeout=TOOL_TIMEOUT_MS / 1000,
         )
-        output = completed.stdout or completed.stderr or ""
-        sanitized = sanitize_output(output)
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
+        combined = stdout
+        if stderr:
+            combined = (combined + ("\n" if combined else "") + stderr) if combined is not None else stderr
+        sanitized = sanitize_output(combined or "")
         trimmed = _trim_output(sanitized)
         if completed.returncode == 0:
             return {"success": True, "output": trimmed or "(empty output)"}
-        return {"success": False, "error": f"Exit {completed.returncode}: {trimmed}"}
+        if not trimmed.strip():
+            # Provide enough context in logs/UI to understand what failed.
+            return {
+                "success": False,
+                "error": f"Exit {completed.returncode}: (no output) command={command!r} cwd={cwd!r}",
+                "meta": {"returncode": completed.returncode, "cwd": cwd, "command": command, "stdout_len": len(stdout), "stderr_len": len(stderr)},
+            }
+        return {
+            "success": False,
+            "error": f"Exit {completed.returncode}: {trimmed}",
+            "meta": {"returncode": completed.returncode, "cwd": cwd, "command": command, "stdout_len": len(stdout), "stderr_len": len(stderr)},
+        }
     except subprocess.TimeoutExpired:
         return {"success": False, "error": f"⏱️ Tool run_command timed out after {int(TOOL_TIMEOUT_MS/1000)}s"}
     except Exception as e:

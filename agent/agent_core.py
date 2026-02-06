@@ -351,10 +351,28 @@ class ReActAgent:
                 call_meta.append({"name": name, "args": args})
             results = await self._tool_registry.execute_many(calls, ctx)
             for idx_r, (call, result) in enumerate(zip(tool_calls, results)):
-                _log.info("ReAct tool result [%d] %s: success=%s output_len=%d%s",
-                          idx_r, calls[idx_r]["name"], result.get("success"),
-                          len(str(result.get("output") or result.get("error") or "")),
-                          f" err={str(result.get('error'))[:100]}" if not result.get("success") else "")
+                name = calls[idx_r]["name"]
+                success = bool(result.get("success"))
+                out_or_err = str(result.get("output") or result.get("error") or "")
+                suffix = ""
+                if not success:
+                    err = str(result.get("error") or "")
+                    # Log the tool arguments so failures like run_command show the exact command.
+                    try:
+                        args_repr = json.dumps(calls[idx_r].get("args") or {}, ensure_ascii=False)
+                    except Exception:
+                        args_repr = repr(calls[idx_r].get("args") or {})
+                    if len(args_repr) > 500:
+                        args_repr = args_repr[:500] + "...(truncated)"
+                    suffix = f" err={err[:200]} args={args_repr}"
+                _log.info(
+                    "ReAct tool result [%d] %s: success=%s output_len=%d%s",
+                    idx_r,
+                    name,
+                    success,
+                    len(out_or_err),
+                    suffix,
+                )
             for call, result in zip(tool_calls, results):
                 output = result.get("output") if result.get("success") else f"Error: {result.get('error')}"
                 if result.get("success"):
