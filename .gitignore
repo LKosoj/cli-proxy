@@ -213,3 +213,4 @@ AGENTS.md
 /.ai_docs_cache
 .DS_Store
 docs/plans/
+bot.log.1
