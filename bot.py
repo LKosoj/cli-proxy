@@ -44,6 +44,7 @@ from utils import (
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
 from agent.plugins.task_management import run_task_deadline_checker
+from agent.tooling.registry import get_tool_registry
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -2489,7 +2490,8 @@ def build_app(config: AppConfig) -> Application:
     try:
         from agent.profiles import build_default_profile
 
-        profile = build_default_profile(config)
+        tool_registry = get_tool_registry(config)
+        profile = build_default_profile(config, tool_registry)
         ui = bot_app.agent.get_plugin_ui(profile)
         plugin_commands = ui.get("plugin_commands") or []
         message_handlers = ui.get("message_handlers") or []

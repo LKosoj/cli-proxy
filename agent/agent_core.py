@@ -409,6 +409,15 @@ class AgentRunner:
         self.config = config
         self._react = ReActAgent(config, tool_registry)
 
+    def record_message(self, chat_id: int, message_id: int) -> None:
+        self._react.record_message(chat_id, message_id)
+
+    def resolve_question(self, question_id: str, answer: str) -> bool:
+        return self._react.resolve_question(question_id, answer)
+
+    def clear_session_cache(self, session_id: str) -> None:
+        self._react.clear_session_cache(session_id)
+
     async def run(
         self,
         session: Any,
@@ -451,12 +460,3 @@ class AgentRunResult:
     output: str
     status: str = "ok"
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-
-    def record_message(self, chat_id: int, message_id: int) -> None:
-        self._react.record_message(chat_id, message_id)
-
-    def resolve_question(self, question_id: str, answer: str) -> bool:
-        return self._react.resolve_question(question_id, answer)
-
-    def clear_session_cache(self, session_id: str) -> None:
-        self._react.clear_session_cache(session_id)
