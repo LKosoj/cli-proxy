@@ -15,8 +15,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    ConversationHandler,
-    MessageHandler,
     filters,
 )
 
@@ -128,6 +126,26 @@ class TaskManagementTool(ToolPlugin):
     _policy = _NotifyPolicy()
     _ST_ADD_TEXT = 1
 
+    def _dialog_state(self) -> Dict[int, Dict[str, Any]]:
+        # chat_id -> dialog data
+        return self.services.setdefault("task_dialog_state", {})
+
+    def _dialog_active_filter(self):
+        # Custom filter that matches only when dialog is active for this chat.
+        tool = self
+
+        class _Active(filters.BaseFilter):
+            def filter(self, message) -> bool:
+                try:
+                    chat_id = getattr(message, "chat_id", None)
+                    if not chat_id:
+                        return False
+                    return bool(tool._dialog_state().get(int(chat_id)))
+                except Exception:
+                    return False
+
+        return _Active()
+
     def get_source_name(self) -> str:
         return "TaskManagement"
 
@@ -200,24 +218,25 @@ class TaskManagementTool(ToolPlugin):
                 "handler_kwargs": {},
                 "add_to_menu": False,
             },
+            {
+                "callback_query_handler": self._start_add_from_button,
+                "callback_pattern": r"^task:add$",
+                "handler_kwargs": {},
+                "add_to_menu": False,
+            },
+            {
+                "callback_query_handler": self._cancel_add_dialog_from_button,
+                "callback_pattern": r"^task:add_cancel$",
+                "handler_kwargs": {},
+                "add_to_menu": False,
+            },
         ]
 
     def get_message_handlers(self) -> List[Dict[str, Any]]:
-        conv = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(self._start_add_from_button, pattern=r"^task:add$"),
-                CommandHandler("task_add_dialog", self._start_add_from_command, filters=filters.COMMAND),
-            ],
-            states={
-                self._ST_ADD_TEXT: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_add_text),
-                ],
-            },
-            fallbacks=[CommandHandler("cancel", self._cancel_add, filters=filters.COMMAND)],
-            name="task_add_dialog",
-            persistent=False,
-        )
-        return [{"handler": conv}]
+        # Avoid ConversationHandler here: it produces PTB warnings for callback entry points with per_message defaults.
+        # We keep a lightweight dialog state inside ToolRegistry services and match only when active.
+        active = self._dialog_active_filter()
+        return [{"filters": active & filters.TEXT & ~filters.COMMAND, "handler": self._on_add_text}]
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         action = args.get("action")
@@ -489,7 +508,7 @@ class TaskManagementTool(ToolPlugin):
         except Exception:
             return False
 
-    async def _start_add_from_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def _start_add_from_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         if query:
             try:
@@ -499,7 +518,12 @@ class TaskManagementTool(ToolPlugin):
         if not self._ensure_agent_enabled(context):
             if query and query.message:
                 await query.message.reply_text("Агент не активен.")
-            return ConversationHandler.END
+            return
+        user_id = query.from_user.id if query and query.from_user else None
+        chat_id = query.message.chat_id if query and query.message else None
+        if not user_id or not chat_id:
+            return
+        self._dialog_state()[int(chat_id)] = {"mode": "add", "user_id": int(user_id), "ts": int(_now_ts())}
         if query and query.message:
             await query.message.reply_text(
                 "Добавление задачи.\n"
@@ -507,24 +531,35 @@ class TaskManagementTool(ToolPlugin):
                 "1) high Сделать важное\n"
                 "2) medium 2026-02-06 10:00 Созвон\n"
                 "3) low 2026-02-06 10:00 Купить молоко\n\n"
-                "/cancel чтобы отменить."
+                "Кнопка Отмена ниже, чтобы выйти из диалога.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Отмена", callback_data="task:add_cancel")]]
+                ),
             )
-        return self._ST_ADD_TEXT
+        return
 
-    async def _start_add_from_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def _start_add_from_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         msg = update.effective_message
         if not self._ensure_agent_enabled(context):
             if msg:
                 await msg.reply_text("Агент не активен.")
-            return ConversationHandler.END
+            return
+        user_id = update.effective_user.id if update.effective_user else None
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if not user_id or not chat_id:
+            return
+        self._dialog_state()[int(chat_id)] = {"mode": "add", "user_id": int(user_id), "ts": int(_now_ts())}
         if msg:
             await msg.reply_text(
                 "Добавление задачи.\n"
                 "Отправьте строку: <priority> [YYYY-MM-DD HH:MM] <title>\n"
                 "Пример: high 2026-02-06 10:00 Созвон\n\n"
-                "/cancel чтобы отменить."
+                "Напишите текст задачи следующим сообщением. Для отмены нажмите кнопку ниже.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Отмена", callback_data="task:add_cancel")]]
+                ),
             )
-        return self._ST_ADD_TEXT
+        return
 
     def _parse_add_input(self, text: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
         raw = (text or "").strip()
@@ -550,18 +585,21 @@ class TaskManagementTool(ToolPlugin):
             return None, None, None, dl_err
         return priority, deadline, title, None
 
-    async def _on_add_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def _on_add_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         msg = update.effective_message
         if not msg:
-            return ConversationHandler.END
+            return
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
         if not user_id or not chat_id:
-            return ConversationHandler.END
+            return
+        st = self._dialog_state().get(int(chat_id)) or {}
+        if st.get("mode") != "add":
+            return
         priority, deadline, title, err = self._parse_add_input(msg.text or "")
         if err:
             await msg.reply_text(err)
-            return self._ST_ADD_TEXT
+            return
 
         dl_ts, _ = _parse_deadline(deadline)
         task_id = f"tsk_{int(_now_ts())}_{uuid.uuid4().hex[:4]}"
@@ -584,14 +622,23 @@ class TaskManagementTool(ToolPlugin):
         bucket = all_tasks.setdefault(str(user_id), {})
         bucket[task_id] = task
         _save_all_tasks(all_tasks)
+        self._dialog_state().pop(int(chat_id), None)
         await msg.reply_text(f"✅ Добавлено: {_format_task_line(task)}\nОткройте /tasks чтобы увидеть меню.")
-        return ConversationHandler.END
+        return
 
-    async def _cancel_add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        msg = update.effective_message
-        if msg:
-            await msg.reply_text("Отменено.")
-        return ConversationHandler.END
+    async def _cancel_add_dialog_from_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if not query:
+            return
+        try:
+            await query.answer()
+        except Exception:
+            pass
+        chat_id = query.message.chat_id if query.message else None
+        if chat_id:
+            self._dialog_state().pop(int(chat_id), None)
+        if query.message:
+            await query.message.reply_text("Отменено.")
 
     async def handle_task_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
