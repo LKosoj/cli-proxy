@@ -3,13 +3,14 @@ import json
 import logging
 import os
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI
 
 from agent.tooling.registry import ToolRegistry as PluginToolRegistry
 
 from config import AppConfig
-from utils import strip_ansi
+from utils import strip_ansi, sandbox_root
 
 # ==== config constants ====
 AGENT_MAX_ITERATIONS = 15
@@ -147,7 +148,7 @@ def get_memory_for_prompt(cwd: str) -> Optional[str]:
 
 
 class ReActAgent:
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, tool_registry: PluginToolRegistry):
         self.config = config
         self._openai_cfg = _get_openai_config(config)
         self._openai_client = None
@@ -155,7 +156,8 @@ class ReActAgent:
             api_key, _, base_url = self._openai_cfg
             self._openai_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._sessions: Dict[str, Dict[str, Any]] = {}
-        self._tool_registry = PluginToolRegistry(config)
+        # ToolRegistry must be a singleton shared across executor/orchestrator/agent.
+        self._tool_registry = tool_registry
 
     def record_message(self, chat_id: int, message_id: int) -> None:
         self._tool_registry.record_message(chat_id, message_id)
@@ -217,13 +219,25 @@ class ReActAgent:
         self,
         session: Dict[str, Any],
         user_message: str,
-        state_root: str,
+        cwd: str,
         chat_id: Optional[int],
         working: List[Dict[str, Any]],
         task_id: Optional[str],
+        request_context: Optional[str],
+        constraints: Optional[str],
+        corr_id: Optional[str],
     ) -> List[Dict[str, Any]]:
         messages: List[Dict[str, Any]] = []
-        messages.append({"role": "system", "content": self._load_system_prompt(state_root, chat_id)})
+        messages.append({"role": "system", "content": self._load_system_prompt(cwd, chat_id)})
+        extra_parts: List[str] = []
+        if corr_id:
+            extra_parts.append(f"corr_id: {corr_id}")
+        if request_context:
+            extra_parts.append(f"<REQUEST_CONTEXT>\n{request_context}\n</REQUEST_CONTEXT>")
+        if constraints:
+            extra_parts.append(f"<CONSTRAINTS>\n{constraints}\n</CONSTRAINTS>")
+        if extra_parts:
+            messages.append({"role": "system", "content": "\n\n".join(extra_parts)})
         task_history = session.get("history_by_task", {}).get(task_id or "unknown", [])
         for conv in task_history:
             messages.append({"role": "user", "content": conv.get("user", "")})
@@ -233,12 +247,15 @@ class ReActAgent:
         messages.extend(working)
         return messages
 
-    async def _call_openai(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _call_openai(
+        self, messages: List[Dict[str, Any]], allowed_tools: Optional[List[str]]
+    ) -> Dict[str, Any]:
         cfg = self._openai_cfg
         if not cfg or not self._openai_client:
             raise RuntimeError("OpenAI config missing")
         _, model, _ = cfg
-        definitions = await self._tool_registry.get_definitions_async(["All"])
+        # Важно: модель должна видеть только разрешённые инструменты, иначе будет часто звать запрещённые.
+        definitions = await self._tool_registry.get_definitions_async(allowed_tools or ["All"])
         resp = await self._openai_client.chat.completions.create(
             model=model,
             messages=messages,
@@ -258,18 +275,37 @@ class ReActAgent:
         chat_id: Optional[int],
         chat_type: Optional[str],
         task_id: Optional[str],
-    ) -> str:
+        allowed_tools: Optional[List[str]] = None,
+        request_context: Optional[str] = None,
+        constraints: Optional[str] = None,
+        corr_id: Optional[str] = None,
+    ) -> "AgentRunResult":
         cwd = session_obj.workdir
-        state_root = getattr(session_obj, "state_root", cwd)
+        # Single source of truth for session state file:
+        # always write/read /workdir/_sandbox/SESSION.json
+        state_root = sandbox_root(self.config.defaults.workdir)
+        os.makedirs(state_root, exist_ok=True)
         if session_id not in self._sessions:
             self._sessions[session_id] = self._load_session(state_root)
         session = self._sessions[session_id]
         working: List[Dict[str, Any]] = []
         final_response = ""
+        final_status = "ok"
         blocked_count = 0
+        tool_facts: List[Dict[str, Any]] = []
         for iteration in range(AGENT_MAX_ITERATIONS):
-            messages = self._build_messages(session, user_message, state_root, chat_id, working, task_id)
-            raw_message = await self._call_openai(messages)
+            messages = self._build_messages(
+                session,
+                user_message,
+                cwd,
+                chat_id,
+                working,
+                task_id,
+                request_context=request_context,
+                constraints=constraints,
+                corr_id=corr_id,
+            )
+            raw_message = await self._call_openai(messages, allowed_tools)
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
             if not tool_calls:
@@ -288,8 +324,11 @@ class ReActAgent:
                 "bot": bot,
                 "context": context,
                 "session": session_obj,
+                "allowed_tools": allowed_tools or ["All"],
+                "corr_id": corr_id,
             }
             calls = []
+            call_meta: List[Dict[str, Any]] = []
             for call in tool_calls:
                 name = call.get("function", {}).get("name")
                 raw_args = call.get("function", {}).get("arguments") or "{}"
@@ -302,6 +341,7 @@ class ReActAgent:
                     except Exception:
                         args = {}
                 calls.append({"name": name, "args": args})
+                call_meta.append({"name": name, "args": args})
             results = await self._tool_registry.execute_many(calls, ctx)
             for call, result in zip(tool_calls, results):
                 output = result.get("output") if result.get("success") else f"Error: {result.get('error')}"
@@ -316,19 +356,38 @@ class ReActAgent:
                     blocked_count += 1
                     output += "\n\n⛔ THIS COMMAND IS PERMANENTLY BLOCKED. Do NOT retry it. Find an alternative approach or inform the user this action is not allowed."
                 working.append({"role": "tool", "tool_call_id": call.get("id"), "content": output or "Success"})
+            for meta, result in zip(call_meta, results):
+                tool_facts.append(
+                    {
+                        "tool": meta.get("name"),
+                        "args": meta.get("args"),
+                        "success": bool(result.get("success")),
+                        "error": result.get("error"),
+                    }
+                )
             if unknown_tool:
                 final_response = "Не могу выполнить без инструментов, уточните."
+                final_status = "error"
                 break
             if all_failed and not (content or "").strip():
                 final_response = "Не могу выполнить без инструментов, уточните."
+                final_status = "error"
                 break
             if blocked_count >= AGENT_MAX_BLOCKED:
                 final_response = "🚫 Stopped: Multiple blocked commands detected. The requested actions are not allowed for security reasons."
+                final_status = "blocked"
                 break
             if not has_blocked:
                 blocked_count = 0
         if not final_response:
             final_response = "⚠️ Max iterations reached"
+            final_status = "timeout"
+        if final_status == "ok":
+            try:
+                if any((not bool(t.get("success"))) for t in tool_facts):
+                    final_status = "partial"
+            except Exception:
+                pass
         date_str = time.strftime("%Y-%m-%d")
         history_key = task_id or "unknown"
         session.setdefault("history_by_task", {}).setdefault(history_key, []).append(
@@ -339,16 +398,16 @@ class ReActAgent:
         self._save_session(state_root, session)
         # Ensure next run reloads from disk instead of cached memory.
         self._sessions.pop(session_id, None)
-        return final_response
+        return AgentRunResult(output=final_response, status=final_status, tool_calls=tool_facts)
 
     def clear_session_cache(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
 
 
 class AgentRunner:
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, tool_registry: PluginToolRegistry):
         self.config = config
-        self._react = ReActAgent(config)
+        self._react = ReActAgent(config, tool_registry)
 
     async def run(
         self,
@@ -358,12 +417,40 @@ class AgentRunner:
         context: Any,
         dest: Dict[str, Any],
         task_id: Optional[str] = None,
-    ) -> str:
+        allowed_tools: Optional[List[str]] = None,
+        request_context: Optional[str] = None,
+        constraints: Optional[str] = None,
+        corr_id: Optional[str] = None,
+    ) -> "AgentRunResult":
         if not _get_openai_config(self.config):
-            return "Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL."
+            return AgentRunResult(
+                output="Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL.",
+                status="error",
+                tool_calls=[],
+            )
         chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
-        return await self._react.run(session.id, user_text, session, bot, context, chat_id, chat_type, task_id)
+        return await self._react.run(
+            session.id,
+            user_text,
+            session,
+            bot,
+            context,
+            chat_id,
+            chat_type,
+            task_id,
+            allowed_tools=allowed_tools,
+            request_context=request_context,
+            constraints=constraints,
+            corr_id=corr_id,
+        )
+
+
+@dataclass
+class AgentRunResult:
+    output: str
+    status: str = "ok"
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
 
     def record_message(self, chat_id: int, message_id: int) -> None:
         self._react.record_message(chat_id, message_id)

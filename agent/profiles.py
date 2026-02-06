@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from config import AppConfig
+from .tooling.registry import ToolRegistry
 
 
 @dataclass
@@ -14,7 +15,6 @@ class ExecutorProfile:
     max_retries: int = 2
 
 
-def build_default_profile(config: AppConfig) -> ExecutorProfile:
-    from .tooling.registry import ToolRegistry
-    tools = list(sorted(ToolRegistry(config).list_tool_names()))
+def build_default_profile(config: AppConfig, tool_registry: ToolRegistry) -> ExecutorProfile:
+    tools = list(sorted(tool_registry.list_tool_names()))
     return ExecutorProfile(name="default", allowed_tools=tools)

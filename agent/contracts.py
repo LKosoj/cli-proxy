@@ -11,6 +11,12 @@ class PlanStep:
     instruction: str
     step_type: str = "task"
     parallel_group: Optional[str] = None
+    # Explicit dependency graph to make parallel execution safe.
+    # If present, orchestrator must respect these dependencies.
+    depends_on: List[str] = field(default_factory=list)
+    # Parallel execution must be explicit to avoid file/resource races.
+    parallelizable: bool = False
+    parallelizable_reason: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
     ask_question: Optional[str] = None
     ask_options: Optional[List[str]] = None
@@ -26,6 +32,7 @@ class ExecutorRequest:
     allowed_tools: Optional[List[str]] = None
     expected_outputs: Optional[List[str]] = None
     deadline_ms: Optional[int] = None
+    corr_id: Optional[str] = None
     profile: str = "default"
 
 
@@ -51,5 +58,5 @@ def validate_request(req: ExecutorRequest) -> None:
 def validate_response(resp: ExecutorResponse) -> None:
     if not resp.task_id:
         raise ValueError("ExecutorResponse.task_id is required")
-    if resp.status not in ("ok", "needs_input", "error"):
+    if resp.status not in ("ok", "needs_input", "error", "timeout", "blocked", "partial"):
         raise ValueError("ExecutorResponse.status invalid")

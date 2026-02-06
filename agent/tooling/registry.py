@@ -37,6 +37,20 @@ class ToolRegistry:
         # Register cached MCP tools (if any) so they can appear immediately in the tool list.
         self._register_mcp_cached_tools()
 
+
+_REGISTRY_SINGLETON: Optional[ToolRegistry] = None
+
+
+def get_tool_registry(config: Any) -> ToolRegistry:
+    """
+    Process-wide singleton ToolRegistry.
+    Avoids re-loading plugins multiple times and keeps shared tool state consistent.
+    """
+    global _REGISTRY_SINGLETON
+    if _REGISTRY_SINGLETON is None:
+        _REGISTRY_SINGLETON = ToolRegistry(config)
+    return _REGISTRY_SINGLETON
+
     def _load_plugins(self) -> None:
         loader = PluginLoader(Path(__file__).resolve().parent.parent / "plugins")
         loaded = loader.load()

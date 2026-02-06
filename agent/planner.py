@@ -21,6 +21,9 @@ _PLANNER_SYSTEM = """Ты — оркестратор. Построй план ш
       "instruction": "...",
       "step_type": "task",
       "parallel_group": null,
+      "depends_on": [],
+      "parallelizable": false,
+      "parallelizable_reason": null,
       "ask_question": null,
       "ask_options": null
     }
@@ -31,7 +34,13 @@ _PLANNER_SYSTEM = """Ты — оркестратор. Построй план ш
 - Если нужно уточнение, добавь шаг с step_type="ask_user" и заполни ask_question + ask_options (минимум 2 варианта).
 - Шаги должны быть исполнимы исполнителем с инструментами.
 - НЕ указывай, какие инструменты использовать исполнителю. Он сам выбирает.
-- Если параллельность не нужна, оставляй parallel_group = null.
+- Параллельность потенциально опасна (гонки по файлам/ресурсам). По умолчанию параллельность выключена.
+- Если хочешь запустить шаги параллельно, ОБЯЗАТЕЛЬНО:
+  - явно выставь parallelizable=true для каждого шага, который можно исполнять параллельно,
+  - объясни почему это безопасно в parallelizable_reason,
+  - при необходимости задай parallel_group (одинаковый gid для шагов, которые можно запустить вместе).
+- Если есть зависимости, укажи depends_on как список id шагов, которые должны завершиться ДО этого шага.
+- Если параллельность не нужна, оставляй parallel_group=null и parallelizable=false.
 """
 
 
@@ -51,12 +60,18 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
     steps: List[PlanStep] = []
     for idx, item in enumerate(steps_raw, start=1):
         step_id = item.get("id") or f"step{idx}"
+        depends_on = item.get("depends_on") or []
+        if not isinstance(depends_on, list):
+            depends_on = []
         step = PlanStep(
             id=step_id,
             title=item.get("title") or f"Шаг {idx}",
             instruction=item.get("instruction") or user_message,
             step_type=item.get("step_type") or "task",
             parallel_group=item.get("parallel_group"),
+            depends_on=[str(x) for x in depends_on if x],
+            parallelizable=bool(item.get("parallelizable") or False),
+            parallelizable_reason=item.get("parallelizable_reason"),
             ask_question=item.get("ask_question"),
             ask_options=item.get("ask_options"),
         )

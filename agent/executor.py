@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any, Dict
 from types import SimpleNamespace
 import os
+import asyncio
+import logging
+import random
 
 from .agent_core import AgentRunner
 from .tooling.registry import ToolRegistry
@@ -11,16 +14,28 @@ from .profiles import ExecutorProfile
 
 
 class Executor:
-    def __init__(self, config):
+    def __init__(self, config, tool_registry: ToolRegistry):
         self._config = config
-        self._runner = AgentRunner(config)
-        self._tool_registry = ToolRegistry(config)
+        self._tool_registry = tool_registry
+        self._runner = AgentRunner(config, tool_registry)
+        self._log = logging.getLogger(__name__)
 
     def _sandbox_root(self) -> str:
         return os.path.join(self._config.defaults.workdir, "_sandbox")
 
     def _session_workspace(self, session_id: str) -> str:
         return os.path.join(self._sandbox_root(), "sessions", session_id)
+
+    def _is_transient_exc(self, e: BaseException) -> bool:
+        if isinstance(e, (asyncio.TimeoutError, ConnectionError, OSError)):
+            return True
+        msg = str(e).lower()
+        return any(k in msg for k in ["timeout", "timed out", "connection", "temporarily", "reset by peer"])
+
+    async def _sleep_backoff(self, attempt: int) -> None:
+        # jittered exponential backoff
+        base = 0.6 * (2**attempt)
+        await asyncio.sleep(base + random.random() * 0.2)
 
     async def run(
         self,
@@ -32,6 +47,7 @@ class Executor:
         profile: ExecutorProfile,
     ) -> ExecutorResponse:
         validate_request(request)
+        self._log.info("executor start corr_id=%s task_id=%s", request.corr_id, request.task_id)
         # Явный needs_input через ask_user
         state_root = self._sandbox_root()
         session_workspace = self._session_workspace(session.id)
@@ -58,6 +74,7 @@ class Executor:
                 "context": context,
                 "session": proxy_session,
                 "allowed_tools": profile.allowed_tools,
+                "corr_id": request.corr_id,
             }
             result = await self._tool_registry.execute("ask_user", {"question": question, "options": options}, ctx)
             if not result.get("success"):
@@ -82,16 +99,54 @@ class Executor:
             validate_response(resp)
             return resp
         # Пока используем текущий ReAct как исполнителя.
-        output = await self._runner.run(proxy_session, request.goal, bot, context, dest, task_id=request.task_id)
+        last_exc: Exception | None = None
+        max_retries = max(0, int(profile.max_retries))
+        for attempt in range(max_retries + 1):
+            try:
+                run_result = await self._runner.run(
+                    proxy_session,
+                    request.goal,
+                    bot,
+                    context,
+                    dest,
+                    task_id=request.task_id,
+                    allowed_tools=profile.allowed_tools,
+                    request_context=request.context,
+                    constraints=request.constraints,
+                    corr_id=request.corr_id,
+                )
+                output = run_result.output
+                resp = ExecutorResponse(
+                    task_id=request.task_id,
+                    status=run_result.status,
+                    summary=(output[:400] + "...") if len(output) > 400 else output,
+                    outputs=[{"type": "text", "content": output}],
+                    tool_calls=run_result.tool_calls,
+                    next_questions=[],
+                )
+                validate_response(resp)
+                return resp
+            except Exception as e:
+                last_exc = e
+                msg = str(e)
+                if "BLOCKED" in msg or "not allowed" in msg.lower():
+                    break
+                if attempt < max_retries and self._is_transient_exc(e):
+                    self._log.warning("transient error, retrying corr_id=%s attempt=%s err=%s", request.corr_id, attempt, e)
+                    await self._sleep_backoff(attempt)
+                    continue
+                break
+
         resp = ExecutorResponse(
             task_id=request.task_id,
-            status="ok",
-            summary=(output[:400] + "...") if len(output) > 400 else output,
-            outputs=[{"type": "text", "content": output}],
-            tool_calls=[],
+            status="error",
+            summary=f"Ошибка выполнения: {last_exc}",
+            outputs=[],
+            tool_calls=[{"tool": "agent", "error": str(last_exc), "corr_id": request.corr_id}],
             next_questions=[],
         )
         validate_response(resp)
+        self._log.info("executor end corr_id=%s status=%s", request.corr_id, resp.status)
         return resp
 
     def record_message(self, chat_id: int, message_id: int) -> None:
