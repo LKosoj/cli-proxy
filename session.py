@@ -69,12 +69,14 @@ class Session:
         cmd_template: Optional[List[str]] = None,
         image_path: Optional[str] = None,
     ) -> str:
+        _log = logging.getLogger("session.headless")
         self.headless_forced_stop = None
         if cmd_template is None:
             cmd_template = self.tool.headless_cmd or self.tool.cmd
             if self.resume_token and self.tool.resume_cmd:
                 cmd_template = self.tool.resume_cmd
         cmd, use_stdin = build_command(cmd_template, prompt, self.resume_token, image=image_path)
+        _log.info("[headless] START cmd=%s use_stdin=%s cwd=%s", cmd, use_stdin, self.workdir)
         env = os.environ.copy()
         if self.tool.env:
             for k, v in self.tool.env.items():
@@ -92,25 +94,27 @@ class Session:
         )
         self.current_proc = proc
         self._headless_interrupt_flag = False
+        _log.info("[headless] PID=%s started", proc.pid)
         if use_stdin and proc.stdin:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
             proc.stdin.close()
+            _log.info("[headless] stdin written and closed")
 
-        # В headless-режиме нельзя завязываться на communicate()/EOF stdout:
-        # некоторые CLI/обёртки/дочерние процессы могут удерживать пайп открытым,
-        # из-за чего communicate() "висит" даже после завершения основного процесса.
-        #
-        # Источник истины: proc.wait() (и, как fallback, проверка PID).
         out_buf = bytearray()
+        drain_eof = False
 
         async def _drain_stdout() -> None:
+            nonlocal drain_eof
             if not proc.stdout:
+                _log.warning("[headless] no stdout pipe")
                 return
             try:
                 while True:
                     chunk = await proc.stdout.read(4096)
                     if not chunk:
+                        drain_eof = True
+                        _log.info("[headless] drain: EOF received, total %d bytes", len(out_buf))
                         break
                     out_buf.extend(chunk)
                     try:
@@ -118,9 +122,10 @@ class Session:
                     except Exception:
                         pass
             except asyncio.CancelledError:
+                _log.warning("[headless] drain: cancelled, had %d bytes", len(out_buf))
                 raise
             except Exception:
-                logging.exception("tool failed stdout drain")
+                logging.exception("[headless] drain: exception")
 
         def _pid_exists(pid: int) -> bool:
             try:
@@ -133,41 +138,65 @@ class Session:
         drain_task = asyncio.create_task(_drain_stdout())
 
         forced_reason: Optional[str] = None
+        poll_iter = 0
         while True:
+            poll_iter += 1
             done, _ = await asyncio.wait({wait_task}, timeout=2)
             if done:
+                _log.info("[headless] wait_task done after %d polls, returncode=%s", poll_iter, proc.returncode)
                 break
+            pid_alive = _pid_exists(proc.pid) if proc.pid else False
+            _log.info(
+                "[headless] poll #%d: wait_task.done=%s pid_exists=%s returncode=%s drain_eof=%s buf=%d",
+                poll_iter, wait_task.done(), pid_alive, proc.returncode, drain_eof, len(out_buf),
+            )
             # Fallback: если asyncio не получил событие завершения, но PID уже отсутствует,
             # считаем процесс завершенным, чтобы не держать сессию busy бесконечно.
-            if proc.pid and not _pid_exists(proc.pid):
+            if proc.pid and not pid_alive:
                 forced_reason = "PID отсутствует, но ожидание завершения не сработало"
+                _log.warning("[headless] %s (returncode=%s)", forced_reason, proc.returncode)
+                break
+            # Дополнительный fallback: returncode уже установлен (asyncio получил SIGCHLD),
+            # но wait() не разрешился, потому что stdout pipe ещё открыт (asyncio ждёт
+            # disconnected на всех pipe прежде чем resolve-ить wait future).
+            if proc.returncode is not None:
+                forced_reason = f"returncode={proc.returncode} есть, но wait() не завершился (stdout pipe удерживается)"
+                _log.warning("[headless] %s", forced_reason)
                 break
 
         # Даем короткий grace на дочитывание хвоста вывода. Если stdout не закрывается — прекращаем чтение.
-        grace_sec = 1.0
-        try:
-            await asyncio.wait_for(drain_task, timeout=grace_sec)
-        except asyncio.TimeoutError:
-            forced_reason = forced_reason or "stdout не закрылся после завершения процесса"
+        grace_sec = 2.0
+        if not drain_task.done():
+            _log.info("[headless] waiting for drain (grace %.1fs)...", grace_sec)
             try:
-                drain_task.cancel()
+                await asyncio.wait_for(asyncio.shield(drain_task), timeout=grace_sec)
+                _log.info("[headless] drain finished within grace")
+            except asyncio.TimeoutError:
+                forced_reason = forced_reason or "stdout не закрылся после завершения процесса"
+                _log.warning("[headless] drain timed out: %s", forced_reason)
+                try:
+                    drain_task.cancel()
+                except Exception:
+                    pass
+                # Закрываем наш read-end пайпа, чтобы не держать ресурсы.
+                try:
+                    transport = getattr(proc.stdout, "_transport", None) if proc.stdout else None
+                    if transport is not None:
+                        transport.close()
+                except Exception:
+                    pass
             except Exception:
-                pass
-            # Закрываем наш read-end пайпа, чтобы не держать ресурсы.
-            try:
-                transport = getattr(proc.stdout, "_transport", None) if proc.stdout else None
-                if transport is not None:
-                    transport.close()
-            except Exception:
-                pass
-        except Exception:
-            forced_reason = forced_reason or "ошибка при ожидании stdout после завершения процесса"
-            try:
-                drain_task.cancel()
-            except Exception:
-                pass
+                forced_reason = forced_reason or "ошибка при ожидании stdout после завершения процесса"
+                _log.exception("[headless] drain grace exception")
+                try:
+                    drain_task.cancel()
+                except Exception:
+                    pass
+        else:
+            _log.info("[headless] drain already finished")
 
         if not wait_task.done():
+            _log.warning("[headless] wait_task still not done, cancelling")
             try:
                 wait_task.cancel()
             except Exception:
@@ -176,6 +205,7 @@ class Session:
         self.current_proc = None
         self._headless_interrupt_flag = False
         text = bytes(out_buf).decode(errors="ignore")
+        _log.info("[headless] END PID=%s forced=%s output_len=%d", proc.pid, forced_reason, len(text))
         if forced_reason:
             self.headless_forced_stop = forced_reason
             if not text:

@@ -59,18 +59,24 @@ class OrchestratorRunner:
         chat_type = dest.get("chat_type")
         cwd = sandbox_root(self._config.defaults.workdir)
         os.makedirs(cwd, exist_ok=True)
+        self._log.info("=== orchestrator run START session=%s chat=%s user_text=%r ===", session.id, chat_id, user_text[:200])
         memory_text = read_memory(cwd)
         memory_context = trim_for_context(memory_text, max_chars=2000)
         ctx_summary = f"session_id={session.id} chat_id={chat_id}"
         if memory_context:
             ctx_summary = f"{ctx_summary}\nmemory:\n{memory_context}"
+            self._log.info("memory context loaded, %d chars", len(memory_context))
         task_key = session.id
         session_data = self._load_session(cwd)
         ctx_summary += self._build_orchestrator_context(session_data, task_key)
         replan_count = 0
         while True:
+            self._log.info("--- planning (attempt %d) ---", replan_count + 1)
             steps = await plan_steps(self._config, user_text, ctx_summary)
             steps = self._order_steps_safely(steps)
+            self._log.info("plan ready: %d step(s) -> %s",
+                           len(steps),
+                           ", ".join(f"{s.id}({s.step_type})" for s in steps))
             results: List[str] = []
             step_results: List[Dict[str, Any]] = []
             restart = False
@@ -83,6 +89,9 @@ class OrchestratorRunner:
 
             while True:
                 batch, skipped = self._next_batch(steps, completed_ok, completed_fail, session_id=session.id)
+                if skipped:
+                    self._log.info("skipped %d step(s): %s", len(skipped),
+                                   ", ".join(f"{r.task_id}({r.status})" for r in skipped))
                 for r in skipped:
                     results.append(r.summary)
                     step_results.append(
@@ -94,8 +103,11 @@ class OrchestratorRunner:
                         }
                     )
                 if not batch:
+                    self._log.info("no more steps to execute, finishing")
                     break
 
+                self._log.info("executing batch: %s (parallel=%s)",
+                               ", ".join(s.id for s in batch), len(batch) > 1)
                 if len(batch) == 1:
                     step = batch[0]
                     resp = await self._execute_step(step, session, bot, context, dest, ctx_summary)
@@ -105,9 +117,11 @@ class OrchestratorRunner:
                         if resp.outputs:
                             answer = str(resp.outputs[0].get("content") or "")
                         if answer:
+                            self._log.info("ask_user answer received, will replan: %r", answer[:200])
                             user_text = f"{user_text}\nОтвет пользователя: {answer}"
                             replan_count += 1
                             if replan_count > 2:
+                                self._log.warning("too many clarifications (%d), stopping", replan_count)
                                 return "⚠️ Слишком много уточнений. Остановлено."
                             restart = True
                             break
@@ -138,6 +152,7 @@ class OrchestratorRunner:
                 group_results = await asyncio.gather(*[_run_one(s) for s in batch], return_exceptions=False)
                 for s, r in zip(batch, group_results):
                     self._apply_step_result(s, r, completed_ok, completed_fail)
+                    self._log.info("parallel step %s finished: status=%s", s.id, getattr(r, "status", "?"))
                 results.extend([r.summary for r in group_results if getattr(r, "summary", None)])
                 for r in group_results:
                     step_results.append(
@@ -153,6 +168,8 @@ class OrchestratorRunner:
                 continue
 
             final_response = "\n\n".join([r for r in results if r]) or "(empty response)"
+            self._log.info("=== orchestrator run END session=%s ok=%d fail=%d response_len=%d ===",
+                           session.id, len(completed_ok), len(completed_fail), len(final_response))
             try:
                 date_str = time.strftime("%Y-%m-%d")
                 entry = {
@@ -332,11 +349,13 @@ class OrchestratorRunner:
             # For now, constraints is only used as an extra system block for the agent.
             constraints=None,
         )
-        self._log.info("step start corr_id=%s step_type=%s", corr_id, step.step_type)
-        # Step-level timeouts/retries live in Executor to avoid double-retry loops.
-        # Orchestrator is responsible for dependency scheduling and final aggregation only.
+        self._log.info("step start corr_id=%s step_type=%s profile=%s allowed_tools=%s",
+                       corr_id, step.step_type, profile.name,
+                       ",".join(profile.allowed_tools[:5]) + ("..." if len(profile.allowed_tools) > 5 else ""))
+        self._log.info("step instruction: %s", (step.instruction or "")[:300])
         resp: ExecutorResponse = await self._executor.run(session, req, bot, context, dest, profile)
-        self._log.info("step end corr_id=%s status=%s", corr_id, getattr(resp, "status", None))
+        self._log.info("step end corr_id=%s status=%s summary=%s", corr_id,
+                       getattr(resp, "status", None), (getattr(resp, "summary", "") or "")[:200])
         if resp.status == "needs_input" and resp.next_questions:
             # Явный запрос пользователю: первая формулировка
             resp.summary = resp.next_questions[0]
@@ -362,8 +381,10 @@ class OrchestratorRunner:
     async def _maybe_update_memory(self, user_text: str, final_response: str, memory_text: str, cwd: str) -> None:
         decision = await decide_memory_save(self._config, user_text, final_response, memory_text)
         if not decision:
+            self._log.info("memory: no update needed")
             return
         tag, content = decision
+        self._log.info("memory: saving tag=%s content_len=%d", tag, len(content))
         append_memory_tagged(cwd, tag, content)
         updated = read_memory(cwd)
         max_bytes = int(self._config.defaults.memory_max_kb) * 1024

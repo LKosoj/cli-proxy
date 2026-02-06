@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import uuid
@@ -10,6 +11,8 @@ from .contracts import PlanStep
 from .heuristics import needs_clarification, normalize_ask_step
 from .openai_client import chat_completion
 from config import AppConfig
+
+_log = logging.getLogger(__name__)
 
 
 _PLANNER_SYSTEM = """Ты — оркестратор. Построй план шагов для выполнения задачи пользователя.
@@ -68,17 +71,21 @@ def _extract_json_object(raw: str) -> str:
 
 
 async def plan_steps(config: AppConfig, user_message: str, context: str) -> List[PlanStep]:
+    _log.info("planner: start, user_message=%r context_len=%d", user_message[:200], len(context))
     raw = await chat_completion(
         config,
         _PLANNER_SYSTEM,
         f"Контекст:\n{context}\n\nЗапрос пользователя:\n{user_message}",
     )
     if not raw:
+        _log.warning("planner: LLM returned empty response, using fallback single step")
         return [PlanStep(id="step1", title="Выполнить задачу", instruction=user_message)]
+    _log.info("planner: LLM response received, %d chars", len(raw))
     try:
         payload = json.loads(_extract_json_object(raw))
         steps_raw = payload.get("steps", [])
-    except Exception:
+    except Exception as exc:
+        _log.warning("planner: JSON parse error: %s, raw=%r", exc, raw[:300])
         return [PlanStep(id="step1", title="Выполнить задачу", instruction=user_message)]
     steps: List[PlanStep] = []
     if not isinstance(steps_raw, list):
@@ -106,8 +113,10 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
             normalize_ask_step(step)
         steps.append(step)
     if not steps:
+        _log.warning("planner: no valid steps parsed, using fallback single step")
         steps = [PlanStep(id="step1", title="Выполнить задачу", instruction=user_message)]
     if not any(s.step_type == "ask_user" for s in steps) and needs_clarification(user_message, config):
+        _log.info("planner: adding clarification step (ask_user)")
         ask_step = PlanStep(
             id="ask_user_1",
             title="Уточнение запроса",
@@ -119,6 +128,8 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
         normalize_ask_step(ask_step)
         steps.insert(0, ask_step)
     _ensure_unique_step_ids(steps)
+    _log.info("planner: finished, %d step(s): %s", len(steps),
+              ", ".join(f"{s.id}({s.step_type}:{s.title})" for s in steps))
     return steps
 
 

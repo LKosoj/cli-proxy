@@ -371,9 +371,12 @@ class DialogMixin:
     # Unified message handler (text / media)
     # =====================================================================
 
-    async def handle_message(self, update: Any, context: Any) -> None:
+    async def handle_message(self, update: Any, context: Any) -> bool:
         """Unified entry point called by the bot for every text message
         while the dialog is active.
+
+        Returns ``True`` if the message was consumed by the dialog,
+        ``False`` if there is no active dialog (message should propagate).
 
         Flow:
         1. Check for active dialog (with timeout).
@@ -384,25 +387,25 @@ class DialogMixin:
         msg = update.effective_message if isinstance(update, _Update) else None
         chat_id = update.effective_chat.id if isinstance(update, _Update) and update.effective_chat else 0
         if not chat_id:
-            return
+            return False
 
         state = self.get_dialog(chat_id)
         if state is None:
-            return
+            return False
 
         # Agent-enabled guard: auto-cancel dialog if agent was turned off.
         if not self._ensure_agent_enabled(context):
             self.end_dialog(chat_id)
             if msg:
                 await msg.reply_text("Агент не активен. Диалог отменён.")
-            return
+            return True
 
         text = (msg.text or "") if msg else ""
         if self.is_cancel_text(text):
             self.end_dialog(chat_id)
             if msg:
                 await msg.reply_text("Отменено.")
-            return
+            return True
 
         handler = self._resolve_step_handler(state.step, "message")
         if handler is None:
@@ -418,7 +421,7 @@ class DialogMixin:
                 hint = self.step_hint(state.step)
                 if hint and msg:
                     await msg.reply_text(hint)
-            return
+            return True
 
         try:
             await handler(update, context)
@@ -427,6 +430,7 @@ class DialogMixin:
             self.end_dialog(chat_id)
             if msg:
                 await msg.reply_text("Ошибка в диалоге, попробуйте заново.")
+        return True
 
     # =====================================================================
     # Unified callback handler (inline buttons)
@@ -588,7 +592,7 @@ class DialogMixin:
 
         mixin = self
 
-        class _ActiveFilter(_filters.BaseFilter):
+        class _ActiveFilter(_filters.MessageFilter):
             def filter(self, message: Any) -> bool:
                 try:
                     chat_id = getattr(message, "chat_id", None)

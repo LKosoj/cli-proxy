@@ -218,6 +218,12 @@ class BotApp:
             error_log_name = "bot_error.log"
         error_log_path = os.path.join(log_dir, error_log_name)
 
+        if base_root:
+            agent_log_name = f"{base_root}_agent{base_ext or '.log'}"
+        else:
+            agent_log_name = "agent.log"
+        agent_log_path = os.path.join(log_dir, agent_log_name)
+
         root = logging.getLogger()
         for handler in list(root.handlers):
             root.removeHandler(handler)
@@ -275,6 +281,38 @@ class BotApp:
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         root.addHandler(error_handler)
+
+        # --- Dedicated agent log file (orchestrator / planner / executor / agent_core) ---
+        agent_handler = TimedRotatingFileHandler(
+            agent_log_path,
+            when="midnight",
+            interval=1,
+            backupCount=1,
+            utc=True,
+            atTime=_dt.time(3, 0),
+            encoding="utf-8",
+        )
+
+        def _agent_namer(default_name: str) -> str:
+            return f"{agent_log_path}.1"
+
+        def _agent_rotator(source: str, dest: str) -> None:
+            try:
+                if os.path.exists(dest):
+                    os.remove(dest)
+            except Exception:
+                pass
+            os.replace(source, dest)
+
+        agent_handler.namer = _agent_namer
+        agent_handler.rotator = _agent_rotator
+        agent_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
+        # Attach to the "agent" logger hierarchy so that agent.orchestrator,
+        # agent.planner, agent.executor, agent.agent_core all write here.
+        agent_logger = logging.getLogger("agent")
+        agent_logger.addHandler(agent_handler)
+        # Prevent agent messages from also going to root (bot.log) to keep it clean.
+        agent_logger.propagate = False
 
         prev_excepthook = sys.excepthook
         prev_threading_excepthook = threading.excepthook
@@ -485,7 +523,10 @@ class BotApp:
             logging.exception(f"tool failed {str(e)}")
 
     async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        _rp_log = logging.getLogger("bot.run_prompt")
+        _rp_log.info("[run_prompt] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
         async with session.run_lock:
+            _rp_log.info("[run_prompt] lock acquired session=%s", session.id)
             session.busy = True
             session.started_at = time.time()
             session.last_output_ts = session.started_at
@@ -494,7 +535,9 @@ class BotApp:
             session.tick_seen = 0
             image_path = dest.get("image_path")
             try:
+                _rp_log.info("[run_prompt] calling session.run_prompt session=%s", session.id)
                 output = await session.run_prompt(prompt, image_path=image_path)
+                _rp_log.info("[run_prompt] session.run_prompt returned session=%s output_len=%d", session.id, len(output))
                 await self.send_output(session, dest, output, context)
                 forced = getattr(session, "headless_forced_stop", None)
                 if forced:
@@ -537,7 +580,10 @@ class BotApp:
                     asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
     async def run_agent(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        _ra_log = logging.getLogger("bot.run_agent")
+        _ra_log.info("[run_agent] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
         async with session.run_lock:
+            _ra_log.info("[run_agent] lock acquired session=%s", session.id)
             session.busy = True
             session.started_at = time.time()
             session.last_output_ts = session.started_at
@@ -545,7 +591,9 @@ class BotApp:
             session.last_tick_value = None
             session.tick_seen = 0
             try:
+                _ra_log.info("[run_agent] calling agent.run session=%s", session.id)
                 output = await self.agent.run(session, prompt, self, context, dest)
+                _ra_log.info("[run_agent] agent.run returned session=%s output_len=%d", session.id, len(output))
                 now = time.time()
                 session.last_output_ts = now
                 session.last_tick_ts = now
@@ -592,16 +640,18 @@ class BotApp:
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
             except asyncio.CancelledError:
+                _ra_log.warning("[run_agent] CancelledError session=%s", session.id)
                 chat_id = dest.get("chat_id")
                 if chat_id is not None:
                     await self._send_message(context, chat_id=chat_id, text="Агент прерван.")
                 raise
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                _ra_log.exception("[run_agent] exception session=%s: %s", session.id, e)
                 chat_id = dest.get("chat_id")
                 if chat_id is not None:
                     await self._send_message(context, chat_id=chat_id, text=f"Ошибка агента: {e}")
             finally:
+                _ra_log.info("[run_agent] finally session=%s busy->False", session.id)
                 session.busy = False
                 if session.queue:
                     next_item = session.queue.popleft()
@@ -695,13 +745,13 @@ class BotApp:
 
     async def on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
+        text = update.message.text if update.message else None
         if not self.is_allowed(chat_id):
             return
         self.context_by_chat[chat_id] = context
         self.metrics.inc("messages")
         if self._has_attachments(update.message):
             return
-        text = update.message.text
         if await self.session_ui.handle_pending_message(chat_id, text, context):
             return
         if chat_id in self.pending_dir_create:
@@ -2567,12 +2617,9 @@ def build_app(config: AppConfig) -> Application:
                 pattern = cmd["callback_pattern"]
                 kwargs = cmd.get("handler_kwargs") or {}
 
-                async def _cb_wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _fn=handler_fn, _kw=kwargs) -> None:
+                async def _cb_wrap(update: Update, context: ContextTypes.DEFAULT_TYPE, _fn=handler_fn, _kw=kwargs, _pat=pattern) -> None:
                     chat_id = update.effective_chat.id if update.effective_chat else None
                     if not chat_id or not bot_app.is_allowed(chat_id):
-                        return
-                    session = bot_app.manager.active()
-                    if not session or not getattr(session, "agent_enabled", False):
                         return
                     try:
                         res = _fn(update, context, **(_kw or {}))
@@ -2626,7 +2673,7 @@ def build_app(config: AppConfig) -> Application:
 
         _PLUGIN_GROUP = -1
 
-        class _AgentEnabledFilter(filters.BaseFilter):
+        class _AgentEnabledFilter(filters.MessageFilter):
             """Only match when the active session has agent_enabled=True."""
             def filter(self, message) -> bool:
                 session = bot_app.manager.active()
@@ -2648,14 +2695,18 @@ def build_app(config: AppConfig) -> Application:
                 chat_id = update.effective_chat.id if update.effective_chat else None
                 if not chat_id or not bot_app.is_allowed(chat_id):
                     return
+                handled = False
                 try:
                     res = _fn(update, context, **(_kw or {}))
                     if asyncio.iscoroutine(res):
-                        await res
+                        handled = await res
+                    else:
+                        handled = res
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
-                # Plugin handled the message — stop propagation to on_message.
-                raise ApplicationHandlerStop()
+                # Only stop propagation if the plugin actually consumed the message.
+                if handled:
+                    raise ApplicationHandlerStop()
 
             app.add_handler(MessageHandler(_agent_filter & filter_obj, _msg_wrap), group=_PLUGIN_GROUP)
 

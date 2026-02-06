@@ -48,7 +48,8 @@ class Executor:
     ) -> ExecutorResponse:
         validate_request(request)
         start_ts = asyncio.get_running_loop().time()
-        self._log.info("executor start corr_id=%s task_id=%s", request.corr_id, request.task_id)
+        self._log.info("executor start corr_id=%s task_id=%s profile=%s goal=%r",
+                       request.corr_id, request.task_id, profile.name, (request.goal or "")[:200])
         # Явный needs_input через ask_user
         state_root = self._sandbox_root()
         session_workspace = self._session_workspace(session.id)
@@ -65,6 +66,7 @@ class Executor:
         if options is not None and len(options) < 2:
             options = ["Да", "Нет"]
         if question and options:
+            self._log.info("executor ask_user: question=%r options=%s", question[:100], options)
             ctx = {
                 "cwd": proxy_session.workdir,
                 "state_root": proxy_session.state_root,
@@ -106,6 +108,8 @@ class Executor:
             )
             return resp
         # Пока используем текущий ReAct как исполнителя.
+        self._log.info("executor launching ReAct agent: max_retries=%d timeout_ms=%d",
+                       int(profile.max_retries), int(profile.timeout_ms))
         last_exc: Exception | None = None
         max_retries = max(0, int(profile.max_retries))
         timeout_ms = int(profile.timeout_ms)
@@ -141,11 +145,10 @@ class Executor:
                     next_questions=[],
                 )
                 validate_response(resp)
+                elapsed = int((asyncio.get_running_loop().time() - start_ts) * 1000)
                 self._log.info(
-                    "executor end corr_id=%s status=%s elapsed_ms=%s",
-                    request.corr_id,
-                    resp.status,
-                    int((asyncio.get_running_loop().time() - start_ts) * 1000),
+                    "executor end corr_id=%s status=%s elapsed_ms=%d tool_calls=%d",
+                    request.corr_id, resp.status, elapsed, len(run_result.tool_calls),
                 )
                 return resp
             except asyncio.TimeoutError as e:
@@ -159,7 +162,9 @@ class Executor:
             except Exception as e:
                 last_exc = e
                 msg = str(e)
+                self._log.warning("executor error corr_id=%s attempt=%d err=%s", request.corr_id, attempt, msg[:200])
                 if "BLOCKED" in msg or "not allowed" in msg.lower():
+                    self._log.warning("executor BLOCKED, stopping retries")
                     break
                 if attempt < max_retries and self._is_transient_exc(e):
                     self._log.warning("transient error, retrying corr_id=%s attempt=%s err=%s", request.corr_id, attempt, e)
@@ -176,11 +181,10 @@ class Executor:
             next_questions=[],
         )
         validate_response(resp)
-        self._log.info(
-            "executor end corr_id=%s status=%s elapsed_ms=%s",
-            request.corr_id,
-            resp.status,
-            int((asyncio.get_running_loop().time() - start_ts) * 1000),
+        elapsed = int((asyncio.get_running_loop().time() - start_ts) * 1000)
+        self._log.error(
+            "executor FAILED corr_id=%s elapsed_ms=%d error=%s",
+            request.corr_id, elapsed, str(last_exc)[:300],
         )
         return resp
 

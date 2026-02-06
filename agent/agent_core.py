@@ -13,6 +13,8 @@ from agent.session_store import read_json_locked, write_json_locked
 from config import AppConfig
 from utils import strip_ansi, sandbox_root
 
+_log = logging.getLogger(__name__)
+
 # ==== config constants ====
 AGENT_MAX_ITERATIONS = 15
 AGENT_MAX_HISTORY = 20
@@ -280,6 +282,8 @@ class ReActAgent:
         # always write/read /workdir/_sandbox/SESSION.json
         state_root = sandbox_root(self.config.defaults.workdir)
         os.makedirs(state_root, exist_ok=True)
+        _log.info("ReAct start session=%s task=%s corr_id=%s msg=%r",
+                  session_id, task_id, corr_id, user_message[:200])
         if session_id not in self._sessions:
             self._sessions[session_id] = self._load_session(state_root)
         session = self._sessions[session_id]
@@ -288,6 +292,7 @@ class ReActAgent:
         final_status = "ok"
         blocked_count = 0
         tool_facts: List[Dict[str, Any]] = []
+        iterations_done = 0
         for iteration in range(AGENT_MAX_ITERATIONS):
             messages = self._build_messages(
                 session,
@@ -300,12 +305,19 @@ class ReActAgent:
                 constraints=constraints,
                 corr_id=corr_id,
             )
+            iterations_done = iteration + 1
+            _log.info("ReAct iter=%d/%d calling LLM (messages=%d)", iterations_done, AGENT_MAX_ITERATIONS, len(messages))
             raw_message = await self._call_openai(messages, allowed_tools)
             tool_calls = raw_message.get("tool_calls") or []
             content = raw_message.get("content")
             if not tool_calls:
                 final_response = (content or "").strip() or "(empty response)"
+                _log.info("ReAct iter=%d no tool_calls, final text (%d chars)", iterations_done, len(final_response))
                 break
+            tool_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+            _log.info("ReAct iter=%d tool_calls=%d: %s", iteration + 1, len(tool_calls), ", ".join(tool_names))
+            if content:
+                _log.info("ReAct iter=%d LLM also said: %r", iteration + 1, content[:200])
             working.append({"role": raw_message.get("role"), "content": content, "tool_calls": tool_calls})
             has_blocked = False
             unknown_tool = False
@@ -338,6 +350,11 @@ class ReActAgent:
                 calls.append({"name": name, "args": args})
                 call_meta.append({"name": name, "args": args})
             results = await self._tool_registry.execute_many(calls, ctx)
+            for idx_r, (call, result) in enumerate(zip(tool_calls, results)):
+                _log.info("ReAct tool result [%d] %s: success=%s output_len=%d%s",
+                          idx_r, calls[idx_r]["name"], result.get("success"),
+                          len(str(result.get("output") or result.get("error") or "")),
+                          f" err={str(result.get('error'))[:100]}" if not result.get("success") else "")
             for call, result in zip(tool_calls, results):
                 output = result.get("output") if result.get("success") else f"Error: {result.get('error')}"
                 if result.get("success"):
@@ -361,20 +378,24 @@ class ReActAgent:
                     }
                 )
             if unknown_tool:
+                _log.warning("ReAct iter=%d unknown tool, stopping", iteration + 1)
                 final_response = "Не могу выполнить без инструментов, уточните."
                 final_status = "error"
                 break
             if all_failed and not (content or "").strip():
+                _log.warning("ReAct iter=%d all tools failed, stopping", iteration + 1)
                 final_response = "Не могу выполнить без инструментов, уточните."
                 final_status = "error"
                 break
             if blocked_count >= AGENT_MAX_BLOCKED:
+                _log.warning("ReAct iter=%d blocked_count=%d, stopping", iteration + 1, blocked_count)
                 final_response = "🚫 Stopped: Multiple blocked commands detected. The requested actions are not allowed for security reasons."
                 final_status = "blocked"
                 break
             if not has_blocked:
                 blocked_count = 0
         if not final_response:
+            _log.warning("ReAct max iterations reached (%d)", AGENT_MAX_ITERATIONS)
             final_response = "⚠️ Max iterations reached"
             final_status = "timeout"
         if final_status == "ok":
@@ -393,6 +414,9 @@ class ReActAgent:
         self._save_session(state_root, session)
         # Ensure next run reloads from disk instead of cached memory.
         self._sessions.pop(session_id, None)
+        _log.info("ReAct end session=%s task=%s status=%s iterations=%d tool_calls=%d response_len=%d",
+                  session_id, task_id, final_status, iterations_done,
+                  len(tool_facts), len(final_response))
         return AgentRunResult(output=final_response, status=final_status, tool_calls=tool_facts)
 
     def clear_session_cache(self, session_id: str) -> None:
@@ -427,6 +451,7 @@ class AgentRunner:
         corr_id: Optional[str] = None,
     ) -> "AgentRunResult":
         if not _get_openai_config(self.config):
+            _log.error("AgentRunner: OpenAI not configured")
             return AgentRunResult(
                 output="Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL.",
                 status="error",
