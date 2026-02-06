@@ -33,13 +33,19 @@ def _get_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
 
 
 def _get_openai_config(config: Optional[AppConfig] = None):
-    api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL")
-    base_url = os.getenv("OPENAI_BASE_URL")
+    api_key = None
+    model = None
+    base_url = None
     if config:
-        api_key = api_key or config.defaults.openai_api_key
-        model = model or config.defaults.openai_model
-        base_url = base_url or config.defaults.openai_base_url
+        # Config должна быть источником правды, env — только fallback.
+        api_key = config.defaults.openai_api_key
+        model = config.defaults.openai_big_model or config.defaults.openai_model
+        base_url = config.defaults.openai_base_url
+    api_key = api_key or os.getenv("OPENAI_API_KEY")
+    # Summaries are intentionally generated with the "big" model to improve quality/faithfulness.
+    # Prefer OPENAI_BIG_MODEL; fall back to OPENAI_MODEL for backward-compat.
+    model = model or os.getenv("OPENAI_BIG_MODEL") or os.getenv("OPENAI_MODEL")
+    base_url = base_url or os.getenv("OPENAI_BASE_URL")
     if not base_url:
         base_url = "https://api.openai.com"
     if not api_key or not model:
@@ -173,7 +179,7 @@ async def summarize_text_with_reason(
 ) -> Tuple[Optional[str], Optional[str]]:
     cfg = _get_openai_config(config)
     if not cfg:
-        return None, "не настроены OPENAI_API_KEY/OPENAI_MODEL"
+        return None, "не настроены OPENAI_API_KEY/OPENAI_BIG_MODEL"
     cleaned = _strip_cli_preamble(text)
     cleaned = normalize_text(cleaned, strip_ansi=True)
     if len(cleaned) < 3000:
