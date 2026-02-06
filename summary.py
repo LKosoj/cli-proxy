@@ -2,12 +2,34 @@ import asyncio
 import logging
 import os
 import re
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
+import httpx
 from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusError
 
 from config import AppConfig
 from utils import normalize_text
+
+# ---------------------------------------------------------------------------
+# Cached AsyncOpenAI clients — one per (api_key, base_url) pair.
+# Avoids creating (and leaking) a new httpx client on every call.
+# ---------------------------------------------------------------------------
+_openai_clients: Dict[Tuple[str, str], AsyncOpenAI] = {}
+
+_OPENAI_TIMEOUT = httpx.Timeout(connect=10, read=200, write=50, pool=10)
+
+
+def _get_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
+    key = (api_key, base_url)
+    client = _openai_clients.get(key)
+    if client is None:
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=_OPENAI_TIMEOUT,
+        )
+        _openai_clients[key] = client
+    return client
 
 
 def _get_openai_config(config: Optional[AppConfig] = None):
@@ -93,7 +115,7 @@ async def _summarize_with_cfg(
     head_len = min(6000, max(0, len(text) - tail_len))
     head = text[:head_len]
     tail = text[-tail_len:] if len(text) > tail_len else text
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    client = _get_openai_client(api_key, base_url)
     resp = await client.chat.completions.create(
         model=model,
         messages=[
@@ -228,7 +250,7 @@ async def _chat_completion_async(
     if not cfg:
         return ""
     api_key, model, base_url = cfg
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    client = _get_openai_client(api_key, base_url)
     resp = await client.chat.completions.create(
         model=model,
         messages=[
