@@ -14,6 +14,7 @@ from .contracts import ExecutorRequest, ExecutorResponse, PlanStep, validate_res
 from .dispatcher import Dispatcher
 from .executor import Executor
 from .tooling.registry import get_tool_registry
+from .session_store import read_json_locked, update_json_locked
 from .memory_policy import compress_memory, decide_memory_save
 from .memory_store import (
     append_memory_tagged,
@@ -34,27 +35,13 @@ class OrchestratorRunner:
         self._dispatcher = Dispatcher(config, tool_registry)
         self._log = logging.getLogger(__name__)
 
-    async def _sleep_backoff(self, attempt: int) -> None:
-        # jittered exponential backoff
-        await asyncio.sleep((0.6 * (2**attempt)) + (0.2 * (attempt % 3)))
-
     def _load_session(self, cwd: str) -> Dict[str, Any]:
         path = os.path.join(cwd, "SESSION.json")
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict):
-                    data.setdefault("orchestrator_by_task", {})
-                    return data
-            except Exception:
-                return {"orchestrator_by_task": {}}
+        data = read_json_locked(path, default={"orchestrator_by_task": {}})
+        if isinstance(data, dict):
+            data.setdefault("orchestrator_by_task", {})
+            return data
         return {"orchestrator_by_task": {}}
-
-    def _save_session(self, cwd: str, session: Dict[str, Any]) -> None:
-        path = os.path.join(cwd, "SESSION.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(session, f, ensure_ascii=False, indent=2)
 
     def _build_orchestrator_context(self, session_data: Dict[str, Any], task_key: str) -> str:
         history = session_data.get("orchestrator_by_task", {}).get(task_key, [])
@@ -85,13 +72,34 @@ class OrchestratorRunner:
             steps = await plan_steps(self._config, user_text, ctx_summary)
             steps = self._order_steps_safely(steps)
             results: List[str] = []
+            step_results: List[Dict[str, Any]] = []
             restart = False
-            # Выполнение: по умолчанию строго последовательное.
-            # Параллелим только то, что явно помечено parallelizable=true и не нарушает depends_on.
-            for batch in self._iter_batches(steps):
+            # Dynamic graph execution:
+            # - respects depends_on
+            # - only executes dependents if their deps succeeded (ok/partial)
+            # - parallelizes only explicitly-marked steps
+            completed_ok: set[str] = set()
+            completed_fail: set[str] = set()
+
+            while True:
+                batch, skipped = self._next_batch(steps, completed_ok, completed_fail, session_id=session.id)
+                for r in skipped:
+                    results.append(r.summary)
+                    step_results.append(
+                        {
+                            "task_id": r.task_id,
+                            "status": r.status,
+                            "summary": r.summary,
+                            "tool_calls": r.tool_calls,
+                        }
+                    )
+                if not batch:
+                    break
+
                 if len(batch) == 1:
                     step = batch[0]
                     resp = await self._execute_step(step, session, bot, context, dest, ctx_summary)
+                    self._apply_step_result(step, resp, completed_ok, completed_fail)
                     if step.step_type == "ask_user" and resp.status == "ok":
                         answer = ""
                         if resp.outputs:
@@ -104,16 +112,42 @@ class OrchestratorRunner:
                             restart = True
                             break
                     results.append(resp.summary)
+                    step_results.append(
+                        {
+                            "task_id": resp.task_id,
+                            "status": resp.status,
+                            "summary": resp.summary,
+                            "tool_calls": resp.tool_calls,
+                        }
+                    )
                     continue
 
                 async def _run_one(s: PlanStep):
                     try:
                         return await self._execute_step(s, session, bot, context, dest, ctx_summary)
                     except Exception as e:
-                        return type("Resp", (), {"status": "error", "summary": f"Ошибка шага {s.id}: {e}", "outputs": []})()
+                        return ExecutorResponse(
+                            task_id=s.id,
+                            status="error",
+                            summary=f"Ошибка шага {s.id}: {e}",
+                            outputs=[],
+                            tool_calls=[{"tool": "step", "error": str(e), "corr_id": f"{session.id}:{s.id}"}],
+                            next_questions=[],
+                        )
 
                 group_results = await asyncio.gather(*[_run_one(s) for s in batch], return_exceptions=False)
+                for s, r in zip(batch, group_results):
+                    self._apply_step_result(s, r, completed_ok, completed_fail)
                 results.extend([r.summary for r in group_results if getattr(r, "summary", None)])
+                for r in group_results:
+                    step_results.append(
+                        {
+                            "task_id": r.task_id,
+                            "status": r.status,
+                            "summary": r.summary,
+                            "tool_calls": r.tool_calls,
+                        }
+                    )
 
             if restart:
                 continue
@@ -127,14 +161,22 @@ class OrchestratorRunner:
                     "context": ctx_summary,
                     "steps": [dataclasses.asdict(step) for step in steps],
                     "results": results,
+                    "step_results": step_results,
                     "final": final_response,
                 }
-                session_data.setdefault("orchestrator_by_task", {}).setdefault(task_key, []).append(entry)
-                # Не держим лишнее в памяти — только последние N записей.
-                max_items = 50
-                while len(session_data["orchestrator_by_task"][task_key]) > max_items:
-                    session_data["orchestrator_by_task"][task_key].pop(0)
-                self._save_session(cwd, session_data)
+                path = os.path.join(cwd, "SESSION.json")
+
+                def _append(current: Dict[str, Any]) -> Dict[str, Any]:
+                    current.setdefault("orchestrator_by_task", {})
+                    current["orchestrator_by_task"].setdefault(task_key, []).append(entry)
+                    # Не держим лишнее в памяти — только последние N записей.
+                    max_items = 50
+                    items = current["orchestrator_by_task"][task_key]
+                    while len(items) > max_items:
+                        items.pop(0)
+                    return current
+
+                update_json_locked(path, _append, default={"orchestrator_by_task": {}})
             except Exception:
                 pass
             await self._maybe_update_memory(user_text, final_response, memory_text, cwd)
@@ -154,78 +196,122 @@ class OrchestratorRunner:
             s.depends_on = deps
         return steps
 
-    def _iter_batches(self, steps: List[PlanStep]) -> List[List[PlanStep]]:
-        """
-        Yield execution batches. Each batch is either:
-        - a single step (sequential execution), or
-        - a set of parallelizable steps (executed via gather).
-        """
-        remaining = {s.id: s for s in steps}
-        done: set[str] = set()
-        order = [s.id for s in steps]
+    def _is_success_status(self, status: str) -> bool:
+        return status in ("ok", "partial")
 
-        batches: List[List[PlanStep]] = []
-        while remaining:
-            ready: List[PlanStep] = []
+    def _apply_step_result(
+        self,
+        step: PlanStep,
+        resp: ExecutorResponse,
+        completed_ok: set[str],
+        completed_fail: set[str],
+    ) -> None:
+        if self._is_success_status(getattr(resp, "status", "error")):
+            completed_ok.add(step.id)
+            completed_fail.discard(step.id)
+        else:
+            completed_fail.add(step.id)
+            completed_ok.discard(step.id)
+
+    def _next_batch(
+        self,
+        steps: List[PlanStep],
+        completed_ok: set[str],
+        completed_fail: set[str],
+        session_id: str,
+    ) -> tuple[List[PlanStep], List[ExecutorResponse]]:
+        """
+        Pick next executable batch based on dependency success.
+        Returns [] when no runnable steps remain.
+        """
+        remaining = [s for s in steps if s.id not in completed_ok and s.id not in completed_fail]
+        if not remaining:
+            return [], []
+
+        ids = {s.id for s in steps}
+        # Compute ready steps: deps must be completed successfully.
+        ready: List[PlanStep] = []
+        blocked: List[PlanStep] = []
+        for s in remaining:
+            deps = [d for d in (s.depends_on or []) if d in ids and d != s.id]
+            if any(d in completed_fail for d in deps):
+                blocked.append(s)
+                continue
+            if all(d in completed_ok for d in deps):
+                ready.append(s)
+
+        # Mark blocked steps as failed (dependency failed) to avoid infinite loop.
+        skipped_responses: List[ExecutorResponse] = []
+        for s in blocked:
+            completed_fail.add(s.id)
+            failed_deps = [d for d in (s.depends_on or []) if d in completed_fail]
+            corr_id = f"{session_id}:{s.id}"
+            resp = ExecutorResponse(
+                task_id=s.id,
+                status="blocked",
+                summary=f"⛔ Шаг {s.id} пропущен: зависимость не выполнена ({', '.join(failed_deps) or 'unknown'}).",
+                outputs=[],
+                tool_calls=[{"tool": "orchestrator", "error": "dependency_failed", "corr_id": corr_id, "depends_on": failed_deps}],
+                next_questions=[],
+            )
+            validate_response(resp)
+            skipped_responses.append(resp)
+
+        if not ready:
+            # Cyclic/unsatisfied dependencies: mark remaining as blocked to avoid silent drops.
+            for s in remaining:
+                if s.id in completed_ok or s.id in completed_fail:
+                    continue
+                deps = [d for d in (s.depends_on or []) if d in ids and d != s.id]
+                corr_id = f"{session_id}:{s.id}"
+                resp = ExecutorResponse(
+                    task_id=s.id,
+                    status="blocked",
+                    summary=f"⛔ Шаг {s.id} пропущен: не удалось удовлетворить зависимости (возможен цикл): {', '.join(deps) or 'none'}.",
+                    outputs=[],
+                    tool_calls=[{"tool": "orchestrator", "error": "unsatisfied_dependencies", "corr_id": corr_id, "depends_on": deps}],
+                    next_questions=[],
+                )
+                validate_response(resp)
+                skipped_responses.append(resp)
+                completed_fail.add(s.id)
+            return [], skipped_responses
+
+        # Validate parallelizable: require reason and be conservative for file-mutating instructions.
+        for s in ready:
+            if s.parallelizable:
+                reason = (s.parallelizable_reason or "").strip()
+                if not reason:
+                    s.parallelizable = False
+                    continue
+                instr = (s.instruction or "").lower()
+                risky = any(k in instr for k in ["write_file", "edit_file", "delete_file", "send_file", "git", "commit", "push", "merge", "rebase"])
+                if risky and "read" not in reason.lower() and "только чтение" not in reason.lower():
+                    s.parallelizable = False
+
+        # Prefer one parallel group if available, else single step in original order.
+        order = [s.id for s in steps]
+        groups: Dict[str, List[PlanStep]] = {}
+        singles: List[PlanStep] = []
+        for s in ready:
+            if s.parallel_group and s.parallelizable:
+                groups.setdefault(s.parallel_group, []).append(s)
+            else:
+                singles.append(s)
+        if groups:
             for sid in order:
-                s = remaining.get(sid)
+                s = next((x for x in ready if x.id == sid), None)
                 if not s:
                     continue
-                if all((d in done) for d in (s.depends_on or [])):
-                    ready.append(s)
-
-            if not ready:
-                # Cyclic or invalid deps. Fall back to sequential in original order.
-                for sid in order:
-                    s = remaining.get(sid)
-                    if s:
-                        batches.append([s])
-                break
-
-            # Partition ready steps into safe parallel groups.
-            grouped: Dict[str, List[PlanStep]] = {}
-            singles: List[PlanStep] = []
-            for s in ready:
                 gid = s.parallel_group
-                if gid and s.parallelizable:
-                    grouped.setdefault(gid, []).append(s)
-                else:
-                    singles.append(s)
-
-            # Execute at most one parallel group at a time (conservative to avoid shared resource races).
-            parallel_batch: Optional[List[PlanStep]] = None
-            if grouped:
-                # Pick the first group in stable order.
-                for sid in order:
-                    s = remaining.get(sid)
-                    if not s:
-                        continue
-                    gid = s.parallel_group
-                    if gid and gid in grouped:
-                        parallel_batch = grouped[gid]
-                        break
-
-            if parallel_batch:
-                batches.append(parallel_batch)
-                for s in parallel_batch:
-                    remaining.pop(s.id, None)
-                    done.add(s.id)
-                continue
-
-            # Otherwise execute the first ready single step in stable order.
-            next_single = None
-            singles_set = {s.id for s in singles}
-            for sid in order:
-                if sid in singles_set:
-                    next_single = remaining.get(sid)
-                    break
-            if not next_single:
-                next_single = singles[0]
-            batches.append([next_single])
-            remaining.pop(next_single.id, None)
-            done.add(next_single.id)
-
-        return batches
+                if gid and gid in groups:
+                    return groups[gid], skipped_responses
+        # fall back to first single in stable order
+        singles_set = {s.id for s in singles}
+        for sid in order:
+            if sid in singles_set:
+                return [next(x for x in singles if x.id == sid)], skipped_responses
+        return [singles[0]], skipped_responses
 
     async def _execute_step(
         self, step: PlanStep, session: Any, bot: Any, context: Any, dest: Dict[str, Any], orchestrator_context: str
@@ -246,43 +332,10 @@ class OrchestratorRunner:
             # For now, constraints is only used as an extra system block for the agent.
             constraints=None,
         )
-        timeout_ms = int(profile.timeout_ms)
-        if req.deadline_ms:
-            try:
-                timeout_ms = min(timeout_ms, int(req.deadline_ms))
-            except Exception:
-                pass
-
         self._log.info("step start corr_id=%s step_type=%s", corr_id, step.step_type)
-        resp: ExecutorResponse
-        if step.step_type == "ask_user":
-            resp = await self._executor.run(session, req, bot, context, dest, profile)
-        else:
-            last_timeout = False
-            for attempt in range(max(0, int(profile.max_retries)) + 1):
-                try:
-                    resp = await asyncio.wait_for(
-                        self._executor.run(session, req, bot, context, dest, profile),
-                        timeout=timeout_ms / 1000.0,
-                    )
-                    last_timeout = False
-                    break
-                except asyncio.TimeoutError:
-                    last_timeout = True
-                    if attempt < int(profile.max_retries):
-                        self._log.warning("step timeout, retrying corr_id=%s attempt=%s", corr_id, attempt)
-                        await self._sleep_backoff(attempt)
-                        continue
-                    resp = ExecutorResponse(
-                        task_id=req.task_id,
-                        status="timeout",
-                        summary=f"⏱️ Таймаут шага ({timeout_ms}ms).",
-                        outputs=[],
-                        tool_calls=[{"tool": "step", "error": "timeout", "corr_id": corr_id}],
-                        next_questions=[],
-                    )
-                    validate_response(resp)
-                    break
+        # Step-level timeouts/retries live in Executor to avoid double-retry loops.
+        # Orchestrator is responsible for dependency scheduling and final aggregation only.
+        resp: ExecutorResponse = await self._executor.run(session, req, bot, context, dest, profile)
         self._log.info("step end corr_id=%s status=%s", corr_id, getattr(resp, "status", None))
         if resp.status == "needs_input" and resp.next_questions:
             # Явный запрос пользователю: первая формулировка

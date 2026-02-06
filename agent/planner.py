@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from typing import List
@@ -44,6 +45,28 @@ _PLANNER_SYSTEM = """Ты — оркестратор. Построй план ш
 """
 
 
+def _extract_json_object(raw: str) -> str:
+    """
+    Planner LLM should return strict JSON, but in practice we may get code fences or extra text.
+    Try to extract the largest JSON object substring.
+    """
+    s = raw.strip()
+    if not s:
+        return s
+    # Remove markdown code fences if present.
+    s = re.sub(r"^```(?:json)?\\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\\s*```$", "", s)
+    # Fast path: looks like JSON already.
+    if s.startswith("{") and s.endswith("}"):
+        return s
+    # Fallback: take substring from first '{' to last '}'.
+    i = s.find("{")
+    j = s.rfind("}")
+    if i >= 0 and j > i:
+        return s[i : j + 1]
+    return s
+
+
 async def plan_steps(config: AppConfig, user_message: str, context: str) -> List[PlanStep]:
     raw = await chat_completion(
         config,
@@ -53,12 +76,16 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
     if not raw:
         return [PlanStep(id="step1", title="Выполнить задачу", instruction=user_message)]
     try:
-        payload = json.loads(raw)
+        payload = json.loads(_extract_json_object(raw))
         steps_raw = payload.get("steps", [])
     except Exception:
         return [PlanStep(id="step1", title="Выполнить задачу", instruction=user_message)]
     steps: List[PlanStep] = []
+    if not isinstance(steps_raw, list):
+        steps_raw = []
     for idx, item in enumerate(steps_raw, start=1):
+        if not isinstance(item, dict):
+            continue
         step_id = item.get("id") or f"step{idx}"
         depends_on = item.get("depends_on") or []
         if not isinstance(depends_on, list):

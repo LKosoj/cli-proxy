@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI
 
 from agent.tooling.registry import ToolRegistry as PluginToolRegistry
+from agent.session_store import read_json_locked, write_json_locked
 
 from config import AppConfig
 from utils import strip_ansi, sandbox_root
@@ -197,23 +198,17 @@ class ReActAgent:
 
     def _load_session(self, state_root: str) -> Dict[str, Any]:
         path = os.path.join(state_root, "SESSION.json")
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict):
-                    data.setdefault("history_by_task", {})
-                    if "history" in data and "history_by_task" not in data:
-                        data["history_by_task"] = {"legacy": data.get("history", [])}
-                    return data
-            except Exception:
-                return {"history_by_task": {}}
+        data = read_json_locked(path, default={"history_by_task": {}})
+        if isinstance(data, dict):
+            data.setdefault("history_by_task", {})
+            if "history" in data and "history_by_task" not in data:
+                data["history_by_task"] = {"legacy": data.get("history", [])}
+            return data
         return {"history_by_task": {}}
 
     def _save_session(self, state_root: str, session: Dict[str, Any]) -> None:
         path = os.path.join(state_root, "SESSION.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(session, f, ensure_ascii=False, indent=2)
+        write_json_locked(path, session)
 
     def _build_messages(
         self,

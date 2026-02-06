@@ -47,6 +47,7 @@ class Executor:
         profile: ExecutorProfile,
     ) -> ExecutorResponse:
         validate_request(request)
+        start_ts = asyncio.get_running_loop().time()
         self._log.info("executor start corr_id=%s task_id=%s", request.corr_id, request.task_id)
         # Явный needs_input через ask_user
         state_root = self._sandbox_root()
@@ -97,23 +98,38 @@ class Executor:
                 next_questions=[],
             )
             validate_response(resp)
+            self._log.info(
+                "executor end corr_id=%s status=%s elapsed_ms=%s",
+                request.corr_id,
+                resp.status,
+                int((asyncio.get_running_loop().time() - start_ts) * 1000),
+            )
             return resp
         # Пока используем текущий ReAct как исполнителя.
         last_exc: Exception | None = None
         max_retries = max(0, int(profile.max_retries))
+        timeout_ms = int(profile.timeout_ms)
+        if request.deadline_ms:
+            try:
+                timeout_ms = min(timeout_ms, int(request.deadline_ms))
+            except Exception:
+                pass
         for attempt in range(max_retries + 1):
             try:
-                run_result = await self._runner.run(
-                    proxy_session,
-                    request.goal,
-                    bot,
-                    context,
-                    dest,
-                    task_id=request.task_id,
-                    allowed_tools=profile.allowed_tools,
-                    request_context=request.context,
-                    constraints=request.constraints,
-                    corr_id=request.corr_id,
+                run_result = await asyncio.wait_for(
+                    self._runner.run(
+                        proxy_session,
+                        request.goal,
+                        bot,
+                        context,
+                        dest,
+                        task_id=request.task_id,
+                        allowed_tools=profile.allowed_tools,
+                        request_context=request.context,
+                        constraints=request.constraints,
+                        corr_id=request.corr_id,
+                    ),
+                    timeout=timeout_ms / 1000.0,
                 )
                 output = run_result.output
                 resp = ExecutorResponse(
@@ -125,7 +141,21 @@ class Executor:
                     next_questions=[],
                 )
                 validate_response(resp)
+                self._log.info(
+                    "executor end corr_id=%s status=%s elapsed_ms=%s",
+                    request.corr_id,
+                    resp.status,
+                    int((asyncio.get_running_loop().time() - start_ts) * 1000),
+                )
                 return resp
+            except asyncio.TimeoutError as e:
+                last_exc = e
+                # Timeout is transient only if caller allows retries.
+                if attempt < max_retries:
+                    self._log.warning("executor timeout, retrying corr_id=%s attempt=%s", request.corr_id, attempt)
+                    await self._sleep_backoff(attempt)
+                    continue
+                break
             except Exception as e:
                 last_exc = e
                 msg = str(e)
@@ -146,7 +176,12 @@ class Executor:
             next_questions=[],
         )
         validate_response(resp)
-        self._log.info("executor end corr_id=%s status=%s", request.corr_id, resp.status)
+        self._log.info(
+            "executor end corr_id=%s status=%s elapsed_ms=%s",
+            request.corr_id,
+            resp.status,
+            int((asyncio.get_running_loop().time() - start_ts) * 1000),
+        )
         return resp
 
     def record_message(self, chat_id: int, message_id: int) -> None:
