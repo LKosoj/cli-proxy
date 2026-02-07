@@ -46,6 +46,8 @@ from utils import (
 from tg_markdown import to_markdown_v2
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
+from agent.manager import ManagerOrchestrator
+from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status, needs_resume_choice
 from agent.plugins.task_management import run_task_deadline_checker
 from agent.tooling.registry import get_tool_registry
 
@@ -110,6 +112,9 @@ class BotApp:
         # Agent task is scoped per session, not per chat.
         # Multiple sessions may exist in the same chat; interrupt/close must only affect its own session.
         self.agent_tasks: Dict[str, asyncio.Task] = {}
+        self.manager_tasks: Dict[str, asyncio.Task] = {}
+        # Pending "continue or start new" decision when manager_auto_resume=false and a plan is active.
+        self.manager_resume_pending: Dict[str, Dict[str, Any]] = {}
         self.session_ui = SessionUI(
             self.config,
             self.manager,
@@ -120,6 +125,7 @@ class BotApp:
             self._interrupt_before_close,
         )
         self.agent = OrchestratorRunner(self.config)
+        self.manager_orchestrator = ManagerOrchestrator(self.config)
         set_approval_callback(self._request_command_approval)
         self.git = GitOps(
             self.config,
@@ -784,6 +790,96 @@ class BotApp:
                     else:
                         asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
+    async def run_manager(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        _rm_log = logging.getLogger("bot.run_manager")
+        _rm_log.info("[run_manager] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
+        # If there's an active plan and auto-resume is disabled, ask user what to do before starting long work.
+        if dest.get("kind") == "telegram":
+            chat_id = dest.get("chat_id")
+            if chat_id is not None:
+                try:
+                    from agent.manager_store import load_plan
+
+                    plan = load_plan(session.workdir)
+                except Exception:
+                    plan = None
+                if needs_resume_choice(plan, auto_resume=bool(self.config.defaults.manager_auto_resume), user_text=prompt):
+                    self.manager_resume_pending[session.id] = {"prompt": prompt, "dest": dict(dest)}
+                    keyboard = InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton("▶️ Продолжить текущий план", callback_data="manager_resume:continue"),
+                            ],
+                            [
+                                InlineKeyboardButton("🆕 Начать новый план", callback_data="manager_resume:new"),
+                            ],
+                            [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                        ]
+                    )
+                    await self._send_message(
+                        context,
+                        chat_id=chat_id,
+                        text="Найден активный план Manager. Продолжить его или начать новый (старый будет заархивирован)?",
+                        reply_markup=keyboard,
+                    )
+                    return
+        async with session.run_lock:
+            _rm_log.info("[run_manager] lock acquired session=%s", session.id)
+            session.busy = True
+            session.started_at = time.time()
+            session.last_output_ts = session.started_at
+            session.last_tick_ts = None
+            session.last_tick_value = None
+            session.tick_seen = 0
+            try:
+                _rm_log.info("[run_manager] calling manager_orchestrator.run session=%s", session.id)
+                output = await self.manager_orchestrator.run(session, prompt, self, context, dest)
+                _rm_log.info("[run_manager] manager_orchestrator.run returned session=%s output_len=%d", session.id, len(output or ""))
+                try:
+                    preview = build_preview(strip_ansi(output or ""), self.config.defaults.summary_max_chars)
+                    session.state_summary = preview
+                    session.state_updated_at = time.time()
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                try:
+                    self.manager._persist_sessions()
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+            except asyncio.CancelledError:
+                _rm_log.warning("[run_manager] CancelledError session=%s", session.id)
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text="Менеджер прерван.")
+                raise
+            except Exception as e:
+                _rm_log.exception("[run_manager] exception session=%s: %s", session.id, e)
+                chat_id = dest.get("chat_id")
+                if chat_id is not None:
+                    await self._send_message(context, chat_id=chat_id, text=f"Ошибка менеджера: {e}")
+            finally:
+                _rm_log.info("[run_manager] finally session=%s busy->False", session.id)
+                session.busy = False
+                if session.queue:
+                    next_item = session.queue.popleft()
+                    if isinstance(next_item, str):
+                        next_prompt = next_item
+                        next_dest = {"kind": "telegram", "chat_id": dest.get("chat_id")}
+                    else:
+                        next_prompt = next_item.get("text", "")
+                        next_dest = next_item.get("dest") or {"kind": "telegram"}
+                        if next_dest.get("kind") == "telegram" and next_dest.get("chat_id") is None:
+                            next_dest["chat_id"] = dest.get("chat_id")
+                    try:
+                        self.manager._persist_sessions()
+                    except Exception as e:
+                        logging.exception(f"tool failed {str(e)}")
+                    if getattr(session, "manager_enabled", False):
+                        self._start_manager_task(session, next_prompt, next_dest, context)
+                    elif session.agent_enabled:
+                        self._start_agent_task(session, next_prompt, next_dest, context)
+                    else:
+                        asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
+
     def _clear_agent_session_cache(self, session_id: str) -> None:
         try:
             self.agent.clear_session_cache(session_id)
@@ -1237,6 +1333,37 @@ class BotApp:
             return
         self._start_agent_task(session, text, dest, context)
 
+    async def _handle_manager_input(
+        self,
+        session: Session,
+        text: str,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        dest: Optional[dict] = None,
+    ) -> None:
+        if dest is None:
+            dest = {"kind": "telegram", "chat_id": chat_id}
+        if session.busy or session.is_active_by_tick() or session.run_lock.locked():
+            self.pending[chat_id] = PendingInput(session.id, text, dest)
+            self.metrics.inc("queued")
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                    ],
+                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                ]
+            )
+            await self._send_message(
+                context,
+                chat_id=chat_id,
+                text="Сессия занята. Что сделать с вашим вводом?",
+                reply_markup=keyboard,
+            )
+            return
+        self._start_manager_task(session, text, dest, context)
+
     async def _handle_user_input(
         self,
         session: Session,
@@ -1245,7 +1372,9 @@ class BotApp:
         context: ContextTypes.DEFAULT_TYPE,
         dest: Optional[dict] = None,
     ) -> None:
-        if session.agent_enabled:
+        if getattr(session, "manager_enabled", False):
+            await self._handle_manager_input(session, text, chat_id, context, dest=dest)
+        elif session.agent_enabled:
             await self._handle_agent_input(session, text, chat_id, context, dest=dest)
         else:
             await self._handle_cli_input(session, text, chat_id, context, dest=dest)
@@ -1358,6 +1487,9 @@ class BotApp:
                     return
                 mode = query.data.split(":", 1)[1]
                 session.agent_enabled = mode == "on"
+                if session.agent_enabled:
+                    # manager and agent are mutually exclusive
+                    session.manager_enabled = False
                 try:
                     self.manager._persist_sessions()
                 except Exception:
@@ -1370,6 +1502,108 @@ class BotApp:
                         self._cancel_plugin_dialogs(cb_chat_id)
                 status = "включен" if session.agent_enabled else "выключен"
                 await query.edit_message_text(f"Агент {status}.")
+                return
+            if query.data.startswith("manager_set:"):
+                session = self.manager.active()
+                if not session:
+                    await query.edit_message_text("Активной сессии нет.")
+                    return
+                mode = query.data.split(":", 1)[1]
+                session.manager_enabled = mode == "on"
+                if session.manager_enabled:
+                    session.agent_enabled = False
+                try:
+                    self.manager._persist_sessions()
+                except Exception:
+                    pass
+                # When manager is turned off, cancel running manager tasks.
+                if not session.manager_enabled:
+                    task = self.manager_tasks.get(session.id)
+                    if task and not task.done():
+                        task.cancel()
+                status = "включен" if session.manager_enabled else "выключен"
+                if query.message:
+                    await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text=f"Менеджер {status}.")
+                return
+            if query.data == "manager_resume:continue":
+                session = self.manager.active()
+                if not session:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                pending = self.manager_resume_pending.pop(session.id, None)
+                if not pending:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Выбор устарел.")
+                    return
+                if query.message:
+                    await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Продолжаю текущий план...")
+                self._start_manager_task(session, MANAGER_CONTINUE_TOKEN, pending.get("dest") or {"kind": "telegram"}, context)
+                return
+            if query.data == "manager_resume:new":
+                session = self.manager.active()
+                if not session:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                pending = self.manager_resume_pending.pop(session.id, None)
+                if not pending:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Выбор устарел.")
+                    return
+                try:
+                    self.manager_orchestrator.reset(session)
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                if query.message:
+                    await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Начинаю новый план...")
+                self._start_manager_task(session, str(pending.get("prompt") or ""), pending.get("dest") or {"kind": "telegram"}, context)
+                return
+            if query.data == "manager_pause":
+                session = self.manager.active()
+                if not session:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                try:
+                    self.manager_orchestrator.pause(session)
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                if query.message:
+                    await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="План приостановлен.")
+                return
+            if query.data == "manager_reset":
+                session = self.manager.active()
+                if not session:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                try:
+                    self.manager_orchestrator.reset(session)
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+                if query.message:
+                    await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="План сброшен.")
+                return
+            if query.data == "manager_status":
+                session = self.manager.active()
+                if not session:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                try:
+                    from agent.manager_store import load_plan
+
+                    plan = load_plan(session.workdir)
+                except Exception:
+                    plan = None
+                if not plan:
+                    if query.message:
+                        await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="План не найден.")
+                    return
+                text = format_manager_status(plan)
+                if query.message:
+                    await self._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text=text)
                 return
             if query.data in ("agent_project_connect", "agent_project_change"):
                 session = self.manager.active()
@@ -2139,13 +2373,14 @@ class BotApp:
         last_out = f"{int(now - s.last_output_ts)}с назад" if s.last_output_ts else "нет"
         tick_txt = f"{int(now - s.last_tick_ts)}с назад" if s.last_tick_ts else "нет"
         agent_txt = "включен" if getattr(s, "agent_enabled", False) else "выключен"
+        manager_txt = "включен" if getattr(s, "manager_enabled", False) else "выключен"
         project_root = getattr(s, "project_root", None)
         project_txt = project_root if project_root else "не подключен"
         await self._send_message(context, 
             chat_id=chat_id,
             text=(
                 f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}\\n"
-                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt}\\n"
+                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt} | Manager: {manager_txt}\\n"
                 f"Проект: {project_txt}\\n"
                 f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}\\n"
                 f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}"
@@ -2186,6 +2421,36 @@ class BotApp:
             text = f"Агент сейчас выключен.\n{project_line}\nВключить?"
         await self._send_message(context, chat_id=chat_id, text=text, reply_markup=keyboard)
 
+    async def cmd_manager(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not self.is_allowed(chat_id):
+            return
+        s = self.manager.active()
+        if not s:
+            await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
+            return
+        enabled = bool(getattr(s, "manager_enabled", False))
+        if enabled:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("Выключить менеджера", callback_data="manager_set:off")],
+                    [InlineKeyboardButton("Статус плана", callback_data="manager_status")],
+                    [InlineKeyboardButton("Приостановить", callback_data="manager_pause")],
+                    [InlineKeyboardButton("Сбросить план", callback_data="manager_reset")],
+                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                ]
+            )
+            text = "🏗 Менеджер проекта\n\nРежим: включен\n\nВыберите действие:"
+        else:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("Включить менеджера", callback_data="manager_set:on")],
+                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                ]
+            )
+            text = "🏗 Менеджер проекта\n\nРежим: выключен\n\nВключить?"
+        await self._send_message(context, chat_id=chat_id, text=text, reply_markup=keyboard)
+
     async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         if not self.is_allowed(chat_id):
@@ -2195,6 +2460,9 @@ class BotApp:
             await self._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
         s.interrupt()
+        mtask = self.manager_tasks.get(s.id)
+        if mtask and not mtask.done():
+            mtask.cancel()
         task = self.agent_tasks.get(s.id)
         if task and not task.done():
             task.cancel()
@@ -2214,6 +2482,22 @@ class BotApp:
                 current = self.agent_tasks.get(sid)
                 if current is _task:
                     self.agent_tasks.pop(sid, None)
+
+            task.add_done_callback(_cleanup)
+
+    def _start_manager_task(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+        existing = self.manager_tasks.get(session.id)
+        if existing and not existing.done():
+            return
+        task = asyncio.create_task(self.run_manager(session, prompt, dest, context))
+        chat_id = dest.get("chat_id")
+        if chat_id is not None:
+            self.manager_tasks[session.id] = task
+
+            def _cleanup(_task: asyncio.Task, sid: str = session.id) -> None:
+                current = self.manager_tasks.get(sid)
+                if current is _task:
+                    self.manager_tasks.pop(sid, None)
 
             task.add_done_callback(_cleanup)
 

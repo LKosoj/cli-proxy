@@ -9,6 +9,7 @@ def build_command_registry(bot_app) -> List[Dict[str, object]]:
         {"name": "git", "desc": "Git-операции по активной сессии (inline-меню).", "handler": bot_app.cmd_git, "menu": True},
         {"name": "files", "desc": "Отправить файл из рабочей директории.", "handler": bot_app.cmd_files, "menu": True},
         {"name": "agent", "desc": "Включить/выключить агента для активной сессии.", "handler": bot_app.cmd_agent, "menu": True},
+        {"name": "manager", "desc": "Режим менеджера проекта (CLI dev + agent review).", "handler": bot_app.cmd_manager, "menu": True},
         {"name": "preset", "desc": "Шаблоны задач для CLI.", "handler": bot_app.cmd_preset, "menu": False},
         {"name": "metrics", "desc": "Метрики бота.", "handler": bot_app.cmd_metrics, "menu": False},
         {"name": "tools", "desc": "Показать доступные инструменты.", "handler": bot_app.cmd_tools, "menu": True},

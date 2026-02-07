@@ -44,6 +44,7 @@ class Session:
     git_conflict_files: list[str] = field(default_factory=list)
     git_conflict_kind: Optional[str] = None
     agent_enabled: bool = False
+    manager_enabled: bool = False
     agent_memory: Dict[str, Any] = field(default_factory=dict)
     project_root: Optional[str] = None
     # Per-session "state" (previously stored by tool+workdir). This avoids collisions when
@@ -495,6 +496,7 @@ class SessionManager:
                     "updated_at": getattr(s, "state_updated_at", None),
                     "queue": queue_items,
                     "agent_enabled": bool(getattr(s, "agent_enabled", False)),
+                    "manager_enabled": bool(getattr(s, "manager_enabled", False)),
                     "agent_memory": getattr(s, "agent_memory", {}),
                     "project_root": getattr(s, "project_root", None),
                 }
@@ -529,6 +531,7 @@ class SessionManager:
             except Exception:
                 session.state_updated_at = None
             session.agent_enabled = bool(val.get("agent_enabled", False))
+            session.manager_enabled = bool(val.get("manager_enabled", False))
             session.agent_memory = val.get("agent_memory", {}) or {}
             session.project_root = val.get("project_root")
             raw_queue = val.get("queue", [])

@@ -69,6 +69,14 @@ class DefaultsConfig:
             "зачем",
         ]
     )
+    # Manager mode (multi-agent orchestration via CLI + reviewer Agent)
+    manager_max_tasks: int = 10
+    manager_max_attempts: int = 3
+    manager_decompose_timeout_sec: int = 300
+    manager_dev_timeout_sec: int = 600
+    manager_review_timeout_sec: int = 300
+    manager_dev_report_max_chars: int = 8000
+    manager_auto_resume: bool = True
 
 
 @dataclasses.dataclass
@@ -179,6 +187,13 @@ def load_config(path: str) -> AppConfig:
                 DefaultsConfig(workdir="").clarification_keywords,
             )
         ),
+        manager_max_tasks=int(defaults_raw.get("manager_max_tasks", 10)),
+        manager_max_attempts=int(defaults_raw.get("manager_max_attempts", 3)),
+        manager_decompose_timeout_sec=int(defaults_raw.get("manager_decompose_timeout_sec", 300)),
+        manager_dev_timeout_sec=int(defaults_raw.get("manager_dev_timeout_sec", 600)),
+        manager_review_timeout_sec=int(defaults_raw.get("manager_review_timeout_sec", 300)),
+        manager_dev_report_max_chars=int(defaults_raw.get("manager_dev_report_max_chars", 8000)),
+        manager_auto_resume=bool(defaults_raw.get("manager_auto_resume", True)),
     )
 
     mcp_raw = raw.get("mcp", {})
@@ -288,6 +303,13 @@ def save_config(config: AppConfig) -> None:
             "memory_compact_target_kb": config.defaults.memory_compact_target_kb,
             "clarification_enabled": config.defaults.clarification_enabled,
             "clarification_keywords": config.defaults.clarification_keywords,
+            "manager_max_tasks": config.defaults.manager_max_tasks,
+            "manager_max_attempts": config.defaults.manager_max_attempts,
+            "manager_decompose_timeout_sec": config.defaults.manager_decompose_timeout_sec,
+            "manager_dev_timeout_sec": config.defaults.manager_dev_timeout_sec,
+            "manager_review_timeout_sec": config.defaults.manager_review_timeout_sec,
+            "manager_dev_report_max_chars": config.defaults.manager_dev_report_max_chars,
+            "manager_auto_resume": config.defaults.manager_auto_resume,
         },
         "mcp": {
             "enabled": config.mcp.enabled,

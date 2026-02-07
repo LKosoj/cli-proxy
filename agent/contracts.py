@@ -60,3 +60,60 @@ def validate_response(resp: ExecutorResponse) -> None:
         raise ValueError("ExecutorResponse.task_id is required")
     if resp.status not in ("ok", "needs_input", "error", "timeout", "blocked", "partial"):
         raise ValueError("ExecutorResponse.status invalid")
+
+
+# -----------------------------
+# Manager mode contracts
+# -----------------------------
+
+
+@dataclass
+class DevTask:
+    """Одна задача разработки в рамках проекта (Manager mode)."""
+
+    id: str
+    title: str
+    description: str
+    acceptance_criteria: List[str]
+    depends_on: List[str] = field(default_factory=list)
+    status: str = "pending"  # pending | in_progress | in_review | approved | rejected | failed | blocked
+    attempt: int = 0
+    max_attempts: int = 3
+    dev_report: Optional[str] = None
+    review_verdict: Optional[str] = None
+    review_comments: Optional[str] = None
+    rejection_history: List[Dict[str, Any]] = field(default_factory=list)
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@dataclass
+class ProjectAnalysis:
+    """Результат анализа текущего состояния проекта (Manager mode)."""
+
+    current_state: str
+    already_done: List[str]
+    remaining_work: List[str]
+
+
+@dataclass
+class ProjectPlan:
+    """План проекта — результат декомпозиции (Manager mode)."""
+
+    project_goal: str
+    tasks: List[DevTask]
+    analysis: Optional[ProjectAnalysis] = None
+    status: str = "active"  # active | completed | failed | paused
+    created_at: str = ""
+    updated_at: str = ""
+    current_task_id: Optional[str] = None
+    completion_report: Optional[str] = None
+
+
+@dataclass
+class ReviewResult:
+    approved: bool
+    summary: str
+    comments: str
+    tests_passed: Optional[bool] = None
+    files_reviewed: List[str] = field(default_factory=list)
