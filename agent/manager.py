@@ -438,7 +438,15 @@ class ManagerOrchestrator:
 
         for t in plan.tasks:
             # Normalize interrupted / stale statuses
-            if t.status in ("rejected", "in_progress", "in_review"):
+            if t.status in ("in_progress", "in_review"):
+                # Interrupted during execution: reset to pending and decrement attempt
+                # so that the loop increment brings it back to the same attempt number.
+                t.status = "pending"
+                if t.attempt > 0:
+                    t.attempt -= 1
+            elif t.status == "rejected":
+                # Interrupted after rejection but before pending: just reset to pending.
+                # Attempt count remains (so loop increments to next attempt).
                 if t.attempt >= t.max_attempts:
                     t.status = "failed"
                 else:
@@ -613,11 +621,11 @@ class ManagerOrchestrator:
 
         # Conditional rejection block
         rejection_block = ""
-        if task.attempt > 0 and task.review_comments:
+        if task.attempt > 1 and task.review_comments:
             rejection_block = (
                 f"### ⚠️ Замечания ревьюера (исправь обязательно):\n"
                 f"{task.review_comments}\n\n"
-                f"Это попытка {task.attempt + 1} из {task.max_attempts}. Исправь все замечания."
+                f"Это попытка {task.attempt} из {task.max_attempts}. Исправь все замечания."
             )
 
         instr = DEV_INSTRUCTION_TEMPLATE.format(
