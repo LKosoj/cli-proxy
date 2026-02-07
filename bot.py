@@ -578,7 +578,7 @@ class BotApp:
         return await self.session_management.ensure_active_session(chat_id, context)
 
     async def on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self.message_processor.on_message(update, context)
+        await self.message_processor.process_message(update, context)
 
     def _has_attachments(self, message: Message) -> bool:
         return any(

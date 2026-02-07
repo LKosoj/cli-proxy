@@ -181,14 +181,19 @@ class SessionUI:
             if not st:
                 await query.edit_message_text("Состояние не найдено.")
                 return True
-            text = (
+            summary = st.summary or "нет"
+            header = (
                 f"Session: {st.session_id or 'нет'}\n"
                 f"Инструмент: {st.tool}\n"
                 f"Каталог: {st.workdir}\n"
                 f"Resume: {st.resume_token or 'нет'}\n"
-                f"Summary: {st.summary or 'нет'}\n"
-                f"Updated: {self._format_ts(st.updated_at)}"
+                f"Summary: "
             )
+            footer = f"\nUpdated: {self._format_ts(st.updated_at)}"
+            max_summary = 4096 - len(header) - len(footer) - 4
+            if len(summary) > max_summary:
+                summary = summary[:max_summary] + " ..."
+            text = header + summary + footer
             await query.edit_message_text(text)
             return True
         if data.startswith("sess_queue:"):
