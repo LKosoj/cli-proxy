@@ -4,8 +4,7 @@ import logging
 import os
 from typing import Any, Dict
 
-from openai import AsyncOpenAI
-
+from agent.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from agent.tooling.spec import ToolSpec
 
@@ -43,7 +42,7 @@ class PromptPerfectTool(ToolPlugin):
         if not api_key:
             return {"success": False, "error": "Не задан OPENAI_API_KEY"}
 
-        client = AsyncOpenAI(api_key=api_key, base_url=(base_url or None))
+        client = create_async_openai_client(api_key=api_key, base_url=(base_url or None))
 
         system = (
             "Ты эксперт по составлению промптов. Преврати исходный текст в четкую, однозначную, "

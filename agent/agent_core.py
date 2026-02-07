@@ -4,8 +4,8 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
-from openai import AsyncOpenAI
 
+from agent.openai_client import create_async_openai_client
 from agent.tooling.registry import ToolRegistry as PluginToolRegistry
 from agent.session_store import read_json_locked, write_json_locked
 
@@ -157,7 +157,7 @@ class ReActAgent:
         self._openai_client = None
         if self._openai_cfg:
             api_key, _, base_url = self._openai_cfg
-            self._openai_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self._openai_client = create_async_openai_client(api_key=api_key, base_url=base_url)
         self._sessions: Dict[str, Dict[str, Any]] = {}
         # ToolRegistry must be a singleton shared across executor/orchestrator/agent.
         self._tool_registry = tool_registry

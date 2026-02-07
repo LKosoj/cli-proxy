@@ -1,10 +1,29 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from openai import AsyncOpenAI
 
 from config import AppConfig
+
+OPENAI_SDK_MAX_RETRIES = 4
+
+
+def create_async_openai_client(
+    api_key: str,
+    base_url: Optional[str] = None,
+    *,
+    timeout: Optional[Any] = None,
+) -> AsyncOpenAI:
+    kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "max_retries": OPENAI_SDK_MAX_RETRIES,
+    }
+    if base_url:
+        kwargs["base_url"] = base_url
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    return AsyncOpenAI(**kwargs)
 
 
 def get_openai_config(config: AppConfig) -> Optional[Tuple[str, str, str]]:
@@ -21,7 +40,7 @@ def build_client(config: AppConfig) -> Optional[Tuple[AsyncOpenAI, str]]:
     if not cfg:
         return None
     api_key, model, base_url = cfg
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    client = create_async_openai_client(api_key=api_key, base_url=base_url)
     return client, model
 
 

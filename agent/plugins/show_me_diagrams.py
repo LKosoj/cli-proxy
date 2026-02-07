@@ -8,8 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-from openai import AsyncOpenAI
-
+from agent.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from agent.tooling.spec import ToolSpec
 
@@ -97,7 +96,7 @@ class ShowMeDiagramsTool(ToolPlugin):
         }
         system = "Ты эксперт по PlantUML. Верни только валидный PlantUML код без пояснений и без ```."
         user = f"{prompts.get(diagram_type, '')}\nЗаголовок: {title}\nОписание: {description}\n"
-        client = AsyncOpenAI(api_key=api_key, base_url=(base_url or None))
+        client = create_async_openai_client(api_key=api_key, base_url=(base_url or None))
         resp = await client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],

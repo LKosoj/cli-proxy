@@ -5,8 +5,7 @@ import logging
 import os
 from typing import Any, Callable, Dict, List
 
-from openai import AsyncOpenAI
-
+from agent.openai_client import create_async_openai_client
 from agent.plugins.base import DialogMixin, ToolPlugin
 from agent.tooling.spec import ToolSpec
 
@@ -378,7 +377,7 @@ class TextDocumentQATool(DialogMixin, ToolPlugin):
                 return {"success": False, "error": "Не задан OPENAI_API_KEY"}
 
             context_text = text[:12000]
-            client = AsyncOpenAI(api_key=api_key, base_url=(base_url or None))
+            client = create_async_openai_client(api_key=api_key, base_url=(base_url or None))
             try:
                 resp = await client.chat.completions.create(
                     model=model,

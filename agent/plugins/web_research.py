@@ -11,6 +11,7 @@ import httpx
 from bs4 import BeautifulSoup
 from openai import AsyncOpenAI
 
+from agent.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from agent.tooling.spec import ToolSpec
 
@@ -133,7 +134,7 @@ class WebResearchTool(ToolPlugin):
         api_key = os.getenv("OPENAI_API_KEY") or (getattr(defaults, "openai_api_key", None) if defaults else None)
         base_url = os.getenv("OPENAI_BASE_URL") or (getattr(defaults, "openai_base_url", None) if defaults else None)
 
-        return AsyncOpenAI(api_key=api_key, base_url=base_url or None)
+        return create_async_openai_client(api_key=api_key, base_url=base_url or None)
 
     def _get_model(self, big: bool = False) -> str:
         """Возвращает модель для использования."""

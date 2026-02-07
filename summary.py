@@ -7,6 +7,7 @@ from typing import Dict, Optional, Tuple
 import httpx
 from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusError
 
+from agent.openai_client import create_async_openai_client
 from config import AppConfig
 from utils import normalize_text
 
@@ -23,7 +24,7 @@ def _get_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
     key = (api_key, base_url)
     client = _openai_clients.get(key)
     if client is None:
-        client = AsyncOpenAI(
+        client = create_async_openai_client(
             api_key=api_key,
             base_url=base_url,
             timeout=_OPENAI_TIMEOUT,
