@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from agent.mcp.manager import MCPManager
 from agent.mcp.stdio_client import MCPToolInfo

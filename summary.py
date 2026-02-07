@@ -202,7 +202,7 @@ async def summarize_text_with_reason(
         return None, "неожиданный ответ OpenAI"
 
 def _tail_digest(text: str) -> str:
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return ""
     tail = lines[-12:]

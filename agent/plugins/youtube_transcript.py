@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from agent.plugins.base import ToolPlugin
 from agent.tooling.spec import ToolSpec

@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from config import AppConfig
 from utils import sandbox_root
@@ -57,7 +57,6 @@ class OrchestratorRunner:
 
     async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
         chat_id = dest.get("chat_id")
-        chat_type = dest.get("chat_type")
         cwd = sandbox_root(self._config.defaults.workdir)
         os.makedirs(cwd, exist_ok=True)
         self._log.info("=== orchestrator run START session=%s chat=%s user_text=%r ===", session.id, chat_id, user_text[:200])

@@ -4,7 +4,7 @@ import asyncio
 import difflib
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from agent.mcp.manager import MCPManager
 from agent.plugins.base import ToolPlugin

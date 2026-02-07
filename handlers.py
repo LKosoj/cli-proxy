@@ -2,57 +2,24 @@
 Module containing command handlers for the Telegram bot.
 """
 
-import asyncio
-import html
 import logging
 import os
-import shutil
 import time
-import re
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update, Message
-from telegram.error import NetworkError, TimedOut
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
-    CallbackQueryHandler,
-    CommandHandler,
     ContextTypes,
-    MessageHandler,
-    filters,
 )
 
-from config import AppConfig, ToolConfig, load_config
-from dotenv_loader import load_dotenv_near
-from session import Session, SessionManager, run_tool_help
-from summary import summarize_text_with_reason
+from session import Session
 from command_registry import build_command_registry
-from dirs_ui import build_dirs_keyboard, prepare_dirs
-from session_ui import SessionUI
-from git_ops import GitOps
-from metrics import Metrics
-from mcp_bridge import MCPBridge
-from state import get_state, load_active_state, clear_active_state
-from toolhelp import get_toolhelp, update_toolhelp
+from state import get_state
 from utils import (
-    ansi_to_html,
-    build_preview,
-    has_ansi,
     is_within_root,
-    make_html_file,
-    sandbox_root,
-    sandbox_session_dir,
-    sandbox_shared_dir,
-    strip_ansi,
 )
-from tg_markdown import to_markdown_v2
-from agent import execute_shell_command, pop_pending_command, set_approval_callback
-from agent.orchestrator import OrchestratorRunner
-from agent.manager import ManagerOrchestrator
-from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status, needs_resume_choice
-from agent.plugins.task_management import run_task_deadline_checker
-from agent.tooling.registry import get_tool_registry
 
 
 @dataclass

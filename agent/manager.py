@@ -7,7 +7,7 @@ import os
 import re
 import time
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from config import AppConfig
 from session import Session
@@ -18,6 +18,8 @@ from .executor import Executor
 from .manager_prompts import (
     DECOMPOSE_INSTRUCTION,
     DECOMPOSE_NORMALIZE_SYSTEM,
+    PLAN_VALIDATION_SYSTEM,
+    PLAN_FIX_INSTRUCTION,
     DEV_INSTRUCTION_TEMPLATE,
     REVIEW_INSTRUCTION_TEMPLATE,
     REVIEW_NORMALIZE_SYSTEM,
@@ -231,15 +233,32 @@ class ManagerOrchestrator:
         await self._run_loop(session, plan, bot, context, dest)
 
         # Final report
-        if plan.status in ("completed", "failed"):
+        if plan.status == "completed":
             report = await self._compose_final_report(plan, workdir=workdir)
             plan.completion_report = report
             save_plan(workdir, plan)
             if chat_id is not None:
-                await bot._send_message(context, chat_id=chat_id, text="Готово. Результат ниже.")
+                await bot._send_message(context, chat_id=chat_id, text="✅ Готово. Результат ниже.")
                 await bot._send_message(context, chat_id=chat_id, text=report)
-            # Archive completed/failed plan
             archive_plan(workdir, plan.status)
+        elif plan.status == "failed":
+            report = await self._compose_final_report(plan, workdir=workdir)
+            plan.completion_report = report
+            save_plan(workdir, plan)
+            if chat_id is not None:
+                await bot._send_message(context, chat_id=chat_id, text=f"❌ План провален. Результат ниже.")
+                await bot._send_message(context, chat_id=chat_id, text=report)
+                # Ask user: retry or archive?
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("🔄 Повторить", callback_data="manager_failed:retry"),
+                        InlineKeyboardButton("📦 В архив", callback_data="manager_failed:archive"),
+                    ],
+                ])
+                await bot._send_message(context, chat_id=chat_id,
+                                        text="Что сделать с проваленным планом?",
+                                        reply_markup=keyboard)
 
         return _plan_summary(plan)
 
@@ -251,7 +270,7 @@ class ManagerOrchestrator:
         chat_id = dest.get("chat_id")
         if chat_id is not None:
             await bot._send_message(context, chat_id=chat_id, text="🏗 Manager: декомпозиция задачи и анализ проекта...")
-        plan = await self._decompose(session, user_text)
+        plan = await self._decompose(session, user_text, bot=bot, context=context, dest=dest)
         if not plan:
             if chat_id is not None:
                 await bot._send_message(context, chat_id=chat_id, text="Не удалось построить план Manager.")
@@ -263,7 +282,7 @@ class ManagerOrchestrator:
     # Decomposition (two-phase: CLI → direct JSON parse → Agent normalization)
     # -----------------------------------------------------------------------
 
-    async def _decompose(self, session: Session, user_goal: str) -> Optional[ProjectPlan]:
+    async def _decompose(self, session: Session, user_goal: str, bot=None, context=None, dest: Optional[dict] = None) -> Optional[ProjectPlan]:
         timeout = int(self._config.defaults.manager_decompose_timeout_sec)
         max_tasks = int(self._config.defaults.manager_max_tasks)
         debug = bool(self._config.defaults.manager_debug_log)
@@ -300,35 +319,80 @@ class ManagerOrchestrator:
             if debug:
                 _debug_write(workdir, "manager_decompose_result", "Decompose Result (direct parse)",
                              json.dumps(asdict(plan), ensure_ascii=False, indent=2))
-            return plan
+        else:
+            # === Phase 2: Agent normalization (fallback) ===
+            _log.info("decompose: direct parse failed, invoking agent normalization")
+            plan = await self._normalize_plan(cli_text, user_goal, max_tasks, workdir=workdir)
+            if not plan:
+                # Retry normalization with strict mode
+                _log.warning("decompose phase 2: first normalization failed, retrying strict")
+                plan = await self._normalize_plan(cli_text, user_goal, max_tasks, strict=True, workdir=workdir)
 
-        # === Phase 2: Agent normalization (fallback) ===
-        _log.info("decompose: direct parse failed, invoking agent normalization")
-        plan = await self._normalize_plan(cli_text, user_goal, max_tasks, workdir=workdir)
-        if plan:
-            return plan
+        if not plan:
+            # Fallback: single task
+            _log.warning("decompose: all normalization failed, using single-task fallback")
+            return ProjectPlan(
+                project_goal=user_goal,
+                tasks=[DevTask(
+                    id="task_1",
+                    title="Выполнить задачу",
+                    description=user_goal,
+                    acceptance_criteria=["Задача выполнена"],
+                    max_attempts=int(self._config.defaults.manager_max_attempts),
+                )],
+                status="active",
+                created_at=_now_iso(),
+                updated_at=_now_iso(),
+            )
 
-        # Retry normalization with strict mode
-        _log.warning("decompose phase 2: first normalization failed, retrying strict")
-        plan = await self._normalize_plan(cli_text, user_goal, max_tasks, strict=True, workdir=workdir)
-        if plan:
-            return plan
+        # === Phase 3: Validate plan (up to 3 correction attempts) ===
+        chat_id = (dest or {}).get("chat_id")
+        max_fix_attempts = 3
+        for fix_attempt in range(1, max_fix_attempts + 1):
+            if chat_id is not None and bot is not None:
+                await bot._send_message(context, chat_id=chat_id,
+                                        text=f"🔎 Валидация плана (проверка {fix_attempt}/{max_fix_attempts})...")
+            issues = await self._validate_plan(plan, workdir)
+            if not issues:
+                _log.info("decompose: plan validation passed (attempt %d)", fix_attempt)
+                if chat_id is not None and bot is not None:
+                    await bot._send_message(context, chat_id=chat_id, text="✅ План прошёл валидацию")
+                break
 
-        # Fallback: single task
-        _log.warning("decompose: all normalization failed, using single-task fallback")
-        return ProjectPlan(
-            project_goal=user_goal,
-            tasks=[DevTask(
-                id="task_1",
-                title="Выполнить задачу",
-                description=user_goal,
-                acceptance_criteria=["Задача выполнена"],
-                max_attempts=int(self._config.defaults.manager_max_attempts),
-            )],
-            status="active",
-            created_at=_now_iso(),
-            updated_at=_now_iso(),
-        )
+            _log.warning("decompose: plan validation failed (attempt %d/%d): %s",
+                         fix_attempt, max_fix_attempts, issues)
+            if debug:
+                _debug_write(workdir, f"manager_validate_issues_{fix_attempt}",
+                             f"Plan Validation Issues (attempt {fix_attempt}/{max_fix_attempts})",
+                             "\n".join(f"- {x}" for x in issues))
+
+            issues_short = "; ".join(issues[:3])
+            if len(issues) > 3:
+                issues_short += f" (+ещё {len(issues) - 3})"
+
+            if fix_attempt >= max_fix_attempts:
+                _log.warning("decompose: max fix attempts reached, using plan as-is")
+                if chat_id is not None and bot is not None:
+                    await bot._send_message(context, chat_id=chat_id,
+                                            text=f"⚠️ План содержит замечания, но исчерпаны попытки корректировки: {issues_short}")
+                break
+
+            if chat_id is not None and bot is not None:
+                await bot._send_message(context, chat_id=chat_id,
+                                        text=f"⚠️ Проблемы в плане: {issues_short}\n🔄 Отправляю CLI на корректировку ({fix_attempt}/{max_fix_attempts})...")
+
+            fixed_plan = await self._fix_plan_via_cli(session, plan, issues, user_goal, timeout, workdir)
+            if fixed_plan:
+                plan = fixed_plan
+                _log.info("decompose: plan corrected (attempt %d), re-validating...", fix_attempt)
+            else:
+                _log.warning("decompose: CLI fix failed (attempt %d), using current plan", fix_attempt)
+                if chat_id is not None and bot is not None:
+                    await bot._send_message(context, chat_id=chat_id,
+                                            text=f"⚠️ CLI не смог исправить план, используем текущий")
+                break
+
+        return plan
 
     def _try_parse_plan(self, raw_text: str, user_goal: str, max_tasks: int) -> Optional[ProjectPlan]:
         """Try to parse CLI output directly as JSON."""
@@ -376,6 +440,53 @@ class ManagerOrchestrator:
             _log.warning("normalize_plan: JSON parse error: %s", e)
             return None
 
+    async def _fix_plan_via_cli(
+        self, session: Session, plan: ProjectPlan, issues: List[str],
+        user_goal: str, timeout: int, workdir: str,
+    ) -> Optional[ProjectPlan]:
+        """Send the plan back to CLI for correction based on validation issues."""
+        debug = bool(self._config.defaults.manager_debug_log)
+        max_tasks = int(self._config.defaults.manager_max_tasks)
+        plan_json = json.dumps(asdict(plan), ensure_ascii=False, indent=2)
+        issues_text = "\n".join(f"- {x}" for x in issues)
+        instr = PLAN_FIX_INSTRUCTION.format(
+            issues=issues_text, plan_json=plan_json, user_goal=user_goal,
+        )
+        if debug:
+            _debug_write(workdir, "manager_fix_prompt", "Plan Fix Prompt → CLI", instr)
+
+        try:
+            cli_text = await asyncio.wait_for(session.run_prompt(instr), timeout=timeout)
+        except asyncio.TimeoutError:
+            try:
+                session.interrupt()
+            except Exception:
+                pass
+            _log.warning("fix_plan: CLI timeout")
+            return None
+        except Exception as exc:
+            _log.warning("fix_plan: CLI error: %s", exc)
+            return None
+
+        cli_text = strip_ansi(cli_text or "")
+        if debug:
+            _debug_write(workdir, "cli_fix_response", "CLI Fix Response", cli_text)
+
+        # Try to parse corrected plan
+        fixed = self._try_parse_plan(cli_text, user_goal, max_tasks)
+        if fixed:
+            if debug:
+                _debug_write(workdir, "manager_fix_result", "Fixed Plan (direct parse)",
+                             json.dumps(asdict(fixed), ensure_ascii=False, indent=2))
+            return fixed
+
+        # Agent normalization fallback
+        fixed = await self._normalize_plan(cli_text, user_goal, max_tasks, workdir=workdir)
+        if fixed and debug:
+            _debug_write(workdir, "manager_fix_result", "Fixed Plan (normalized)",
+                         json.dumps(asdict(fixed), ensure_ascii=False, indent=2))
+        return fixed
+
     def _payload_to_plan(self, payload: dict, user_goal: str, max_tasks: int) -> Optional[ProjectPlan]:
         """Convert a parsed JSON dict to ProjectPlan."""
         tasks_raw = payload.get("tasks") or []
@@ -419,6 +530,103 @@ class ManagerOrchestrator:
             updated_at=_now_iso(),
             current_task_id=None,
         )
+
+    # -----------------------------------------------------------------------
+    # Plan validation
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_plan_structure(plan: ProjectPlan) -> List[str]:
+        """Check plan for structural issues. Returns list of problems (empty = OK)."""
+        issues: List[str] = []
+        task_ids = set()
+        id_list = [t.id for t in plan.tasks]
+
+        for t in plan.tasks:
+            # Duplicate IDs
+            if t.id in task_ids:
+                issues.append(f"Дублирующийся ID задачи: '{t.id}'")
+            task_ids.add(t.id)
+
+            # Empty fields
+            if not t.title.strip():
+                issues.append(f"Задача '{t.id}': пустой title")
+            if not t.description.strip():
+                issues.append(f"Задача '{t.id}': пустой description")
+            if not t.acceptance_criteria:
+                issues.append(f"Задача '{t.id}': нет acceptance_criteria")
+
+            # Self-dependency
+            if t.id in t.depends_on:
+                issues.append(f"Задача '{t.id}' зависит от самой себя")
+
+            # Missing dependencies
+            for dep in t.depends_on:
+                if dep not in id_list:
+                    issues.append(f"Задача '{t.id}' зависит от несуществующей '{dep}'")
+
+        # Circular dependencies (topological sort)
+        if not issues:  # only check if no basic issues
+            visited: Dict[str, int] = {}  # 0=in progress, 1=done
+            def _has_cycle(tid: str) -> bool:
+                if tid in visited:
+                    return visited[tid] == 0
+                visited[tid] = 0
+                task_map = {t.id: t for t in plan.tasks}
+                task = task_map.get(tid)
+                if task:
+                    for dep in task.depends_on:
+                        if _has_cycle(dep):
+                            return True
+                visited[tid] = 1
+                return False
+
+            for t in plan.tasks:
+                if t.id not in visited:
+                    if _has_cycle(t.id):
+                        issues.append("Обнаружена циклическая зависимость между задачами")
+                        break
+
+        return issues
+
+    async def _validate_plan_semantics(self, plan: ProjectPlan, workdir: str) -> List[str]:
+        """LLM-based validation: check for logical contradictions between tasks."""
+        debug = bool(self._config.defaults.manager_debug_log)
+        tasks_text = json.dumps(
+            [{"id": t.id, "title": t.title, "description": t.description,
+              "acceptance_criteria": t.acceptance_criteria, "depends_on": t.depends_on}
+             for t in plan.tasks],
+            ensure_ascii=False, indent=2,
+        )
+        if debug:
+            _debug_write(workdir, "manager_validate_prompt", "Plan Validation Prompt", tasks_text)
+
+        raw = await chat_completion(
+            self._config, PLAN_VALIDATION_SYSTEM, tasks_text, response_format={"type": "json_object"}
+        )
+        if debug:
+            _debug_write(workdir, "agent_validate_response", "Plan Validation Response", raw or "(empty)")
+
+        if not raw:
+            return []
+        try:
+            payload = json.loads(_extract_json_object(raw))
+            if isinstance(payload, dict) and not payload.get("valid", True):
+                return [str(x) for x in (payload.get("issues") or []) if x]
+        except Exception:
+            pass
+        return []
+
+    async def _validate_plan(self, plan: ProjectPlan, workdir: str) -> List[str]:
+        """Full plan validation: structural + semantic. Returns list of issues."""
+        # 1. Structural checks (fast, deterministic)
+        issues = self._validate_plan_structure(plan)
+        if issues:
+            return issues
+
+        # 2. Semantic checks (LLM-based, only if structure is OK)
+        semantic_issues = await self._validate_plan_semantics(plan, workdir)
+        return semantic_issues
 
     # -----------------------------------------------------------------------
     # Plan notification

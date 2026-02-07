@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-from agent.contracts import DevTask, ProjectPlan
 from agent.manager import ManagerOrchestrator, _extract_json_object, _truncate_report
 
 
@@ -90,7 +89,6 @@ def _make_orchestrator():
     """Create a ManagerOrchestrator with minimal config (will fail on real calls but OK for parsing)."""
     # We only need _payload_to_plan which doesn't use executor.
     # Patch __init__ to skip executor creation.
-    import types
     obj = object.__new__(ManagerOrchestrator)
     obj._config = _FakeConfig()
     return obj

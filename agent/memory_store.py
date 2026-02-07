@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 MEMORY_FILE = "MEMORY.md"
 _ENTRY_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}): \[(\w+)\] (.*)$")

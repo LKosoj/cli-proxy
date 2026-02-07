@@ -1,13 +1,10 @@
 import asyncio
-import html
 import logging
 import os
 import shutil
 import time
-import re
 import concurrent.futures
-from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update, Message
 from telegram.error import NetworkError, TimedOut
@@ -22,40 +19,30 @@ from telegram.ext import (
 
 from config import AppConfig, ToolConfig, load_config
 from dotenv_loader import load_dotenv_near
-from session import Session, SessionManager, run_tool_help
+from session import Session, SessionManager
 from summary import summarize_text_with_reason
 from command_registry import build_command_registry
-from dirs_ui import build_dirs_keyboard, prepare_dirs
 from session_ui import SessionUI
 from git_ops import GitOps
 from metrics import Metrics
 from mcp_bridge import MCPBridge
-from state import get_state, load_active_state, clear_active_state
-from toolhelp import get_toolhelp, update_toolhelp
 from utils import (
     ansi_to_html,
-    build_preview,
-    has_ansi,
-    is_within_root,
     make_html_file,
     sandbox_root,
     sandbox_session_dir,
     sandbox_shared_dir,
-    strip_ansi,
 )
 
 # Export utility functions at module level for easy patching in tests
-from utils import ansi_to_html as ansi_to_html, make_html_file as make_html_file
-from summary import summarize_text_with_reason as summarize_text_with_reason
 from tg_markdown import to_markdown_v2
-from agent import execute_shell_command, pop_pending_command, set_approval_callback
+from agent import set_approval_callback
 from agent.orchestrator import OrchestratorRunner
 from agent.manager import ManagerOrchestrator
-from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status, needs_resume_choice
 from agent.plugins.task_management import run_task_deadline_checker
 from agent.tooling.registry import get_tool_registry
 
-from handlers import BotHandlers
+from handlers import BotHandlers, PendingInput
 from callbacks import CallbackHandler
 from message_processor import MessageProcessor
 from session_management import SessionManagement
@@ -140,10 +127,6 @@ class BotApp:
         self._task_deadline_checker_task: Optional[asyncio.Task] = None
         
         # Initialize modules
-        from handlers import BotHandlers
-        from callbacks import CallbackHandler  
-        from message_processor import MessageProcessor
-        from session_management import SessionManagement
         
         self.handlers = BotHandlers(self)
         self.callbacks = CallbackHandler(self)
@@ -163,7 +146,6 @@ class BotApp:
         bot_module = sys.modules.get('bot', sys.modules[__name__])
         if hasattr(bot_module, 'ansi_to_html'):
             return bot_module.ansi_to_html
-        from utils import ansi_to_html
         return ansi_to_html
 
     @property
@@ -173,7 +155,6 @@ class BotApp:
         bot_module = sys.modules.get('bot', sys.modules[__name__])
         if hasattr(bot_module, 'make_html_file'):
             return bot_module.make_html_file
-        from utils import make_html_file
         return make_html_file
 
     @property
@@ -183,7 +164,6 @@ class BotApp:
         bot_module = sys.modules.get('bot', sys.modules[__name__])
         if hasattr(bot_module, 'summarize_text_with_reason'):
             return bot_module.summarize_text_with_reason
-        from summary import summarize_text_with_reason
         return summarize_text_with_reason
 
     def _configure_agent_sandbox(self) -> None:
@@ -461,7 +441,7 @@ class BotApp:
             try:
                 await context.bot.send_document(**kwargs)
                 return True
-            except (NetworkError, TimedOut) as e:
+            except (NetworkError, TimedOut):
                 if attempt == 4:
                     logging.exception("Ошибка сети при отправке файла в Telegram.")
                     return False

@@ -3,47 +3,22 @@ Module containing callback handling functionality for the Telegram bot.
 """
 
 import asyncio
-import html
 import logging
 import os
 import shutil
-import time
-import re
-from typing import Dict, Optional, Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import AppConfig, ToolConfig, load_config
-from dotenv_loader import load_dotenv_near
-from session import Session, SessionManager, run_tool_help
-from summary import summarize_text_with_reason
-from command_registry import build_command_registry
+from session import run_tool_help
 from dirs_ui import build_dirs_keyboard, prepare_dirs
-from session_ui import SessionUI
-from git_ops import GitOps
-from metrics import Metrics
-from mcp_bridge import MCPBridge
-from state import get_state, load_active_state, clear_active_state
+from state import load_active_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import (
-    ansi_to_html,
-    build_preview,
-    has_ansi,
     is_within_root,
-    make_html_file,
-    sandbox_root,
-    sandbox_session_dir,
-    sandbox_shared_dir,
-    strip_ansi,
 )
-from tg_markdown import to_markdown_v2
-from agent import execute_shell_command, pop_pending_command, set_approval_callback
-from agent.orchestrator import OrchestratorRunner
-from agent.manager import ManagerOrchestrator
-from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status, needs_resume_choice
-from agent.plugins.task_management import run_task_deadline_checker
-from agent.tooling.registry import get_tool_registry
+from agent import execute_shell_command, pop_pending_command
+from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status
 
 
 class CallbackHandler:
@@ -204,6 +179,29 @@ class CallbackHandler:
                 if query.message:
                     await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Начинаю новый план...")
                 self.bot_app._start_manager_task(session, str(pending.get("prompt") or ""), pending.get("dest") or {"kind": "telegram"}, context)
+                return
+            if query.data == "manager_failed:retry":
+                session = self.bot_app.manager.active()
+                if not session:
+                    if query.message:
+                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                if query.message:
+                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="🔄 Повторяю выполнение плана...")
+                from agent.manager import MANAGER_CONTINUE_TOKEN
+                dest = {"kind": "telegram", "chat_id": query.message.chat_id if query.message else chat_id}
+                self.bot_app._start_manager_task(session, MANAGER_CONTINUE_TOKEN, dest, context)
+                return
+            if query.data == "manager_failed:archive":
+                session = self.bot_app.manager.active()
+                if not session:
+                    if query.message:
+                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    return
+                from agent.manager_store import archive_plan
+                archive_plan(session.workdir, "failed")
+                if query.message:
+                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="📦 План перенесён в архив.")
                 return
             if query.data == "manager_pause":
                 session = self.bot_app.manager.active()

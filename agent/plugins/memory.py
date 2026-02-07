@@ -4,7 +4,7 @@ import os
 import time
 from typing import Any, Callable, Dict, List
 
-from telegram import InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from agent.plugins.base import DialogMixin, ToolPlugin

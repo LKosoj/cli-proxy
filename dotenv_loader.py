@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Optional
+from typing import Dict
 
 
 def _strip_inline_comment_unquoted(value: str) -> str:

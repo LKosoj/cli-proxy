@@ -1,5 +1,4 @@
 import asyncio
-import types
 
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 from bot import BotApp

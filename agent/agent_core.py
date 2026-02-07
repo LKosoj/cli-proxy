@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -95,7 +94,7 @@ def save_chat_message(username: str, text: str, is_bot: bool = False, chat_id: O
             with open(history_file, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
         content += line
-        lines = [l for l in content.split("\n") if l.strip()]
+        lines = [line for line in content.split("\n") if line.strip()]
         if len(lines) > MAX_CHAT_MESSAGES:
             content = "\n".join(lines[-MAX_CHAT_MESSAGES:]) + "\n"
         with open(history_file, "w", encoding="utf-8") as f:
@@ -194,7 +193,7 @@ class ReActAgent:
             prompt += f"\n\n<MEMORY>\nNotes from previous sessions (use \"memory\" tool to update):\n{memory_content}\n</MEMORY>"
         chat_history = get_chat_history(chat_id)
         if chat_history:
-            line_count = len([l for l in chat_history.split("\n") if l.strip()])
+            line_count = len([line for line in chat_history.split("\n") if line.strip()])
             prompt += f"\n\n<RECENT_CHAT>\nИстория чата ({line_count} сообщений). ЭТО ВСЁ что у тебя есть - от самых старых к новым:\n{chat_history}\n</RECENT_CHAT>"
         return prompt
 

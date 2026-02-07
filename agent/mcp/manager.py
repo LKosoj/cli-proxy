@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from config import AppConfig, MCPClientServerConfig
 from agent.mcp.http_client import HttpMCPClient, HttpMCPClientConfig

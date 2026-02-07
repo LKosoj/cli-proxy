@@ -323,15 +323,15 @@ def build_command(
 
 def detect_prompt_regex(lines: List[str]) -> Optional[str]:
     # Use last non-empty line; if it repeats in tail, treat as prompt.
-    cleaned = [strip_ansi(l).rstrip("\n") for l in lines]
-    cleaned = [l for l in cleaned if l.strip()]
+    cleaned = [strip_ansi(line).rstrip("\n") for line in lines]
+    cleaned = [line for line in cleaned if line.strip()]
     if not cleaned:
         return None
     tail = cleaned[-6:]
     candidate = tail[-1]
     if len(candidate) > 80:
         return None
-    occurrences = sum(1 for l in tail if l == candidate)
+    occurrences = sum(1 for line in tail if line == candidate)
     if occurrences >= 2:
         return re.escape(candidate) + r"\s*$"
     return None

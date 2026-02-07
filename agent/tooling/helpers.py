@@ -16,7 +16,6 @@ import requests
 
 from utils import strip_ansi
 from .constants import (
-    GREP_TIMEOUT_MS,
     OUTPUT_HEAD_LEN,
     OUTPUT_TAIL_LEN,
     OUTPUT_TRIM_LEN,

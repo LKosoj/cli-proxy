@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import urllib.parse
 import logging
 from typing import Any, Dict
 

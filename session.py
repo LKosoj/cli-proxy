@@ -5,7 +5,7 @@ import signal
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional
 
 import logging
 import pexpect
@@ -13,7 +13,7 @@ import subprocess
 import shlex
 
 from config import AppConfig, ToolConfig, save_config
-from state import get_state, load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
+from state import load_active_state, load_sessions, save_sessions, set_active_state, clear_active_state
 from utils import build_command, detect_prompt_regex, detect_resume_regex, extract_tick_tokens, resolve_env_value, strip_ansi
 
 

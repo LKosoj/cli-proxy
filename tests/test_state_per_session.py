@@ -1,4 +1,3 @@
-import os
 
 from state import load_state, get_state
 
