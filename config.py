@@ -6,6 +6,7 @@ import yaml
 
 from dotenv_loader import load_dotenv_near
 
+
 @dataclasses.dataclass
 class TelegramConfig:
     token: str

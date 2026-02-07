@@ -13,7 +13,10 @@ class UseCliTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="use_cli",
-            description="Delegate a complex task to the selected CLI (codex/gemini/claude code). Use when the task is too complex for tools or requires full coding workflow.",
+            description=(
+                "Delegate a complex task to the selected CLI (codex/gemini/claude code). "
+                "Use when the task is too complex for tools or requires full coding workflow."
+            ),
             parameters={
                 "type": "object",
                 "properties": {"task_text": {"type": "string", "description": "Task description for CLI"}},

@@ -212,7 +212,8 @@ class HaiperImageToVideoTool(DialogMixin, ToolPlugin):
         prompt = (args.get("prompt") or "").strip()
         model_id = (args.get("model") or "haiper-2.0").strip()
 
-        token = os.getenv("ZAI_API_KEY") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "zai_api_key", None)
+        cfg_def = getattr(getattr(self, "config", None), "defaults", None)
+        token = os.getenv("ZAI_API_KEY") or (cfg_def and getattr(cfg_def, "zai_api_key", None))
         if not token:
             return {"success": False, "error": "Не задан ZAI_API_KEY (нужен ключ для api.vsegpt.ru)"}
 

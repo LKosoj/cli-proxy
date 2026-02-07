@@ -29,7 +29,7 @@ def parse_dotenv(text: str) -> Dict[str, str]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
-            line = line[len("export ") :].lstrip()
+            line = line[len("export "):].lstrip()
         if "=" not in line:
             continue
         key, value = line.split("=", 1)
@@ -82,4 +82,3 @@ def load_dotenv_near(path: str, filename: str = ".env", override: bool = False) 
         return {}
     base_dir = os.path.dirname(os.path.abspath(path))
     return load_dotenv(os.path.join(base_dir, filename), override=override)
-

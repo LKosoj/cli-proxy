@@ -53,4 +53,3 @@ def test_run_agent_success_does_not_send_messages(tmp_path, monkeypatch):
         assert sent == []
 
     asyncio.run(_run())
-

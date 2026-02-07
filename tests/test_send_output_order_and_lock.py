@@ -62,6 +62,7 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
             return "<html>ok</html>"
 
         monkeypatch.setattr(bot_mod, "ansi_to_html", _ansi_to_html)
+
         def _make_html_file(html, prefix):
             p = tmp_path / "out.html"
             p.write_text(html, encoding="utf-8")
@@ -83,6 +84,7 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
         dest = {"kind": "telegram", "chat_id": 1}
         output = "x" * 5000
         # Let HTML generation proceed only after we've observed summary started.
+
         async def _release():
             await asyncio.wait_for(summary_started.wait(), timeout=1.0)
             allow_html.set()

@@ -13,7 +13,10 @@ class SendFileTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="send_file",
-            description="Send a file from your workspace to the chat. Use this to share files you created or found with the user. Max file size: 50MB.",
+            description=(
+                "Send a file from your workspace to the chat. Use this to share files you created or found "
+                "with the user. Max file size: 50MB."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -60,5 +63,8 @@ class SendFileTool(ToolPlugin):
             logging.exception(f"tool failed {str(e)}")
             msg = str(e)
             if "not enough rights" in msg or "CHAT_SEND_MEDIA_FORBIDDEN" in msg:
-                return {"success": False, "error": "Cannot send files in this group (no permissions). Try: read the file and paste contents, or tell user to DM for files."}
+                return {"success": False, "error": (
+                    "Cannot send files in this group (no permissions). "
+                    "Try: read the file and paste contents, or tell user to DM for files."
+                )}
             return {"success": False, "error": f"Failed to send file: {msg}"}

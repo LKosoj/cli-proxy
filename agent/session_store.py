@@ -91,4 +91,3 @@ def update_json_locked(
             return updated
         finally:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-

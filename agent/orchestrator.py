@@ -525,7 +525,8 @@ class OrchestratorRunner:
                     s.parallelizable = False
                     continue
                 instr = (s.instruction or "").lower()
-                risky = any(k in instr for k in ["write_file", "edit_file", "delete_file", "send_file", "git", "commit", "push", "merge", "rebase"])
+                risky_keys = ["write_file", "edit_file", "delete_file", "send_file", "git", "commit", "push", "merge", "rebase"]
+                risky = any(k in instr for k in risky_keys)
                 if risky and "read" not in reason.lower() and "только чтение" not in reason.lower():
                     s.parallelizable = False
 

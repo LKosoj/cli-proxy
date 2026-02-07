@@ -91,6 +91,7 @@ def compact_memory_by_priority(content: str, max_bytes: int, priority: List[str]
     if not entries:
         return ""
     priority_index = {tag.upper(): idx for idx, tag in enumerate(priority)}
+
     def _sort_key(entry: Dict[str, str]):
         return (priority_index.get(entry["tag"].upper(), 999), entry["ts"])
     entries_sorted = sorted(entries, key=_sort_key)

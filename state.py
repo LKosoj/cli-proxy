@@ -122,6 +122,7 @@ def save_state(path: str, data: Dict[str, SessionState]) -> None:
     raw["_sessions"] = sessions
     _save_raw(path, raw)
 
+
 def delete_state(path: str, tool: str, workdir: str) -> None:
     # Legacy helper: previously deleted the top-level "{tool}::{workdir}" entry.
     raw = _load_raw(path)
@@ -135,7 +136,9 @@ def make_key(tool: str, workdir: str) -> str:
     return f"{tool}::{workdir}"
 
 
-def update_state(path: str, tool: str, workdir: str, resume_token: Optional[str], summary: Optional[str], name: Optional[str] = None) -> None:
+def update_state(
+    path: str, tool: str, workdir: str, resume_token: Optional[str], summary: Optional[str], name: Optional[str] = None
+) -> None:
     # Legacy helper kept for backward compatibility. Prefer storing state per session in "_sessions"
     # via SessionManager._persist_sessions().
     data = load_state(path)

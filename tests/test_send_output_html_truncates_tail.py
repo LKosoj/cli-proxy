@@ -83,4 +83,3 @@ def test_send_output_html_truncates_tail(tmp_path, monkeypatch):
         assert seen["arg"] == tail
 
     asyncio.run(_run())
-

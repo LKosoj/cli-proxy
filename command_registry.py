@@ -14,7 +14,12 @@ def build_command_registry(bot_app) -> List[Dict[str, object]]:
         {"name": "metrics", "desc": "Метрики бота.", "handler": bot_app.cmd_metrics, "menu": False},
         {"name": "tools", "desc": "Показать доступные инструменты.", "handler": bot_app.cmd_tools, "menu": True},
         {"name": "toolhelp", "desc": "Показать /команды выбранного инструмента.", "handler": bot_app.cmd_toolhelp, "menu": True},
-        {"name": "newpath", "desc": "Задать путь для новой сессии после выбора инструмента.", "handler": bot_app.cmd_newpath, "menu": False},
+        {
+            "name": "newpath",
+            "desc": "Задать путь для новой сессии после выбора инструмента.",
+            "handler": bot_app.cmd_newpath,
+            "menu": False,
+        },
         {"name": "use", "desc": "Выбрать активную сессию (через меню).", "handler": bot_app.cmd_use, "menu": False},
         {"name": "close", "desc": "Закрыть сессию (через меню).", "handler": bot_app.cmd_close, "menu": False},
         {"name": "status", "desc": "Показать статус активной сессии.", "handler": bot_app.cmd_status, "menu": False},

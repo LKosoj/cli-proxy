@@ -57,4 +57,3 @@ def test_needs_resume_choice_logic() -> None:
     assert needs_resume_choice(plan, auto_resume=False, user_text="сделай это") is True
     assert needs_resume_choice(plan, auto_resume=True, user_text="сделай это") is False
     assert needs_resume_choice(plan, auto_resume=False, user_text="  ") is False
-

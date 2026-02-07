@@ -15,12 +15,19 @@ class ScheduleTaskTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="schedule_task",
-            description="Schedule a reminder or delayed command. Use for: 'remind me in 5 min', 'run this script in 1 hour'. Max delay: 24 hours. Max 5 tasks per user.",
+            description=(
+                "Schedule a reminder or delayed command. Use for: 'remind me in 5 min', 'run this script in 1 hour'. "
+                "Max delay: 24 hours. Max 5 tasks per user."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["add", "list", "cancel"], "description": "add = create new task, list = show user's tasks, cancel = cancel task by id"},
-                    "type": {"type": "string", "enum": ["message", "command"], "description": "message = send reminder text, command = execute shell command"},
+                    "action": {"type": "string", "enum": ["add", "list", "cancel"], "description": (
+                        "add = create new task, list = show user's tasks, cancel = cancel task by id"
+                    )},
+                    "type": {"type": "string", "enum": ["message", "command"], "description": (
+                        "message = send reminder text, command = execute shell command"
+                    )},
                     "content": {"type": "string", "description": "For message: the reminder text. For command: the shell command to run."},
                     "delay_minutes": {"type": "number", "description": "Delay in minutes before execution (1-1440, i.e. max 24h)"},
                     "task_id": {"type": "string", "description": "Task ID (for cancel action)"},
@@ -67,11 +74,13 @@ class ScheduleTaskTool(ToolPlugin):
                 elif ttype == "command" and bot and context:
                     result = await helpers.execute_shell_command(content, ctx["cwd"])
                     out = result.get("output") if result.get("success") else result.get("error")
-                    await bot._send_message(context, chat_id=chat_id, text=f"⏰ Запланированная команда:\n`{content}`\n\nРезультат:\n{(out or '')[:500]}")
+                    txt = f"⏰ Запланированная команда:\n`{content}`\n\nРезультат:\n{(out or '')[:500]}"
+                    await bot._send_message(context, chat_id=chat_id, text=txt)
 
             asyncio.create_task(_job())
             execute_time = time.strftime("%H:%M", time.localtime(execute_at))
-            return {"success": True, "output": f"✅ Запланировано на {execute_time} (через {delay} мин)\nID: {task_id}\nТип: {ttype}\nСодержимое: {content[:50]}"}
+            out_text = f"✅ Запланировано на {execute_time} (через {delay} мин)\nID: {task_id}\nТип: {ttype}\nСодержимое: {content[:50]}"
+            return {"success": True, "output": out_text}
         if action == "list":
             user_set = user_tasks.get(user_id, set())
             if not user_set:

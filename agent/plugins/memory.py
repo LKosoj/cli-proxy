@@ -45,11 +45,16 @@ class MemoryTool(DialogMixin, ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="memory",
-            description="Long-term memory. Use to save important info (project context, decisions, todos) or read previous notes. Memory persists across sessions.",
+            description=(
+                "Long-term memory. Use to save important info (project context, decisions, todos) or read previous notes. "
+                "Memory persists across sessions."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["read", "append", "clear"], "description": "read: get all memory, append: add new entry, clear: reset memory"},
+                    "action": {"type": "string", "enum": ["read", "append", "clear"], "description": (
+                        "read: get all memory, append: add new entry, clear: reset memory"
+                    )},
                     "content": {"type": "string", "description": "For append: text to add (will be timestamped automatically)"},
                 },
                 "required": ["action"],

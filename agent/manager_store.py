@@ -39,6 +39,7 @@ def _task_from_dict(d: Dict[str, Any]) -> DevTask:
         review_verdict=d.get("review_verdict"),
         review_comments=d.get("review_comments"),
         rejection_history=list(d.get("rejection_history") or []),
+        partial_work_note=d.get("partial_work_note"),
         started_at=d.get("started_at"),
         completed_at=d.get("completed_at"),
     )
@@ -133,4 +134,3 @@ def archive_plan(workdir: str, status: str) -> Optional[str]:
     except Exception as e:
         _log.exception("tool failed archive_plan: %s", e)
         return None
-

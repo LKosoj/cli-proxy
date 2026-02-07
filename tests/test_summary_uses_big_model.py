@@ -53,4 +53,3 @@ def test_summary_uses_openai_big_model(tmp_path, monkeypatch):
         assert seen["model"] == "big-model"
 
     asyncio.run(_run())
-

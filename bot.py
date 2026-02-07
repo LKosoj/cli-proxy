@@ -125,14 +125,14 @@ class BotApp:
         )
         self.mcp = MCPBridge(self.config, self)
         self._task_deadline_checker_task: Optional[asyncio.Task] = None
-        
+
         # Initialize modules
-        
+
         self.handlers = BotHandlers(self)
         self.callbacks = CallbackHandler(self)
         self.message_processor = MessageProcessor(self)
         self.session_management = SessionManagement(self)
-        
+
         # Store references to modules to allow patching in tests
         import utils
         import summary
@@ -432,7 +432,7 @@ class BotApp:
                 return message
             except (NetworkError, TimedOut):
                 if attempt == 4:
-                    print("Ошибка сети при отправке сообщения в Telegram.")
+                    logging.warning("Ошибка сети при отправке сообщения в Telegram.")
                     return
                 await asyncio.sleep(2 * (2 ** attempt))
 
@@ -473,7 +473,10 @@ class BotApp:
         except Exception:
             return False
 
-    async def _edit_message(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, text: str, *, md2: bool = True) -> bool:
+    async def _edit_message(
+        self, context: ContextTypes.DEFAULT_TYPE, chat_id: int,
+        message_id: int, text: str, *, md2: bool = True,
+    ) -> bool:
         try:
             if md2:
                 await context.bot.edit_message_text(
@@ -522,11 +525,12 @@ class BotApp:
             rows.append([InlineKeyboardButton(self._short_label(k), callback_data=f"state_pick:{i}")])
         nav = []
         if start > 0:
-            nav.append(InlineKeyboardButton("Назад", callback_data=f"state_page:{page-1}"))
+            nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"state_page:{page-1}"))
         if end < len(keys):
-            nav.append(InlineKeyboardButton("Далее", callback_data=f"state_page:{page+1}"))
+            nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"state_page:{page+1}"))
         if nav:
             rows.append(nav)
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
         return InlineKeyboardMarkup(rows)
 
     async def send_output(
@@ -540,7 +544,11 @@ class BotApp:
         header_override: Optional[str] = None,
         force_html: bool = False,
     ) -> None:
-        await self.session_management.send_output(session, dest, output, context, send_header=send_header, header_override=header_override, force_html=force_html)
+        await self.session_management.send_output(
+            session, dest, output, context,
+            send_header=send_header, header_override=header_override,
+            force_html=force_html,
+        )
 
     async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.session_management.run_prompt(session, prompt, dest, context)
@@ -755,17 +763,17 @@ class BotApp:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
-                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                        InlineKeyboardButton("⛔ Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("📥 В очередь", callback_data="queue_input"),
                     ],
-                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                    [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
                 ]
             )
-            await self._send_message(context, 
-                chat_id=chat_id,
-                text="Сессия занята. Что сделать с вашим вводом?",
-                reply_markup=keyboard,
-            )
+            await self._send_message(context,
+                                     chat_id=chat_id,
+                                     text="Сессия занята. Что сделать с вашим вводом?",
+                                     reply_markup=keyboard,
+                                     )
             return
         asyncio.create_task(self.run_prompt(session, text, dest, context))
 
@@ -785,10 +793,10 @@ class BotApp:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
-                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                        InlineKeyboardButton("⛔ Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("📥 В очередь", callback_data="queue_input"),
                     ],
-                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                    [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
                 ]
             )
             await self._send_message(
@@ -816,10 +824,10 @@ class BotApp:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
-                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                        InlineKeyboardButton("⛔ Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("📥 В очередь", callback_data="queue_input"),
                     ],
-                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                    [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
                 ]
             )
             await self._send_message(
@@ -896,10 +904,10 @@ class BotApp:
         await self._handle_user_input(session, payload, chat_id, context)
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self.callbacks.on_callback(update, context)
+        await self.callbacks.handle_callback(update, context)
+
     async def cmd_tools(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_tools(update, context)
-        
 
     async def cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_new(update, context)
@@ -1048,6 +1056,7 @@ class BotApp:
     async def _send_toolhelp_content(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, content: str) -> None:
         await self.handlers._send_toolhelp_content(chat_id, context, content)
 
+
 def build_app(config: AppConfig) -> Application:
     app = Application.builder().token(config.telegram.token).build()
     bot_app = BotApp(config)
@@ -1066,9 +1075,9 @@ def build_app(config: AppConfig) -> Application:
         err = context.error
         msg = str(err)
         if "ConnectError" in msg or "NetworkError" in msg or "TimedOut" in msg:
-            print("Сеть недоступна или Telegram API не резолвится. Проверьте интернет/DNS/доступ к api.telegram.org.")
+            logging.warning("Ошибка сети при отправке сообщения в Telegram.")
             return
-        print(f"Ошибка бота: {err}")
+        logging.exception("Ошибка бота: %s", err)
 
     core_registry = build_command_registry(bot_app)
     core_command_names = {e["name"] for e in core_registry}
@@ -1159,6 +1168,7 @@ def build_app(config: AppConfig) -> Application:
 
         class _AgentEnabledFilter(filters.MessageFilter):
             """Only match when the active session has agent_enabled=True."""
+
             def filter(self, message) -> bool:
                 session = bot_app.manager.active()
                 return bool(session and getattr(session, "agent_enabled", False))

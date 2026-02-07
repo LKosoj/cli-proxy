@@ -47,8 +47,9 @@ class AutoTTSTool(ToolPlugin):
         fmt = (args.get("response_format") or "mp3").strip()
         instructions = (args.get("instructions") or "").strip() or None
 
-        api_key = os.getenv("OPENAI_API_KEY") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_api_key", None)
-        base_url = os.getenv("OPENAI_BASE_URL") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_base_url", None)
+        cfg_def = getattr(getattr(self, "config", None), "defaults", None)
+        api_key = os.getenv("OPENAI_API_KEY") or (cfg_def and getattr(cfg_def, "openai_api_key", None))
+        base_url = os.getenv("OPENAI_BASE_URL") or (cfg_def and getattr(cfg_def, "openai_base_url", None))
         if not api_key:
             return {"success": False, "error": "Не задан OPENAI_API_KEY"}
 

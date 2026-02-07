@@ -326,7 +326,7 @@ class RemindersTool(DialogMixin, ToolPlugin):
                 if not t:
                     continue
                 left_min = int(max(0, (t["execute_at"] - time.time()) / 60))
-                lines.append(f"• {rid}: через {left_min} мин ({t.get('when','')}) - {t.get('content','')[:40]}")
+                lines.append(f"• {rid}: через {left_min} мин ({t.get('when', '')}) - {t.get('content', '')[:40]}")
             return {"success": True, "output": "Активные напоминания:\n" + "\n".join(lines)}
 
         if action == "delete":

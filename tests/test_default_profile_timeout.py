@@ -10,4 +10,3 @@ def test_default_profile_timeout_is_240s():
     reg = ToolRegistry(cfg)
     profile = build_default_profile(cfg, reg)
     assert profile.timeout_ms == 240_000
-

@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import httpx
 import requests
 
 from utils import strip_ansi
@@ -27,6 +28,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 BLOCKED_PATTERNS_PATH = os.path.join(REPO_ROOT, "approvals", "blocked-patterns.json")
 
 # ==== Approvals ====
+
 
 @dataclass
 class PendingCommand:
@@ -200,12 +202,18 @@ async def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
             return {
                 "success": False,
                 "error": f"Exit {completed.returncode}: (no output) command={command!r} cwd={cwd!r}",
-                "meta": {"returncode": completed.returncode, "cwd": cwd, "command": command, "stdout_len": len(stdout), "stderr_len": len(stderr)},
+                "meta": {
+                    "returncode": completed.returncode, "cwd": cwd, "command": command,
+                    "stdout_len": len(stdout), "stderr_len": len(stderr),
+                },
             }
         return {
             "success": False,
             "error": f"Exit {completed.returncode}: {trimmed}",
-            "meta": {"returncode": completed.returncode, "cwd": cwd, "command": command, "stdout_len": len(stdout), "stderr_len": len(stderr)},
+            "meta": {
+                "returncode": completed.returncode, "cwd": cwd, "command": command,
+                "stdout_len": len(stdout), "stderr_len": len(stderr),
+            },
         }
     except subprocess.TimeoutExpired:
         return {"success": False, "error": f"⏱️ Tool run_command timed out after {int(TOOL_TIMEOUT_MS/1000)}s"}
@@ -351,7 +359,11 @@ async def search_web_impl(query: str, config: Any) -> Dict[str, Any]:
                         raise RuntimeError(f"Proxy error: {r.status_code}")
                     results = (r.json() or {}).get("search_result", [])
                 elif name == "tavily":
-                    r = requests.post("https://api.tavily.com/search", json={"api_key": tavily_key, "query": query, "max_results": 5}, timeout=timeout_sec)
+                    r = requests.post(
+                        "https://api.tavily.com/search",
+                        json={"api_key": tavily_key, "query": query, "max_results": 5},
+                        timeout=timeout_sec,
+                    )
                     if not r.ok:
                         raise RuntimeError(f"Tavily error: {r.status_code}")
                     results = (r.json() or {}).get("results", [])
@@ -406,6 +418,44 @@ async def search_web_impl(query: str, config: Any) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _extract_html_title(html_content: str) -> str:
+    """Извлекает заголовок из HTML-страницы."""
+    try:
+        from bs4 import BeautifulSoup as _BS
+        soup = _BS(html_content, "html.parser")
+        title_tag = soup.find("title")
+        if title_tag and title_tag.string:
+            return title_tag.string.strip()
+        og_title = soup.find("meta", property="og:title")
+        if og_title and og_title.get("content"):
+            return og_title.get("content").strip()
+        h1_tag = soup.find("h1")
+        if h1_tag:
+            return h1_tag.get_text().strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _clean_html_with_bs4(html_content: str) -> str:
+    """Очищает HTML через BeautifulSoup и возвращает текст."""
+    try:
+        from bs4 import BeautifulSoup as _BS
+        soup = _BS(html_content, "html.parser")
+        for el in soup(["script", "style", "iframe", "noscript", "nav",
+                        "footer", "header", "aside", "form", "button"]):
+            el.decompose()
+        for el in soup(["br", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+                        "ul", "ol", "li", "div", "table", "tr", "td", "th"]):
+            el.append("\n")
+        text = soup.get_text(separator="\n", strip=True)
+        # убираем лишние пустые строки
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
     if not url:
         return {"success": False, "error": "URL required"}
@@ -420,12 +470,94 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
     for p in blocked:
         if p.search(url):
             return {"success": False, "error": "🚫 BLOCKED: Cannot access metadata endpoints"}
+
+    timeout_sec = int(WEB_FETCH_TIMEOUT_MS / 1000)
+
+    # ── Stage 1: прямой запрос через httpx (без API-ключей) ──────────
+    direct_error: Optional[str] = None
+    try:
+        enhanced_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                      "image/webp,*/*;q=0.8",
+            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=enhanced_headers, timeout=timeout_sec)
+            response.raise_for_status()
+
+            content_type = response.headers.get("Content-Type", "").lower()
+
+            # --- PDF ---
+            if url.lower().endswith(".pdf") or "application/pdf" in content_type:
+                try:
+                    from io import BytesIO
+                    from pdfminer.high_level import extract_text  # type: ignore
+                    pdf_text = extract_text(BytesIO(response.content))
+                    if pdf_text and pdf_text.strip():
+                        title = url.split("/")[-1] or "PDF"
+                        output = f"# {title}\n\n{pdf_text.strip()}"
+                        return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page direct+pdf")}
+                except ImportError:
+                    logging.warning("pdfminer not installed, skipping PDF extraction")
+                except Exception as e:
+                    logging.warning(f"PDF extraction failed for {url}: {e}")
+
+            html_text = response.text
+            if not html_text or not html_text.strip():
+                raise RuntimeError("Empty response body")
+
+            title = _extract_html_title(html_text)
+
+            # --- trafilatura (основной метод) ---
+            try:
+                import trafilatura  # type: ignore
+                extracted = trafilatura.extract(
+                    html_text,
+                    include_formatting=True,
+                    include_links=True,
+                    include_tables=True,
+                    include_images=True,
+                    include_comments=False,
+                    output_format="markdown",
+                )
+                if extracted and extracted.strip():
+                    output = f"# {title}\n\n{extracted.strip()}" if title else extracted.strip()
+                    logging.info(f"fetch_page OK via direct+trafilatura: {url}")
+                    return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page direct+trafilatura")}
+            except ImportError:
+                pass
+            except Exception as e:
+                logging.warning(f"trafilatura extraction failed for {url}: {e}")
+
+            # --- BeautifulSoup fallback ---
+            bs_text = _clean_html_with_bs4(html_text)
+            if bs_text and bs_text.strip():
+                output = f"# {title}\n\n{bs_text.strip()}" if title else bs_text.strip()
+                logging.info(f"fetch_page OK via direct+bs4: {url}")
+                return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page direct+bs4")}
+
+            # --- raw HTML как последний вариант прямого запроса ---
+            logging.info(f"fetch_page OK via direct (raw html): {url}")
+            return {"success": True, "output": _trim_fetch_output(html_text[:20000], reason="fetch_page direct")}
+
+    except Exception as e:
+        direct_error = str(e)
+        logging.warning(f"Direct fetch failed for {url}: {e}")
+
+    # ── Stage 2: API-провайдеры (fallback) ───────────────────────────
     proxy_url = os.getenv("PROXY_URL")
     zai_key = os.getenv("ZAI_API_KEY") or (config.defaults.zai_api_key if config else None)
     tavily_key = os.getenv("TAVILY_API_KEY") or (config.defaults.tavily_api_key if config else None)
     jina_key = os.getenv("JINA_API_KEY") or (config.defaults.jina_api_key if config else None)
-    timeout_sec = int(WEB_FETCH_TIMEOUT_MS / 1000)
-    # The agent LLM will see tool outputs in the *next* turn. Keep fetch results bounded.
+
     try:
         providers: List[tuple[str, Any]] = []
         if proxy_url:
@@ -437,9 +569,9 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
         if zai_key:
             providers.append(("zai", "zai"))
         if not providers:
-            return {"success": False, "error": "No search API configured (PROXY_URL or TAVILY_API_KEY or JINA_API_KEY or ZAI_API_KEY)"}
+            return {"success": False, "error": direct_error or "Direct fetch failed and no API providers configured"}
 
-        last_error: Optional[str] = None
+        last_error: Optional[str] = direct_error
         for name, _ in providers:
             try:
                 if name == "proxy":
@@ -514,43 +646,19 @@ async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
                     output += content
                     return {"success": True, "output": _trim_fetch_output(output, reason="fetch_page zai")}
             except Exception as e:
-                # Ожидаемые нефатальные ошибки (провайдер вернул пусто, 4xx/5xx и т.п.)
-                # не должны заспамливать ERROR-трейсами в логе.
                 msg = str(e)
                 if isinstance(e, RuntimeError) and msg == "No content returned":
                     logging.warning("tool failed %s", msg)
-                elif isinstance(e, RuntimeError) and (msg.startswith("Tavily") or msg.startswith("Proxy") or msg.startswith("Jina") or msg.startswith("Z.AI")):
+                elif isinstance(e, RuntimeError) and any(
+                    msg.startswith(p) for p in ("Tavily", "Proxy", "Jina", "Z.AI")
+                ):
                     logging.warning("tool failed %s", msg)
                 else:
                     logging.exception(f"tool failed {msg}")
-                last_error = str(e)
+                last_error = msg
                 continue
 
-        # Last resort: direct fetch + extraction (no extra config required).
-        try:
-            r = requests.get(url, timeout=timeout_sec, headers={"User-Agent": "cli-proxy/1.0"})
-            if not r.ok:
-                raise RuntimeError(f"Direct fetch error: {r.status_code}")
-            html_text = r.text or ""
-            if not html_text.strip():
-                raise RuntimeError("No content returned")
-            try:
-                import trafilatura  # type: ignore
-            except Exception:
-                trafilatura = None
-            extracted = None
-            if trafilatura:
-                try:
-                    extracted = trafilatura.extract(html_text, include_comments=False, include_tables=True)
-                except Exception:
-                    extracted = None
-            # Fallback: return raw HTML (trimmed) if extractor fails.
-            if extracted and extracted.strip():
-                return {"success": True, "output": _trim_fetch_output(extracted.strip(), reason="fetch_page direct+trafilatura")}
-            return {"success": True, "output": _trim_fetch_output(html_text[:20000], reason="fetch_page direct")}
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
-            return {"success": False, "error": last_error or str(e) or "Fetch failed"}
+        return {"success": False, "error": last_error or "All fetch methods failed"}
     except Exception as e:
         logging.exception(f"tool failed {str(e)}")
         return {"success": False, "error": str(e)}

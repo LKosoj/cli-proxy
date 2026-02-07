@@ -370,9 +370,10 @@ class TextDocumentQATool(DialogMixin, ToolPlugin):
             except Exception as e:
                 return {"success": False, "error": f"Не удалось прочитать документ: {e}"}
 
-            api_key = os.getenv("OPENAI_API_KEY") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_api_key", None)
-            base_url = os.getenv("OPENAI_BASE_URL") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_base_url", None)
-            model = os.getenv("OPENAI_MODEL") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_model", None) or "gpt-4o-mini"
+            cfg_def = getattr(getattr(self, "config", None), "defaults", None)
+            api_key = os.getenv("OPENAI_API_KEY") or (cfg_def and getattr(cfg_def, "openai_api_key", None))
+            base_url = os.getenv("OPENAI_BASE_URL") or (cfg_def and getattr(cfg_def, "openai_base_url", None))
+            model = os.getenv("OPENAI_MODEL") or (cfg_def and getattr(cfg_def, "openai_model", None)) or "gpt-4o-mini"
             if not api_key:
                 return {"success": False, "error": "Не задан OPENAI_API_KEY"}
 

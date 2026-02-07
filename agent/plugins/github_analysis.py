@@ -44,7 +44,8 @@ class GitHubAnalysisTool(ToolPlugin):
         if not owner or not repo:
             return {"success": False, "error": "owner и repo обязательны"}
 
-        token = os.getenv("GITHUB_TOKEN") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "github_token", None)
+        cfg_def = getattr(getattr(self, "config", None), "defaults", None)
+        token = os.getenv("GITHUB_TOKEN") or (cfg_def and getattr(cfg_def, "github_token", None))
         try:
             out = await asyncio.to_thread(self._fetch_sync, owner, repo, path, max_files, token)
         except Exception as e:

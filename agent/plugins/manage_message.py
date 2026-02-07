@@ -11,11 +11,16 @@ class ManageMessageTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="manage_message",
-            description="Delete or edit your own recent messages. Use to fix typos, remove spam, or clean up. Can only manage YOUR OWN messages from this conversation.",
+            description=(
+                "Delete or edit your own recent messages. Use to fix typos, remove spam, or clean up. "
+                "Can only manage YOUR OWN messages from this conversation."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["delete_last", "delete_by_index", "edit_last"], "description": "Action: delete_last (delete your last message), delete_by_index (delete by index, 0=oldest), edit_last (edit your last message)"},
+                    "action": {"type": "string", "enum": ["delete_last", "delete_by_index", "edit_last"], "description": (
+                        "Action: delete_last, delete_by_index (0=oldest), edit_last"
+                    )},
                     "index": {"type": "number", "description": "For delete_by_index: which message to delete (0=oldest recent, -1=newest)"},
                     "new_text": {"type": "string", "description": "For edit_last: the new text for the message"},
                 },

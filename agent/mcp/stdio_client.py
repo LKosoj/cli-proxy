@@ -174,4 +174,3 @@ class StdioMCPClient:
                 else:
                     result = msg.get("result")
                     fut.set_result(result if isinstance(result, dict) else {})
-

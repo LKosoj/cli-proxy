@@ -18,6 +18,7 @@ from session import Session
 from command_registry import build_command_registry
 from state import get_state
 from utils import (
+    format_session_label,
     is_within_root,
 )
 
@@ -34,10 +35,10 @@ class BotHandlers:
     """
     Class containing command handlers for the Telegram bot.
     """
-    
+
     def __init__(self, bot_app):
         self.bot_app = bot_app
-    
+
     def _preset_commands(self) -> Dict[str, str]:
         if self.bot_app.config.presets:
             return {p.name: p.prompt for p in self.bot_app.config.presets}
@@ -100,17 +101,17 @@ class BotHandlers:
                     ),
                 )
                 return
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton(t, callback_data=f"new_tool:{t}")]
-                    for t in tools
-                ]
-            )
+            rows = [
+                [InlineKeyboardButton(t, callback_data=f"new_tool:{t}")]
+                for t in tools
+            ]
+            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+            keyboard = InlineKeyboardMarkup(rows)
             await self.bot_app._send_message(context,
-                chat_id=chat_id,
-                text="Выберите инструмент для новой сессии:",
-                reply_markup=keyboard,
-            )
+                                             chat_id=chat_id,
+                                             text="Выберите инструмент для новой сессии:",
+                                             reply_markup=keyboard,
+                                             )
             return
         tool, path = args[0], " ".join(args[1:])
         if tool not in self.bot_app.config.tools:
@@ -179,26 +180,21 @@ class BotHandlers:
                 await self.bot_app._send_message(context, chat_id=chat_id, text="Сессий нет.")
                 return
             self.bot_app.use_menu[chat_id] = items
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            f"{sid}: {(self.bot_app.manager.get(sid).name or (self.bot_app.manager.get(sid).tool.name + ' @ ' + self.bot_app.manager.get(sid).workdir))}",
-                            callback_data=f"use_pick:{i}",
-                        )
-                    ]
-                    for i, sid in enumerate(items)
-                ]
-            )
+            rows = []
+            for i, sid in enumerate(items):
+                m = self.bot_app.manager.get(sid)
+                label = f"{sid}: {(m.name or (m.tool.name + ' @ ' + m.workdir))}"
+                rows.append([InlineKeyboardButton(label, callback_data=f"use_pick:{i}")])
+            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+            keyboard = InlineKeyboardMarkup(rows)
             await self.bot_app._send_message(context,
-                chat_id=chat_id, text="Выберите сессию:", reply_markup=keyboard
-            )
+                                             chat_id=chat_id, text="Выберите сессию:", reply_markup=keyboard
+                                             )
             return
         ok = self.bot_app.manager.set_active(context.args[0])
         if ok:
             s = self.bot_app.manager.get(context.args[0])
-            label = s.name or f"{s.tool.name} @ {s.workdir}"
-            await self.bot_app._send_message(context, chat_id=chat_id, text=f"Активная сессия: {s.id} | {label}")
+            await self.bot_app._send_message(context, chat_id=chat_id, text=format_session_label(s))
         else:
             await self.bot_app._send_message(context, chat_id=chat_id, text="Сессия не найдена.")
 
@@ -212,15 +208,15 @@ class BotHandlers:
                 await self.bot_app._send_message(context, chat_id=chat_id, text="Сессий нет.")
                 return
             self.bot_app.close_menu[chat_id] = items
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton(sid, callback_data=f"close_pick:{i}")]
-                    for i, sid in enumerate(items)
-                ]
-            )
+            rows = [
+                [InlineKeyboardButton(sid, callback_data=f"close_pick:{i}")]
+                for i, sid in enumerate(items)
+            ]
+            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+            keyboard = InlineKeyboardMarkup(rows)
             await self.bot_app._send_message(context,
-                chat_id=chat_id, text="Выберите сессию для закрытия:", reply_markup=keyboard
-            )
+                                             chat_id=chat_id, text="Выберите сессию для закрытия:", reply_markup=keyboard
+                                             )
             return
         self.bot_app._interrupt_before_close(context.args[0], chat_id, context)
         ok = self.bot_app.manager.close(context.args[0])
@@ -250,17 +246,15 @@ class BotHandlers:
         agent_txt = "включен" if getattr(s, "agent_enabled", False) else "выключен"
         manager_txt = "включен" if getattr(s, "manager_enabled", False) else "выключен"
         project_root = getattr(s, "project_root", None)
-        project_txt = project_root if project_root else "не подключен"
-        await self.bot_app._send_message(context,
-            chat_id=chat_id,
-            text=(
-                f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}\\n"
-                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt} | Manager: {manager_txt}\\n"
-                f"Проект: {project_txt}\\n"
-                f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}\\n"
-                f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}"
-            ),
-        )
+        lines = [
+            f"Активная сессия: {s.id} ({s.name or s.tool.name}) @ {s.workdir}",
+            f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt} | Manager: {manager_txt}",
+        ]
+        if project_root:
+            lines.append(f"Проект: {project_root}")
+        lines.append(f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {s.tick_seen}")
+        lines.append(f"Очередь: {len(s.queue)} | Resume: {'есть' if s.resume_token else 'нет'}")
+        await self.bot_app._send_message(context, chat_id=chat_id, text="\\n".join(lines))
 
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -274,23 +268,23 @@ class BotHandlers:
         project_root = getattr(s, "project_root", None)
         project_line = f"Проект: {project_root}" if project_root else "Проект: не подключен"
         if enabled:
-            rows = [[InlineKeyboardButton("Выключить агента", callback_data="agent_set:off")]]
+            rows = [[InlineKeyboardButton("🔴 Выключить агента", callback_data="agent_set:off")]]
             if project_root:
-                rows.append([InlineKeyboardButton("Сменить проект", callback_data="agent_project_change")])
-                rows.append([InlineKeyboardButton("Отключить проект", callback_data="agent_project_disconnect")])
+                rows.append([InlineKeyboardButton("📂 Сменить проект", callback_data="agent_project_change")])
+                rows.append([InlineKeyboardButton("🔌 Отключить проект", callback_data="agent_project_disconnect")])
             else:
-                rows.append([InlineKeyboardButton("Подключить проект", callback_data="agent_project_connect")])
-            rows.append([InlineKeyboardButton("Плагины", callback_data="agent_plugin_commands")])
-            rows.append([InlineKeyboardButton("Очистить песочницу (кроме служебных)", callback_data="agent_clean_all")])
-            rows.append([InlineKeyboardButton("Очистить текущую сессию (кроме служебных)", callback_data="agent_clean_session")])
-            rows.append([InlineKeyboardButton("Отмена", callback_data="agent_cancel")])
+                rows.append([InlineKeyboardButton("📂 Подключить проект", callback_data="agent_project_connect")])
+            rows.append([InlineKeyboardButton("🧩 Плагины", callback_data="agent_plugin_commands")])
+            rows.append([InlineKeyboardButton("🧹 Очистить песочницу", callback_data="agent_clean_all")])
+            rows.append([InlineKeyboardButton("🧹 Очистить сессию", callback_data="agent_clean_session")])
+            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
             keyboard = InlineKeyboardMarkup(rows)
             text = f"Агент сейчас включен.\n{project_line}\nВыберите действие:"
         else:
             keyboard = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("Включить агента", callback_data="agent_set:on")],
-                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                    [InlineKeyboardButton("🟢 Включить агента", callback_data="agent_set:on")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
                 ]
             )
             text = f"Агент сейчас выключен.\n{project_line}\nВключить?"
@@ -308,19 +302,19 @@ class BotHandlers:
         if enabled:
             keyboard = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("Выключить менеджера", callback_data="manager_set:off")],
-                    [InlineKeyboardButton("Статус плана", callback_data="manager_status")],
-                    [InlineKeyboardButton("Приостановить", callback_data="manager_pause")],
-                    [InlineKeyboardButton("Сбросить план", callback_data="manager_reset")],
-                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                    [InlineKeyboardButton("🔴 Выключить менеджера", callback_data="manager_set:off")],
+                    [InlineKeyboardButton("📋 Статус плана", callback_data="manager_status")],
+                    [InlineKeyboardButton("⏸ Приостановить", callback_data="manager_pause")],
+                    [InlineKeyboardButton("🗑 Сбросить план", callback_data="manager_reset")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
                 ]
             )
             text = "🏗 Менеджер проекта\n\nРежим: включен\n\nВыберите действие:"
         else:
             keyboard = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("Включить менеджера", callback_data="manager_set:on")],
-                    [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                    [InlineKeyboardButton("🟢 Включить менеджера", callback_data="manager_set:on")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
                 ]
             )
             text = "🏗 Менеджер проекта\n\nРежим: выключен\n\nВключить?"
@@ -490,7 +484,10 @@ class BotHandlers:
                 workdir = " ".join(context.args[1:])
                 st = get_state(self.bot_app.config.defaults.state_path, tool, workdir)
             if not st:
-                await self.bot_app._send_message(context, chat_id=chat_id, text="Состояние не найдено (используйте /state <session_id> или /state <tool> <workdir>)")
+                await self.bot_app._send_message(
+                    context, chat_id=chat_id,
+                    text="Состояние не найдено (используйте /state <session_id> или /state <tool> <workdir>)",
+                )
                 return
             text = (
                 f"Session: {st.session_id or 'нет'}\\n"
@@ -522,10 +519,10 @@ class BotHandlers:
         self.bot_app.state_menu_page[chat_id] = 0
         keyboard = self.bot_app._build_state_keyboard(chat_id)
         await self.bot_app._send_message(context,
-            chat_id=chat_id,
-            text="Выберите запись состояния:",
-            reply_markup=keyboard,
-        )
+                                         chat_id=chat_id,
+                                         text="Выберите запись состояния:",
+                                         reply_markup=keyboard,
+                                         )
 
     async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -567,18 +564,21 @@ class BotHandlers:
             )
             return
         self.bot_app.toolhelp_menu[chat_id] = tools
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton(t, callback_data=f"toolhelp_pick:{t}")]
-                for t in tools
-            ]
-        )
+        rows = [
+            [InlineKeyboardButton(t, callback_data=f"toolhelp_pick:{t}")]
+            for t in tools
+        ]
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+        keyboard = InlineKeyboardMarkup(rows)
         await self.bot_app._send_message(
             context,
             chat_id=chat_id,
             text="Выберите инструмент для просмотра /команд:",
             reply_markup=keyboard,
         )
+
+    async def _send_toolhelp_content(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, content: str) -> None:
+        await self.bot_app._send_message(context, chat_id=chat_id, text=content)
 
     async def cmd_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -660,7 +660,7 @@ class BotHandlers:
             rows.append(nav_row)
         if os.path.abspath(base) != os.path.abspath(session.workdir):
             rows.append([InlineKeyboardButton("🗑 Удалить эту папку", callback_data="file_del_current")])
-        rows.append([InlineKeyboardButton("Отмена", callback_data="file_nav:cancel")])
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="file_nav:cancel")])
         text = f"Каталог: {base}\nСтраница {page + 1}/{total_pages}"
         keyboard = InlineKeyboardMarkup(rows)
         if edit_message:
@@ -675,7 +675,7 @@ class BotHandlers:
         presets = self._preset_commands()
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton(k, callback_data=f"preset_run:{k}")] for k in presets.keys()]
-            + [[InlineKeyboardButton("Отмена", callback_data="preset_run:cancel")]]
+            + [[InlineKeyboardButton("❌ Отмена", callback_data="preset_run:cancel")]]
         )
         await self.bot_app._send_message(context, chat_id=chat_id, text="Выберите шаблон:", reply_markup=keyboard)
 

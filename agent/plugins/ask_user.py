@@ -13,12 +13,17 @@ class AskUserTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="ask_user",
-            description="Ask user a question with button options. Use when you need confirmation or choice from user. Returns the selected option.",
+            description=(
+                "Ask user a question with button options. Use when you need confirmation or choice from user. "
+                "Returns the selected option."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
                     "question": {"type": "string", "description": "The question to ask the user"},
-                    "options": {"type": "array", "items": {"type": "string"}, "description": "Button options for user to choose from (2-4 options)"},
+                    "options": {"type": "array", "items": {"type": "string"}, "description": (
+                        "Button options for user to choose from (2-4 options)"
+                    )},
                 },
                 "required": ["question", "options"],
             },

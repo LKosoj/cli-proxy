@@ -37,7 +37,7 @@ class SessionManagement:
     """
     Class containing session management functionality for the Telegram bot.
     """
-    
+
     def __init__(self, bot_app):
         self.bot_app = bot_app
         # HTML rendering of large ANSI logs is CPU-heavy and often pure-Python.
@@ -383,7 +383,7 @@ class SessionManagement:
                             [
                                 InlineKeyboardButton("🆕 Начать новый план", callback_data="manager_resume:new"),
                             ],
-                            [InlineKeyboardButton("Отмена", callback_data="agent_cancel")],
+                            [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
                         ]
                     )
                     await self.bot_app._send_message(
@@ -504,12 +504,13 @@ class SessionManagement:
                     keyboard = InlineKeyboardMarkup(
                         [
                             [
-                                InlineKeyboardButton("Восстановить", callback_data="restore_yes"),
-                                InlineKeyboardButton("Нет", callback_data="restore_no"),
+                                InlineKeyboardButton("✅ Восстановить", callback_data="restore_yes"),
+                                InlineKeyboardButton("❌ Нет", callback_data="restore_no"),
                             ]
                         ]
                     )
-                    await self.bot_app._send_message(context,
+                    await self.bot_app._send_message(
+                        context,
                         chat_id=chat_id,
                         text=(
                             f"Найдена активная сессия: {active.tool} @ {active.workdir}. "
@@ -519,9 +520,9 @@ class SessionManagement:
                     )
                     return None
             await self.bot_app._send_message(context,
-                chat_id=chat_id,
-                text="Нет активной сессии. Используйте /tools и /new <tool> <path>.",
-            )
+                                             chat_id=chat_id,
+                                             text="Нет активной сессии. Используйте /tools и /new <tool> <path>.",
+                                             )
             return None
         return session
 

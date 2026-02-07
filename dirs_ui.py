@@ -60,15 +60,16 @@ def build_dirs_keyboard(
     nav = []
     parent = os.path.dirname(base.rstrip(os.sep))
     if parent and parent != base:
-        nav.append(InlineKeyboardButton("Вверх", callback_data="dir_up"))
+        nav.append(InlineKeyboardButton("⬆️ Вверх", callback_data="dir_up"))
     if start > 0:
-        nav.append(InlineKeyboardButton("Назад", callback_data=f"dir_page:{page-1}"))
+        nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"dir_page:{page-1}"))
     if end < len(items):
-        nav.append(InlineKeyboardButton("Далее", callback_data=f"dir_page:{page+1}"))
+        nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"dir_page:{page+1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton("Использовать этот каталог", callback_data="dir_use_current")])
-    rows.append([InlineKeyboardButton("Создать каталог", callback_data="dir_create")])
-    rows.append([InlineKeyboardButton("git clone", callback_data="dir_git_clone")])
-    rows.append([InlineKeyboardButton("Ввести путь", callback_data="dir_enter")])
+    rows.append([InlineKeyboardButton("✅ Использовать этот каталог", callback_data="dir_use_current")])
+    rows.append([InlineKeyboardButton("📁 Создать каталог", callback_data="dir_create")])
+    rows.append([InlineKeyboardButton("📦 git clone", callback_data="dir_git_clone")])
+    rows.append([InlineKeyboardButton("✏️ Ввести путь", callback_data="dir_enter")])
+    rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
     return InlineKeyboardMarkup(rows)

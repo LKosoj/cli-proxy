@@ -42,4 +42,3 @@ def test_manager_store_roundtrip(tmp_path):
     # delete is idempotent
     delete_plan(wd)
     delete_plan(wd)
-

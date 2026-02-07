@@ -15,6 +15,7 @@ from dirs_ui import build_dirs_keyboard, prepare_dirs
 from state import load_active_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import (
+    format_session_label,
     is_within_root,
 )
 from agent import execute_shell_command, pop_pending_command
@@ -25,9 +26,19 @@ class CallbackHandler:
     """
     Class containing callback handling functionality for the Telegram bot.
     """
-    
+
     def __init__(self, bot_app):
         self.bot_app = bot_app
+
+    async def _edit_msg(self, context, query, text):
+        """Shortcut: edit the callback query message with given text."""
+        if query.message:
+            await self.bot_app._edit_message(
+                context,
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id,
+                text=text,
+            )
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -143,51 +154,48 @@ class CallbackHandler:
                     if task and not task.done():
                         task.cancel()
                 status = "включен" if session.manager_enabled else "выключен"
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text=f"Менеджер {status}.")
+                await self._edit_msg(context, query, f"Менеджер {status}.")
                 return
             if query.data == "manager_resume:continue":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
                 pending = self.bot_app.manager_resume_pending.pop(session.id, None)
                 if not pending:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Выбор устарел.")
+                    await self._edit_msg(context, query, "Выбор устарел.")
                     return
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Продолжаю текущий план...")
-                self.bot_app._start_manager_task(session, MANAGER_CONTINUE_TOKEN, pending.get("dest") or {"kind": "telegram"}, context)
+                await self._edit_msg(context, query, "Продолжаю текущий план...")
+                self.bot_app._start_manager_task(
+                    session, MANAGER_CONTINUE_TOKEN,
+                    pending.get("dest") or {"kind": "telegram"}, context,
+                )
                 return
             if query.data == "manager_resume:new":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
                 pending = self.bot_app.manager_resume_pending.pop(session.id, None)
                 if not pending:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Выбор устарел.")
+                    await self._edit_msg(context, query, "Выбор устарел.")
                     return
                 try:
                     self.bot_app.manager_orchestrator.reset(session)
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Начинаю новый план...")
-                self.bot_app._start_manager_task(session, str(pending.get("prompt") or ""), pending.get("dest") or {"kind": "telegram"}, context)
+                await self._edit_msg(context, query, "Начинаю новый план...")
+                self.bot_app._start_manager_task(
+                    session, str(pending.get("prompt") or ""),
+                    pending.get("dest") or {"kind": "telegram"}, context,
+                )
                 return
             if query.data == "manager_failed:retry":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="🔄 Повторяю выполнение плана...")
+                await self._edit_msg(context, query, "🔄 Повторяю выполнение плана...")
                 from agent.manager import MANAGER_CONTINUE_TOKEN
                 dest = {"kind": "telegram", "chat_id": query.message.chat_id if query.message else chat_id}
                 self.bot_app._start_manager_task(session, MANAGER_CONTINUE_TOKEN, dest, context)
@@ -195,45 +203,38 @@ class CallbackHandler:
             if query.data == "manager_failed:archive":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
                 from agent.manager_store import archive_plan
                 archive_plan(session.workdir, "failed")
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="📦 План перенесён в архив.")
+                await self._edit_msg(context, query, "📦 План перенесён в архив.")
                 return
             if query.data == "manager_pause":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
                 try:
                     self.bot_app.manager_orchestrator.pause(session)
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="План приостановлен.")
+                await self._edit_msg(context, query, "План приостановлен.")
                 return
             if query.data == "manager_reset":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
                 try:
                     self.bot_app.manager_orchestrator.reset(session)
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="План сброшен.")
+                await self._edit_msg(context, query, "План сброшен.")
                 return
             if query.data == "manager_status":
                 session = self.bot_app.manager.active()
                 if not session:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="Активной сессии нет.")
+                    await self._edit_msg(context, query, "Активной сессии нет.")
                     return
                 try:
                     from agent.manager_store import load_plan
@@ -242,12 +243,10 @@ class CallbackHandler:
                 except Exception:
                     plan = None
                 if not plan:
-                    if query.message:
-                        await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text="План не найден.")
+                    await self._edit_msg(context, query, "План не найден.")
                     return
                 text = format_manager_status(plan)
-                if query.message:
-                    await self.bot_app._edit_message(context, chat_id=query.message.chat_id, message_id=query.message.message_id, text=text)
+                await self._edit_msg(context, query, text)
                 return
             if query.data in ("agent_project_connect", "agent_project_change"):
                 session = self.bot_app.manager.active()
@@ -314,7 +313,7 @@ class CallbackHandler:
                         [InlineKeyboardButton(entry["label"], callback_data=f"agent_plugin:{entry['plugin_id']}")]
                         for entry in plugin_menu
                     ]
-                    rows.append([InlineKeyboardButton("Назад", callback_data="agent_cancel")])
+                    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="agent_cancel")])
                     await query.edit_message_text("Плагины:", reply_markup=InlineKeyboardMarkup(rows))
                 except Exception as e:
                     logging.exception(f"tool failed {str(e)}")
@@ -348,7 +347,7 @@ class CallbackHandler:
                         else:
                             btn = InlineKeyboardButton(act["label"], callback_data=f"cb:{pid}:{act['action']}")
                         rows.append([btn])
-                    rows.append([InlineKeyboardButton("Назад к плагинам", callback_data="agent_plugin_commands")])
+                    rows.append([InlineKeyboardButton("⬅️ Назад к плагинам", callback_data="agent_plugin_commands")])
                     label = entry.get("label", pid)
                     await query.edit_message_text(f"{label}:", reply_markup=InlineKeyboardMarkup(rows))
                 except Exception as e:
@@ -406,8 +405,7 @@ class CallbackHandler:
             ok = self.bot_app.manager.set_active(sid)
             if ok:
                 s = self.bot_app.manager.get(sid)
-                label = s.name or f"{s.tool.name} @ {s.workdir}"
-                await query.edit_message_text(f"Активная сессия: {sid} | {label}")
+                await query.edit_message_text(format_session_label(s))
             else:
                 await query.edit_message_text("Сессия не найдена.")
             return
@@ -585,6 +583,7 @@ class CallbackHandler:
             tool = query.data.split(":", 1)[1]
             entry = get_toolhelp(self.bot_app.config.defaults.toolhelp_path, tool)
             if entry:
+                await query.edit_message_text("Отправляю help…")
                 await self.bot_app._send_toolhelp_content(chat_id, context, entry.content)
                 return
             await query.edit_message_text("Загружаю help…")
@@ -709,8 +708,8 @@ class CallbackHandler:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Да", callback_data="file_del_confirm"),
-                        InlineKeyboardButton("Отмена", callback_data="file_del_cancel"),
+                        InlineKeyboardButton("✅ Да", callback_data="file_del_confirm"),
+                        InlineKeyboardButton("❌ Отмена", callback_data="file_del_cancel"),
                     ]
                 ]
             )
@@ -734,8 +733,8 @@ class CallbackHandler:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Да", callback_data="file_del_confirm"),
-                        InlineKeyboardButton("Отмена", callback_data="file_del_cancel"),
+                        InlineKeyboardButton("✅ Да", callback_data="file_del_confirm"),
+                        InlineKeyboardButton("❌ Отмена", callback_data="file_del_cancel"),
                     ]
                 ]
             )

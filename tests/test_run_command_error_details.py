@@ -20,4 +20,3 @@ def test_execute_shell_command_includes_cmd_and_cwd_when_no_output(monkeypatch):
     assert "command=" in (res.get("error") or "")
     assert "cwd=" in (res.get("error") or "")
     assert res.get("meta", {}).get("returncode") == 1
-

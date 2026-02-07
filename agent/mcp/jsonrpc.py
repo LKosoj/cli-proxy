@@ -68,4 +68,3 @@ class JsonRpcStream:
             # Some servers may output logs to stdout; ignore non-JSON lines.
             return None
         return obj if isinstance(obj, dict) else None
-

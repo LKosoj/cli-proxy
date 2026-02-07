@@ -5,6 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from state import get_state
+from utils import format_session_label
 
 
 class SessionUI:
@@ -35,6 +36,7 @@ class SessionUI:
             label = s.name or f"{s.tool.name} @ {s.workdir}"
             text = self._short_label(f"{active} {sid}: {label}", max_len=60)
             rows.append([InlineKeyboardButton(text, callback_data=f"sess_pick:{sid}")])
+        rows.append([InlineKeyboardButton("❌ Закрыть меню", callback_data="sess_close_menu")])
         return InlineKeyboardMarkup(rows)
 
     async def handle_pending_message(self, chat_id: int, text: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -83,23 +85,23 @@ class SessionUI:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Use", callback_data=f"sess_use:{session_id}"),
-                        InlineKeyboardButton("Status", callback_data=f"sess_status:{session_id}"),
+                        InlineKeyboardButton("✅ Use", callback_data=f"sess_use:{session_id}"),
+                        InlineKeyboardButton("📋 Status", callback_data=f"sess_status:{session_id}"),
                     ],
                     [
-                        InlineKeyboardButton("Rename", callback_data=f"sess_rename:{session_id}"),
-                        InlineKeyboardButton("Resume", callback_data=f"sess_resume:{session_id}"),
+                        InlineKeyboardButton("✏️ Rename", callback_data=f"sess_rename:{session_id}"),
+                        InlineKeyboardButton("🔄 Resume", callback_data=f"sess_resume:{session_id}"),
                     ],
                     [
-                        InlineKeyboardButton("Queue", callback_data=f"sess_queue:{session_id}"),
-                        InlineKeyboardButton("Clear queue", callback_data=f"sess_clearqueue:{session_id}"),
+                        InlineKeyboardButton("📥 Queue", callback_data=f"sess_queue:{session_id}"),
+                        InlineKeyboardButton("🗑 Clear queue", callback_data=f"sess_clearqueue:{session_id}"),
                     ],
                     [
-                        InlineKeyboardButton("State", callback_data=f"sess_state:{session_id}"),
-                        InlineKeyboardButton("Close session", callback_data=f"sess_close:{session_id}"),
+                        InlineKeyboardButton("💾 State", callback_data=f"sess_state:{session_id}"),
+                        InlineKeyboardButton("🚫 Close", callback_data=f"sess_close:{session_id}"),
                     ],
                     [
-                        InlineKeyboardButton("Закрыть меню", callback_data="sess_close_menu"),
+                        InlineKeyboardButton("❌ Закрыть меню", callback_data="sess_close_menu"),
                     ],
                 ]
             )
@@ -113,9 +115,7 @@ class SessionUI:
             ok = self.manager.set_active(session_id)
             if ok:
                 session = self.manager.get(session_id)
-                label = session.name or f"{session.tool.name} @ {session.workdir}"
-                agent_txt = "включен" if getattr(session, "agent_enabled", False) else "выключен"
-                await query.edit_message_text(f"Активная сессия: {session.id} | {label} | Агент: {agent_txt}")
+                await query.edit_message_text(format_session_label(session))
             else:
                 await query.edit_message_text("Сессия не найдена.")
             return True
@@ -135,14 +135,18 @@ class SessionUI:
             last_out = f"{int(now - session.last_output_ts)}с назад" if session.last_output_ts else "нет"
             tick_txt = f"{int(now - session.last_tick_ts)}с назад" if session.last_tick_ts else "нет"
             agent_txt = "включен" if getattr(session, "agent_enabled", False) else "выключен"
-            text = (
-                f"Сессия: {session.id} ({session.name or session.tool.name}) @ {session.workdir}\n"
-                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt}\n"
-                f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {session.tick_seen}\n"
-                f"Очередь: {len(session.queue)} | Resume: {'есть' if session.resume_token else 'нет'}"
-            )
-            await self._send_message(context, chat_id=chat_id, text=text)
-            await query.answer()
+            manager_txt = "включен" if getattr(session, "manager_enabled", False) else "выключен"
+            project_root = getattr(session, "project_root", None)
+            lines = [
+                f"Сессия: {session.id} ({session.name or session.tool.name}) @ {session.workdir}",
+                f"Статус: {busy_txt} | {git_txt}{conflict_txt} | В работе: {run_for} | Агент: {agent_txt} | Manager: {manager_txt}",
+            ]
+            if project_root:
+                lines.append(f"Проект: {project_root}")
+            lines.append(f"Последний вывод: {last_out} | Последний тик: {tick_txt} | Тиков: {session.tick_seen}")
+            lines.append(f"Очередь: {len(session.queue)} | Resume: {'есть' if session.resume_token else 'нет'}")
+            text = "\n".join(lines)
+            await query.edit_message_text(text)
             return True
         if data.startswith("sess_rename:"):
             session_id = data.split(":", 1)[1]
@@ -175,8 +179,7 @@ class SessionUI:
                 return True
             st = get_state(self.config.defaults.state_path, session.tool.name, session.workdir, session_id=session.id)
             if not st:
-                await self._send_message(context, chat_id=chat_id, text="Состояние не найдено.")
-                await query.answer()
+                await query.edit_message_text("Состояние не найдено.")
                 return True
             text = (
                 f"Session: {st.session_id or 'нет'}\n"
@@ -186,8 +189,7 @@ class SessionUI:
                 f"Summary: {st.summary or 'нет'}\n"
                 f"Updated: {self._format_ts(st.updated_at)}"
             )
-            await self._send_message(context, chat_id=chat_id, text=text)
-            await query.answer()
+            await query.edit_message_text(text)
             return True
         if data.startswith("sess_queue:"):
             session_id = data.split(":", 1)[1]

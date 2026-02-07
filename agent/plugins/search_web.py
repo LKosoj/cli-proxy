@@ -11,8 +11,15 @@ class SearchWebTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="search_web",
-            description="Search the internet. USE IMMEDIATELY for: news, current events, external info, 'what is X?', prices, weather.",
-            parameters={"type": "object", "properties": {"query": {"type": "string", "description": "Search query"}}, "required": ["query"]},
+            description=(
+                "Search the internet. USE IMMEDIATELY for: news, current events, external info, "
+                "'what is X?', prices, weather."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "Search query"}},
+                "required": ["query"],
+            },
             risk_level="medium",
         )
 

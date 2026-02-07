@@ -55,7 +55,10 @@ class SearchTextTool(ToolPlugin):
         if args.get("context_after"):
             flags.append(f"-A{int(args.get('context_after'))}")
         flags += ["--exclude-dir=node_modules", "--exclude-dir=.git", "--exclude-dir=dist"]
-        flags += ["--exclude=*.env*", "--exclude=*credentials*", "--exclude=*secret*", "--exclude=*.pem", "--exclude=*.key", "--exclude=id_rsa*"]
+        flags += [
+            "--exclude=*.env*", "--exclude=*credentials*", "--exclude=*secret*",
+            "--exclude=*.pem", "--exclude=*.key", "--exclude=id_rsa*",
+        ]
         escaped = pattern.replace('"', '\\"')
         cmd = f"grep {' '.join(flags)} \"{escaped}\" \"{search_path}\" 2>/dev/null | head -200"
         try:

@@ -81,7 +81,7 @@ def _strip_cli_preamble(text: str) -> str:
             if 1 <= len(key) <= 24:
                 meta_lines += 1
     if meta_lines >= 3 or separators >= 1:
-        remainder = lines[user_idx + 1 :]
+        remainder = lines[user_idx + 1:]
         return "\n".join(remainder).lstrip()
     return text
 
@@ -108,8 +108,6 @@ def _compact_reason(reason: str) -> str:
     if len(clean) > 120:
         return f"{clean[:117]}..."
     return clean
-
-
 
 
 async def _summarize_with_cfg(
@@ -200,6 +198,7 @@ async def summarize_text_with_reason(
     except Exception:
         logging.getLogger(__name__).exception("OpenAI summary error")
         return None, "неожиданный ответ OpenAI"
+
 
 def _tail_digest(text: str) -> str:
     lines = [line.strip() for line in text.splitlines() if line.strip()]

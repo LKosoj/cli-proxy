@@ -86,4 +86,3 @@ def test_agent_does_not_stop_on_single_tool_failure(tmp_path, monkeypatch):
 
     assert res.status in ("ok", "partial")
     assert res.output.strip() == "done"
-

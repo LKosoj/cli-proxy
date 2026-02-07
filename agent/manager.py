@@ -7,7 +7,7 @@ import os
 import re
 import time
 from dataclasses import asdict
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 from config import AppConfig
 from session import Session
@@ -21,10 +21,12 @@ from .manager_prompts import (
     PLAN_VALIDATION_SYSTEM,
     PLAN_FIX_INSTRUCTION,
     DEV_INSTRUCTION_TEMPLATE,
+    DEV_REWORK_INSTRUCTION_TEMPLATE,
     REVIEW_INSTRUCTION_TEMPLATE,
     REVIEW_NORMALIZE_SYSTEM,
     DECISION_SYSTEM,
     COMMIT_MESSAGE_SYSTEM,
+    PLAN_RECONCILE_SYSTEM,
     FINAL_REPORT_SYSTEM,
 )
 from .manager_store import archive_plan, delete_plan, load_plan, save_plan
@@ -92,7 +94,7 @@ def _extract_json_object(raw: str) -> str:
     i = s.find("{")
     j = s.rfind("}")
     if i >= 0 and j > i:
-        return s[i : j + 1]
+        return s[i: j + 1]
 
     return s
 
@@ -246,7 +248,7 @@ class ManagerOrchestrator:
             plan.completion_report = report
             save_plan(workdir, plan)
             if chat_id is not None:
-                await bot._send_message(context, chat_id=chat_id, text=f"❌ План провален. Результат ниже.")
+                await bot._send_message(context, chat_id=chat_id, text="❌ План провален. Результат ниже.")
                 await bot._send_message(context, chat_id=chat_id, text=report)
                 # Ask user: retry or archive?
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -282,7 +284,10 @@ class ManagerOrchestrator:
     # Decomposition (two-phase: CLI → direct JSON parse → Agent normalization)
     # -----------------------------------------------------------------------
 
-    async def _decompose(self, session: Session, user_goal: str, bot=None, context=None, dest: Optional[dict] = None) -> Optional[ProjectPlan]:
+    async def _decompose(
+        self, session: Session, user_goal: str, bot=None,
+        context=None, dest: Optional[dict] = None,
+    ) -> Optional[ProjectPlan]:
         timeout = int(self._config.defaults.manager_decompose_timeout_sec)
         max_tasks = int(self._config.defaults.manager_max_tasks)
         debug = bool(self._config.defaults.manager_debug_log)
@@ -379,7 +384,10 @@ class ManagerOrchestrator:
 
             if chat_id is not None and bot is not None:
                 await bot._send_message(context, chat_id=chat_id,
-                                        text=f"⚠️ Проблемы в плане: {issues_short}\n🔄 Отправляю CLI на корректировку ({fix_attempt}/{max_fix_attempts})...")
+                                        text=(
+                                            f"⚠️ Проблемы в плане: {issues_short}\n"
+                                            f"🔄 Отправляю CLI на корректировку ({fix_attempt}/{max_fix_attempts})..."
+                                        ))
 
             fixed_plan = await self._fix_plan_via_cli(session, plan, issues, user_goal, timeout, workdir)
             if fixed_plan:
@@ -389,7 +397,7 @@ class ManagerOrchestrator:
                 _log.warning("decompose: CLI fix failed (attempt %d), using current plan", fix_attempt)
                 if chat_id is not None and bot is not None:
                     await bot._send_message(context, chat_id=chat_id,
-                                            text=f"⚠️ CLI не смог исправить план, используем текущий")
+                                            text="⚠️ CLI не смог исправить план, используем текущий")
                 break
 
         return plan
@@ -568,6 +576,7 @@ class ManagerOrchestrator:
         # Circular dependencies (topological sort)
         if not issues:  # only check if no basic issues
             visited: Dict[str, int] = {}  # 0=in progress, 1=done
+
             def _has_cycle(tid: str) -> bool:
                 if tid in visited:
                     return visited[tid] == 0
@@ -748,7 +757,10 @@ class ManagerOrchestrator:
                 plan.status = "failed"
                 save_plan(session.workdir, plan)
                 if chat_id is not None:
-                    await bot._send_message(context, chat_id=chat_id, text=f"⛔ Превышен лимит итераций ({max_iterations}). План остановлен.")
+                    await bot._send_message(
+                        context, chat_id=chat_id,
+                        text=f"⛔ Превышен лимит итераций ({max_iterations}). План остановлен.",
+                    )
                 break
 
             task = self._next_ready_task(plan)
@@ -763,7 +775,10 @@ class ManagerOrchestrator:
                             t.status = "blocked"
                     plan.status = "failed"
                     if chat_id is not None:
-                        await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: невозможно продолжить (задачи заблокированы).")
+                        await bot._send_message(
+                            context, chat_id=chat_id,
+                            text="⛔ План остановлен: невозможно продолжить (задачи заблокированы).",
+                        )
                 save_plan(session.workdir, plan)
                 break
 
@@ -776,12 +791,18 @@ class ManagerOrchestrator:
             if skip_dev:
                 # Development already completed — go straight to review
                 if chat_id is not None:
-                    await bot._send_message(context, chat_id=chat_id, text=f"🔍 Продолжаю ревью: {task.title} (попытка {task.attempt}/{task.max_attempts})")
+                    await bot._send_message(
+                        context, chat_id=chat_id,
+                        text=f"🔍 Продолжаю ревью: {task.title} (попытка {task.attempt}/{task.max_attempts})",
+                    )
             else:
                 task.status = "in_progress"
                 save_plan(session.workdir, plan)
                 if chat_id is not None:
-                    await bot._send_message(context, chat_id=chat_id, text=f"🔧 Разработка: {task.title} (попытка {task.attempt}/{task.max_attempts})")
+                    await bot._send_message(
+                        context, chat_id=chat_id,
+                        text=f"🔧 Разработка: {task.title} (попытка {task.attempt}/{task.max_attempts})",
+                    )
 
                 # === DEVELOPMENT ===
                 dev_ok, dev_report = await self._delegate_develop(session, plan, task)
@@ -793,21 +814,31 @@ class ManagerOrchestrator:
                         task.completed_at = _now_iso()
                         save_plan(session.workdir, plan)
                         if chat_id is not None:
-                            await bot._send_message(context, chat_id=chat_id,
-                                                    text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}")
+                            await bot._send_message(
+                                context, chat_id=chat_id,
+                                text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}",
+                            )
                         # Check if plan is now blocked
                         if self._is_plan_blocked(plan):
                             plan.status = "failed"
                             save_plan(session.workdir, plan)
                             if chat_id is not None:
-                                await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
+                                await bot._send_message(
+                                    context, chat_id=chat_id,
+                                    text="⛔ План остановлен: критическая задача провалена.",
+                                )
                             break
                     else:
                         task.status = "pending"  # will be retried on next iteration
                         save_plan(session.workdir, plan)
                         if chat_id is not None:
-                            await bot._send_message(context, chat_id=chat_id,
-                                                    text=f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): {dev_report[:150]}\n🔄 Повтор...")
+                            await bot._send_message(
+                                context, chat_id=chat_id,
+                                text=(
+                                    f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): "
+                                    f"{dev_report[:150]}\n🔄 Повтор..."
+                                ),
+                            )
                     continue
 
             # === REVIEW ===
@@ -830,7 +861,10 @@ class ManagerOrchestrator:
                 if chat_id is not None:
                     await bot._send_message(context, chat_id=chat_id, text=f"✅ Принято: {task.title}")
                 # Auto-commit approved changes
-                await self._auto_commit(session, task, plan, bot, context, dest)
+                committed = await self._auto_commit(session, task, plan, bot, context, dest)
+                # Reconcile plan: CLI may have done more than asked
+                if committed:
+                    await self._reconcile_plan_after_commit(session, task, plan, bot, context, dest)
                 continue
 
             # rejected
@@ -844,20 +878,29 @@ class ManagerOrchestrator:
                 task.completed_at = _now_iso()
                 save_plan(session.workdir, plan)
                 if chat_id is not None:
-                    await bot._send_message(context, chat_id=chat_id, text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts})")
+                    await bot._send_message(
+                        context, chat_id=chat_id,
+                        text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts})",
+                    )
                 # Check if plan is now blocked
                 if self._is_plan_blocked(plan):
                     plan.status = "failed"
                     save_plan(session.workdir, plan)
                     if chat_id is not None:
-                        await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
+                        await bot._send_message(
+                            context, chat_id=chat_id,
+                            text="⛔ План остановлен: критическая задача провалена.",
+                        )
                     break
             else:
                 task.status = "pending"  # will be retried
                 save_plan(session.workdir, plan)
                 if chat_id is not None:
                     reasons_txt = ", ".join(reasons) if reasons else "см. замечания"
-                    await bot._send_message(context, chat_id=chat_id, text=f"🔄 Доработка: {task.title} (попытка {task.attempt + 1})\nПричины: {reasons_txt}")
+                    await bot._send_message(
+                        context, chat_id=chat_id,
+                        text=f"🔄 Доработка: {task.title} (попытка {task.attempt + 1})\nПричины: {reasons_txt}",
+                    )
 
     # -----------------------------------------------------------------------
     # Delegate development to CLI
@@ -880,24 +923,60 @@ class ManagerOrchestrator:
         completed_tasks = [t for t in plan.tasks if t.status == "approved"]
         completed_summary = ", ".join(t.title for t in completed_tasks) if completed_tasks else "(нет)"
 
-        # Conditional rejection block
-        rejection_block = ""
-        if task.attempt > 1 and task.review_comments:
-            rejection_block = (
-                f"### ⚠️ Замечания ревьюера (исправь обязательно):\n"
-                f"{task.review_comments}\n\n"
-                f"Это попытка {task.attempt} из {task.max_attempts}. Исправь все замечания."
+        # Partial work block: what was already done by a previous task's CLI
+        partial_work_block = ""
+        if task.partial_work_note:
+            partial_work_block = (
+                f"### ⚠️ Часть работы уже выполнена (НЕ переделывай!):\n"
+                f"{task.partial_work_note}\n\n"
+                f"Учти это при выполнении задачи. Проверь перечисленные файлы/функции — "
+                f"они уже существуют. Сконцентрируйся только на ОСТАВШЕЙСЯ работе."
             )
 
-        instr = DEV_INSTRUCTION_TEMPLATE.format(
-            task_title=task.title,
-            task_description=task.description,
-            task_acceptance=_task_acceptance(task),
-            rejection_block=rejection_block,
-            project_context=ctx or "(контекст не задан)",
-            already_done=already_done or "(нет данных)",
-            completed_tasks_summary=completed_summary,
-        )
+        is_rework = task.attempt > 1 and task.review_comments
+
+        if is_rework:
+            # Rework: task was already implemented, focus on fixing review issues
+            rejection_history_block = ""
+            if len(task.rejection_history) > 1:
+                history_lines = []
+                for entry in task.rejection_history[:-1]:
+                    att = entry.get("attempt", "?")
+                    comments = entry.get("comments", "")
+                    if comments:
+                        history_lines.append(f"- Попытка {att}: {comments}")
+                if history_lines:
+                    rejection_history_block = (
+                        "### История предыдущих замечаний:\n"
+                        + "\n".join(history_lines)
+                    )
+
+            instr = DEV_REWORK_INSTRUCTION_TEMPLATE.format(
+                task_title=task.title,
+                task_description=task.description,
+                dev_report=task.dev_report or "(отчёт отсутствует)",
+                review_comments=task.review_comments,
+                rejection_history_block=rejection_history_block,
+                task_acceptance=_task_acceptance(task),
+                partial_work_block=partial_work_block,
+                project_context=ctx or "(контекст не задан)",
+                already_done=already_done or "(нет данных)",
+                completed_tasks_summary=completed_summary,
+                attempt=task.attempt,
+                max_attempts=task.max_attempts,
+            )
+        else:
+            # First attempt: full task description
+            instr = DEV_INSTRUCTION_TEMPLATE.format(
+                task_title=task.title,
+                task_description=task.description,
+                task_acceptance=_task_acceptance(task),
+                rejection_block="",
+                partial_work_block=partial_work_block,
+                project_context=ctx or "(контекст не задан)",
+                already_done=already_done or "(нет данных)",
+                completed_tasks_summary=completed_summary,
+            )
         if debug:
             _debug_write(session.workdir, f"manager_dev_prompt_{task.id}",
                          f"Dev Prompt → CLI [{task.id}] (attempt {task.attempt})", instr)
@@ -1171,6 +1250,135 @@ class ManagerOrchestrator:
             await bot._send_message(context, chat_id=chat_id,
                                     text=f"📝 Коммит: {summary_line}")
         return True
+
+    # -----------------------------------------------------------------------
+    # Plan reconciliation after commit
+    # -----------------------------------------------------------------------
+
+    async def _reconcile_plan_after_commit(
+        self, session: Session, task: DevTask, plan: ProjectPlan, bot, context, dest: dict,
+    ) -> None:
+        """After a commit, check if CLI did more than asked and adjust the plan accordingly."""
+        chat_id = dest.get("chat_id")
+        workdir = session.workdir
+        debug = bool(self._config.defaults.manager_debug_log)
+
+        # Only reconcile if there are remaining non-approved tasks
+        remaining = [t for t in plan.tasks if t.status not in ("approved", "failed", "blocked")]
+        if not remaining:
+            return
+
+        # Get current project state (git diff stat from last commit)
+        code, log_out = await self._run_git(workdir, ["log", "-1", "--stat", "--format=%s"])
+        if code != 0:
+            log_out = ""
+
+        # Build context for reconciliation
+        remaining_tasks_info = []
+        for t in remaining:
+            remaining_tasks_info.append({
+                "id": t.id,
+                "title": t.title,
+                "description": t.description,
+                "acceptance_criteria": t.acceptance_criteria,
+                "status": t.status,
+                "depends_on": t.depends_on,
+            })
+
+        user_msg = (
+            f"### Выполненная задача:\n"
+            f"Название: {task.title}\n"
+            f"Описание: {task.description}\n\n"
+            f"### Отчёт разработчика:\n{task.dev_report or '(пусто)'}\n\n"
+            f"### Последний коммит (git log -1 --stat):\n{log_out.strip()}\n\n"
+            f"### Оставшиеся задачи:\n{json.dumps(remaining_tasks_info, ensure_ascii=False, indent=2)}"
+        )
+
+        if debug:
+            _debug_write(workdir, f"manager_reconcile_prompt_{task.id}",
+                         f"Plan Reconcile Prompt [{task.id}]", user_msg)
+
+        raw = await chat_completion(
+            self._config, PLAN_RECONCILE_SYSTEM, user_msg[:12000],
+            response_format={"type": "json_object"},
+        )
+
+        if debug:
+            _debug_write(workdir, f"agent_reconcile_response_{task.id}",
+                         f"Plan Reconcile Response [{task.id}]", raw or "(empty)")
+
+        if not raw:
+            return
+
+        try:
+            payload = json.loads(_extract_json_object(raw))
+            if not isinstance(payload, dict):
+                return
+        except Exception:
+            return
+
+        tasks_by_id = {t.id: t for t in plan.tasks}
+        changes_made = False
+
+        # 1. Mark fully completed tasks
+        completed_ids = payload.get("completed_task_ids") or []
+        for tid in completed_ids:
+            t = tasks_by_id.get(tid)
+            if t and t.status not in ("approved", "failed"):
+                t.status = "approved"
+                t.completed_at = _now_iso()
+                t.review_verdict = "approved"
+                t.review_comments = "Автоматически закрыта: работа выполнена в рамках предыдущей задачи"
+                changes_made = True
+                _log.info("reconcile: task %s auto-approved (done by CLI in task %s)", tid, task.id)
+
+        # 2. Apply adjustments to remaining tasks (partial completion)
+        adjustments = payload.get("adjustments") or []
+        for adj in adjustments:
+            if not isinstance(adj, dict):
+                continue
+            tid = adj.get("task_id")
+            t = tasks_by_id.get(tid)
+            if not t or t.status in ("approved", "failed"):
+                continue
+            new_desc = adj.get("updated_description")
+            new_criteria = adj.get("updated_acceptance_criteria")
+            done_note = adj.get("already_done_note")
+            if new_desc and isinstance(new_desc, str) and new_desc.strip():
+                t.description = new_desc.strip()
+                changes_made = True
+            if new_criteria and isinstance(new_criteria, list) and new_criteria:
+                t.acceptance_criteria = [str(c) for c in new_criteria if c]
+                changes_made = True
+            if done_note and isinstance(done_note, str) and done_note.strip():
+                # Accumulate partial work notes (task may be adjusted multiple times)
+                existing = t.partial_work_note or ""
+                if existing:
+                    t.partial_work_note = f"{existing}\n{done_note.strip()}"
+                else:
+                    t.partial_work_note = done_note.strip()
+                changes_made = True
+            _log.info("reconcile: task %s adjusted — %s", tid, adj.get("reason", ""))
+
+        if changes_made:
+            plan.updated_at = _now_iso()
+            save_plan(workdir, plan)
+
+            summary = payload.get("summary") or "План скорректирован"
+            if chat_id is not None:
+                # Build notification
+                lines = [f"🔄 Сверка плана после коммита: {summary}"]
+                if completed_ids:
+                    lines.append(f"✅ Автоматически закрыты: {', '.join(completed_ids)}")
+                if adjustments:
+                    adj_ids = [a.get("task_id", "?") for a in adjustments if isinstance(a, dict)]
+                    lines.append(f"📝 Скорректированы: {', '.join(adj_ids)}")
+                await bot._send_message(context, chat_id=chat_id, text="\n".join(lines))
+
+            if debug:
+                _debug_write(workdir, f"manager_reconcile_result_{task.id}",
+                             f"Plan Reconcile Result [{task.id}]",
+                             json.dumps(payload, ensure_ascii=False, indent=2))
 
     # -----------------------------------------------------------------------
     # External controls (UI commands)

@@ -83,6 +83,7 @@ class DevTask:
     review_verdict: Optional[str] = None
     review_comments: Optional[str] = None
     rejection_history: List[Dict[str, Any]] = field(default_factory=list)
+    partial_work_note: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
 

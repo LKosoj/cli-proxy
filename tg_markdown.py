@@ -25,4 +25,3 @@ def to_markdown_v2(text: str) -> str:
         s = str(text)
         # Escape all specials. This makes the message render as plain text (safe default).
         return _MDV2_RE.sub(r"\\\\\\1", s)
-

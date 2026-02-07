@@ -30,4 +30,3 @@ def test_web_research_env_overrides_config_big_model(monkeypatch):
     tool.initialize(config=cfg, services={})
 
     assert tool._get_model(big=True) == "env-model"  # noqa: SLF001 (regression test)
-

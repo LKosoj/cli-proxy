@@ -11,7 +11,10 @@ class RunCommandTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="run_command",
-            description="Run a shell command. Use for: git, npm, pip, system operations. DANGEROUS commands (rm -rf, sudo, etc.) require user approval.",
+            description=(
+                "Run a shell command. Use for: git, npm, pip, system operations. "
+                "DANGEROUS commands (rm -rf, sudo, etc.) require user approval."
+            ),
             parameters={
                 "type": "object",
                 "properties": {"command": {"type": "string", "description": "The shell command to execute"}},

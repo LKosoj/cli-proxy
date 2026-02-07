@@ -227,7 +227,7 @@ class DialogMixin:
         """
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         return InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Отмена", callback_data=self._cancel_callback_data())]]
+            [[InlineKeyboardButton("❌ Отмена", callback_data=self._cancel_callback_data())]]
         )
 
     # -- dialog step buttons ------------------------------------------------
@@ -245,7 +245,7 @@ class DialogMixin:
             keyboard = InlineKeyboardMarkup([
                 [self.dialog_button("High", "high"),
                  self.dialog_button("Low", "low")],
-                [InlineKeyboardButton("Отмена", callback_data=self._cancel_callback_data())],
+                [InlineKeyboardButton("❌ Отмена", callback_data=self._cancel_callback_data())],
             ])
         """
         from telegram import InlineKeyboardButton

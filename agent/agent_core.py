@@ -27,6 +27,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 SYSTEM_PROMPT_PATH = os.path.join(REPO_ROOT, "agent", "system.txt")
 # ==== OpenAI config ====
 
+
 def _get_openai_config(config: Optional[AppConfig] = None) -> Optional[Tuple[str, str, str]]:
     api_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("OPENAI_MODEL")
@@ -194,7 +195,10 @@ class ReActAgent:
         chat_history = get_chat_history(chat_id)
         if chat_history:
             line_count = len([line for line in chat_history.split("\n") if line.strip()])
-            prompt += f"\n\n<RECENT_CHAT>\nИстория чата ({line_count} сообщений). ЭТО ВСЁ что у тебя есть - от самых старых к новым:\n{chat_history}\n</RECENT_CHAT>"
+            prompt += (
+                f"\n\n<RECENT_CHAT>\nИстория чата ({line_count} сообщений). "
+                f"ЭТО ВСЁ что у тебя есть - от самых старых к новым:\n{chat_history}\n</RECENT_CHAT>"
+            )
         return prompt
 
     def _load_session(self, state_root: str) -> Dict[str, Any]:
@@ -394,7 +398,10 @@ class ReActAgent:
                 if output and "BLOCKED:" in output:
                     has_blocked = True
                     blocked_count += 1
-                    output += "\n\n⛔ THIS COMMAND IS PERMANENTLY BLOCKED. Do NOT retry it. Find an alternative approach or inform the user this action is not allowed."
+                    output += (
+                        "\n\n⛔ THIS COMMAND IS PERMANENTLY BLOCKED. Do NOT retry it. "
+                        "Find an alternative approach or inform the user this action is not allowed."
+                    )
                 working.append({"role": "tool", "tool_call_id": call.get("id"), "content": output or "Success"})
             for meta, result in zip(call_meta, results):
                 out = result.get("output") if result.get("success") else None
@@ -443,7 +450,10 @@ class ReActAgent:
             consecutive_all_failed = 0
             if blocked_count >= AGENT_MAX_BLOCKED:
                 _log.warning("ReAct iter=%d blocked_count=%d, stopping", iteration + 1, blocked_count)
-                final_response = "🚫 Stopped: Multiple blocked commands detected. The requested actions are not allowed for security reasons."
+                final_response = (
+                    "🚫 Stopped: Multiple blocked commands detected. "
+                    "The requested actions are not allowed for security reasons."
+                )
                 final_status = "blocked"
                 break
             if not has_blocked:

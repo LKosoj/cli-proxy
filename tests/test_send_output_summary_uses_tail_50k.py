@@ -53,6 +53,7 @@ def test_send_output_summary_uses_tail_50k(tmp_path, monkeypatch):
 
         # Avoid threads for html conversion and file IO.
         monkeypatch.setattr(bot_mod, "ansi_to_html", lambda _s: "<html/>")
+
         def _make_html_file(_html, _prefix):
             p = tmp_path / "out.html"
             p.write_text("x", encoding="utf-8")

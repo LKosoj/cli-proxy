@@ -175,7 +175,7 @@ def _dedupe_repeated_blocks(text: str) -> str:
                 while i + k < total and j + k < total and lines[i + k] == lines[j + k]:
                     k += 1
                 if k >= min_block:
-                    del lines[j : j + k]
+                    del lines[j: j + k]
                     changed = True
                     total = len(lines)
                     break
@@ -245,7 +245,7 @@ def _ansi_to_html_fragment(text: str) -> str:
 
     idx = 0
     for match in _ANSI_RE.finditer(text):
-        chunk = text[idx : match.start()]
+        chunk = text[idx: match.start()]
         if chunk:
             out.append(html.escape(chunk))
         codes = match.group(0)[2:-1]
@@ -388,3 +388,11 @@ def resolve_env_value(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
     return os.path.expandvars(value)
+
+
+def format_session_label(session) -> str:
+    """Форматирует однострочную сводку об активной сессии."""
+    label = session.name or f"{session.tool.name} @ {session.workdir}"
+    agent_txt = "включен" if getattr(session, "agent_enabled", False) else "выключен"
+    manager_txt = "включен" if getattr(session, "manager_enabled", False) else "выключен"
+    return f"Активная сессия: {session.id} | {label} | Агент: {agent_txt} | Manager: {manager_txt}"

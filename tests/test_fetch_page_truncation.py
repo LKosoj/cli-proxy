@@ -11,4 +11,3 @@ def test_trim_fetch_output_noop_when_small():
     from agent.tooling import helpers
 
     assert helpers._trim_fetch_output("hello", reason="test") == "hello"  # noqa: SLF001
-

@@ -19,4 +19,3 @@ def test_session_manager_persists_manager_enabled(tmp_path):
     s2 = sm2.get(s.id)
     assert s2 is not None
     assert s2.manager_enabled is True
-

@@ -25,7 +25,7 @@ def build_client(config: AppConfig) -> Optional[Tuple[AsyncOpenAI, str]]:
     return client, model
 
 
-async def chat_completion(config: AppConfig, system: str, user: str, response_format = None) -> str:
+async def chat_completion(config: AppConfig, system: str, user: str, response_format=None) -> str:
     client_info = build_client(config)
     if not client_info:
         return ""

@@ -132,6 +132,7 @@ def test_orchestrator_compose_final_answer_does_not_block_on_send_output(tmp_pat
 
         monkeypatch.setattr(orch, "_execute_step", _fake_execute_step)
         monkeypatch.setattr(orch, "_maybe_update_memory", lambda *_a, **_k: asyncio.sleep(0))
+
         async def _fake_chat_completion(*_a, **_k):
             return "FINAL"
 

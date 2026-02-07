@@ -75,9 +75,10 @@ class ShowMeDiagramsTool(ToolPlugin):
         return {"success": True, "output": out}
 
     async def _generate_plantuml(self, diagram_type: str, title: str, description: str) -> str:
-        api_key = os.getenv("OPENAI_API_KEY") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_api_key", None)
-        base_url = os.getenv("OPENAI_BASE_URL") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_base_url", None)
-        model = os.getenv("OPENAI_MODEL") or getattr(getattr(self, "config", None), "defaults", None) and getattr(self.config.defaults, "openai_model", None) or "gpt-4o-mini"
+        cfg_def = getattr(getattr(self, "config", None), "defaults", None)
+        api_key = os.getenv("OPENAI_API_KEY") or (cfg_def and getattr(cfg_def, "openai_api_key", None))
+        base_url = os.getenv("OPENAI_BASE_URL") or (cfg_def and getattr(cfg_def, "openai_base_url", None))
+        model = os.getenv("OPENAI_MODEL") or (cfg_def and getattr(cfg_def, "openai_model", None)) or "gpt-4o-mini"
         if not api_key:
             # Агент может сгенерировать PlantUML сам без этого инструмента, но здесь возвращаем явную ошибку.
             raise RuntimeError("Не задан OPENAI_API_KEY для генерации PlantUML кода")
@@ -85,7 +86,10 @@ class ShowMeDiagramsTool(ToolPlugin):
         prompts = {
             "gantt_chart": "Сгенерируй PlantUML для диаграммы Ганта. Используй @startgantt/@endgantt.",
             "mind_map": "Сгенерируй PlantUML для mind map. Используй @startmindmap/@endmindmap.",
-            "flowchart": "Сгенерируй PlantUML для блок-схемы. Используй @startuml/@enduml, start/stop, :action; и if/else при необходимости.",
+            "flowchart": (
+                "Сгенерируй PlantUML для блок-схемы. "
+                "Используй @startuml/@enduml, start/stop, :action; и if/else при необходимости."
+            ),
             "project_timeline": "Сгенерируй PlantUML для таймлайна проекта в @startuml/@enduml.",
             "infographic": "Сгенерируй PlantUML для инфографики в @startuml/@enduml.",
             "org_chart": "Сгенерируй PlantUML для оргструктуры в @startuml/@enduml.",

@@ -71,30 +71,33 @@ class GitOps:
     def build_git_keyboard(self) -> InlineKeyboardMarkup:
         rows = [
             [
-                InlineKeyboardButton("Status", callback_data="git_status"),
-                InlineKeyboardButton("Fetch", callback_data="git_fetch"),
+                InlineKeyboardButton("📋 Status", callback_data="git_status"),
+                InlineKeyboardButton("📡 Fetch", callback_data="git_fetch"),
             ],
             [
-                InlineKeyboardButton("Pull", callback_data="git_pull"),
-                InlineKeyboardButton("Merge", callback_data="git_merge_menu"),
+                InlineKeyboardButton("⬇️ Pull", callback_data="git_pull"),
+                InlineKeyboardButton("🔀 Merge", callback_data="git_merge_menu"),
             ],
             [
-                InlineKeyboardButton("Rebase", callback_data="git_rebase_menu"),
-                InlineKeyboardButton("Diff", callback_data="git_diff"),
+                InlineKeyboardButton("🔀 Rebase", callback_data="git_rebase_menu"),
+                InlineKeyboardButton("📝 Diff", callback_data="git_diff"),
             ],
             [
-                InlineKeyboardButton("Log", callback_data="git_log"),
-                InlineKeyboardButton("Stash", callback_data="git_stash"),
+                InlineKeyboardButton("📜 Log", callback_data="git_log"),
+                InlineKeyboardButton("📦 Stash", callback_data="git_stash"),
             ],
             [
-                InlineKeyboardButton("Commit", callback_data="git_commit"),
-                InlineKeyboardButton("Push", callback_data="git_push"),
+                InlineKeyboardButton("💾 Commit", callback_data="git_commit"),
+                InlineKeyboardButton("⬆️ Push", callback_data="git_push"),
             ],
             [
-                InlineKeyboardButton("Summary", callback_data="git_summary"),
+                InlineKeyboardButton("📊 Summary", callback_data="git_summary"),
             ],
             [
-                InlineKeyboardButton("Help", callback_data="git_help"),
+                InlineKeyboardButton("❓ Help", callback_data="git_help"),
+            ],
+            [
+                InlineKeyboardButton("❌ Закрыть", callback_data="git_cancel"),
             ],
         ]
         return InlineKeyboardMarkup(rows)
@@ -106,26 +109,26 @@ class GitOps:
             rows.append(
                 [InlineKeyboardButton(self._short_label(ref), callback_data=f"git_{action}_pick:{i}")]
             )
-        rows.append([InlineKeyboardButton("Отмена", callback_data="git_cancel")])
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="git_cancel")])
         return InlineKeyboardMarkup(rows)
 
     def _build_git_pull_keyboard(self, ref: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(f"Merge {ref}", callback_data="git_pull_merge"),
-                    InlineKeyboardButton(f"Rebase {ref}", callback_data="git_pull_rebase"),
+                    InlineKeyboardButton(f"🔀 Merge {ref}", callback_data="git_pull_merge"),
+                    InlineKeyboardButton(f"🔀 Rebase {ref}", callback_data="git_pull_rebase"),
                 ],
-                [InlineKeyboardButton("Отмена", callback_data="git_pull_cancel")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="git_pull_cancel")],
             ]
         )
 
     def _build_git_confirm_keyboard(self, action: str, ref: str) -> InlineKeyboardMarkup:
-        label = "Выполнить merge" if action == "merge" else "Выполнить rebase"
+        label = "✅ Выполнить merge" if action == "merge" else "✅ Выполнить rebase"
         return InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton(f"{label} {ref}", callback_data=f"git_confirm_{action}")],
-                [InlineKeyboardButton("Отмена", callback_data="git_cancel")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="git_cancel")],
             ]
         )
 
@@ -133,12 +136,15 @@ class GitOps:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Открыть diff", callback_data="git_conflict_diff"),
-                    InlineKeyboardButton("Abort", callback_data="git_conflict_abort"),
+                    InlineKeyboardButton("📝 Diff", callback_data="git_conflict_diff"),
+                    InlineKeyboardButton("⛔ Abort", callback_data="git_conflict_abort"),
                 ],
                 [
-                    InlineKeyboardButton("Continue", callback_data="git_conflict_continue"),
-                    InlineKeyboardButton("Позвать агента", callback_data="git_conflict_agent"),
+                    InlineKeyboardButton("▶️ Continue", callback_data="git_conflict_continue"),
+                    InlineKeyboardButton("🤖 Позвать агента", callback_data="git_conflict_agent"),
+                ],
+                [
+                    InlineKeyboardButton("❌ Закрыть", callback_data="git_cancel"),
                 ],
             ]
         )
@@ -604,46 +610,46 @@ class GitOps:
             if data == "git_pull_merge":
                 ref = self.git_pull_target.get(chat_id)
                 if not ref:
-                    await self._send_git_message(context, chat_id, session, "Цель pull не определена.")
+                    await query.edit_message_text("Цель pull не определена.")
                     return True
+                await query.edit_message_text("Выполняю merge…")
                 await self._git_merge_or_rebase(session, chat_id, context, "merge", ref)
                 self.git_pull_target.pop(chat_id, None)
                 return True
             if data == "git_pull_rebase":
                 ref = self.git_pull_target.get(chat_id)
                 if not ref:
-                    await self._send_git_message(context, chat_id, session, "Цель pull не определена.")
+                    await query.edit_message_text("Цель pull не определена.")
                     return True
+                await query.edit_message_text("Выполняю rebase…")
                 await self._git_merge_or_rebase(session, chat_id, context, "rebase", ref)
                 self.git_pull_target.pop(chat_id, None)
                 return True
             if data == "git_merge_menu":
+                await query.edit_message_text("Загружаю список веток…")
                 code, output = await self._run_git(session, ["branch", "-r"])
                 branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
                 if not branches:
-                    await self._send_git_message(context, chat_id, session, "Нет удаленных веток.")
+                    await query.edit_message_text("Нет удаленных веток.")
                     return True
                 self.git_branch_menu[chat_id] = branches
                 prefix = self._session_label(session)
-                await self._send_message(
-                    context,
-                    chat_id=chat_id,
-                    text=f"{prefix}\nВыберите ветку для merge:",
+                await query.edit_message_text(
+                    f"{prefix}\nВыберите ветку для merge:",
                     reply_markup=self._build_git_branches_keyboard(chat_id, "merge"),
                 )
                 return True
             if data == "git_rebase_menu":
+                await query.edit_message_text("Загружаю список веток…")
                 code, output = await self._run_git(session, ["branch", "-r"])
                 branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
                 if not branches:
-                    await self._send_git_message(context, chat_id, session, "Нет удаленных веток.")
+                    await query.edit_message_text("Нет удаленных веток.")
                     return True
                 self.git_branch_menu[chat_id] = branches
                 prefix = self._session_label(session)
-                await self._send_message(
-                    context,
-                    chat_id=chat_id,
-                    text=f"{prefix}\nВыберите ветку для rebase:",
+                await query.edit_message_text(
+                    f"{prefix}\nВыберите ветку для rebase:",
                     reply_markup=self._build_git_branches_keyboard(chat_id, "rebase"),
                 )
                 return True
@@ -652,7 +658,7 @@ class GitOps:
                 idx = int(data.split(":", 1)[1])
                 branches = self.git_branch_menu.get(chat_id, [])
                 if idx < 0 or idx >= len(branches):
-                    await self._send_git_message(context, chat_id, session, "Выбор недоступен.")
+                    await query.edit_message_text("Выбор недоступен.")
                     return True
                 ref = branches[idx]
                 ahead_behind = await self._git_ahead_behind(session, ref)
@@ -663,10 +669,8 @@ class GitOps:
                     info = f"Ahead {ahead} / Behind {behind} относительно {ref}."
                 self.git_pending_ref[chat_id] = ref
                 prefix = self._session_label(session)
-                await self._send_message(
-                    context,
-                    chat_id=chat_id,
-                    text=f"{prefix}\n{info}",
+                await query.edit_message_text(
+                    f"{prefix}\n{info}",
                     reply_markup=self._build_git_confirm_keyboard(action, ref),
                 )
                 return True
@@ -674,16 +678,19 @@ class GitOps:
                 action = "merge" if data == "git_confirm_merge" else "rebase"
                 ref = self.git_pending_ref.get(chat_id)
                 if not ref:
-                    await self._send_git_message(context, chat_id, session, "Ссылка не выбрана.")
+                    await query.edit_message_text("Ссылка не выбрана.")
                     return True
+                await query.edit_message_text(f"Выполняю {action}…")
                 await self._git_merge_or_rebase(session, chat_id, context, action, ref)
                 self.git_pending_ref.pop(chat_id, None)
                 return True
             if data == "git_diff":
+                await query.edit_message_text("Получаю diff…")
                 code, output = await self._run_git(session, ["diff"])
                 await self._send_git_output(context, chat_id, session, "Diff", output)
                 return True
             if data == "git_log":
+                await query.edit_message_text("Получаю log…")
                 code, output = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "20"])
                 await self._send_git_output(context, chat_id, session, "Log", output)
                 return True
@@ -706,6 +713,7 @@ class GitOps:
                     session.git_busy = False
                 return True
             if data == "git_stash":
+                await query.edit_message_text("Выполняю stash…")
                 session.git_busy = True
                 try:
                     code, output = await self._run_git(session, ["stash", "push", "-u"])
@@ -750,6 +758,7 @@ class GitOps:
                     await self._send_git_message(context, chat_id, session, "Введите сообщение коммита (или '-' для отмены):")
                 return True
             if data == "git_push":
+                await query.edit_message_text("Выполняю push…")
                 session.git_busy = True
                 try:
                     branch = await self._git_current_branch(session)
@@ -766,14 +775,16 @@ class GitOps:
                     session.git_busy = False
                 return True
             if data == "git_conflict_diff":
+                await query.edit_message_text("Получаю diff…")
                 code, output = await self._run_git(session, ["diff"])
                 await self._send_git_output(context, chat_id, session, "Diff", output)
                 return True
             if data == "git_conflict_abort":
                 mode = await self._git_in_progress(session)
                 if not mode:
-                    await self._send_git_message(context, chat_id, session, "Нет активного merge/rebase.")
+                    await query.edit_message_text("Нет активного merge/rebase.")
                     return True
+                await query.edit_message_text("Выполняю abort…")
                 cmd = ["merge", "--abort"] if mode == "merge" else ["rebase", "--abort"]
                 code, output = await self._run_git(session, cmd)
                 await self._send_git_output(context, chat_id, session, "Abort", output)
@@ -784,8 +795,9 @@ class GitOps:
             if data == "git_conflict_continue":
                 mode = await self._git_in_progress(session)
                 if not mode:
-                    await self._send_git_message(context, chat_id, session, "Нет активного merge/rebase.")
+                    await query.edit_message_text("Нет активного merge/rebase.")
                     return True
+                await query.edit_message_text("Выполняю continue…")
                 cmd = ["merge", "--continue"] if mode == "merge" else ["rebase", "--continue"]
                 code, output = await self._run_git(session, cmd)
                 await self._send_git_output(context, chat_id, session, "Continue", output)

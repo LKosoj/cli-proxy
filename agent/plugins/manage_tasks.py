@@ -56,7 +56,9 @@ class ManageTasksTool(ToolPlugin):
                     if t.get("status"):
                         existing["status"] = t["status"]
                 else:
-                    tasks.append({"id": t["id"], "content": t["content"], "status": t.get("status", "pending"), "created_at": int(time.time() * 1000)})
+                    item = {"id": t["id"], "content": t["content"], "status": t.get("status", "pending"),
+                            "created_at": int(time.time() * 1000)}
+                    tasks.append(item)
             return {"success": True, "output": helpers._format_tasks(tasks)}
         if action == "update":
             items = args.get("tasks") or []

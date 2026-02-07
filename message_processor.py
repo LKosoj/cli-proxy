@@ -20,7 +20,7 @@ class MessageProcessor:
     """
     Class containing message processing functionality for the Telegram bot.
     """
-    
+
     def __init__(self, bot_app):
         self.bot_app = bot_app
 
@@ -349,17 +349,17 @@ class MessageProcessor:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
-                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                        InlineKeyboardButton("⛔ Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("📥 В очередь", callback_data="queue_input"),
                     ],
-                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                    [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
                 ]
             )
             await self.bot_app._send_message(context,
-                chat_id=chat_id,
-                text="Сессия занята. Что сделать с вашим вводом?",
-                reply_markup=keyboard,
-            )
+                                             chat_id=chat_id,
+                                             text="Сессия занята. Что сделать с вашим вводом?",
+                                             reply_markup=keyboard,
+                                             )
             return
         asyncio.create_task(self.bot_app.run_prompt(session, text, dest, context))
 
@@ -379,10 +379,10 @@ class MessageProcessor:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
-                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                        InlineKeyboardButton("⛔ Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("📥 В очередь", callback_data="queue_input"),
                     ],
-                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                    [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
                 ]
             )
             await self.bot_app._send_message(
@@ -410,10 +410,10 @@ class MessageProcessor:
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Отменить текущую", callback_data="cancel_current"),
-                        InlineKeyboardButton("Поставить в очередь", callback_data="queue_input"),
+                        InlineKeyboardButton("⛔ Отменить текущую", callback_data="cancel_current"),
+                        InlineKeyboardButton("📥 В очередь", callback_data="queue_input"),
                     ],
-                    [InlineKeyboardButton("Отмена ввода", callback_data="discard_input")],
+                    [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
                 ]
             )
             await self.bot_app._send_message(

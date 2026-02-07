@@ -42,7 +42,10 @@ class WriteFileTool(ToolPlugin):
             return {"success": False, "error": f"🚫 BLOCKED: {symlink_check[1]}"}
         content_check = helpers._contains_dangerous_code(content)
         if content_check[0]:
-            return {"success": False, "error": f"🚫 BLOCKED: File contains dangerous code ({content_check[1]}). Cannot write files that may leak secrets."}
+            return {"success": False, "error": (
+                f"🚫 BLOCKED: File contains dangerous code ({content_check[1]}). "
+                "Cannot write files that may leak secrets."
+            )}
         try:
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             with open(full_path, "w", encoding="utf-8") as f:

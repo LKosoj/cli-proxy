@@ -221,6 +221,7 @@ class TaskManagementTool(DialogMixin, ToolPlugin):
                 return {"success": True, "output": "Задач нет."}
             # Sort: deadline first, then priority.
             prio_rank = {"high": 0, "medium": 1, "low": 2}
+
             def _key(t: Dict[str, Any]):
                 dl = t.get("deadline_ts")
                 dl = dl if isinstance(dl, int) else 2**31
@@ -503,14 +504,14 @@ async def run_task_deadline_checker(application: Any, is_allowed_cb) -> None:
                         notify = task.setdefault("notify", {})
                         if dl_ts > now and dl_ts - now <= policy.due_soon_window_sec:
                             if not notify.get("due_soon_sent_at"):
-                                text = f"⏳ Скоро дедлайн: {task.get('title','(без названия)')}\nДедлайн: {task.get('deadline')}\nID: {tid}"
+                                text = f"⏳ Скоро дедлайн: {task.get('title', '(без названия)')}\nДедлайн: {task.get('deadline')}\nID: {tid}"
                                 await application.bot.send_message(chat_id=chat_id, text=text)
                                 notify["due_soon_sent_at"] = now
                                 dirty = True
                         if dl_ts <= now:
                             last = notify.get("overdue_sent_at") or 0
                             if now - int(last) >= policy.overdue_repeat_sec:
-                                text = f"⚠️ Просрочено: {task.get('title','(без названия)')}\nДедлайн: {task.get('deadline')}\nID: {tid}"
+                                text = f"⚠️ Просрочено: {task.get('title', '(без названия)')}\nДедлайн: {task.get('deadline')}\nID: {tid}"
                                 await application.bot.send_message(chat_id=chat_id, text=text)
                                 notify["overdue_sent_at"] = now
                                 dirty = True
