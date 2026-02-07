@@ -364,6 +364,10 @@ class BotApp:
         # Prevent agent messages from also going to root (bot.log) to keep it clean.
         agent_logger.propagate = False
 
+        # Suppress httpx/httpcore INFO logs that leak the bot token in URLs.
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+
         prev_excepthook = sys.excepthook
         prev_threading_excepthook = threading.excepthook
 
