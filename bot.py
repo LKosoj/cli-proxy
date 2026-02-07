@@ -434,9 +434,9 @@ class BotApp:
                 if chat_id and message:
                     self.agent.record_message(chat_id, message.message_id)
                 return message
-            except (NetworkError, TimedOut):
+            except (NetworkError, TimedOut) as exc:
                 if attempt == 4:
-                    logging.warning("Ошибка сети при отправке сообщения в Telegram.")
+                    logging.warning("Ошибка сети при отправке сообщения в Telegram: %s", exc)
                     return
                 await asyncio.sleep(2 * (2 ** attempt))
 
