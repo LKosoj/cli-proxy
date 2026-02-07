@@ -167,8 +167,9 @@ async def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppC
     cfg = _get_openai_config(config)
     if not cfg:
         return None
-    cleaned = _strip_cli_preamble(text)
-    cleaned = normalize_text(cleaned, strip_ansi=True)
+    # normalize_text() can be CPU-heavy on large inputs; avoid blocking the event loop.
+    cleaned = await asyncio.to_thread(_strip_cli_preamble, text)
+    cleaned = await asyncio.to_thread(normalize_text, cleaned, True)
     if len(cleaned) < 3000:
         return cleaned
     return await _summarize_with_cfg(cleaned, max_chars, cfg)
@@ -180,8 +181,8 @@ async def summarize_text_with_reason(
     cfg = _get_openai_config(config)
     if not cfg:
         return None, "не настроены OPENAI_API_KEY/OPENAI_BIG_MODEL"
-    cleaned = _strip_cli_preamble(text)
-    cleaned = normalize_text(cleaned, strip_ansi=True)
+    cleaned = await asyncio.to_thread(_strip_cli_preamble, text)
+    cleaned = await asyncio.to_thread(normalize_text, cleaned, True)
     if len(cleaned) < 3000:
         return cleaned, None
     try:

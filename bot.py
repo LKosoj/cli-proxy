@@ -58,6 +58,8 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
 _HTML_PROCESS_THRESHOLD_CHARS = 100_000
 _HTML_PROCESS_POOL = concurrent.futures.ProcessPoolExecutor(max_workers=1)
 _HTML_RENDER_TAIL_CHARS = 10_000
+_SUMMARY_PREPARE_THRESHOLD_CHARS = 20_000
+_SUMMARY_TAIL_CHARS = 50_000
 
 
 @dataclass
@@ -555,8 +557,11 @@ class BotApp:
 
             async def _summarize() -> tuple[Optional[str], Optional[str]]:
                 try:
+                    # Limit input size for summary: only the tail matters most for CLI sessions.
+                    # This also reduces CPU work during normalization and avoids polling stalls.
+                    text_for_summary = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
                     s, err = await asyncio.wait_for(
-                        summarize_text_with_reason(strip_ansi(output), config=self.config),
+                        summarize_text_with_reason(text_for_summary, config=self.config),
                         timeout=30,
                     )
                     return s, err
