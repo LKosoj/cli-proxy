@@ -159,7 +159,7 @@ class MessageProcessor:
                 logging.exception(f"tool failed {str(e)}")
                 await self.bot_app._send_message(context, chat_id=chat_id, text=f"Ошибка запуска git clone: {e}")
             return
-        if await self.bot_app._plugin_awaiting_input(chat_id):
+        if self.bot_app._plugin_awaiting_input(chat_id):
             # Safety net: if the agent was turned off while a dialog was active,
             # the plugin handler in group -1 won't fire (_AgentEnabledFilter blocks it).
             # Detect this and clean up so the user isn't stuck.
