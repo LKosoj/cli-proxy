@@ -55,7 +55,8 @@ class Executor:
         session_workspace = self._session_workspace(session.id)
         os.makedirs(session_workspace, exist_ok=True)
         project_root = getattr(session, "project_root", None)
-        agent_cwd = project_root or session_workspace
+        session_workdir = getattr(session, "workdir", None)
+        agent_cwd = project_root or session_workdir or session_workspace
         proxy_session = SimpleNamespace(
             id=session.id,
             workdir=agent_cwd,
