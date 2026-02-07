@@ -72,10 +72,10 @@ class DefaultsConfig:
     # Manager mode (multi-agent orchestration via CLI + reviewer Agent)
     manager_max_tasks: int = 10
     manager_max_attempts: int = 3
-    manager_decompose_timeout_sec: int = 600
-    manager_dev_timeout_sec: int = 1200
-    manager_review_timeout_sec: int = 600
-    manager_dev_report_max_chars: int = 8000
+    manager_decompose_timeout_sec: int = 1200
+    manager_dev_timeout_sec: int = 3600
+    manager_review_timeout_sec: int = 1200
+    manager_dev_report_max_chars: int = 20000
     manager_auto_resume: bool = True
     manager_auto_commit: bool = True         # git commit после каждого одобренного шага плана
     manager_debug_log: bool = True           # Сохранять сырые ответы CLI/агентов в .manager/
@@ -191,10 +191,10 @@ def load_config(path: str) -> AppConfig:
         ),
         manager_max_tasks=int(defaults_raw.get("manager_max_tasks", 10)),
         manager_max_attempts=int(defaults_raw.get("manager_max_attempts", 3)),
-        manager_decompose_timeout_sec=int(defaults_raw.get("manager_decompose_timeout_sec", 600)),
-        manager_dev_timeout_sec=int(defaults_raw.get("manager_dev_timeout_sec", 1200)),
-        manager_review_timeout_sec=int(defaults_raw.get("manager_review_timeout_sec", 600)),
-        manager_dev_report_max_chars=int(defaults_raw.get("manager_dev_report_max_chars", 8000)),
+        manager_decompose_timeout_sec=int(defaults_raw.get("manager_decompose_timeout_sec", 1200)),
+        manager_dev_timeout_sec=int(defaults_raw.get("manager_dev_timeout_sec", 3600)),
+        manager_review_timeout_sec=int(defaults_raw.get("manager_review_timeout_sec", 1200)),
+        manager_dev_report_max_chars=int(defaults_raw.get("manager_dev_report_max_chars", 20000)),
         manager_auto_resume=bool(defaults_raw.get("manager_auto_resume", True)),
         manager_auto_commit=bool(defaults_raw.get("manager_auto_commit", True)),
         manager_debug_log=bool(defaults_raw.get("manager_debug_log", True)),
