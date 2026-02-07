@@ -53,7 +53,7 @@ def _debug_write(workdir: str, prefix: str, title: str, body: str) -> None:
         debug_dir = os.path.join(workdir, ".manager")
         os.makedirs(debug_dir, exist_ok=True)
         ts = _debug_ts()
-        fname = f"{prefix}_{ts}.md"
+        fname = f"{ts}_{prefix}.md"
         path = os.path.join(debug_dir, fname)
         content = f"# {title}\n\n**Timestamp:** {_now_iso()}\n\n---\n\n{body}\n"
         with open(path, "w", encoding="utf-8") as f:
