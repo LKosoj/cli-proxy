@@ -217,4 +217,5 @@ AGENTS.md
 docs/plans/
 bot.log.1
 /.manager
+/.mnager_archive
 MANAGER_PLAN.json

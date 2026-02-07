@@ -26,7 +26,8 @@ from telegram.ext import (
 from config import AppConfig, ToolConfig, load_config
 from dotenv_loader import load_dotenv_near
 from session import Session, SessionManager, run_tool_help
-from summary import summarize_text_with_reason
+# Note: summarize_text_with_reason will be accessed through self.bot_app
+# to allow for patching in tests
 from command_registry import build_command_registry
 from dirs_ui import build_dirs_keyboard, prepare_dirs
 from session_ui import SessionUI
@@ -36,16 +37,16 @@ from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import (
-    ansi_to_html,
     build_preview,
     has_ansi,
     is_within_root,
-    make_html_file,
     sandbox_root,
     sandbox_session_dir,
     sandbox_shared_dir,
     strip_ansi,
 )
+# Note: ansi_to_html and make_html_file will be accessed through self.bot_app
+# to allow for patching in tests
 from tg_markdown import to_markdown_v2
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
@@ -53,6 +54,15 @@ from agent.manager import ManagerOrchestrator
 from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status, needs_resume_choice
 from agent.plugins.task_management import run_task_deadline_checker
 from agent.tooling.registry import get_tool_registry
+
+
+_HTML_PROCESS_THRESHOLD_CHARS = 100_000
+_HTML_PROCESS_POOL = None  # Will be initialized in main bot app
+_HTML_RENDER_TAIL_CHARS = 10_000
+_SUMMARY_PREPARE_THRESHOLD_CHARS = 20_000
+_SUMMARY_TAIL_CHARS = 50_000
+_SUMMARY_WAIT_FOR_HTML_S = 5.0
+_SUMMARY_TIMEOUT_S = 100.0
 
 
 @dataclass
@@ -127,11 +137,11 @@ class SessionManagement:
                 t0 = time.time()
                 if len(render_src) >= _HTML_PROCESS_THRESHOLD_CHARS:
                     _so_log.info("[send_output] HTML: using process pool (len=%d)", len(render_src))
-                    html_text_local = await loop.run_in_executor(_HTML_PROCESS_POOL, ansi_to_html, render_src)
+                    html_text_local = await loop.run_in_executor(_HTML_PROCESS_POOL, self.bot_app.ansi_to_html, render_src)
                 else:
-                    html_text_local = await asyncio.to_thread(ansi_to_html, render_src)
+                    html_text_local = await asyncio.to_thread(self.bot_app.ansi_to_html, render_src)
                 _so_log.info("[send_output] HTML: conversion done in %.2fs", time.time() - t0)
-                return await asyncio.to_thread(make_html_file, html_text_local, self.bot_app.config.defaults.html_filename_prefix)
+                return await asyncio.to_thread(self.bot_app.make_html_file, html_text_local, self.bot_app.config.defaults.html_filename_prefix)
 
             async def _summarize() -> tuple[Optional[str], Optional[str]]:
                 try:
@@ -139,7 +149,7 @@ class SessionManagement:
                     # This also reduces CPU work during normalization and avoids polling stalls.
                     text_for_summary = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
                     s, err = await asyncio.wait_for(
-                        summarize_text_with_reason(text_for_summary, config=self.bot_app.config),
+                        self.bot_app.summarize_text_with_reason(text_for_summary, config=self.bot_app.config),
                         timeout=_SUMMARY_TIMEOUT_S,
                     )
                     return s, err
