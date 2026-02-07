@@ -45,8 +45,8 @@ class SessionManagement:
         # For large outputs we offload conversion to a separate process.
         self._html_process_threshold_chars = 100_000
         self._html_process_pool = None  # Will be initialized in main bot app
-        self._html_render_tail_chars = 10_000
-        self._summary_prepare_threshold_chars = 20_000
+        self._html_render_tail_chars = 50_000
+        self._summary_prepare_threshold_chars = 50_000
         self._summary_tail_chars = 50_000
         self._summary_wait_for_html_s = 5.0
         self._summary_timeout_s = 100.0

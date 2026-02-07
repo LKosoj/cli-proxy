@@ -350,9 +350,9 @@ class ManagerOrchestrator:
                 updated_at=_now_iso(),
             )
 
-        # === Phase 3: Validate plan (up to 3 correction attempts) ===
+        # === Phase 3: Validate plan (up to N correction attempts) ===
         chat_id = (dest or {}).get("chat_id")
-        max_fix_attempts = 3
+        max_fix_attempts = int(self._config.defaults.manager_max_attempts)
         for fix_attempt in range(1, max_fix_attempts + 1):
             if chat_id is not None and bot is not None:
                 await bot._send_message(context, chat_id=chat_id,
