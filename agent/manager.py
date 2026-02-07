@@ -214,6 +214,13 @@ class ManagerOrchestrator:
         if plan and plan.status == "active" and (self._config.defaults.manager_auto_resume or txt == MANAGER_CONTINUE_TOKEN):
             # continue silently
             pass
+        elif plan and plan.status == "failed" and self._can_resume_failed(plan):
+            # Plan was failed (timeout / partial) but has retryable tasks — resume it.
+            plan.status = "active"
+            plan.updated_at = _now_iso()
+            save_plan(workdir, plan)
+            if chat_id is not None:
+                await bot._send_message(context, chat_id=chat_id, text="🔄 Возобновляю ранее остановленный план...")
         else:
             plan = await self._start_new_plan(session, user_text, bot, context, dest)
 
@@ -437,8 +444,8 @@ class ManagerOrchestrator:
         has_pending = False
         all_blocked_or_done = True
 
+        # --- Pass 1: normalize interrupted / stale statuses ---
         for t in plan.tasks:
-            # Normalize interrupted / stale statuses
             if t.status in ("in_progress", "in_review"):
                 # Interrupted during execution: reset to pending and decrement attempt
                 # so that the loop increment brings it back to the same attempt number.
@@ -446,24 +453,31 @@ class ManagerOrchestrator:
                 if t.attempt > 0:
                     t.attempt -= 1
             elif t.status == "rejected":
-                # Interrupted after rejection but before pending: just reset to pending.
-                # Attempt count remains (so loop increments to next attempt).
                 if t.attempt >= t.max_attempts:
                     t.status = "failed"
                 else:
                     t.status = "pending"
+            elif t.status == "failed" and t.attempt < t.max_attempts:
+                # Task failed but has attempts left (e.g. plan was stopped mid-way) → retry
+                t.status = "pending"
 
-            # Check for cascade blocking: if any dependency failed → block
+        # --- Pass 2: re-evaluate blocked tasks (they may be unblocked now) ---
+        for t in plan.tasks:
+            if t.status == "blocked":
+                deps = [tasks_by_id[dep_id] for dep_id in t.depends_on if dep_id in tasks_by_id]
+                if not any(d.status == "failed" for d in deps):
+                    t.status = "pending"
+
+        # --- Pass 3: find next ready task ---
+        for t in plan.tasks:
+            # Cascade blocking: if any dependency failed → block
             deps = [tasks_by_id[dep_id] for dep_id in t.depends_on if dep_id in tasks_by_id]
             if any(d.status == "failed" for d in deps):
                 if t.status not in ("approved", "failed"):
                     t.status = "blocked"
                 continue
 
-            if t.status == "blocked":
-                continue
-
-            if t.status in ("approved", "failed"):
+            if t.status in ("approved", "failed", "blocked"):
                 continue
 
             if t.status in RETRIABLE_STATUSES:
@@ -479,6 +493,20 @@ class ManagerOrchestrator:
         if has_pending and all_blocked_or_done:
             _log.warning("_next_ready_task: deadlock or cascade block detected")
         return None
+
+    @staticmethod
+    def _can_resume_failed(plan: ProjectPlan) -> bool:
+        """True if a failed plan still has tasks that can be retried."""
+        for t in plan.tasks:
+            if t.status in ("pending", "rejected", "in_progress", "in_review"):
+                return True
+            # Blocked tasks may become unblocked after normalization
+            if t.status == "blocked":
+                return True
+            # A failed task with attempts left can be retried
+            if t.status == "failed" and t.attempt < t.max_attempts:
+                return True
+        return False
 
     def _is_plan_blocked(self, plan: ProjectPlan) -> bool:
         """True if all remaining non-approved tasks are blocked/failed (no more progress possible)."""
