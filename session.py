@@ -89,18 +89,23 @@ class Session:
                 if v is None:
                     continue
                 env[k] = resolve_env_value(str(v))
+        # When separate_stderr is enabled for this tool, capture stderr on its own
+        # pipe instead of merging it into stdout.  Headless CLIs (e.g. codex exec)
+        # write the final answer to stdout and progress / prompt echo to stderr.
+        use_separate_stderr = getattr(self.tool, "separate_stderr", False)
+
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=self.workdir,
             env=env,
             stdin=asyncio.subprocess.PIPE if use_stdin else None,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stderr=asyncio.subprocess.PIPE if use_separate_stderr else asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
         self.current_proc = proc
         self._headless_interrupt_flag = False
-        _log.info("[headless] PID=%s started", proc.pid)
+        _log.info("[headless] PID=%s started (separate_stderr=%s)", proc.pid, use_separate_stderr)
         if use_stdin and proc.stdin:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
@@ -108,6 +113,7 @@ class Session:
             _log.info("[headless] stdin written and closed")
 
         out_buf = bytearray()
+        err_buf = bytearray()
         drain_eof = False
 
         async def _drain_stdout() -> None:
@@ -133,6 +139,26 @@ class Session:
             except Exception:
                 logging.exception("[headless] drain: exception")
 
+        async def _drain_stderr() -> None:
+            """Drain stderr separately when separate_stderr is enabled."""
+            if not proc.stderr:
+                return
+            try:
+                while True:
+                    chunk = await proc.stderr.read(4096)
+                    if not chunk:
+                        break
+                    err_buf.extend(chunk)
+                    # Update activity from stderr too so progress is visible
+                    try:
+                        self._update_activity(chunk.decode(errors="ignore"))
+                    except Exception:
+                        pass
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
         def _pid_exists(pid: int) -> bool:
             try:
                 os.kill(pid, 0)
@@ -142,6 +168,7 @@ class Session:
 
         wait_task = asyncio.create_task(proc.wait())
         drain_task = asyncio.create_task(_drain_stdout())
+        stderr_drain_task = asyncio.create_task(_drain_stderr()) if use_separate_stderr else None
 
         forced_reason: Optional[str] = None
         poll_iter = 0
@@ -207,6 +234,20 @@ class Session:
                 wait_task.cancel()
             except Exception:
                 pass
+
+        # Clean up stderr drain task
+        if stderr_drain_task is not None:
+            if not stderr_drain_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(stderr_drain_task), timeout=2.0)
+                except (asyncio.TimeoutError, Exception):
+                    try:
+                        stderr_drain_task.cancel()
+                    except Exception:
+                        pass
+            stderr_text = bytes(err_buf).decode(errors="ignore").strip()
+            if stderr_text:
+                _log.info("[headless] stderr (%d chars): %s", len(stderr_text), stderr_text[:500])
 
         self.current_proc = None
         self._headless_interrupt_flag = False

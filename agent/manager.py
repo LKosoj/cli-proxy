@@ -67,62 +67,6 @@ def _debug_write(workdir: str, prefix: str, title: str, body: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Prompt echo stripping
-# ---------------------------------------------------------------------------
-
-
-def _strip_prompt_echo(prompt: str, response: str) -> str:
-    """Remove echoed prompt text from CLI response.
-
-    Some CLIs (e.g. Codex) include the full user prompt in their output
-    before the actual response.  If the prompt contains example JSON,
-    the parser may grab the example instead of the real answer.
-
-    Detection: find distinctive (>30 chars) lines from the prompt at the
-    start of the response, then cut everything up to (and including)
-    the last matching distinctive line.
-    """
-    if not prompt or not response:
-        return response or ""
-
-    # Collect distinctive lines from the prompt (long enough to be unique)
-    prompt_lines = [
-        line.strip()
-        for line in prompt.strip().splitlines()
-        if len(line.strip()) > 30
-    ]
-    if len(prompt_lines) < 2:
-        return response
-
-    # Check if the first distinctive line appears near the start of the response
-    first_line = prompt_lines[0]
-    start_pos = response.find(first_line)
-    if start_pos < 0 or start_pos > 300:
-        return response  # No echo detected
-
-    # Echo detected.  Find the last distinctive prompt line in the response
-    # to determine where the echo ends and the real answer begins.
-    best_end = -1
-    for line in prompt_lines:
-        pos = response.find(line, start_pos)
-        if pos >= 0:
-            end_candidate = pos + len(line)
-            if end_candidate > best_end:
-                best_end = end_candidate
-
-    if best_end > 0:
-        stripped = response[best_end:].strip()
-        if stripped:
-            _log.debug(
-                "strip_prompt_echo: removed %d chars of echoed prompt",
-                best_end,
-            )
-            return stripped
-
-    return response
-
-
-# ---------------------------------------------------------------------------
 # JSON extraction helpers
 # ---------------------------------------------------------------------------
 
@@ -368,9 +312,6 @@ class ManagerOrchestrator:
             return None
 
         cli_text = strip_ansi(cli_text or "")
-        # Strip echoed prompt: CLI may include the instruction text before its response,
-        # which contains example JSON that would confuse the parser.
-        cli_text = _strip_prompt_echo(instr, cli_text)
         _log.info("decompose phase 1 done: CLI output %d chars", len(cli_text))
 
         if debug:
@@ -536,7 +477,6 @@ class ManagerOrchestrator:
             return None
 
         cli_text = strip_ansi(cli_text or "")
-        cli_text = _strip_prompt_echo(instr, cli_text)
         if debug:
             _debug_write(workdir, "cli_fix_response", "CLI Fix Response", cli_text)
 
@@ -1043,7 +983,6 @@ class ManagerOrchestrator:
         try:
             out = await asyncio.wait_for(session.run_prompt(instr), timeout=timeout)
             out = strip_ansi(out or "")
-            out = _strip_prompt_echo(instr, out)
             if debug:
                 _debug_write(session.workdir, f"cli_dev_response_{task.id}",
                              f"CLI Dev Response [{task.id}] (attempt {task.attempt})", out)

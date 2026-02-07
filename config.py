@@ -27,6 +27,7 @@ class ToolConfig:
     help_cmd: Optional[str] = None
     env: Optional[Dict[str, str]] = None
     auto_commands: Optional[List[str]] = None
+    separate_stderr: bool = False
 
 
 @dataclasses.dataclass
@@ -160,6 +161,7 @@ def load_config(path: str) -> AppConfig:
             help_cmd=t.get("help_cmd"),
             env=t.get("env"),
             auto_commands=t.get("auto_commands"),
+            separate_stderr=bool(t.get("separate_stderr", False)),
         )
 
     defaults = DefaultsConfig(
@@ -354,6 +356,7 @@ def save_config(config: AppConfig) -> None:
             "help_cmd": tool.help_cmd,
             "env": tool.env,
             "auto_commands": tool.auto_commands,
+            "separate_stderr": tool.separate_stderr,
         }
 
     with open(config.path, "w", encoding="utf-8") as f:

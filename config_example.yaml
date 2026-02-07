@@ -12,6 +12,7 @@ tools:
     resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
     help_cmd: "/status"
     auto_commands: ["/approvals full"]
+    separate_stderr: true  # codex exec пишет ответ в stdout, прогресс/эхо в stderr
     env:
       OPENAI_API_KEY: null
       OPENAI_MODEL: null
