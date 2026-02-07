@@ -220,6 +220,7 @@ async def run(self, session, user_text, bot, context, dest) -> str:
            task.status = "approved"
            task.completed_at = now()
            notify("✅ {task.title} — принята")
+           await _auto_commit(task)  # git commit если manager_auto_commit=true
        else:
            task.rejection_history.append({
                "attempt": task.attempt,
@@ -511,10 +512,34 @@ async def _compose_final_report(self, plan: ProjectPlan) -> str:
 Для каждого события:
 - `in_progress` → «🔧 Начинаю задачу N: {title}»
 - `in_review` → «🔍 Отправлено на ревью: {title}»
-- `approved` → «✅ Принято: {title}»
+- `approved` → «✅ Принято: {title}» + автокоммит (если `manager_auto_commit=true`)
 - `rejected` → «🔄 Доработка: {title} — {краткие_замечания}»
 - `failed` → «❌ Провал: {title}»
 - `blocked` → «⛔ Заблокировано: {title}»
+
+### 6.9. Автокоммит после одобрения (`_auto_commit`)
+
+После каждого одобренного шага Manager автоматически коммитит изменения в git:
+
+1. **Проверка флага:** если `manager_auto_commit=false` — пропустить.
+2. **Проверка git-репозитория:** `git rev-parse --is-inside-work-tree`. Если не репо — пропустить.
+3. **Проверка наличия изменений:** `git status --porcelain`. Если пусто — пропустить.
+4. **Сбор контекста:** `git diff --stat` + `git diff --staged --stat`.
+5. **Генерация сообщения коммита:** `chat_completion` с промптом `COMMIT_MESSAGE_SYSTEM`,
+   передавая: название задачи, описание, критерии приёмки, diff stat.
+   Формат ответа: `SUMMARY: <заголовок>` + `BODY: <пункты>`.
+   Fallback: если LLM не вернул — `[Manager] {task.title}`.
+6. **Выполнение:** `git add -A` → `git commit -m "summary" -m "body"`.
+7. **Уведомление:** «📝 Коммит: {summary}» в чат.
+
+```python
+async def _auto_commit(self, session, task, plan, bot, context, dest) -> bool:
+```
+
+Промпт `COMMIT_MESSAGE_SYSTEM` (в `agent/manager_prompts.py`) инструктирует LLM:
+- Заголовок до 80 символов, на русском, без точки.
+- Body: 2–5 конкретных пунктов о сделанных изменениях.
+- Не упоминать внутренние процессы (ревью, попытки).
 
 ## 7. Профили исполнения (`agent/profiles.py`)
 
@@ -913,6 +938,7 @@ class DefaultsConfig:
     manager_review_timeout_sec: int = 300   # Таймаут на ревью (секунды)
     manager_dev_report_max_chars: int = 8000  # Макс. длина dev_report для ревью
     manager_auto_resume: bool = True        # Автовозобновление плана
+    manager_auto_commit: bool = True        # git commit после каждого одобренного шага
 ```
 
 ### 10.2. Секция в `config_example.yaml`
@@ -928,6 +954,7 @@ defaults:
   manager_review_timeout_sec: 300
   manager_dev_report_max_chars: 8000
   manager_auto_resume: true
+  manager_auto_commit: true         # git commit после каждого одобренного шага
 ```
 
 ## 11. Команды бота

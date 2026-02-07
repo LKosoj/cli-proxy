@@ -84,7 +84,7 @@ python bot.py
 - `defaults.log_path`: bot log file path (main log). Errors are written to a separate `*_error.log` file with the same rotation rules.
 - `defaults.image_temp_dir`: temp image directory (relative to workdir or absolute).
 - `defaults.image_max_mb`: max size for a single image (default 10 MB).
-- `defaults.manager_*`: Manager mode settings — max tasks, max attempts, decompose/dev/review timeouts, report truncation, auto-resume, debug logging to `.manager/`
+- `defaults.manager_*`: Manager mode settings — max tasks, max attempts, decompose/dev/review timeouts, report truncation, auto-resume, auto-commit (`manager_auto_commit`) after each approved step, debug logging to `.manager/`
 - `mcp.*`: TCP bridge for external clients (host/port/token)
 - `presets`: task templates list (name + prompt)
 

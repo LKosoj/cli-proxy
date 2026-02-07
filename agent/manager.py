@@ -22,6 +22,7 @@ from .manager_prompts import (
     REVIEW_INSTRUCTION_TEMPLATE,
     REVIEW_NORMALIZE_SYSTEM,
     DECISION_SYSTEM,
+    COMMIT_MESSAGE_SYSTEM,
     FINAL_REPORT_SYSTEM,
 )
 from .manager_store import archive_plan, delete_plan, load_plan, save_plan
@@ -570,6 +571,8 @@ class ManagerOrchestrator:
                 save_plan(session.workdir, plan)
                 if chat_id is not None:
                     await bot._send_message(context, chat_id=chat_id, text=f"✅ Принято: {task.title}")
+                # Auto-commit approved changes
+                await self._auto_commit(session, task, plan, bot, context, dest)
                 continue
 
             # rejected
@@ -790,6 +793,126 @@ class ManagerOrchestrator:
         if debug and workdir:
             _debug_write(workdir, "agent_final_report_response", "Agent Final Report Response", out or "(empty)")
         return out or "Отчёт недоступен (пустой ответ модели)."
+
+    # -----------------------------------------------------------------------
+    # Git auto-commit after approved task
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    async def _run_git(workdir: str, args: List[str]) -> Tuple[int, str]:
+        """Run a git command in *workdir* and return (returncode, output)."""
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_PAGER"] = "cat"
+        proc = await asyncio.create_subprocess_exec(
+            "git", *args,
+            cwd=workdir,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        return proc.returncode or 0, (out or b"").decode(errors="ignore")
+
+    async def _auto_commit(self, session: Session, task: DevTask, plan: ProjectPlan, bot, context, dest: dict) -> bool:
+        """Perform git add -A && git commit after an approved task. Returns True if committed."""
+        if not self._config.defaults.manager_auto_commit:
+            return False
+
+        chat_id = dest.get("chat_id")
+        workdir = session.workdir
+        debug = bool(self._config.defaults.manager_debug_log)
+
+        # 1. Check this is a git repo
+        code, out = await self._run_git(workdir, ["rev-parse", "--is-inside-work-tree"])
+        if code != 0 or out.strip() != "true":
+            _log.debug("auto_commit: not a git repo, skipping")
+            return False
+
+        # 2. Check if there are changes
+        code, status_out = await self._run_git(workdir, ["status", "--porcelain"])
+        if code != 0 or not status_out.strip():
+            _log.debug("auto_commit: no changes to commit")
+            return False
+
+        # 3. Get diff stat for commit message context
+        code, stat_out = await self._run_git(workdir, ["diff", "--stat"])
+        if code != 0:
+            stat_out = ""
+        # Include staged changes stat too
+        code, staged_stat = await self._run_git(workdir, ["diff", "--staged", "--stat"])
+        if code == 0 and staged_stat.strip():
+            stat_out = f"{stat_out}\n{staged_stat}".strip()
+
+        # 4. Generate commit message via LLM
+        user_msg = (
+            f"Задача: {task.title}\n"
+            f"Описание: {task.description}\n"
+            f"Критерии приёмки:\n{_task_acceptance(task)}\n\n"
+            f"git status --porcelain:\n{status_out.strip()}\n\n"
+            f"git diff --stat:\n{stat_out.strip()}"
+        )
+        if debug:
+            _debug_write(workdir, f"manager_commit_prompt_{task.id}",
+                         f"Commit Message Prompt [{task.id}]", user_msg)
+
+        raw = await chat_completion(self._config, COMMIT_MESSAGE_SYSTEM, user_msg[:8000])
+
+        if debug:
+            _debug_write(workdir, f"agent_commit_response_{task.id}",
+                         f"Commit Message Response [{task.id}]", raw or "(empty)")
+
+        summary_line = ""
+        body_lines: List[str] = []
+        if raw:
+            in_body = False
+            for line in raw.splitlines():
+                if line.startswith("SUMMARY:"):
+                    summary_line = line.replace("SUMMARY:", "", 1).strip()
+                    continue
+                if line.startswith("BODY:"):
+                    in_body = True
+                    continue
+                if in_body and line.strip():
+                    body_lines.append(line.rstrip())
+
+        # Fallback: use task title as commit message
+        if not summary_line:
+            summary_line = f"[Manager] {task.title}"
+
+        # Sanitize
+        if len(summary_line) > 100:
+            summary_line = summary_line[:100].rstrip()
+        body = "\n".join(body_lines).strip()
+        if len(body) > 2000:
+            body = body[:2000].rstrip()
+
+        # 5. git add -A
+        code, add_out = await self._run_git(workdir, ["add", "-A"])
+        if code != 0:
+            _log.warning("auto_commit: git add failed: %s", add_out)
+            if chat_id is not None:
+                await bot._send_message(context, chat_id=chat_id,
+                                        text=f"⚠️ Git add failed: {add_out[:200]}")
+            return False
+
+        # 6. git commit
+        args = ["commit", "-m", summary_line]
+        if body:
+            args += ["-m", body]
+        code, commit_out = await self._run_git(workdir, args)
+        if code != 0:
+            _log.warning("auto_commit: git commit failed: %s", commit_out)
+            if chat_id is not None:
+                await bot._send_message(context, chat_id=chat_id,
+                                        text=f"⚠️ Git commit failed: {commit_out[:200]}")
+            return False
+
+        _log.info("auto_commit: committed for task %s: %s", task.id, summary_line)
+        if chat_id is not None:
+            await bot._send_message(context, chat_id=chat_id,
+                                    text=f"📝 Коммит: {summary_line}")
+        return True
 
     # -----------------------------------------------------------------------
     # External controls (UI commands)
