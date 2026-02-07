@@ -17,6 +17,7 @@ from telegram.ext import (
 from session import Session
 from command_registry import build_command_registry
 from state import get_state
+from dirs_ui import build_dirs_keyboard, prepare_dirs
 from utils import (
     format_session_label,
     is_within_root,
@@ -609,6 +610,41 @@ class BotHandlers:
             return []
         entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
         return entries
+
+    async def _send_dirs_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, base: str) -> None:
+        err = prepare_dirs(
+            self.bot_app.dirs_menu,
+            self.bot_app.dirs_base,
+            self.bot_app.dirs_page,
+            self.bot_app.dirs_root,
+            chat_id,
+            base,
+        )
+        if err:
+            mode = self.bot_app.dirs_mode.get(chat_id)
+            if mode == "new_session":
+                self.bot_app.pending_new_tool.pop(chat_id, None)
+            if mode == "git_clone":
+                self.bot_app.pending_git_clone.pop(chat_id, None)
+            self.bot_app.dirs_mode.pop(chat_id, None)
+            self.bot_app.dirs_menu.pop(chat_id, None)
+            await self.bot_app._send_message(context, chat_id=chat_id, text=err)
+            return
+        keyboard = build_dirs_keyboard(
+            self.bot_app.dirs_menu,
+            self.bot_app.dirs_base,
+            self.bot_app.dirs_page,
+            self.bot_app._short_label,
+            chat_id,
+            base,
+            0,
+        )
+        await self.bot_app._send_message(
+            context,
+            chat_id=chat_id,
+            text="Выберите каталог:",
+            reply_markup=keyboard,
+        )
 
     async def _send_files_menu(
         self,
