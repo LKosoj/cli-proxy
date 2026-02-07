@@ -64,6 +64,7 @@ def test_send_output_sends_preview_even_if_html_is_slow(tmp_path, monkeypatch):
 
         # Don't wait for HTML to send preview in tests.
         monkeypatch.setattr(bot_mod, "_SUMMARY_WAIT_FOR_HTML_S", 0.0)
+        monkeypatch.setattr(bot_mod, "_SUMMARY_TIMEOUT_S", 0.01)
 
         events = []
 

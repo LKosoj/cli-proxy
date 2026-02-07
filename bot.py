@@ -61,6 +61,7 @@ _HTML_RENDER_TAIL_CHARS = 10_000
 _SUMMARY_PREPARE_THRESHOLD_CHARS = 20_000
 _SUMMARY_TAIL_CHARS = 50_000
 _SUMMARY_WAIT_FOR_HTML_S = 5.0
+_SUMMARY_TIMEOUT_S = 100.0
 
 
 @dataclass
@@ -563,12 +564,12 @@ class BotApp:
                     text_for_summary = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
                     s, err = await asyncio.wait_for(
                         summarize_text_with_reason(text_for_summary, config=self.config),
-                        timeout=30,
+                        timeout=_SUMMARY_TIMEOUT_S,
                     )
                     return s, err
                 except asyncio.TimeoutError:
-                    _so_log.warning("[send_output] summarize timed out after 30s")
-                    return None, "таймаут суммаризации (30с)"
+                    _so_log.warning("[send_output] summarize timed out after %ss", _SUMMARY_TIMEOUT_S)
+                    return None, f"таймаут суммаризации ({int(_SUMMARY_TIMEOUT_S)}с)"
                 except Exception:
                     _so_log.exception("[send_output] summarize exception")
                     return None, "неизвестная ошибка"
