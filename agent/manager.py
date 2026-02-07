@@ -566,18 +566,26 @@ class ManagerOrchestrator:
             task.dev_report = dev_report
             save_plan(session.workdir, plan)
             if not dev_ok:
-                task.status = "failed"
-                task.completed_at = _now_iso()
-                save_plan(session.workdir, plan)
-                if chat_id is not None:
-                    await bot._send_message(context, chat_id=chat_id, text=f"❌ Провал: {task.title} — {dev_report[:200]}")
-                # Check if plan is now blocked
-                if self._is_plan_blocked(plan):
-                    plan.status = "failed"
+                if task.attempt >= task.max_attempts:
+                    task.status = "failed"
+                    task.completed_at = _now_iso()
                     save_plan(session.workdir, plan)
                     if chat_id is not None:
-                        await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
-                    break
+                        await bot._send_message(context, chat_id=chat_id,
+                                                text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}")
+                    # Check if plan is now blocked
+                    if self._is_plan_blocked(plan):
+                        plan.status = "failed"
+                        save_plan(session.workdir, plan)
+                        if chat_id is not None:
+                            await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
+                        break
+                else:
+                    task.status = "pending"  # will be retried on next iteration
+                    save_plan(session.workdir, plan)
+                    if chat_id is not None:
+                        await bot._send_message(context, chat_id=chat_id,
+                                                text=f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): {dev_report[:150]}\n🔄 Повтор...")
                 continue
 
             # === REVIEW ===
