@@ -34,25 +34,25 @@ def test_send_output_html_truncates_tail(tmp_path, monkeypatch):
         # Capture what gets passed into ansi_to_html.
         seen = {"arg": None}
 
-        import bot as bot_mod
+        import session_management as sm_mod
 
         def _ansi_to_html(s: str):
             seen["arg"] = s
             return "<html/>"
 
-        monkeypatch.setattr(bot_mod, "ansi_to_html", _ansi_to_html)
+        monkeypatch.setattr(sm_mod, "ansi_to_html", _ansi_to_html)
 
         def _make_html_file(_html, _prefix):
             p = tmp_path / "out.html"
             p.write_text("x", encoding="utf-8")
             return str(p)
 
-        monkeypatch.setattr(bot_mod, "make_html_file", _make_html_file)
+        monkeypatch.setattr(sm_mod, "make_html_file", _make_html_file)
 
         async def _fake_summary(_text, config):
             return "SUMMARY", None
 
-        monkeypatch.setattr(bot_mod, "summarize_text_with_reason", _fake_summary)
+        monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)
 
         events = []
 
@@ -73,13 +73,13 @@ def test_send_output_html_truncates_tail(tmp_path, monkeypatch):
 
         monkeypatch.setattr(asyncio, "to_thread", _to_thread)
 
-        # 20k output, last 10k should be rendered.
-        head = "H" * 10000
-        tail = "T" * 10000
+        # 70k output, only tail 50k should be rendered.
+        head = "H" * 20000
+        tail = "T" * 50000
         output = head + tail
 
         dest = {"kind": "telegram", "chat_id": 1}
         await app.send_output(session, dest, output, context=None, force_html=True)
-        assert seen["arg"] == tail
+        assert seen["arg"] == output[-50000:]
 
     asyncio.run(_run())

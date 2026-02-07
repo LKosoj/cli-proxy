@@ -33,13 +33,13 @@ def test_send_output_summary_uses_tail_50k(tmp_path, monkeypatch):
 
         seen = {"text": None}
 
-        import bot as bot_mod
+        import session_management as sm_mod
 
         async def _fake_summary(text, config):
             seen["text"] = text
             return "SUMMARY", None
 
-        monkeypatch.setattr(bot_mod, "summarize_text_with_reason", _fake_summary)
+        monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)
 
         # Avoid HTML path in test.
         async def _send_message(_ctx, chat_id, text, **kwargs):
@@ -52,14 +52,14 @@ def test_send_output_summary_uses_tail_50k(tmp_path, monkeypatch):
         monkeypatch.setattr(app, "_send_document", _send_document)
 
         # Avoid threads for html conversion and file IO.
-        monkeypatch.setattr(bot_mod, "ansi_to_html", lambda _s: "<html/>")
+        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s: "<html/>")
 
         def _make_html_file(_html, _prefix):
             p = tmp_path / "out.html"
             p.write_text("x", encoding="utf-8")
             return str(p)
 
-        monkeypatch.setattr(bot_mod, "make_html_file", _make_html_file)
+        monkeypatch.setattr(sm_mod, "make_html_file", _make_html_file)
 
         async def _to_thread(fn, *args, **kwargs):
             return fn(*args, **kwargs)

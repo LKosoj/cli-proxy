@@ -69,7 +69,7 @@ class TestNextReadyTask:
     def test_cascade_block_on_failed_dep(self):
         orch = _make_orchestrator()
         plan = _plan([
-            _task("t1", status="failed"),
+            _task("t1", status="failed", attempt=3, max_attempts=3),
             _task("t2", depends_on=["t1"]),
         ])
         task = orch._next_ready_task(plan)
@@ -117,6 +117,21 @@ class TestNextReadyTask:
         assert task is None
         assert plan.tasks[0].status == "failed"
 
+    def test_in_review_max_attempts_becomes_failed(self):
+        orch = _make_orchestrator()
+        plan = _plan([_task("t1", status="in_review", attempt=3, max_attempts=3)])
+        task = orch._next_ready_task(plan)
+        assert task is None
+        assert plan.tasks[0].status == "failed"
+
+    def test_failed_with_attempts_left_becomes_pending(self):
+        orch = _make_orchestrator()
+        plan = _plan([_task("t1", status="failed", attempt=1, max_attempts=3)])
+        task = orch._next_ready_task(plan)
+        assert task is not None
+        assert task.id == "t1"
+        assert task.status == "pending"
+
     def test_all_approved_returns_none(self):
         orch = _make_orchestrator()
         plan = _plan([_task("t1", status="approved"), _task("t2", status="approved")])
@@ -127,7 +142,7 @@ class TestNextReadyTask:
         orch = _make_orchestrator()
         plan = _plan([
             _task("t1", status="approved"),
-            _task("t2", status="failed"),
+            _task("t2", status="failed", attempt=3, max_attempts=3),
             _task("t3", depends_on=["t1"]),     # ready
             _task("t4", depends_on=["t2"]),     # will be blocked on next call
         ])

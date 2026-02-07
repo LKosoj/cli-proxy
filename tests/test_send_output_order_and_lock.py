@@ -45,7 +45,7 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
         monkeypatch.setattr(app, "_send_document", _send_document)
 
         # Avoid threads / heavy conversion in tests.
-        import bot as bot_mod
+        import session_management as sm_mod
 
         summary_started = asyncio.Event()
         allow_html = asyncio.Event()
@@ -54,21 +54,21 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
             summary_started.set()
             return "SUMMARY", None
 
-        monkeypatch.setattr(bot_mod, "summarize_text_with_reason", _fake_summary)
+        monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)
 
         def _ansi_to_html(_s):
             # This runs inside asyncio.to_thread in prod. In test we override to_thread to be awaitable,
             # so we can block it until summary has started.
             return "<html>ok</html>"
 
-        monkeypatch.setattr(bot_mod, "ansi_to_html", _ansi_to_html)
+        monkeypatch.setattr(sm_mod, "ansi_to_html", _ansi_to_html)
 
         def _make_html_file(html, prefix):
             p = tmp_path / "out.html"
             p.write_text(html, encoding="utf-8")
             return str(p)
 
-        monkeypatch.setattr(bot_mod, "make_html_file", _make_html_file)
+        monkeypatch.setattr(sm_mod, "make_html_file", _make_html_file)
 
         async def _to_thread(fn, *args, **kwargs):
             # Force the HTML path to wait until summary started to prove we run them in parallel.

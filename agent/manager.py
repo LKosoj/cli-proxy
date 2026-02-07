@@ -130,6 +130,15 @@ def _truncate_report(text: str, max_chars: int) -> str:
     return f"{text[:head_size]}\n\n...(обрезано {skipped} символов)...\n\n{text[-tail_size:]}"
 
 
+def _task_progress(plan: ProjectPlan, task: DevTask) -> Tuple[int, int]:
+    """Return 1-based task position in plan and total tasks count."""
+    total = len(plan.tasks)
+    for idx, candidate in enumerate(plan.tasks, start=1):
+        if candidate is task or candidate.id == task.id:
+            return idx, total
+    return 0, total
+
+
 # ---------------------------------------------------------------------------
 # Public helpers used by bot.py
 # ---------------------------------------------------------------------------
@@ -143,6 +152,25 @@ def needs_resume_choice(plan: Optional[ProjectPlan], *, auto_resume: bool, user_
     if not plan or plan.status != "active":
         return False
     if auto_resume:
+        return False
+    txt = (user_text or "").strip()
+    if not txt:
+        return False
+    if txt == MANAGER_CONTINUE_TOKEN:
+        return False
+    return True
+
+
+def needs_failed_resume_choice(plan: Optional[ProjectPlan], *, auto_resume: bool, user_text: str) -> bool:
+    """
+    True when we have a failed plan with retryable tasks and auto-resume is disabled.
+    Used by the bot to ask whether to continue a stopped plan or start a new one.
+    """
+    if not plan or plan.status != "failed":
+        return False
+    if auto_resume:
+        return False
+    if not ManagerOrchestrator._can_resume_failed(plan):
         return False
     txt = (user_text or "").strip()
     if not txt:
@@ -218,7 +246,12 @@ class ManagerOrchestrator:
         if plan and plan.status == "active" and (self._config.defaults.manager_auto_resume or txt == MANAGER_CONTINUE_TOKEN):
             # continue silently
             pass
-        elif plan and plan.status == "failed" and self._can_resume_failed(plan):
+        elif (
+            plan
+            and plan.status == "failed"
+            and self._can_resume_failed(plan)
+            and (self._config.defaults.manager_auto_resume or txt == MANAGER_CONTINUE_TOKEN)
+        ):
             # Plan was failed (timeout / partial) but has retryable tasks — resume it.
             plan.status = "active"
             plan.updated_at = _now_iso()
@@ -664,24 +697,26 @@ class ManagerOrchestrator:
         # --- Pass 1: normalize interrupted / stale statuses ---
         for t in plan.tasks:
             if t.status == "in_progress":
-                # Interrupted during development: reset to pending and decrement attempt
-                # so that the loop increment brings it back to the same attempt number.
-                t.status = "pending"
-                if t.attempt > 0:
-                    t.attempt -= 1
+                # Interrupted during development.
+                # If retry budget is exhausted, mark as failed; otherwise restart from pending.
+                if t.attempt >= t.max_attempts:
+                    t.status = "failed"
+                else:
+                    t.status = "pending"
             elif t.status == "in_review":
-                # Interrupted during review: dev is DONE, keep as in_review so loop
-                # skips development and goes straight to review. Decrement attempt
-                # so the loop increment restores the correct number.
-                if t.attempt > 0:
-                    t.attempt -= 1
+                # Interrupted during review.
+                # Same rule as in_progress: retry if attempts remain, otherwise fail.
+                if t.attempt >= t.max_attempts:
+                    t.status = "failed"
+                else:
+                    t.status = "pending"
             elif t.status == "rejected":
                 if t.attempt >= t.max_attempts:
                     t.status = "failed"
                 else:
                     t.status = "pending"
             elif t.status == "failed" and t.attempt < t.max_attempts:
-                # Task failed but has attempts left (e.g. plan was stopped mid-way) → retry
+                # Previously failed task can be retried if attempts remain.
                 t.status = "pending"
 
         # --- Pass 2: re-evaluate blocked tasks (they may be unblocked now) ---
@@ -799,9 +834,13 @@ class ManagerOrchestrator:
                 task.status = "in_progress"
                 save_plan(session.workdir, plan)
                 if chat_id is not None:
+                    task_num, task_total = _task_progress(plan, task)
                     await bot._send_message(
                         context, chat_id=chat_id,
-                        text=f"🔧 Разработка: {task.title} (попытка {task.attempt}/{task.max_attempts})",
+                        text=(
+                            f"🔧 Разработка ({task_num}/{task_total}): {task.title} "
+                            f"(попытка {task.attempt}/{task.max_attempts})"
+                        ),
                     )
 
                 # === DEVELOPMENT ===

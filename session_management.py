@@ -22,7 +22,7 @@ from utils import (
     make_html_file,
     strip_ansi,
 )
-from agent.manager import needs_resume_choice
+from agent.manager import needs_failed_resume_choice, needs_resume_choice
 
 
 @dataclass
@@ -390,6 +390,26 @@ class SessionManagement:
                         context,
                         chat_id=chat_id,
                         text="Найден активный план Manager. Продолжить его или начать новый (старый будет заархивирован)?",
+                        reply_markup=keyboard,
+                    )
+                    return
+                if needs_failed_resume_choice(plan, auto_resume=bool(self.bot_app.config.defaults.manager_auto_resume), user_text=prompt):
+                    self.bot_app.manager_resume_pending[session.id] = {"prompt": prompt, "dest": dict(dest)}
+                    keyboard = InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton("▶️ Продолжить остановленный план", callback_data="manager_resume:continue"),
+                            ],
+                            [
+                                InlineKeyboardButton("🆕 Начать новый план", callback_data="manager_resume:new"),
+                            ],
+                            [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
+                        ]
+                    )
+                    await self.bot_app._send_message(
+                        context,
+                        chat_id=chat_id,
+                        text="Найден остановленный план Manager с доступными повторами. Продолжить его или начать новый (старый будет заархивирован)?",
                         reply_markup=keyboard,
                     )
                     return
