@@ -19,7 +19,7 @@ def build_default_profile(config: AppConfig, tool_registry: ToolRegistry) -> Exe
     tools = list(sorted(tool_registry.list_tool_names()))
     # Default steps can involve multi-provider web fetch + LLM summarization,
     # which regularly exceeds 90s. Give enough headroom for "long" step1 tasks.
-    return ExecutorProfile(name="default", allowed_tools=tools, timeout_ms=240_000)
+    return ExecutorProfile(name="default", allowed_tools=tools, timeout_ms=600_000)
 
 
 def _available(tool_registry: ToolRegistry, names: List[str]) -> List[str]:
