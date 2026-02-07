@@ -56,8 +56,8 @@ from agent.plugins.task_management import run_task_deadline_checker
 from agent.tooling.registry import get_tool_registry
 
 from handlers import BotHandlers
-from callbacks import CallbackHandlers
-from message_processing import MessageProcessor
+from callbacks import CallbackHandler
+from message_processor import MessageProcessor
 from session_management import SessionManagement
 
 
@@ -140,8 +140,13 @@ class BotApp:
         self._task_deadline_checker_task: Optional[asyncio.Task] = None
         
         # Initialize modules
+        from handlers import BotHandlers
+        from callbacks import CallbackHandler  
+        from message_processor import MessageProcessor
+        from session_management import SessionManagement
+        
         self.handlers = BotHandlers(self)
-        self.callbacks = CallbackHandlers(self)
+        self.callbacks = CallbackHandler(self)
         self.message_processor = MessageProcessor(self)
         self.session_management = SessionManagement(self)
         

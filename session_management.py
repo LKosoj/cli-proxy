@@ -10,24 +10,15 @@ import shutil
 import time
 import re
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update, Message
-from telegram.error import NetworkError, TimedOut
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
 from config import AppConfig, ToolConfig, load_config
 from dotenv_loader import load_dotenv_near
 from session import Session, SessionManager, run_tool_help
-# Note: summarize_text_with_reason will be accessed through self.bot_app
-# to allow for patching in tests
+from summary import summarize_text_with_reason
 from command_registry import build_command_registry
 from dirs_ui import build_dirs_keyboard, prepare_dirs
 from session_ui import SessionUI
@@ -37,16 +28,16 @@ from mcp_bridge import MCPBridge
 from state import get_state, load_active_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
 from utils import (
+    ansi_to_html,
     build_preview,
     has_ansi,
     is_within_root,
+    make_html_file,
     sandbox_root,
     sandbox_session_dir,
     sandbox_shared_dir,
     strip_ansi,
 )
-# Note: ansi_to_html and make_html_file will be accessed through self.bot_app
-# to allow for patching in tests
 from tg_markdown import to_markdown_v2
 from agent import execute_shell_command, pop_pending_command, set_approval_callback
 from agent.orchestrator import OrchestratorRunner
@@ -54,15 +45,6 @@ from agent.manager import ManagerOrchestrator
 from agent.manager import MANAGER_CONTINUE_TOKEN, format_manager_status, needs_resume_choice
 from agent.plugins.task_management import run_task_deadline_checker
 from agent.tooling.registry import get_tool_registry
-
-
-_HTML_PROCESS_THRESHOLD_CHARS = 100_000
-_HTML_PROCESS_POOL = None  # Will be initialized in main bot app
-_HTML_RENDER_TAIL_CHARS = 10_000
-_SUMMARY_PREPARE_THRESHOLD_CHARS = 20_000
-_SUMMARY_TAIL_CHARS = 50_000
-_SUMMARY_WAIT_FOR_HTML_S = 5.0
-_SUMMARY_TIMEOUT_S = 100.0
 
 
 @dataclass
@@ -80,6 +62,16 @@ class SessionManagement:
     
     def __init__(self, bot_app):
         self.bot_app = bot_app
+        # HTML rendering of large ANSI logs is CPU-heavy and often pure-Python.
+        # Running it in a thread can starve the event loop due to the GIL, which looks like "polling freeze".
+        # For large outputs we offload conversion to a separate process.
+        self._html_process_threshold_chars = 100_000
+        self._html_process_pool = None  # Will be initialized in main bot app
+        self._html_render_tail_chars = 10_000
+        self._summary_prepare_threshold_chars = 20_000
+        self._summary_tail_chars = 50_000
+        self._summary_wait_for_html_s = 5.0
+        self._summary_timeout_s = 100.0
 
     async def send_output(
         self,
@@ -117,7 +109,7 @@ class SessionManagement:
                     f"Каталог: {session.workdir}\n"
                     f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\n"
                     f"Resume: {'есть' if session.resume_token else 'нет'}\n"
-                    f"Сначала отправлю вывод во вложении (HTML, последние {_HTML_RENDER_TAIL_CHARS} символов), затем пришлю summary."
+                    f"Сначала отправлю вывод во вложении (HTML, последние {self._html_render_tail_chars} символов), затем пришлю summary."
                 )
                 if chat_id is not None:
                     await self.bot_app._send_message(context, chat_id=chat_id, text=header)
@@ -126,7 +118,7 @@ class SessionManagement:
                 # Keep the log prefix stable for existing log parsing, but note that for big outputs
                 # we may switch to a process pool (see below).
                 _so_log.info("[send_output] generating HTML (in thread)...")
-                render_src = output[-_HTML_RENDER_TAIL_CHARS:] if len(output) > _HTML_RENDER_TAIL_CHARS else output
+                render_src = output[-self._html_render_tail_chars:] if len(output) > self._html_render_tail_chars else output
                 if len(render_src) != len(output):
                     _so_log.info(
                         "[send_output] HTML: truncating output for render (orig_len=%d -> render_len=%d)",
@@ -135,27 +127,27 @@ class SessionManagement:
                     )
                 loop = asyncio.get_running_loop()
                 t0 = time.time()
-                if len(render_src) >= _HTML_PROCESS_THRESHOLD_CHARS:
+                if len(render_src) >= self._html_process_threshold_chars:
                     _so_log.info("[send_output] HTML: using process pool (len=%d)", len(render_src))
-                    html_text_local = await loop.run_in_executor(_HTML_PROCESS_POOL, self.bot_app.ansi_to_html, render_src)
+                    html_text_local = await loop.run_in_executor(self._html_process_pool, ansi_to_html, render_src)
                 else:
-                    html_text_local = await asyncio.to_thread(self.bot_app.ansi_to_html, render_src)
+                    html_text_local = await asyncio.to_thread(ansi_to_html, render_src)
                 _so_log.info("[send_output] HTML: conversion done in %.2fs", time.time() - t0)
-                return await asyncio.to_thread(self.bot_app.make_html_file, html_text_local, self.bot_app.config.defaults.html_filename_prefix)
+                return await asyncio.to_thread(make_html_file, html_text_local, self.bot_app.config.defaults.html_filename_prefix)
 
             async def _summarize() -> tuple[Optional[str], Optional[str]]:
                 try:
                     # Limit input size for summary: only the tail matters most for CLI sessions.
                     # This also reduces CPU work during normalization and avoids polling stalls.
-                    text_for_summary = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
+                    text_for_summary = output[-self._summary_tail_chars:] if len(output) > self._summary_tail_chars else output
                     s, err = await asyncio.wait_for(
-                        self.bot_app.summarize_text_with_reason(text_for_summary, config=self.bot_app.config),
-                        timeout=_SUMMARY_TIMEOUT_S,
+                        summarize_text_with_reason(text_for_summary, config=self.bot_app.config),
+                        timeout=self._summary_timeout_s,
                     )
                     return s, err
                 except asyncio.TimeoutError:
-                    _so_log.warning("[send_output] summarize timed out after %ss", _SUMMARY_TIMEOUT_S)
-                    return None, f"таймаут суммаризации ({int(_SUMMARY_TIMEOUT_S)}с)"
+                    _so_log.warning("[send_output] summarize timed out after %ss", self._summary_timeout_s)
+                    return None, f"таймаут суммаризации ({int(self._summary_timeout_s)}с)"
                 except Exception:
                     _so_log.exception("[send_output] summarize exception")
                     return None, "неизвестная ошибка"
@@ -169,7 +161,7 @@ class SessionManagement:
                 summary, summary_error = await summary_task
                 # Fallback preview should still be sent even if summary timed out / HTML is slow.
                 try:
-                    text_for_preview = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
+                    text_for_preview = output[-self._summary_tail_chars:] if len(output) > self._summary_tail_chars else output
                     preview = summary or build_preview(strip_ansi(text_for_preview), self.bot_app.config.defaults.summary_max_chars)
                 except Exception:
                     preview = summary or ""
@@ -179,7 +171,7 @@ class SessionManagement:
                 # Prefer HTML-first, but never "send nothing": wait briefly for HTML, then send anyway.
                 if not html_sent.is_set():
                     try:
-                        await asyncio.wait_for(html_sent.wait(), timeout=_SUMMARY_WAIT_FOR_HTML_S)
+                        await asyncio.wait_for(html_sent.wait(), timeout=self._summary_wait_for_html_s)
                     except asyncio.TimeoutError:
                         pass
 
@@ -226,7 +218,7 @@ class SessionManagement:
             try:
                 # Store whatever we managed to send as a session preview, if available.
                 # Prefer summary; else use local preview of the tail.
-                text_for_preview = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
+                text_for_preview = output[-self._summary_tail_chars:] if len(output) > self._summary_tail_chars else output
                 state_preview = build_preview(strip_ansi(text_for_preview), self.bot_app.config.defaults.summary_max_chars)
                 session.state_summary = state_preview
                 session.state_updated_at = time.time()
@@ -238,7 +230,13 @@ class SessionManagement:
                 logging.exception(f"tool failed {str(e)}")
             _so_log.info("[send_output] done session=%s", session.id)
 
-    async def run_prompt(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def run_prompt(
+        self,
+        session: Session,
+        prompt: str,
+        dest: dict,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
         _rp_log = logging.getLogger("bot.run_prompt")
         _rp_log.info("[run_prompt] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
         async with session.run_lock:
@@ -306,7 +304,13 @@ class SessionManagement:
                         logging.exception(f"tool failed {str(e)}")
                     asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
-    async def run_agent(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def run_agent(
+        self,
+        session: Session,
+        prompt: str,
+        dest: dict,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
         _ra_log = logging.getLogger("bot.run_agent")
         _ra_log.info("[run_agent] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
         async with session.run_lock:
@@ -320,7 +324,7 @@ class SessionManagement:
             try:
                 _ra_log.info("[run_agent] calling agent.run session=%s", session.id)
                 output = await self.bot_app.agent.run(session, prompt, self.bot_app, context, dest)
-                _ra_log.info("[run_agent] agent.run returned session=%s output_len=%d", session.id, len(output))
+                _ra_log.info("[run_agent] agent.run returned session=%s output_len=%d", session.id, len(output or ""))
                 now = time.time()
                 session.last_output_ts = now
                 session.last_tick_ts = now
@@ -365,12 +369,20 @@ class SessionManagement:
                         self.bot_app.manager._persist_sessions()
                     except Exception as e:
                         logging.exception(f"tool failed {str(e)}")
-                    if session.agent_enabled:
+                    if getattr(session, "manager_enabled", False):
+                        self.bot_app._start_manager_task(session, next_prompt, next_dest, context)
+                    elif session.agent_enabled:
                         self.bot_app._start_agent_task(session, next_prompt, next_dest, context)
                     else:
                         asyncio.create_task(self.run_prompt(session, next_prompt, next_dest, context))
 
-    async def run_manager(self, session: Session, prompt: str, dest: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def run_manager(
+        self,
+        session: Session,
+        prompt: str,
+        dest: dict,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
         _rm_log = logging.getLogger("bot.run_manager")
         _rm_log.info("[run_manager] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
         # If there's an active plan and auto-resume is disabled, ask user what to do before starting long work.
@@ -415,8 +427,12 @@ class SessionManagement:
                 _rm_log.info("[run_manager] calling manager_orchestrator.run session=%s", session.id)
                 output = await self.bot_app.manager_orchestrator.run(session, prompt, self.bot_app, context, dest)
                 _rm_log.info("[run_manager] manager_orchestrator.run returned session=%s output_len=%d", session.id, len(output or ""))
+                now = time.time()
+                session.last_output_ts = now
+                session.last_tick_ts = now
+                session.tick_seen = (session.tick_seen or 0) + 1
                 try:
-                    preview = build_preview(strip_ansi(output or ""), self.bot_app.config.defaults.summary_max_chars)
+                    preview = build_preview(strip_ansi(output), self.bot_app.config.defaults.summary_max_chars)
                     session.state_summary = preview
                     session.state_updated_at = time.time()
                 except Exception as e:
@@ -481,8 +497,8 @@ class SessionManagement:
                 return False, "Каталог не существует."
             project_root = os.path.realpath(project_root)
         session.project_root = project_root
-        self._interrupt_before_close(session.id, chat_id, context)
-        self._clear_agent_session_cache(session.id)
+        self.bot_app._interrupt_before_close(session.id, chat_id, context)
+        self.bot_app._clear_agent_session_cache(session.id)
         try:
             self.bot_app.manager._persist_sessions()
         except Exception:
@@ -563,23 +579,3 @@ class SessionManagement:
                     self.bot_app.manager_tasks.pop(sid, None)
 
             task.add_done_callback(_cleanup)
-
-    async def run_prompt_raw(self, prompt: str, session_id: Optional[str] = None) -> str:
-        session = self.bot_app.manager.get(session_id) if session_id else self.bot_app.manager.active()
-        if not session:
-            raise RuntimeError("no_active_session")
-        if session.run_lock.locked():
-            raise RuntimeError("session_busy")
-        async with session.run_lock:
-            session.busy = True
-            session.started_at = time.time()
-            session.last_output_ts = session.started_at
-            session.last_tick_ts = None
-            session.last_tick_value = None
-            session.tick_seen = 0
-            try:
-                output = await session.run_prompt(prompt)
-                self.bot_app.metrics.observe_output(len(output))
-                return output
-            finally:
-                session.busy = False

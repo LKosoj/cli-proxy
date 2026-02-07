@@ -1,5 +1,5 @@
 """
-Module containing callback handlers for the Telegram bot.
+Module containing callback handling functionality for the Telegram bot.
 """
 
 import asyncio
@@ -9,19 +9,10 @@ import os
 import shutil
 import time
 import re
-from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update, Message
-from telegram.error import NetworkError, TimedOut
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
 from config import AppConfig, ToolConfig, load_config
 from dotenv_loader import load_dotenv_near
@@ -55,23 +46,15 @@ from agent.plugins.task_management import run_task_deadline_checker
 from agent.tooling.registry import get_tool_registry
 
 
-@dataclass
-class PendingInput:
-    session_id: str
-    text: str
-    dest: dict
-    image_path: Optional[str] = None
-
-
-class CallbackHandlers:
+class CallbackHandler:
     """
-    Class containing callback handlers for the Telegram bot.
+    Class containing callback handling functionality for the Telegram bot.
     """
     
     def __init__(self, bot_app):
         self.bot_app = bot_app
 
-    async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         try:
             await query.answer()
