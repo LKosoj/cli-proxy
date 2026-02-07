@@ -1074,8 +1074,8 @@ def build_app(config: AppConfig) -> Application:
     async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         err = context.error
         msg = str(err)
-        if "ConnectError" in msg or "NetworkError" in msg or "TimedOut" in msg:
-            logging.warning("Ошибка сети при отправке сообщения в Telegram.")
+        if "ConnectError" in msg or "NetworkError" in msg or "TimedOut" in msg or "Conflict" in msg:
+            logging.warning("Ошибка сети при отправке сообщения в Telegram: %s", msg)
             return
         logging.exception("Ошибка бота: %s", err)
 
