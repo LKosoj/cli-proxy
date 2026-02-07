@@ -2,146 +2,121 @@
 
 ```mermaid
 graph TD
-    subgraph "Telegram Interface"
-        A[Telegram Bot] --> B[SessionUI]
-        A --> C[DirsUI]
-        A --> D[Plugin Menus]
-    end
+    A[Telegram-бот] --> B[SessionUI]
+    A --> C[GitOps]
+    A --> D[ToolRegistry]
+    A --> E[SessionManager]
+    A --> F[Metrics]
+    A --> G[MCPBridge]
 
-    subgraph "Core Application"
-        B --> E[SessionManager]
-        C --> E
-        D --> F[ToolRegistry]
-        E --> G[Session]
-        G --> H[OrchestratorRunner]
-        H --> I[Executor]
-        I --> J[AgentRunner]
-        J --> K[ReActAgent]
-        F --> L[MCPManager]
-        L --> M[HttpMCPClient]
-        L --> N[StdioMCPClient]
-        F --> O[PluginLoader]
-    end
+    B --> H[SessionManager]
+    B --> I[TelegramIO]
+    B --> J[config.yaml]
 
-    subgraph "State & Configuration"
-        P[config.yaml] --> E
-        P --> F
-        P --> L
-        Q[state.json] --> E
-        R[toolhelp.json] --> F
-        S[tasks.json] --> F
-        T[MEMORY.md] --> J
-    end
+    C --> E
+    C --> I
+    C --> J
 
-    subgraph "External Services"
-        K --> U[OpenAI API]
-        K --> V[Tavily Search]
-        K --> W[Jina Reader]
-        M --> X[External MCP Server]
-        N --> Y[Local MCP Server]
-    end
+    D --> K[Плагины]
+    D --> L[MCP-серверы]
+    D --> M[tools.* в config.yaml]
 
-    subgraph "Persistence & Utils"
-        Z[read_json_locked] --> Q
-        AA[write_json_locked] --> Q
-        AB[ansi_to_html] --> AC[HTML Output]
-        AD[make_html_file] --> AC
-    end
+    E --> N[state.json]
+    E --> O[Session]
+    E --> P[SessionState]
 
-    E --> Z
-    E --> AA
-    G --> AB
-    G --> AD
-    H --> AB
-    J --> AB
-    K --> AB
+    F --> Q[bot.log]
+    F --> R[bot_error.log]
+    F --> S[agent.log]
 
-    style A fill:#4CAF50,stroke:#388E3C
-    style B fill:#2196F3,stroke:#1976D2
-    style E fill:#2196F3,stroke:#1976D2
-    style F fill:#2196F3,stroke:#1976D2
-    style G fill:#FF9800,stroke:#F57C00
-    style K fill:#9C27B0,stroke:#7B1FA2
-    style P fill:#607D8B,stroke:#455A64
-    style Q fill:#607D8B,stroke:#455A64
-    style U fill:#FF5722,stroke:#D84315
-    style X fill:#795548,stroke:#5D4037
-    style Y fill:#795548,stroke:#5D4037
+    G --> T[TCP-порт]
+    G --> U[bot_app.run_prompt_raw]
+    G --> V[MCP-токен]
+
+    H --> W[Клавиатура сессий]
+    H --> X[Обработка callback]
+    H --> Y[Ожидание ввода]
+
+    O --> Z[headless/interactive]
+    O --> AA[auto_commands]
+    O --> AB[resume_token]
+
+    K --> AC[локальные .py]
+    K --> AD[MCPRemoteToolPlugin]
+
+    M --> AE[cmd, prompt_regex]
+    M --> AF[env, auto_commands]
+
+    style A fill:#4CAF50,stroke:#388E3C,color:white
+    style B fill:#2196F3,stroke:#1976D2,color:white
+    style C fill:#2196F3,stroke:#1976D2,color:white
+    style D fill:#2196F3,stroke:#1976D2,color:white
+    style E fill:#2196F3,stroke:#1976D2,color:white
+    style F fill:#2196F3,stroke:#1976D2,color:white
+    style G fill:#2196F3,stroke:#1976D2,color:white
+    style N fill:#FFC107,stroke:#FFA000,color:black
+    style Q fill:#9E9E9E,stroke:#616161,color:white
+    style T fill:#9C27B0,stroke:#7B1FA2,color:white
 ```
 
-# Архитектура
+## Архитектура
 
-Система представляет собой Telegram-бота с поддержкой многопользовательских сессий, CLI-агентов и интеграции с внешними сервисами. Архитектура построена вокруг центрального класса `BotApp`, координирующего взаимодействие между компонентами.
+Система построена вокруг Telegram-бота, управляющего CLI-агентами через сессии. Архитектура обеспечивает изоляцию, отказоустойчивость и масштабируемость.
 
-## Основные компоненты
+### Основные компоненты
 
-### `SessionManager` и `Session`
-`SessionManager` управляет жизненным циклом сессий, обеспечивая создание, активацию, восстановление и сохранение состояния. Каждая сессия (`Session`) изолирована в отдельной рабочей директории и содержит:
-- Ссылку на `ToolConfig` (CLI-агент: Codex, Gemini и др.)
-- Рабочую директорию (`workdir`)
-- Токен возобновления (`resume_token`)
-- Очередь команд и состояние занятости
+**Telegram-бот** — центральный узел, принимающий команды и вложения. Работает в режиме polling, использует `python-telegram-bot` для асинхронной обработки. Ограничивает доступ по `whitelist_chat_ids`.
 
-Сессии сохраняются в `state.json` с помощью потокобезопасных операций `read_json_locked`/`write_json_locked`. При старте приложения активные сессии восстанавливаются из файла.
+**SessionManager** — управляет жизненным циклом сессий. Создаёт, активирует, сохраняет и восстанавливает сессии. Хранит состояние в `state.json` с поддержкой миграции с устаревшего формата. Обеспечивает уникальность `session_id` и отслеживает активную сессию.
 
-### `SessionUI`
-Обеспечивает интерактивное управление сессиями через Telegram. Генерирует меню с помощью `build_sessions_menu()` и обрабатывает действия:
-- Выбор/активация сессии
-- Переименование (`sess_rename:`)
-- Обновление resume-токена (`sess_resume:`)
-- Проверка состояния (`sess_state:`)
-- Очистка очереди (`sess_clearqueue`)
-- Закрытие сессии с вызовом `_on_before_close` и `_on_close`
+**Session** — представляет одну сессию CLI-инструмента (Codex, Claude и др.). Поддерживает два режима:
+- `headless` — запуск через `asyncio.subprocess`.
+- `interactive` — управление через `pexpect` с ожиданием приглашения (`prompt_regex`) и возобновлением по `resume_token`.
 
-Ввод данных (имя, токен) обрабатывается в `handle_pending_message()` с поддержкой отмены через "отмена", "-", "Отмена".
+**SessionUI** — интерфейс управления сессиями через inline-кнопки. Формирует меню сессий, обрабатывает `callback`-действия (`sess_pick`, `sess_use`, `sess_rename` и др.) и режим ожидания ввода (переименование, установка токена). Использует `pending_session_rename` и `pending_session_resume` для отслеживания контекста.
 
-### `ToolRegistry` и плагины
-Центральный реестр инструментов, управляющий локальными плагинами и удалёнными MCP-инструментами. Ключевые функции:
-- Автоматическая загрузка плагинов из директории `plugins/` через `PluginLoader`
-- Регистрация инструментов с валидацией по `ToolSpec`
-- Фильтрация по `allowed_tools` ("All", "None")
-- Выполнение через `execute()` с таймаутом `TOOL_TIMEOUT_MS`
-- Поддержка параллельного выполнения (`execute_parallel_or_sequential`)
+**GitOps** — выполняет Git-операции (commit, pull, merge, rebase) через inline-меню. Использует `GIT_ASKPASS` для безопасной передачи `github_token`. Поддерживает разрешение конфликтов и вызов агента для правки.
 
-Плагины реализуют интерфейс `ToolPlugin` и могут включать диалоги через `DialogMixin`.
+**ToolRegistry** — централизованный реестр инструментов. Загружает локальные плагины из `plugins/` и обнаруживает MCP-серверы. Предоставляет спецификации инструментов в формате OpenAI/Google и управляет их выполнением с таймаутом (`TOOL_TIMEOUT_MS`).
 
-### `OrchestratorRunner` и `Executor`
-Оркестратор (`OrchestratorRunner`) управляет выполнением задач:
-1. Планирование через `plan_steps()` с генерацией `PlanStep`
-2. Упорядочивание шагов с учётом зависимостей (`_order_steps_safely`)
-3. Параллельное выполнение безопасных операций (`_next_batch`)
-4. Обработка результатов и обновление памяти (`_apply_step_result`, `_maybe_update_memory`)
+**MCPBridge** — TCP-сервер, принимающий JSON-запросы на выполнение команд. Проверяет токен (`config.mcp.token`) и делегирует обработку `bot_app.run_prompt_raw`. Формат запроса: `{"token", "prompt", "session_id"}`.
 
-`Executor` запускает `AgentRunner`, который инициирует цикл ReAct-агента с вызовом инструментов из `ToolRegistry`.
+**Metrics** — собирает метрики в реальном времени: `messages`, `commands`, `errors`, `queued`. Метод `snapshot` возвращает текстовый отчёт с временем работы и размером последнего вывода.
 
-### `MCPManager`
-Управляет подключением к MCP-серверам через два транспорта:
-- `stdio`: запуск локального сервера через `StdioMCPClient`
-- `http`: подключение к внешнему серверу через `HttpMCPClient`
+### Хранение и конфигурация
 
-Инструменты кэшируются в `_shared/mcp_tools_cache.json` для ускорения инициализации. Поддерживает `list_tools()` и `call()` с валидацией аргументов.
+**state.json** — хранит сессии в формате:
+```json
+{
+  "_sessions": { "session_id": { "tool", "workdir", "resume_token", "name", "updated_at" } },
+  "_active": { "session_id", "tool", "workdir", "updated_at" }
+}
+```
+Поддерживает миграцию с устаревшего формата `{tool}::{workdir}`.
 
-## Потоки данных
+**config.yaml** — основной конфигурационный файл. Загружается с подстановкой переменных окружения (`${VAR}`). Ключевые секции:
+- `telegram` — токен и `whitelist_chat_ids`.
+- `tools` — настройки CLI-инструментов: `cmd`, `prompt_regex`, `env`.
+- `defaults` — пути, таймауты, API-ключи.
+- `mcp` — параметры встроенного MCP-сервера.
+- `presets` — шаблоны команд.
 
-1. **Пользователь → Бот**: команда `/sessions` → `SessionUI.build_sessions_menu()` → отправка меню
-2. **Пользователь → Сессия**: выбор сессии → `SessionManager.set_active()` → обновление `_active` в `state.json`
-3. **Агент → Инструмент**: `ReActAgent` вызывает инструмент → `ToolRegistry.execute()` → выполнение плагина
-4. **Вывод → Пользователь**: ANSI-вывод → `ansi_to_html()` → `make_html_file()` → отправка HTML-файла
+### Безопасность и отказоустойчивость
 
-## Безопасность и ограничения
+- **Проверка путей** — `is_within_root` предотвращает выход за пределы `AGENT_SANDBOX_ROOT`.
+- **Фильтрация команд** — `BLOCKED_PATTERNS_PATH` блокирует опасные команды (rm -rf, sudo, exfiltration).
+- **Повторные попытки** — `TelegramIO` отправляет сообщения до 5 раз при `NetworkError`.
+- **Сериализованный доступ** — `read_json_locked` и `write_json_locked` используют системные блокировки для целостности `state.json`.
 
-- **Изоляция**: все операции выполняются в пределах `workdir`, проверка через `is_within_root()`
-- **Блокировка команд**: `check_command()` с `BLOCKED_PATTERNS_PATH` предотвращает выполнение опасных операций
-- **Таймауты**: `TOOL_TIMEOUT_MS` (120 сек), `GREP_TIMEOUT_MS` (30 сек), `WEB_FETCH_TIMEOUT_MS` (90 сек)
-- **Ограничение вывода**: `OUTPUT_TRIM_LEN` (3000 символов), `OUTPUT_HEAD_LEN` (1500), `OUTPUT_TAIL_LEN` (1000)
-- **Память**: `MEMORY.md` сжимается по приоритету тегов (`PREF > DECISION > CONFIG > AGREEMENT`)
+### Восстановление и интеграции
 
-## Конфигурация и состояние
+После перезапуска бот восстанавливает:
+- Активные сессии из `state.json`.
+- Очередь задач.
+- Состояние `toolhelp.json`.
 
-- `config.yaml`: глобальные настройки (`telegram.token`, `defaults.workdir`, `tools.*`, `mcp.*`)
-- `state.json`: состояние сессий и активной сессии
-- `toolhelp.json`: справка по CLI-инструментам
-- `tasks.json`: задачи пользователя
-- `MEMORY.md`: долговременная память агента
-
-Переменные окружения имеют приоритет над `config.yaml` (например, `TAVILY_API_KEY`, `JINA_API_KEY`, `GITHUB_TOKEN`).
+Интеграции:
+- **OpenAI** — для суммаризации, генерации коммитов, декомпозиции задач.
+- **MCP** — подключение к внешним инструментальным серверам.
+- **Git** — inline-операции с поддержкой приватных репозиториев.
+- **Плагины** — динамическая загрузка из `plugins/` с поддержкой диалогов через `DialogMixin`.

@@ -348,6 +348,18 @@
 </li>
             
 <li>
+    <a href="../manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="../manager_prompts__py.html" class="dropdown-item">manager_prompts.py</a>
+</li>
+            
+<li>
+    <a href="../manager_store__py.html" class="dropdown-item">manager_store.py</a>
+</li>
+            
+<li>
     <a href="../memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
 </li>
             
@@ -378,6 +390,14 @@
   </li>
                                     
 <li>
+    <a href="../../bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="../../bot_logging__py.html" class="dropdown-item">bot_logging.py</a>
+</li>
+                                    
+<li>
     <a href="../../command_registry__py.html" class="dropdown-item">command_registry.py</a>
 </li>
                                     
@@ -387,6 +407,10 @@
                                     
 <li>
     <a href="../../dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../../dotenv_loader__py.html" class="dropdown-item">dotenv_loader.py</a>
 </li>
                                     
 <li>
@@ -415,6 +439,14 @@
                                     
 <li>
     <a href="../../summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="../../telegram_io__py.html" class="dropdown-item">telegram_io.py</a>
+</li>
+                                    
+<li>
+    <a href="../../tg_markdown__py.html" class="dropdown-item">tg_markdown.py</a>
 </li>
                                     
 <li>
@@ -475,169 +507,129 @@
                     <div class="col-md-9" role="main">
 
 <h1 id="agentpluginsbase">agent/plugins/base</h1>
-<p>Базовый модуль для реализации плагинов инструментов (tools) в агентной системе. Определяет абстрактный класс <code>ToolPlugin</code> как основу для всех плагинов, а также предоставляет миксин <code>DialogMixin</code> для поддержки интерактивных диалогов с пользователем. Включает стандартные механизмы управления состоянием, обработки команд и интеграции с Telegram UI.</p>
+<p>Модуль предоставляет базовый функционал для реализации диалоговых сценариев и обработки inline-кнопок в Telegram-ботах. Он включает инструменты для управления состоянием диалога, создания кнопок с привязкой к шагам диалога или автономным действиям, а также единые точки обработки сообщений и колбэков. Модуль предназначен для использования в плагинах, реализующих интерактивные диалоги.</p>
 <p>Ключевые структуры данных<br />
-DialogState — состояние активного диалога для одного чата, включая текущий шаг, данные, ID пользователя и время начала<br />
-StepHandler — Тип, описывающий обработчик шага диалога: может быть вызываемым объектом или словарём с ключами "message" и/или "callback"</p>
+DialogState — состояние активного диалога, включает текущий шаг и произвольные данные</p>
 <hr />
-<p>class ToolPlugin<br />
-Абстрактный базовый класс для всех плагинов инструментов.<br />
-Поля<br />
-plugin_id — опциональный строковый идентификатор плагина; если не задан, используется имя класса.<br />
-function_prefix — префикс для имен функций плагина; если не задан, используется результат get_plugin_id().<br />
-Методы<br />
-get_plugin_id() -&gt; str — возвращает уникальный идентификатор плагина.<br />
-get_function_prefix() -&gt; str — возвращает префикс, используемый при регистрации функций.<br />
-initialize(config: Any = None, services: Optional[Dict[str, Any]] = None) -&gt; None — инициализирует плагин с конфигурацией и сервисами.<br />
-close() -&gt; None — вызывается при завершении работы плагина; по умолчанию не делает ничего.<br />
-get_source_name() -&gt; str — возвращает имя источника, используемое в логах; по умолчанию — результат get_plugin_id().<br />
-get_commands() -&gt; List[Dict[str, Any]] — возвращает список доступных команд плагина; по умолчанию — пустой список.<br />
-get_message_handlers() -&gt; List[Dict[str, Any]] — возвращает конфигурации обработчиков текстовых сообщений; по умолчанию — пустой список.<br />
-get_inline_handlers() -&gt; List[Dict[str, Any]] — возвращает конфигурации обработчиков инлайн-запросов; по умолчанию — пустой список.<br />
-get_menu_label() -&gt; Optional[str] — возвращает метку для отображения в главном меню плагинов; если None — скрыт.<br />
-get_menu_actions() -&gt; List[Dict[str, str]] — возвращает список действий для подменю плагина; каждое действие содержит "label" и "action".<br />
-awaiting_input(chat_id: int) -&gt; bool — возвращает True, если плагин ожидает ввода от пользователя в указанном чате.<br />
-cancel_input(chat_id: int) -&gt; bool — отменяет активный диалог в чате; возвращает True, если диалог был отменён.<br />
-get_spec() -&gt; ToolSpec — абстрактный метод, возвращающий спецификацию инструмента.<br />
-execute(args: Dict[str, Any], ctx: Dict[str, Any]) -&gt; Dict[str, Any] — абстрактный метод, выполняющий логику инструмента.</p>
+<p>def cancel_button() -&gt; Any<br />
+Создаёт inline-кнопку "Отмена" с callback_data для завершения диалога<br />
+Возвращает<br />
+InlineKeyboardMarkup с одной кнопкой "Отмена"</p>
 <hr />
-<p>class DialogMixin<br />
-Миксин, предоставляющий стандартный протокол для многошаговых интерактивных диалогов.<br />
-Поля<br />
-CANCEL_WORDS — набор слов, распознаваемых как команда отмены диалога.<br />
-DIALOG_TIMEOUT — таймаут (в секундах) неактивного диалога; по умолчанию 300 секунд.<br />
-Методы<br />
-_dialogs() -&gt; Dict[int, DialogState] — возвращает хранилище активных диалогов, привязанное к экземпляру плагина.<br />
-start_dialog(chat_id: int, step: str, data: Optional[Dict[str, Any]] = None, user_id: int = 0) -&gt; None — начинает новый диалог в указанном чате.<br />
-end_dialog(chat_id: int) -&gt; None — завершает и удаляет диалог в указанном чате.<br />
-get_dialog(chat_id: int) -&gt; Optional[DialogState] — возвращает текущее состояние диалога, если оно активно; иначе None.<br />
-set_step(chat_id: int, step: str, data: Optional[Dict[str, Any]] = None) -&gt; None — изменяет текущий шаг диалога и обновляет данные.<br />
-_ensure_agent_enabled(context: Any) -&gt; bool — проверяет, включён ли агент в текущей сессии; возвращает False при ошибках.<br />
-is_cancel_text(text: str) -&gt; bool — проверяет, является ли текст одним из слов отмены.<br />
-_plugin_id_safe() -&gt; str — безопасно получает plugin_id плагина или использует имя класса.<br />
-_cancel_callback_data() -&gt; str — генерирует уникальную строку callback_data для кнопки отмены.<br />
-cancel_markup() -&gt; Any — возвращает объект InlineKeyboardMarkup с кнопкой «Отмена», привязанной к текущему плагину.</p>
-<hr />
-<p>dialog_button(label: str, data: str) -&gt; Any<br />
-Создаёт кнопку с callback_data, привязанную к текущему диалогу плагина.<br />
+<p>def dialog_button(label: str, data: str) -&gt; Any<br />
+Создаёт кнопку, привязанную к текущему диалогу с указанным payload<br />
 Аргументы<br />
-label — Текст кнопки, отображаемый пользователю<br />
-data — Данные, включаемые в callback_data; будут доступны при обработке нажатия<br />
+label — отображаемый текст кнопки<br />
+data — строка данных, передаваемая в callback_data<br />
 Возвращает<br />
-Объект InlineKeyboardButton с префиксом <code>dlg:{plugin_id}:{data}</code> в callback_data</p>
+InlineKeyboardButton с префиксом <code>dlg:{plugin_id}:{data}</code></p>
 <hr />
-<p>action_button(label: str, action: str, payload: str = "") -&gt; Any<br />
-Создаёт кнопку для автономного действия вне диалога.<br />
+<p>def action_button(label: str, action: str, payload: str = "") -&gt; Any<br />
+Создаёт кнопку для автономного действия вне диалога<br />
 Аргументы<br />
-label — Текст кнопки<br />
-action — Идентификатор действия, по которому будет выбран обработчик<br />
-payload — Дополнительные данные, передаваемые обработчику (опционально)<br />
+label — отображаемый текст кнопки<br />
+action — имя действия, по которому будет вызван обработчик<br />
+payload — дополнительные данные (опционально)<br />
 Возвращает<br />
-Объект InlineKeyboardButton с callback_data вида <code>cb:{plugin_id}:{action}</code> или <code>cb:{plugin_id}:{action}:{payload}</code></p>
+InlineKeyboardButton с callback_data вида <code>cb:{plugin_id}:{action}</code> или с payload</p>
 <hr />
-<p>@staticmethod parse_callback_payload(update: Any) -&gt; str<br />
-Извлекает полезную нагрузку из callback_data нажатой кнопки.<br />
+<p>@staticmethod<br />
+def parse_callback_payload(update: Any) -&gt; str<br />
+Извлекает payload из callback_data нажатой кнопки<br />
 Аргументы<br />
-update — Объект обновления от Telegram<br />
+update — объект обновления от Telegram<br />
 Возвращает<br />
-Строку с payload из callback_data; пустую строку, если payload отсутствует или формат не распознан</p>
+Строку payload из <code>dlg:...</code> или <code>cb:...</code>, иначе пустую строку</p>
 <hr />
-<p>awaiting_input(chat_id: int) -&gt; bool<br />
-Проверяет, активен ли диалог с указанным чатом.<br />
+<p>def awaiting_input(self, chat_id: int) -&gt; bool<br />
+Проверяет, активен ли диалог с пользователем в указанном чате<br />
 Аргументы<br />
-chat_id — Идентификатор чата<br />
+chat_id — идентификатор чата<br />
 Возвращает<br />
-True, если диалог активен; иначе False</p>
+True, если диалог активен, иначе False</p>
 <hr />
-<p>cancel_input(chat_id: int) -&gt; bool<br />
-Завершает активный диалог в указанном чате.<br />
+<p>def cancel_input(self, chat_id: int) -&gt; bool<br />
+Принудительно завершает активный диалог в указанном чате<br />
 Аргументы<br />
-chat_id — Идентификатор чата<br />
+chat_id — идентификатор чата<br />
 Возвращает<br />
-True, если диалог был завершён; иначе False</p>
+True, если диалог был завершён, иначе False</p>
 <hr />
-<p>dialog_steps() -&gt; Dict[str, StepHandler]<br />
-Возвращает отображение имён шагов диалога на их обработчики.<br />
+<p>def dialog_steps(self) -&gt; Dict[str, StepHandler]<br />
+Возвращает отображение шагов диалога на их обработчики<br />
 Возвращает<br />
-Словарь, где ключ — имя шага, значение — обработчик (вызываемый объект или словарь с "message"/"callback")</p>
+Словарь, сопоставляющий имя шага с обработчиком (функция или словарь с "message"/"callback")</p>
 <hr />
-<p>callback_handlers() -&gt; Dict[str, Callable]<br />
-Возвращает отображение имён автономных действий на их обработчики.<br />
+<p>def callback_handlers(self) -&gt; Dict[str, Callable]<br />
+Возвращает отображение имён действий на их автономные обработчики<br />
 Возвращает<br />
-Словарь, где ключ — имя действия, значение — асинхронная функция с сигнатурой <code>(update, context, payload)</code></p>
+Словарь, сопоставляющий имя действия с асинхронной функцией (update, context, payload)</p>
 <hr />
-<p>step_hint(step: str) -&gt; Optional[str]<br />
-Возвращает подсказку для пользователя при некорректном вводе на указанном шаге.<br />
+<p>def step_hint(self, step: str) -&gt; Optional[str]<br />
+Возвращает подсказку для пользователя при некорректном вводе на указанном шаге<br />
 Аргументы<br />
-step — Имя текущего шага диалога<br />
+step — имя текущего шага диалога<br />
 Возвращает<br />
 Текст подсказки или None, если подсказка не требуется</p>
 <hr />
-<p>_resolve_step_handler(step: str, kind: str = "message") -&gt; Optional[Callable]<br />
-Определяет обработчик для указанного шага и типа события.<br />
+<p>def _resolve_step_handler(self, step: str, kind: str = "message") -&gt; Optional[Callable]<br />
+Находит обработчик для указанного шага и типа события<br />
 Аргументы<br />
-step — Имя шага диалога<br />
-kind — Тип обработчика: "message" или "callback"<br />
+step — имя шага диалога<br />
+kind — тип обработчика: "message" или "callback"<br />
 Возвращает<br />
-Вызываемый объект обработчика или None, если не найден</p>
+Функцию-обработчик или None, если не найдена</p>
 <hr />
-<p>handle_message(update: Any, context: Any) -&gt; bool<br />
-Унифицированный обработчик входящих текстовых и медиа-сообщений во время активного диалога.<br />
+<p>async def handle_message(self, update: Any, context: Any) -&gt; bool<br />
+Обрабатывает входящее текстовое или медиа-сообщение в контексте активного диалога<br />
 Аргументы<br />
-update — Объект обновления от Telegram<br />
-context — Контекст выполнения от Telegram<br />
+update — объект обновления от Telegram<br />
+context — контекст выполнения от библиотеки python-telegram-bot<br />
 Возвращает<br />
-True, если сообщение было обработано диалогом; иначе False<br />
+True, если сообщение обработано диалогом, иначе False<br />
 Исключения<br />
 Любые исключения логируются, диалог завершается, пользователю отправляется сообщение об ошибке</p>
 <hr />
-<p>handle_callback(update: Any, context: Any) -&gt; None<br />
-Унифицированный обработчик нажатий на inline-кнопки в рамках активного диалога.<br />
-Аргументы<br />
-update — Объект обновления от Telegram<br />
-context — Контекст выполнения от Telegram<br />
-Исключения<br />
-Любые исключения логируются, диалог завершается, пользователю отправляется сообщение об ошибке</p>
-<hr />
-<p>async def handle_callback(update: Any, context: Any) -&gt; None<br />
-Обрабатывает callback-запрос на текущем шаге диалога.<br />
-Аргументы<br />
-update — объект обновления от Telegram, содержащий callback_query<br />
-context — контекст выполнения от telegram.ext<br />
-Исключения<br />
-Любые исключения логируются, диалог завершается, пользователь получает уведомление об ошибке</p>
-<hr />
-<p>async def _dispatch_callback(update: Any, context: Any) -&gt; None<br />
-Центральная точка входа для обработки всех callback-данных, маршрутизирует по префиксу.<br />
+<p>async def handle_callback(self, update: Any, context: Any) -&gt; bool<br />
+Обрабатывает нажатие inline-кнопки в контексте диалога или автономного действия<br />
 Аргументы<br />
 update — объект обновления с callback_query<br />
-context — контекст выполнения</p>
-<hr />
-<p>async def _on_cancel_button(update: Any, context: Any) -&gt; None<br />
-Обрабатывает нажатие кнопки отмены диалога (callback_data="dlg_cancel:...").<br />
-Аргументы<br />
-update — объект обновления с callback_query<br />
-context — контекст выполнения</p>
-<hr />
-<p>def _dialog_callback_commands() -&gt; List[Dict[str, Any]]<br />
-Возвращает конфигурацию обработчика колбэков для регистрации в get_commands.<br />
+context — контекст выполнения<br />
 Возвращает<br />
-Список словарей с настройками обработчика callback-запросов</p>
+True, если колбэк был обработан, иначе False<br />
+Исключения<br />
+Любые исключения логируются, диалог завершается, пользователю отправляется уведомление об ошибке</p>
 <hr />
-<p>def _dialog_active_filter() -&gt; Any<br />
-Создаёт фильтр, пропускающий только сообщения из чатов с активным диалогом.<br />
-Возвращает<br />
-Объект-фильтр telegram.ext.filters, проверяющий активность диалога по chat_id</p>
-<hr />
-<p>def get_message_handlers() -&gt; List[Dict[str, Any]]<br />
-Возвращает список обработчиков сообщений, привязанных к активным диалогам.<br />
-Возвращает<br />
-Список конфигураций обработчиков для текстовых (и дополнительных) сообщений</p>
-<hr />
-<p>def extra_message_filters() -&gt; Any<br />
-Переопределяется для добавления поддержки не-текстовых типов (например, PHOTO).<br />
-Возвращает<br />
-Фильтр telegram.ext.filters для дополнительных типов контента (по умолчанию — пустой)</p></div>
+<p>class DialogMixin<br />
+Миксин для реализации интерактивных диалогов в плагинах<br />
+Поля<br />
+CANCEL_WORDS — множество текстов, распознаваемых как команда отмены<br />
+DIALOG_TIMEOUT — таймаут диалога в секундах, после которого состояние сбрасывается<br />
+Методы<br />
+_dialogs() — возвращает хранилище диалогов, привязанное к экземпляру<br />
+start_dialog(chat_id: int, step: str, data: Optional[Dict[str, Any]] = None, user_id: int = 0) — запускает новый диалог в указанном чате<br />
+end_dialog(chat_id: int) — завершает диалог в указанном чате<br />
+get_dialog(chat_id: int) — возвращает активное состояние диалога для чата<br />
+set_step(chat_id: int, step: str, data: Optional[Dict[str, Any]] = None) — переводит диалог в новый шаг и обновляет данные<br />
+_ensure_agent_enabled(context: Any) — проверяет, включён ли агент в текущем контексте<br />
+is_cancel_text(text: str) — проверяет, является ли текст командой отмены<br />
+_plugin_id_safe() — возвращает идентификатор плагина, безопасно обрабатывая отсутствие метода<br />
+_cancel_callback_data() — генерирует уникальный callback_data для кнопки отмены<br />
+cancel_markup() — возвращает разметку с кнопкой «Отмена» для инлайн-клавиатуры<br />
+_dialog_callback_commands() — возвращает обработчик CallbackQueryHandler для всех колбэков плагина<br />
+_on_cancel(update, context) — обрабатывает нажатие кнопки отмены<br />
+_on_dialog_callback(update, context) — обрабатывает колбэк в рамках активного диалога<br />
+_on_standalone_callback(update, context) — обрабатывает автономные колбэки (вне диалога)<br />
+dialog_steps() — возвращает словарь шагов диалога и их обработчиков<br />
+callback_handlers() — возвращает словарь автономных колбэк-действий<br />
+handle_message(update, context) — обрабатывает входящее текстовое сообщение в контексте диалога<br />
+handle_callback(update, context) — обрабатывает колбэк-запрос в контексте диалога<br />
+get_message_handlers() — возвращает конфигурацию обработчиков сообщений для диалогов<br />
+awaiting_input(chat_id: int) — проверяет, ожидает ли плагин ввода в указанном чате<br />
+cancel_input(chat_id: int) — отменяет активный диалог в чате<br />
+button(label: str, action: str) — создаёт конфигурацию кнопки для инлайн-меню<br />
+callback_data(action: str) — генерирует callback_data для автономного действия<br />
+dialog_data(step: str) — генерирует callback_data для шага диалога</p></div>
             </div>
         </div>
 

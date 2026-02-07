@@ -348,6 +348,18 @@
 </li>
             
 <li>
+    <a href="../../modules/agent/manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="../../modules/agent/manager_prompts__py.html" class="dropdown-item">manager_prompts.py</a>
+</li>
+            
+<li>
+    <a href="../../modules/agent/manager_store__py.html" class="dropdown-item">manager_store.py</a>
+</li>
+            
+<li>
     <a href="../../modules/agent/memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
 </li>
             
@@ -378,6 +390,14 @@
   </li>
                                     
 <li>
+    <a href="../../modules/bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="../../modules/bot_logging__py.html" class="dropdown-item">bot_logging.py</a>
+</li>
+                                    
+<li>
     <a href="../../modules/command_registry__py.html" class="dropdown-item">command_registry.py</a>
 </li>
                                     
@@ -387,6 +407,10 @@
                                     
 <li>
     <a href="../../modules/dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../../modules/dotenv_loader__py.html" class="dropdown-item">dotenv_loader.py</a>
 </li>
                                     
 <li>
@@ -415,6 +439,14 @@
                                     
 <li>
     <a href="../../modules/summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="../../modules/telegram_io__py.html" class="dropdown-item">telegram_io.py</a>
+</li>
+                                    
+<li>
+    <a href="../../modules/tg_markdown__py.html" class="dropdown-item">tg_markdown.py</a>
 </li>
                                     
 <li>
@@ -475,73 +507,83 @@
                     <div class="col-md-9" role="main">
 
 <h1 id="config_exampleyaml">config_example.yaml</h1>
-<p>Конфигурационный файл задаёт параметры работы Telegram-бота для взаимодействия с различными языковыми моделями. Включает настройки аутентификации, команды запуска инструментов, переменные окружения, пути к файлам, поведение бота и поддержку нескольких LLM-провайдеров. Поддерживается интеграция с внешними MCP-серверами и использование пресетов для упрощения запуска типовых задач.</p>
+<p>Конфигурационный файл задаёт параметры Telegram-бота, взаимодействующего с AI-инструментами (Codex, Claude, Gemini, Qwen) для выполнения задач в указанной рабочей директории. Поддерживаются настройки аутентификации, команд запуска, переменных окружения, таймаутов, обработки изображений, логирования и интеграции с MCP для межагентного взаимодействия. Реализованы режимы автоматического продолжения сессий, многоагентная оркестровка, уточнение запросов и использование предустановленных команд.</p>
 <p>Секции и ключи</p>
 <p>telegram — настройки интеграции с Telegram, включая токен бота и список разрешённых chat_id<br>
 telegram.token — токен Telegram-бота для авторизации через Bot API<br>
-telegram.whitelist_chat_ids — список идентификаторов чатов, которым разрешено использовать бота<br>
-tools — конфигурация инструментов для взаимодействия с различными LLM<br>
+telegram.whitelist_chat_ids — список идентификаторов чатов, которым разрешено взаимодействовать с ботом<br>
+tools — конфигурация внешних AI-инструментов, с которыми может взаимодействовать бот<br>
 tools.codex — параметры инструмента Codex, включая команды, режим работы и переменные окружения<br>
 tools.claude — параметры инструмента Claude, включая команды и переменные окружения<br>
 tools.gemini — параметры инструмента Gemini, включая команды и переменные окружения<br>
 tools.qwen — параметры инструмента Qwen, включая команды и переменные окружения<br>
-tools.&lt;имя&gt;.mode — режим работы инструмента (например, headless)<br>
-tools.&lt;имя&gt;.cmd — команда для запуска инструмента с подстановкой параметров<br>
-tools.&lt;имя&gt;.interactive_cmd — команда для запуска интерактивного режима<br>
-tools.&lt;имя&gt;.resume_cmd — команда с подстановкой для возобновления сессии<br>
-tools.&lt;имя&gt;.image_cmd — шаблон команды для обработки изображений<br>
-tools.&lt;имя&gt;.resume_regex — регулярное выражение для извлечения thread_id из вывода<br>
+tools.&lt;имя&gt;.mode — режим работы инструмента (например, headless — без интерактивного ввода)<br>
+tools.&lt;имя&gt;.cmd — базовая команда запуска инструмента с подстановкой параметров {prompt} и {resume}<br>
+tools.&lt;имя&gt;.interactive_cmd — команда для запуска инструмента в интерактивном режиме<br>
+tools.&lt;имя&gt;.resume_cmd — команда, используемая для возобновления сессии с поддержкой {resume} и {prompt}<br>
+tools.&lt;имя&gt;.image_cmd — шаблон аргумента командной строки для передачи изображения<br>
+tools.&lt;имя&gt;.resume_regex — регулярное выражение для извлечения thread_id из вывода инструмента<br>
 tools.&lt;имя&gt;.help_cmd — команда, отправляемая инструменту для получения справки<br>
-tools.&lt;имя&gt;.auto_commands — список команд, автоматически отправляемых при старте<br>
-tools.&lt;имя&gt;.env — переменные окружения, передаваемые инструменту<br>
-defaults — значения по умолчанию для различных параметров системы<br>
-defaults.workdir — рабочая директория по умолчанию для выполнения команд<br>
-defaults.idle_timeout_sec — таймаут бездействия в секундах перед остановкой сессии<br>
-defaults.summary_max_chars — максимальное количество символов в сводке выполнения<br>
+tools.&lt;имя&gt;.auto_commands — список команд, автоматически выполняемых при старте сессии<br>
+tools.&lt;имя&gt;.env — переменные окружения, передаваемые инструменту (например, API-ключи)<br>
+defaults — глобальные параметры по умолчанию для работы бота и инструментов<br>
+defaults.workdir — рабочая директория, в которой выполняются команды<br>
+defaults.idle_timeout_sec — таймаут бездействия (в секундах) перед завершением сессии<br>
+defaults.summary_max_chars — максимальное количество символов в итоговом отчёте<br>
 defaults.html_filename_prefix — префикс имени файла для сохранения HTML-вывода<br>
-defaults.state_path — путь к файлу сохранения состояния сессии<br>
-defaults.toolhelp_path — путь к файлу с описанием инструментов<br>
-defaults.openai_api_key — ключ API для OpenAI (если не задан, используется null)<br>
+defaults.state_path — путь к файлу состояния сессии<br>
+defaults.toolhelp_path — путь к файлу с описанием доступных инструментов<br>
+defaults.openai_api_key — API-ключ OpenAI, может быть переопределён в инструментах<br>
 defaults.openai_model — модель OpenAI по умолчанию<br>
-defaults.openai_base_url — базовый URL для API OpenAI<br>
-defaults.big_model_to_use — модель, используемая для сложных задач<br>
-defaults.zai_api_key — ключ API для Zai<br>
-defaults.tavily_api_key — ключ API для Tavily<br>
-defaults.jina_api_key — ключ API для Jina<br>
-defaults.github_token — токен для доступа к GitHub<br>
-defaults.log_path — путь к файлу логов<br>
+defaults.openai_big_model — альтернативная, более мощная модель OpenAI<br>
+defaults.openai_base_url — базовый URL для API OpenAI (поддержка альтернативных провайдеров)<br>
+defaults.big_model_to_use — указание, какую большую модель использовать<br>
+defaults.zai_api_key — API-ключ для Zai<br>
+defaults.tavily_api_key — API-ключ для Tavily (поиск)<br>
+defaults.jina_api_key — API-ключ для Jina (поиск/индексация)<br>
+defaults.github_token — токен для доступа к GitHub (например, для коммитов)<br>
+defaults.log_path — путь к файлу логов бота<br>
 defaults.image_temp_dir — временная директория для хранения изображений<br>
 defaults.image_max_mb — максимальный размер изображения в мегабайтах<br>
-defaults.memory_max_kb — максимальный объём памяти для хранения контекста в КБ<br>
-defaults.memory_compact_target_kb — целевой объём памяти после компрессии в КБ<br>
-defaults.clarification_enabled — включена ли функция уточнения запросов<br>
-defaults.clarification_keywords — список ключевых слов, при которых бот запрашивает уточнение<br>
-mcp — настройки встроенного MCP-сервера<br>
-mcp.enabled — включён ли MCP-сервер<br>
+defaults.memory_max_kb — максимальный объём памяти (в КБ) для хранения контекста<br>
+defaults.memory_compact_target_kb — целевой объём памяти после компрессии контекста<br>
+defaults.manager_max_tasks — максимальное количество задач в многоагентной оркестровке<br>
+defaults.manager_max_attempts — максимальное количество попыток выполнения задачи<br>
+defaults.manager_decompose_timeout_sec — таймаут этапа декомпозиции задачи<br>
+defaults.manager_dev_timeout_sec — таймаут выполнения задачи разработчиком<br>
+defaults.manager_review_timeout_sec — таймаут проверки задачи рецензентом<br>
+defaults.manager_dev_report_max_chars — максимальное количество символов в отчёте разработчика<br>
+defaults.manager_auto_resume — автоматическое возобновление сессии после перезапуска<br>
+defaults.manager_auto_commit — автоматическая фиксация изменений в Git после одобрения шага<br>
+defaults.manager_debug_log — включение детального логирования многоагентных сессий<br>
+defaults.clarification_enabled — включение режима уточнения неясных запросов<br>
+defaults.clarification_keywords — список ключевых слов, при обнаружении которых бот запросит уточнение<br>
+mcp — настройки встроенного MCP-сервера (Multi-Client Protocol)<br>
+mcp.enabled — включение или отключение MCP-сервера<br>
 mcp.host — хост, на котором запускается MCP-сервер<br>
 mcp.port — порт MCP-сервера<br>
-mcp.token — токен для аутентификации на MCP-сервере<br>
+mcp.token — токен для аутентификации подключений к MCP-серверу<br>
 mcp_clients — список внешних MCP-клиентов, подключаемых через stdio<br>
 mcp_clients.name — имя MCP-клиента<br>
-mcp_clients.enabled — включён ли клиент<br>
-mcp_clients.transport — тип транспорта (например, stdio)<br>
-mcp_clients.cmd — команда для запуска клиента<br>
+mcp_clients.enabled — включение клиента<br>
+mcp_clients.transport — тип транспорта (поддерживается stdio)<br>
+mcp_clients.cmd — команда для запуска MCP-клиента<br>
 mcp_clients.cwd — рабочая директория клиента<br>
 mcp_clients.env — переменные окружения для клиента<br>
-mcp_clients.timeout_ms — таймаут ожидания ответа от клиента в миллисекундах<br>
+mcp_clients.timeout_ms — таймаут ожидания ответа от клиента<br>
 mcp_servers — список внешних MCP-серверов, доступных по HTTP<br>
 mcp_servers.&lt;имя&gt;.url — URL MCP-сервера<br>
-presets — список пресетов команд, доступных для быстрого запуска<br>
+presets — предустановленные команды, доступные через короткие имена<br>
 presets.name — имя пресета<br>
-presets.prompt — текст запроса, отправляемый при активации пресета</p>
+presets.prompt — текст запроса, подставляемый при вызове пресета</p>
 <p>Важные параметры</p>
-<p>telegram.token — обязательный параметр для подключения бота к Telegram<br>
-tools.codex.resume_regex — критически важен для извлечения идентификатора сессии из вывода Codex<br>
-defaults.workdir — определяет рабочую директорию, где будут выполняться все команды<br>
-defaults.clarification_enabled — управляет поведением бота при неоднозначных запросах<br>
-mcp.enabled — включение этой опции позволяет подключать внешние MCP-инструменты<br>
-mcp_servers — позволяет интегрировать сторонние серверы без запуска локальных процессов<br>
-presets — ускоряют выполнение типовых задач через предопределённые команды</p></div>
+<p>telegram.token — обязательный параметр, без которого бот не сможет подключиться к Telegram<br>
+tools.&lt;имя&gt;.cmd — ключевой параметр, определяющий, как запускается каждый AI-инструмент<br>
+defaults.workdir — критически важен для корректного выполнения команд в нужной директории<br>
+defaults.manager_auto_commit — влияет на автоматизацию Git-операций, требует аккуратного использования<br>
+mcp.enabled — включение MCP позволяет использовать расширенные инструменты (например, доступ к файловой системе, браузеру)<br>
+mcp_servers — позволяет интегрировать сторонние MCP-сервисы, такие как NotebookLM или Chrome DevTools<br>
+defaults.clarification_enabled — улучшает качество взаимодействия, предотвращая выполнение неоднозначных запросов</p></div>
             </div>
         </div>
 

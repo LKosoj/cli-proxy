@@ -348,6 +348,18 @@
 </li>
             
 <li>
+    <a href="modules/agent/manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/manager_prompts__py.html" class="dropdown-item">manager_prompts.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/manager_store__py.html" class="dropdown-item">manager_store.py</a>
+</li>
+            
+<li>
     <a href="modules/agent/memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
 </li>
             
@@ -378,6 +390,14 @@
   </li>
                                     
 <li>
+    <a href="modules/bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/bot_logging__py.html" class="dropdown-item">bot_logging.py</a>
+</li>
+                                    
+<li>
     <a href="modules/command_registry__py.html" class="dropdown-item">command_registry.py</a>
 </li>
                                     
@@ -387,6 +407,10 @@
                                     
 <li>
     <a href="modules/dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/dotenv_loader__py.html" class="dropdown-item">dotenv_loader.py</a>
 </li>
                                     
 <li>
@@ -415,6 +439,14 @@
                                     
 <li>
     <a href="modules/summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/telegram_io__py.html" class="dropdown-item">telegram_io.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/tg_markdown__py.html" class="dropdown-item">tg_markdown.py</a>
 </li>
                                     
 <li>
@@ -467,15 +499,23 @@
             
             <li class="nav-item" data-bs-level="1"><a href="#_1" class="nav-link">Запуск и окружение</a>
               <ul class="nav flex-column">
-            <li class="nav-item" data-bs-level="2"><a href="#_2" class="nav-link">Запуск бота</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_2" class="nav-link">Запуск приложения</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Переменные окружения</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Окружение и конфигурация</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#configyaml" class="nav-link">Конфигурационный файл (config.yaml)</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_5" class="nav-link">Зависимости</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_6" class="nav-link">Требования к системе</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_7" class="nav-link">Рекомендации по развёртыванию</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -487,138 +527,78 @@
                     <div class="col-md-9" role="main">
 
 <h1 id="_1">Запуск и окружение</h1>
-<h2 id="_2">Запуск бота</h2>
-<p>Бот запускается в режиме polling через <code>python-telegram-bot</code>. Точка входа — функция <code>build_app</code>, которая:</p>
-<ol>
-<li>Загружает конфигурацию из <code>config.yaml</code>.</li>
-<li>Инициализирует основные компоненты: <code>SessionManager</code>, <code>ToolRegistry</code>, <code>Metrics</code>.</li>
-<li>Регистрирует обработчики команд, сообщений и callback-запросов.</li>
-<li>Интегрирует плагины.</li>
-<li>Запускает приложение с проверкой доступа по <code>whitelist_chat_ids</code>.</li>
-</ol>
-<p><strong>Команда запуска:</strong>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>bot.py
+<h2 id="_2">Запуск приложения</h2>
+<p>Точка входа — <code>__main__.py</code>. Запуск выполняется командой:
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>bot
 </code></pre></div></p>
-<h2 id="_3">Переменные окружения</h2>
-<p>Переменные окружения имеют приоритет над настройками в <code>config.yaml</code>.</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Переменная</th>
-<th style="text-align: left;">Назначение</th>
-<th style="text-align: left;">Обязательная</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;"><code>TELEGRAM_TOKEN</code></td>
-<td style="text-align: left;">Токен бота от @BotFather</td>
-<td style="text-align: left;">Да</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>TAVILY_API_KEY</code></td>
-<td style="text-align: left;">Ключ для поиска через Tavily</td>
-<td style="text-align: left;">Нет</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>JINA_API_KEY</code></td>
-<td style="text-align: left;">Ключ для веб-поиска и чтения страниц (Jina.ai)</td>
-<td style="text-align: left;">Нет</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>GITHUB_TOKEN</code></td>
-<td style="text-align: left;">Токен для аутентификации в Git (HTTPS)</td>
-<td style="text-align: left;">Для приватных репозиториев</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>OPENAI_API_KEY</code></td>
-<td style="text-align: left;">Ключ для доступа к OpenAI API</td>
-<td style="text-align: left;">Для функций, требующих LLM</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>ZAI_API_KEY</code></td>
-<td style="text-align: left;">Ключ для доступа к Z.AI API</td>
-<td style="text-align: left;">Для функций, требующих LLM</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>WOLFRAM_APP_ID</code></td>
-<td style="text-align: left;">ID приложения для WolframAlpha</td>
-<td style="text-align: left;">Для инструмента <code>wolfram_alpha</code></td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>TMDB_API_KEY</code></td>
-<td style="text-align: left;">Ключ для доступа к The Movie Database</td>
-<td style="text-align: left;">Для инструмента <code>movie_info</code></td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>EDAMAM_APP_ID</code>, <code>EDAMAM_APP_KEY</code></td>
-<td style="text-align: left;">Ключи для доступа к Edamam API</td>
-<td style="text-align: left;">Для инструмента <code>chief</code></td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>STABLE_DIFFUSION_TOKEN</code></td>
-<td style="text-align: left;">Токен для HuggingFace Inference API</td>
-<td style="text-align: left;">Для инструмента <code>image_generation</code></td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>AGENT_SANDBOX_ROOT</code></td>
-<td style="text-align: left;">Корневая директория для песочниц агентов</td>
-<td style="text-align: left;">Нет (по умолчанию <code>workdir</code>)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="configyaml">Конфигурационный файл (<code>config.yaml</code>)</h2>
-<p>Основной файл конфигурации. Пример структуры:</p>
+<p>Приложение инициализируется в следующем порядке:
+1. Загрузка переменных окружения из <code>.env</code>-файла в директории конфигурации.
+2. Загрузка <code>config.yaml</code> через <code>load_config()</code>.
+3. Построение экземпляра <code>BotApp</code> с помощью <code>build_app()</code>.
+4. Запуск polling-режима через <code>application.run_polling()</code>.</p>
+<h2 id="_3">Окружение и конфигурация</h2>
+<h3 id="_4">Переменные окружения</h3>
+<ul>
+<li><code>.env</code>-файл загружается автоматически из директории, указанной в <code>CONFIG_PATH</code>.</li>
+<li>Поддерживаются стандартные префиксы: <code>export KEY=value</code>, комментарии <code>#</code>, кавычки.</li>
+<li>Приоритет: переменные окружения &gt; значения в <code>.env</code> &gt; значения в <code>config.yaml</code>.</li>
+</ul>
+<h3 id="configyaml">Конфигурационный файл (<code>config.yaml</code>)</h3>
+<p>Обязательные параметры:
 <div class="highlight"><pre><span></span><code><span class="nt">telegram</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;YOUR_TELEGRAM_TOKEN&quot;</span>
-<span class="w">  </span><span class="nt">whitelist_chat_ids</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">123456789</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">987654321</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;YOUR_BOT_TOKEN&quot;</span>
+<span class="w">  </span><span class="nt">whitelist_chat_ids</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">123456789</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># ID разрешённых пользователей</span>
 
 <span class="nt">defaults</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">workdir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/workdir&quot;</span>
+<span class="w">  </span><span class="nt">workdir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/working/directory&quot;</span>
 <span class="w">  </span><span class="nt">log_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/bot.log&quot;</span>
-<span class="w">  </span><span class="nt">state_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/state.json&quot;</span>
-<span class="w">  </span><span class="nt">image_temp_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp/images&quot;</span>
-<span class="w">  </span><span class="nt">image_max_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
-<span class="w">  </span><span class="nt">idle_timeout_sec</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3600</span>
-<span class="w">  </span><span class="nt">memory_max_kb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1024</span>
-<span class="w">  </span><span class="nt">memory_compact_target_kb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span>
-<span class="w">  </span><span class="nt">output_max_chars</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4000</span>
-<span class="w">  </span><span class="nt">clarification_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">clarification_keywords</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;уточни&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;почему&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;где&quot;</span><span class="p p-Indicator">]</span>
-
-<span class="nt">tools</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">codex</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;codex</span><span class="nv"> </span><span class="s">--headless</span><span class="nv"> </span><span class="s">--prompt</span><span class="nv"> </span><span class="s">&#39;{prompt}&#39;&quot;</span>
-<span class="w">    </span><span class="nt">interactive_cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;codex&quot;</span>
-<span class="w">    </span><span class="nt">resume_cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;codex</span><span class="nv"> </span><span class="s">--resume</span><span class="nv"> </span><span class="s">&#39;{resume}&#39;&quot;</span>
-<span class="w">    </span><span class="nt">help_cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;codex</span><span class="nv"> </span><span class="s">--help&quot;</span>
-<span class="w">    </span><span class="nt">prompt_regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.*\\$</span><span class="nv"> </span><span class="s">$&quot;</span>
-<span class="w">    </span><span class="nt">resume_regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;thread_id:</span><span class="nv"> </span><span class="s">([a-zA-Z0-9]+)&quot;</span>
-<span class="w">    </span><span class="nt">env</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">OPENAI_API_KEY</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${OPENAI_API_KEY}&quot;</span>
-<span class="w">  </span><span class="c1"># ... другие инструменты (claude, gemini, qwen)</span>
-
-<span class="nt">mcp</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;127.0.0.1&quot;</span>
-<span class="w">  </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8765</span>
-<span class="w">  </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;your_mcp_token&quot;</span>
-
-<span class="nt">mcp_servers</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;context7&quot;</span>
-<span class="w">    </span><span class="nt">transport</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;http&quot;</span>
-<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;http://context7-server:8888&quot;</span>
-<span class="w">    </span><span class="nt">headers</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">Authorization</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Bearer</span><span class="nv"> </span><span class="s">${MCP_CONTEXT7_TOKEN}&quot;</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;notebooklm&quot;</span>
-<span class="w">    </span><span class="nt">transport</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;stdio&quot;</span>
-<span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;python</span><span class="nv"> </span><span class="s">-m</span><span class="nv"> </span><span class="s">notebooklm_mcp_server&quot;</span>
-
-<span class="nt">presets</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">tests</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Запусти</span><span class="nv"> </span><span class="s">тесты</span><span class="nv"> </span><span class="s">и</span><span class="nv"> </span><span class="s">сообщи</span><span class="nv"> </span><span class="s">результат.&quot;</span>
-<span class="w">  </span><span class="nt">lint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Проверь</span><span class="nv"> </span><span class="s">код</span><span class="nv"> </span><span class="s">линтером.&quot;</span>
-<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Собери</span><span class="nv"> </span><span class="s">проект.&quot;</span>
-</code></pre></div></div>
+</code></pre></div></p>
+<p>Ключевые секции:
+- <code>tools.*</code> — настройка CLI-инструментов (команды, режимы, переменные окружения).
+- <code>mcp.*</code> — включение TCP-моста для внешних клиентов.
+- <code>manager_*</code> — параметры режима оркестрации (таймауты, лимиты, автокоммит).
+- <code>presets</code> — шаблоны задач для быстрого запуска.</p>
+<h2 id="_5">Зависимости</h2>
+<p>Установка зависимостей:
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+</code></pre></div></p>
+<p>Ключевые пакеты:
+- <code>python-telegram-bot==20.7</code> — основа бота.
+- <code>openai</code>, <code>httpx</code> — интеграция с LLM.
+- <code>pexpect</code>, <code>ansi2html</code> — выполнение и рендеринг CLI-вывода.
+- <code>PyYAML</code>, <code>md2tgmd</code> — конфигурация и форматирование.
+- <code>duckduckgo-search</code>, <code>youtube-transcript-api</code> — внешние источники данных.</p>
+<h2 id="_6">Требования к системе</h2>
+<ul>
+<li>Python 3.10+</li>
+<li>Доступ к <code>git</code> в <code>PATH</code> (для Git-операций).</li>
+<li>Установленные CLI-инструменты (Codex, Gemini и др.) — если используются.</li>
+<li>Свободный порт (по умолчанию <code>8888</code>) — если включён MCP-сервер.</li>
+</ul>
+<h2 id="_7">Рекомендации по развёртыванию</h2>
+<ol>
+<li>
+<p><strong>Безопасность</strong>:
+   - Ограничьте доступ через <code>whitelist_chat_ids</code>.
+   - Храните <code>.env</code> вне версии.
+   - Используйте <code>sandbox_root</code> для изоляции рабочих директорий.</p>
+</li>
+<li>
+<p><strong>Логирование</strong>:
+   - Настройте ротацию логов через <code>TimedRotatingFileHandler</code>.
+   - Мониторьте <code>bot_error.log</code> для отладки.</p>
+</li>
+<li>
+<p><strong>Восстановление</strong>:
+   - Состояние сессий сохраняется в <code>state.json</code>.
+   - После перезапуска бот восстанавливает активные сессии и очереди.</p>
+</li>
+<li>
+<p><strong>Производительность</strong>:
+   - Установите <code>idle_timeout_sec</code> для автоматического завершения неактивных сессий.
+   - Ограничьте <code>manager_max_tasks</code> и <code>manager_max_attempts</code> во избежание бесконечных циклов.</p>
+</li>
+</ol></div>
             </div>
         </div>
 

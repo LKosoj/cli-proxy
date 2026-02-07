@@ -348,6 +348,18 @@
 </li>
             
 <li>
+    <a href="manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="manager_prompts__py.html" class="dropdown-item">manager_prompts.py</a>
+</li>
+            
+<li>
+    <a href="manager_store__py.html" class="dropdown-item">manager_store.py</a>
+</li>
+            
+<li>
     <a href="memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
 </li>
             
@@ -378,6 +390,14 @@
   </li>
                                     
 <li>
+    <a href="../bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="../bot_logging__py.html" class="dropdown-item">bot_logging.py</a>
+</li>
+                                    
+<li>
     <a href="../command_registry__py.html" class="dropdown-item">command_registry.py</a>
 </li>
                                     
@@ -387,6 +407,10 @@
                                     
 <li>
     <a href="../dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="../dotenv_loader__py.html" class="dropdown-item">dotenv_loader.py</a>
 </li>
                                     
 <li>
@@ -415,6 +439,14 @@
                                     
 <li>
     <a href="../summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="../telegram_io__py.html" class="dropdown-item">telegram_io.py</a>
+</li>
+                                    
+<li>
+    <a href="../tg_markdown__py.html" class="dropdown-item">tg_markdown.py</a>
 </li>
                                     
 <li>
@@ -475,184 +507,196 @@
                     <div class="col-md-9" role="main">
 
 <h1 id="agentagent_core">agent/agent_core</h1>
-<p>Агентная система, реализующая архитектуру ReAct (Reasoning + Action) для взаимодействия с инструментами и генерации ответов через LLM. Поддерживает асинхронное выполнение, управление сессиями, историей чата, памятью и ограничениями на инструменты. Состояние сессии сохраняется в файловой системе с потокобезопасными операциями. Агент взаимодействует с OpenAI API и поддерживает корреляцию запросов, трассировку и логирование.</p>
+<p>Модуль реализует агентную систему на основе ReAct-подхода (Reasoning + Action), позволяющую агенту выполнять цепочки рассуждений и вызовов инструментов для решения задач. Основная логика сосредоточена в классе <code>ReActAgent</code>, который управляет итерациями выполнения, обработкой результатов инструментов и восстановлением при ошибках. Класс <code>AgentRunner</code> предоставляет удобный интерфейс для запуска агента в различных контекстах. Результат выполнения агента возвращается в виде структурированного объекта <code>AgentRunResult</code>.</p>
 <p>Ключевые структуры данных<br />
-AgentState — Состояние агента, включая историю действий, итерации и блокировки<br />
-AgentRunResult — Результат выполнения агента, включает финальный ответ, статус, факты о вызванных инструментах и метрики выполнения</p>
-<p>@dataclass<br />
-AgentState<br />
-Состояние агента, включая историю действий, итерации и блокировки.<br />
-Поля<br />
-history — История действий агента в формате списка словарей<br />
-iteration — Текущий номер итерации в цикле ReAct<br />
-blocked — Счётчик блокировок (например, при превышении лимитов)<br />
-last_action — Последнее выполненное действие (название инструмента или "Thought", "Answer")<br />
-last_result — Результат последнего действия (вывод инструмента или ответ)</p>
+AgentRunResult — Результат выполнения агента, включая вывод, статус и список вызовов инструментов.</p>
 <hr />
-<p>class ReActAgent<br />
-Агент, использующий архитектуру ReAct (Reasoning + Action) для взаимодействия с инструментами и генерации ответов через LLM.<br />
-Поля<br />
-config — Конфигурация приложения (AppConfig)<br />
-_tool_registry — Реестр инструментов, используемый для выполнения действий<br />
-_openai_client — Асинхронный клиент OpenAI для взаимодействия с моделью<br />
-_sessions — Кэш сессий агента, индексированный по ключу состояния<br />
-_openai_cfg — Кортеж с конфигурацией OpenAI (ключ, модель, URL)<br />
-Методы<br />
-<strong>init</strong>(self, config: AppConfig, tool_registry: PluginToolRegistry) — Инициализирует агента с конфигурацией и реестром инструментов<br />
-record_message(self, chat_id: int, message_id: int) — Регистрирует отправленное сообщение в реестре инструментов<br />
-resolve_question(self, question_id: str, answer: str) -&gt; bool — Разрешает ожидающий вопрос с заданным идентификатором<br />
-_load_system_prompt(self, cwd: str, chat_id: Optional[int]) -&gt; str — Формирует системный промпт с подстановкой контекста (память, история, инструменты)<br />
-_load_session(self, state_root: str) -&gt; Dict[str, Any] — Загружает состояние сессии из файла SESSION.json<br />
-_save_session(self, state_root: str, session: Dict[str, Any]) -&gt; None — Сохраняет состояние сессии в файл с блокировкой<br />
-_reset_session(self, state_root: str) -&gt; None — Сбрасывает состояние сессии, удаляя файл состояния<br />
-_execute_step(self, session: Dict[str, Any], prompt: str, cwd: str, chat_id: Optional[int]) -&gt; Tuple[str, bool] — Выполняет один шаг агента: генерация действия и его выполнение<br />
-run(self, prompt: str, cwd: str, chat_id: Optional[int] = None) -&gt; str — Основной метод запуска агента; выполняет цикл ReAct до достижения результата или лимита итераций</p>
+<p>@dataclass
+class AgentState
+Состояние агента, включая историю действий, итерации и блокировки.
+Поля
+history — История действий агента в формате списка словарей.
+iteration — Текущий номер итерации в цикле ReAct.
+blocked — Счётчик блокировок, ограничивающий бесконечные циклы.
+last_action — Последнее выполненное действие (название инструмента или рассуждение).
+last_result — Результат последнего действия.</p>
 <hr />
-<p>save_chat_message(username: str, text: str, is_bot: bool = False, chat_id: Optional[int] = None) -&gt; None<br />
-Сохраняет сообщение в файл истории чата с ограничением по длине и количеству сообщений.<br />
-Аргументы<br />
-username — Имя пользователя, отправившего сообщение<br />
-text — Текст сообщения<br />
-is_bot — Флаг, указывающий, является ли сообщение ответом бота<br />
-chat_id — Идентификатор чата; если None, используется глобальный чат<br />
-Исключения<br />
-Не выбрасывает исключения, все ошибки подавляются</p>
+<p>class ReActAgent
+Агент, реализующий цикл Reasoning-Action с поддержкой инструментов и управления сессиями.
+Поля
+config — Конфигурация приложения (AppConfig).
+_tool_registry — Реестр инструментов, используемый для выполнения действий.
+_openai_client — Асинхронный клиент OpenAI для взаимодействия с моделью.
+_sessions — Кэш сессий агента, индексированный по ключу состояния.
+_openai_cfg — Кортеж с конфигурацией OpenAI (ключ, модель, URL).
+Методы
+<strong>init</strong>(self, config: AppConfig, tool_registry: PluginToolRegistry) — Инициализирует агента с конфигурацией и реестром инструментов.
+record_message(self, chat_id: int, message_id: int) — Регистрирует отправленное сообщение в реестре инструментов.
+resolve_question(self, question_id: str, answer: str) -&gt; bool — Разрешает ожидающий вопрос с заданным идентификатором.
+_load_system_prompt(self, cwd: str, chat_id: Optional[int]) -&gt; str — Формирует системный промпт с подстановкой контекста (память, история, инструменты).
+_load_session(self, state_root: str) -&gt; Dict[str, Any] — Загружает состояние сессии из файла SESSION.json.
+_save_session(self, state_root: str, session: Dict[str, Any]) -&gt; None — Сохраняет состояние сессии в файл с блокировкой.
+_reset_session(self, state_root: str) -&gt; None — Сбрасывает состояние сессии, удаляя файл состояния.
+_execute_step(self, session: Dict[str, Any], prompt: str, cwd: str, chat_id: Optional[int]) -&gt; Tuple[str, bool] — Выполняет один шаг агента: генерация действия и его выполнение.
+run(self, prompt: str, cwd: str, chat_id: Optional[int] = None) -&gt; str — Основной метод запуска агента; выполняет цикл ReAct до достижения результата или лимита итераций.</p>
 <hr />
-<p>get_chat_history(chat_id: Optional[int]) -&gt; Optional[str]<br />
-Возвращает содержимое истории чата, ограниченное по размеру и количеству сообщений.<br />
-Аргументы<br />
-chat_id — Идентификатор чата; если None, возвращается глобальный чат<br />
-Возвращает<br />
-Текст истории чата или None, если история отсутствует или пуста<br />
-Исключения<br />
-Не выбрасывает исключения, все ошибки подавляются</p>
+<p>save_chat_message(username: str, text: str, is_bot: bool = False, chat_id: Optional[int] = None) -&gt; None
+Сохраняет сообщение в файл истории чата с ограничением по длине и количеству сообщений.
+Аргументы
+username — Имя пользователя, отправившего сообщение.
+text — Текст сообщения.
+is_bot — Флаг, указывающий, является ли сообщение ответом бота.
+chat_id — Идентификатор чата; если None, используется глобальный чат.
+Исключения
+Не выбрасывает исключения, все ошибки подавляются.</p>
 <hr />
-<p>log_global(user_id: str, action: str, details: Optional[str] = None) -&gt; None<br />
-Записывает запись в глобальный лог активности с временной меткой и деталями.<br />
-Аргументы<br />
-user_id — Идентификатор пользователя<br />
-action — Описание действия<br />
-details — Дополнительные детали (ограничиваются по длине)<br />
-Исключения<br />
-Не выбрасывает исключения, все ошибки подавляются</p>
+<p>get_chat_history(chat_id: Optional[int]) -&gt; Optional[str]
+Возвращает содержимое истории чата, ограниченное по размеру и количеству сообщений.
+Аргументы
+chat_id — Идентификатор чата; если None, возвращается глобальный чат.
+Возвращает
+Текст истории чата или None, если история отсутствует или пуста.
+Исключения
+Не выбрасывает исключения, все ошибки подавляются.</p>
 <hr />
-<p>get_memory_for_prompt(cwd: str) -&gt; Optional[str]<br />
-Читает содержимое файла памяти (MEMORY.md) из указанной директории и возвращает его, ограничивая по длине.<br />
-Аргументы<br />
-cwd — Текущая рабочая директория, в которой ищется файл памяти<br />
-Возвращает<br />
-Содержимое памяти как строку или None, если файл отсутствует или пуст<br />
-Исключения<br />
-Не выбрасывает исключения, все ошибки подавляются</p>
+<p>log_global(user_id: str, action: str, details: Optional[str] = None) -&gt; None
+Записывает запись в глобальный лог активности с временной меткой и деталями.
+Аргументы
+user_id — Идентификатор пользователя.
+action — Описание действия.
+details — Дополнительные детали (ограничиваются по длине).
+Исключения
+Не выбрасывает исключения, все ошибки подавляются.</p>
 <hr />
-<p>_get_openai_config(config: Optional[AppConfig] = None) -&gt; Optional[Tuple[str, str, str]]<br />
-Извлекает конфигурацию OpenAI из переменных окружения или конфигурационного файла.<br />
-Аргументы<br />
-config — Опциональный объект конфигурации приложения<br />
-Возвращает<br />
-Кортеж (api_key, model, base_url) или None, если ключ или модель не заданы<br />
-Исключения<br />
-Не выбрасывает исключения</p>
+<p>get_memory_for_prompt(cwd: str) -&gt; Optional[str]
+Читает содержимое файла памяти (MEMORY.md) из указанной директории и возвращает его, ограничивая по длине.
+Аргументы
+cwd — Текущая рабочая директория, в которой ищется файл памяти.
+Возвращает
+Содержимое памяти как строку или None, если файл отсутствует или пуст.
+Исключения
+Не выбрасывает исключения, все ошибки подавляются.</p>
 <hr />
-<p>read_json_locked(path: str, default: Any = None) -&gt; Any<br />
-Читает JSON-файл с потокобезопасной блокировкой.<br />
-Аргументы<br />
-path — Путь к файлу для чтения<br />
-default — Значение по умолчанию, если файл не существует или поврежён<br />
-Возвращает<br />
-Содержимое файла в виде объекта Python или значение по умолчанию<br />
-Исключения<br />
-Может выбрасывать исключения при ошибках десериализации или ввода-вывода</p>
+<p>_get_openai_config(config: Optional[AppConfig] = None) -&gt; Optional[Tuple[str, str, str]]
+Извлекает конфигурацию OpenAI из переменных окружения или конфигурационного файла.
+Аргументы
+config — Опциональный объект конфигурации приложения.
+Возвращает
+Кортеж (api_key, model, base_url) или None, если ключ или модель не заданы.
+Исключения
+Не выбрасывает исключения.</p>
 <hr />
-<p>write_json_locked(path: str, data: Any) -&gt; None<br />
-Сохраняет данные в JSON-файл с потокобезопасной блокировкой.<br />
-Аргументы<br />
-path — Путь к файлу для записи<br />
-data — Объект Python для сериализации в JSON<br />
-Исключения<br />
-Может выбрасывать исключения при ошибках сериализации или ввода-вывода</p>
+<p>read_json_locked(path: str, default: Any = None) -&gt; Any
+Читает JSON-файл с эксклюзивной блокировкой для потокобезопасного доступа.
+Аргументы
+path — путь к файлу.
+default — значение по умолчанию, если файл не существует или поврежён.
+Возвращает
+Десериализованные данные из файла или значение по умолчанию.
+Исключения
+Может выбрасывать исключения при ошибках файловой системы или блокировки.</p>
 <hr />
-<p>sandbox_root(workdir: str) -&gt; str<br />
-Формирует путь к корневой директории песочницы на основе рабочей директории.<br />
-Аргументы<br />
-workdir — Базовая рабочая директория<br />
-Возвращает<br />
-Путь к директории _sandbox внутри workdir</p>
+<p>write_json_locked(path: str, data: Any) -&gt; None
+Записывает данные в JSON-файл с эксклюзивной блокировкой.
+Аргументы
+path — путь к файлу.
+data — сериализуемые данные.
+Исключения
+Может выбрасывать исключения при ошибках файловой системы или блокировки.</p>
 <hr />
-<p>_load_session(self, state_root: str) -&gt; Dict[str, Any]<br />
-Загружает состояние сессии из SESSION.json с обработкой устаревшего формата.<br />
-Аргументы<br />
-state_root — Корневая директория для хранения сессии<br />
-Возвращает<br />
-Словарь с данными сессии, включая history_by_task<br />
-Исключения<br />
-Не выбрасывает исключения, возвращает значение по умолчанию при ошибках</p>
+<p>sandbox_root(workdir: str) -&gt; str
+Формирует путь к корневой директории песочницы для хранения состояния сессии.
+Аргументы
+workdir — рабочая директория по умолчанию.
+Возвращает
+Путь к директории _sandbox внутри workdir.</p>
 <hr />
-<p>_save_session(self, state_root: str, session: Dict[str, Any]) -&gt; None<br />
-Сохраняет состояние сессии в файл SESSION.json.<br />
-Аргументы<br />
-state_root — Корневая директория для сохранения<br />
-session — Объект состояния сессии для записи</p>
+<p>_load_session(self, state_root: str) -&gt; Dict[str, Any]
+Загружает сессию из SESSION.json с обработкой миграции старых данных.
+Аргументы
+state_root — путь к корню состояния сессии.
+Возвращает
+Словарь с данными сессии, включая history_by_task.</p>
 <hr />
-<p>_load_system_prompt(self, cwd: str, chat_id: Optional[int]) -&gt; str<br />
-Загружает системный промпт из файловой системы или возвращает стандартный.<br />
-Аргументы<br />
-cwd — Текущая рабочая директория<br />
-chat_id — Идентификатор чата (опционально)<br />
-Возвращает<br />
-Текст системного промпта</p>
+<p>_save_session(self, state_root: str, session: Dict[str, Any]) -&gt; None
+Сохраняет сессию в SESSION.json с блокировкой.
+Аргументы
+state_root — путь к корню состояния.
+session — данные сессии для сохранения.</p>
 <hr />
-<p>_build_messages(self, session: Dict[str, Any], user_message: str, cwd: str, chat_id: Optional[int], working: List[Dict[str, Any]], task_id: Optional[str], request_context: Optional[str], constraints: Optional[str], corr_id: Optional[str]) -&gt; List[Dict[str, Any]]<br />
-Формирует цепочку сообщений для отправки в LLM, включая системный промпт, контекст, историю и текущий ввод.<br />
-Аргументы<br />
-session — Текущее состояние сессии<br />
-user_message — Сообщение от пользователя<br />
-cwd — Текущая рабочая директория<br />
-chat_id — Идентификатор чата<br />
-working — Промежуточные сообщения текущей итерации<br />
-task_id — Идентификатор задачи для выбора истории<br />
-request_context — Дополнительный контекст запроса<br />
-constraints — Ограничения на поведение агента<br />
-corr_id — Идентификатор корреляции для логирования<br />
-Возвращает<br />
-Список сообщений в формате OpenAI API</p>
+<p>_load_system_prompt(self, cwd: str, chat_id: Optional[int]) -&gt; str
+Загружает системный промпт из файла, специфичного для chat_id или общего по умолчанию.
+Аргументы
+cwd — текущая рабочая директория.
+chat_id — идентификатор чата для выбора промпта.
+Возвращает
+Содержимое системного промпта как строка.</p>
 <hr />
-<p>async _call_openai(self, messages: List[Dict[str, Any]], allowed_tools: Optional[List[str]]) -&gt; Dict[str, Any]<br />
-Выполняет асинхронный вызов OpenAI API с поддержкой инструментов.<br />
-Аргументы<br />
-messages — Список сообщений для модели<br />
-allowed_tools — Список разрешённых инструментов (или ["All"])<br />
-Возвращает<br />
-Ответ модели в виде словаря (model_dump)<br />
-Исключения<br />
-RuntimeError — Если конфигурация OpenAI не инициализирована</p>
+<p>_build_messages(self, session: Dict[str, Any], user_message: str, cwd: str, chat_id: Optional[int], working: List[Dict[str, Any]], task_id: Optional[str], request_context: Optional[str], constraints: Optional[str], corr_id: Optional[str]) -&gt; List[Dict[str, Any]]
+Формирует полный список сообщений для отправки в LLM, включая системные, историю и текущий запрос.
+Аргументы
+session — текущее состояние сессии.
+user_message — ввод пользователя.
+cwd — рабочая директория.
+chat_id — идентификатор чата.
+working — промежуточные сообщения с вызовами инструментов.
+task_id — идентификатор задачи для выбора истории.
+request_context — дополнительный контекст запроса.
+constraints — ограничения на поведение агента.
+corr_id — идентификатор корреляции для логирования.
+Возвращает
+Список сообщений в формате OpenAI API.</p>
 <hr />
-<p>async run(self, session_id: str, user_message: str, session_obj: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str], task_id: Optional[str], allowed_tools: Optional[List[str]] = None, request_context: Optional[str] = None, constraints: Optional[str] = None, corr_id: Optional[str] = None) -&gt; AgentRunResult<br />
-Запускает цикл агента: итеративно вызывает LLM, обрабатывает инструменты, собирает результат.<br />
-Аргументы<br />
-session_id — Уникальный идентификатор сессии<br />
-user_message — Ввод от пользователя<br />
-session_obj — Объект сессии (с workdir)<br />
-bot — Объект бота (Telegram/Discord и т.п.)<br />
-context — Контекст выполнения (например, aiogram)<br />
-chat_id — Идентификатор чата<br />
-chat_type — Тип чата (личный, группа и т.п.)<br />
-task_id — Идентификатор задачи для сегментации истории<br />
-allowed_tools — Ограничение набора доступных инструментов<br />
-request_context — Дополнительный контекст запроса<br />
-constraints — Ограничения на поведение агента<br />
-corr_id — Идентификатор корреляции для трейсинга<br />
-Возвращает<br />
-Объект AgentRunResult с результатом выполнения<br />
-Исключения<br />
-RuntimeError — При отсутствии конфигурации OpenAI</p>
+<p>async _call_openai(self, messages: List[Dict[str, Any]], allowed_tools: Optional[List[str]]) -&gt; Dict[str, Any]
+Выполняет асинхронный вызов OpenAI Chat Completions с поддержкой инструментов.
+Аргументы
+messages — список сообщений для модели.
+allowed_tools — список разрешённых инструментов (или None для всех).
+Возвращает
+Сырой ответ модели в виде словаря.
+Исключения
+RuntimeError — если конфигурация OpenAI не инициализирована.</p>
 <hr />
-<p>class AgentRunResult<br />
-Результат выполнения агента, включающий вывод, статус и список вызовов инструментов.<br />
-Поля<br />
-output — Текстовый ответ агента<br />
-status — Статус выполнения: "ok", "error", "partial", "blocked", "timeout"<br />
-tool_calls — Список словарей с информацией о вызовах инструментов, включая имя, аргументы, успех и ошибки</p></div>
+<p>async run(self, session_id: str, user_text: str, session: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str], task_id: Optional[str] = None, allowed_tools: Optional[List[str]] = None, request_context: Optional[str] = None, constraints: Optional[str] = None, corr_id: Optional[str] = None) -&gt; AgentRunResult
+Запускает выполнение агента с заданным пользовательским запросом и управляет циклом ReAct до достижения результата или лимитов.
+Аргументы
+session_id — Уникальный идентификатор сессии агента.
+user_text — Ввод пользователя, с которого начинается выполнение.
+session — Объект сессии, содержащий состояние агента.
+bot — Экземпляр бота для взаимодействия с пользователем.
+context — Контекст выполнения (например, данные запроса).
+chat_id — Идентификатор чата (опционально).
+chat_type — Тип чата (например, "private", "group") (опционально).
+task_id — Идентификатор задачи для отслеживания истории (опционально).
+allowed_tools — Список разрешённых к использованию инструментов (опционально).
+request_context — Дополнительный контекст запроса, включаемый в промпт (опционально).
+constraints — Ограничения на действия агента, добавляемые в системный промпт (опционально).
+corr_id — Идентификатор корреляции для логирования (опционально).
+Возвращает
+Объект AgentRunResult с результатом выполнения агента.
+Исключения
+RuntimeError — при ошибках конфигурации или превышении лимитов итераций.</p>
+<hr />
+<p>clear_session_cache(self, session_id: str) -&gt; None
+Очищает кэш сессии агента по её идентификатору.
+Аргументы
+session_id — Идентификатор сессии, которую нужно удалить из кэша.</p>
+<hr />
+<p>class AgentRunner
+Фасад для запуска агента, обеспечивающий инъекцию конфигурации и управление зависимостями.
+Методы
+<strong>init</strong>(config: AppConfig, tool_registry: PluginToolRegistry) — Инициализирует runner с конфигурацией и реестром инструментов.
+record_message(chat_id: int, message_id: int) — Регистрирует отправленное сообщение для последующего редактирования.
+resolve_question(question_id: str, answer: str) — Разрешает ожидающий вопрос по его идентификатору.
+clear_session_cache(session_id: str) — Очищает кэш сессии в связанном ReAct-агенте.
+run(session_id: str, user_text: str, session: Any, bot: Any, context: Any, chat_id: Optional[int], chat_type: Optional[str], task_id: Optional[str] = None, allowed_tools: Optional[List[str]] = None, request_context: Optional[str] = None, constraints: Optional[str] = None, corr_id: Optional[str] = None) — Асинхронно запускает выполнение агента с заданными параметрами.</p>
+<hr />
+<p>class AgentRunResult
+Результат выполнения агента.
+Поля
+output — Текстовый вывод агента, предназначенный для пользователя.
+status — Статус выполнения: "ok", "partial", "error", "blocked".
+tool_calls — Список словарей с информацией о вызовах инструментов (название, аргументы, успех, ошибка, вывод).</p></div>
             </div>
         </div>
 

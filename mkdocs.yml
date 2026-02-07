@@ -96,6 +96,9 @@ nav:
     - dispatcher.py: modules/agent/dispatcher__py.md
     - executor.py: modules/agent/executor__py.md
     - heuristics.py: modules/agent/heuristics__py.md
+    - manager.py: modules/agent/manager__py.md
+    - manager_prompts.py: modules/agent/manager_prompts__py.md
+    - manager_store.py: modules/agent/manager_store__py.md
     - memory_policy.py: modules/agent/memory_policy__py.md
     - memory_store.py: modules/agent/memory_store__py.md
     - openai_client.py: modules/agent/openai_client__py.md
@@ -103,9 +106,12 @@ nav:
     - planner.py: modules/agent/planner__py.md
     - profiles.py: modules/agent/profiles__py.md
     - session_store.py: modules/agent/session_store__py.md
+  - bot.py: modules/bot__py.md
+  - bot_logging.py: modules/bot_logging__py.md
   - command_registry.py: modules/command_registry__py.md
   - config.py: modules/config__py.md
   - dirs_ui.py: modules/dirs_ui__py.md
+  - dotenv_loader.py: modules/dotenv_loader__py.md
   - git_ops.py: modules/git_ops__py.md
   - mcp_bridge.py: modules/mcp_bridge__py.md
   - metrics.py: modules/metrics__py.md
@@ -113,6 +119,8 @@ nav:
   - session_ui.py: modules/session_ui__py.md
   - state.py: modules/state__py.md
   - summary.py: modules/summary__py.md
+  - telegram_io.py: modules/telegram_io__py.md
+  - tg_markdown.py: modules/tg_markdown__py.md
   - toolhelp.py: modules/toolhelp__py.md
   - utils.py: modules/utils__py.md
 - Изменения: changes.md

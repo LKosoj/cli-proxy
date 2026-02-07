@@ -1,90 +1,79 @@
 # Запуск и окружение
 
-## Запуск бота
+## Запуск приложения
 
-Бот запускается в режиме polling через `python-telegram-bot`. Точка входа — функция `build_app`, которая:
-
-1.  Загружает конфигурацию из `config.yaml`.
-2.  Инициализирует основные компоненты: `SessionManager`, `ToolRegistry`, `Metrics`.
-3.  Регистрирует обработчики команд, сообщений и callback-запросов.
-4.  Интегрирует плагины.
-5.  Запускает приложение с проверкой доступа по `whitelist_chat_ids`.
-
-**Команда запуска:**
+Точка входа — `__main__.py`. Запуск выполняется командой:
 ```bash
-python bot.py
+python -m bot
 ```
 
-## Переменные окружения
+Приложение инициализируется в следующем порядке:
+1. Загрузка переменных окружения из `.env`-файла в директории конфигурации.
+2. Загрузка `config.yaml` через `load_config()`.
+3. Построение экземпляра `BotApp` с помощью `build_app()`.
+4. Запуск polling-режима через `application.run_polling()`.
 
-Переменные окружения имеют приоритет над настройками в `config.yaml`.
+## Окружение и конфигурация
 
-| Переменная | Назначение | Обязательная |
-| :--- | :--- | :--- |
-| `TELEGRAM_TOKEN` | Токен бота от @BotFather | Да |
-| `TAVILY_API_KEY` | Ключ для поиска через Tavily | Нет |
-| `JINA_API_KEY` | Ключ для веб-поиска и чтения страниц (Jina.ai) | Нет |
-| `GITHUB_TOKEN` | Токен для аутентификации в Git (HTTPS) | Для приватных репозиториев |
-| `OPENAI_API_KEY` | Ключ для доступа к OpenAI API | Для функций, требующих LLM |
-| `ZAI_API_KEY` | Ключ для доступа к Z.AI API | Для функций, требующих LLM |
-| `WOLFRAM_APP_ID` | ID приложения для WolframAlpha | Для инструмента `wolfram_alpha` |
-| `TMDB_API_KEY` | Ключ для доступа к The Movie Database | Для инструмента `movie_info` |
-| `EDAMAM_APP_ID`, `EDAMAM_APP_KEY` | Ключи для доступа к Edamam API | Для инструмента `chief` |
-| `STABLE_DIFFUSION_TOKEN` | Токен для HuggingFace Inference API | Для инструмента `image_generation` |
-| `AGENT_SANDBOX_ROOT` | Корневая директория для песочниц агентов | Нет (по умолчанию `workdir`) |
+### Переменные окружения
+- `.env`-файл загружается автоматически из директории, указанной в `CONFIG_PATH`.
+- Поддерживаются стандартные префиксы: `export KEY=value`, комментарии `#`, кавычки.
+- Приоритет: переменные окружения > значения в `.env` > значения в `config.yaml`.
 
-## Конфигурационный файл (`config.yaml`)
-
-Основной файл конфигурации. Пример структуры:
-
+### Конфигурационный файл (`config.yaml`)
+Обязательные параметры:
 ```yaml
 telegram:
-  token: "YOUR_TELEGRAM_TOKEN"
-  whitelist_chat_ids: [123456789, 987654321]
+  token: "YOUR_BOT_TOKEN"
+  whitelist_chat_ids: [123456789]  # ID разрешённых пользователей
 
 defaults:
-  workdir: "/path/to/workdir"
+  workdir: "/path/to/working/directory"
   log_path: "/path/to/bot.log"
-  state_path: "/path/to/state.json"
-  image_temp_dir: "/tmp/images"
-  image_max_mb: 10
-  idle_timeout_sec: 3600
-  memory_max_kb: 1024
-  memory_compact_target_kb: 512
-  output_max_chars: 4000
-  clarification_enabled: true
-  clarification_keywords: ["уточни", "почему", "где"]
-
-tools:
-  codex:
-    cmd: "codex --headless --prompt '{prompt}'"
-    interactive_cmd: "codex"
-    resume_cmd: "codex --resume '{resume}'"
-    help_cmd: "codex --help"
-    prompt_regex: ".*\\$ $"
-    resume_regex: "thread_id: ([a-zA-Z0-9]+)"
-    env:
-      OPENAI_API_KEY: "${OPENAI_API_KEY}"
-  # ... другие инструменты (claude, gemini, qwen)
-
-mcp:
-  enabled: true
-  host: "127.0.0.1"
-  port: 8765
-  token: "your_mcp_token"
-
-mcp_servers:
-  - name: "context7"
-    transport: "http"
-    url: "http://context7-server:8888"
-    headers:
-      Authorization: "Bearer ${MCP_CONTEXT7_TOKEN}"
-  - name: "notebooklm"
-    transport: "stdio"
-    cmd: "python -m notebooklm_mcp_server"
-
-presets:
-  tests: "Запусти тесты и сообщи результат."
-  lint: "Проверь код линтером."
-  build: "Собери проект."
 ```
+
+Ключевые секции:
+- `tools.*` — настройка CLI-инструментов (команды, режимы, переменные окружения).
+- `mcp.*` — включение TCP-моста для внешних клиентов.
+- `manager_*` — параметры режима оркестрации (таймауты, лимиты, автокоммит).
+- `presets` — шаблоны задач для быстрого запуска.
+
+## Зависимости
+
+Установка зависимостей:
+```bash
+pip install -r requirements.txt
+```
+
+Ключевые пакеты:
+- `python-telegram-bot==20.7` — основа бота.
+- `openai`, `httpx` — интеграция с LLM.
+- `pexpect`, `ansi2html` — выполнение и рендеринг CLI-вывода.
+- `PyYAML`, `md2tgmd` — конфигурация и форматирование.
+- `duckduckgo-search`, `youtube-transcript-api` — внешние источники данных.
+
+## Требования к системе
+
+- Python 3.10+
+- Доступ к `git` в `PATH` (для Git-операций).
+- Установленные CLI-инструменты (Codex, Gemini и др.) — если используются.
+- Свободный порт (по умолчанию `8888`) — если включён MCP-сервер.
+
+## Рекомендации по развёртыванию
+
+1. **Безопасность**:
+   - Ограничьте доступ через `whitelist_chat_ids`.
+   - Храните `.env` вне версии.
+   - Используйте `sandbox_root` для изоляции рабочих директорий.
+
+2. **Логирование**:
+   - Настройте ротацию логов через `TimedRotatingFileHandler`.
+   - Мониторьте `bot_error.log` для отладки.
+
+3. **Восстановление**:
+   - Состояние сессий сохраняется в `state.json`.
+   - После перезапуска бот восстанавливает активные сессии и очереди.
+
+4. **Производительность**:
+   - Установите `idle_timeout_sec` для автоматического завершения неактивных сессий.
+   - Ограничьте `manager_max_tasks` и `manager_max_attempts` во избежание бесконечных циклов.

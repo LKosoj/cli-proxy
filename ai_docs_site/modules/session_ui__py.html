@@ -348,6 +348,18 @@
 </li>
             
 <li>
+    <a href="agent/manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="agent/manager_prompts__py.html" class="dropdown-item">manager_prompts.py</a>
+</li>
+            
+<li>
+    <a href="agent/manager_store__py.html" class="dropdown-item">manager_store.py</a>
+</li>
+            
+<li>
     <a href="agent/memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
 </li>
             
@@ -378,6 +390,14 @@
   </li>
                                     
 <li>
+    <a href="bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="bot_logging__py.html" class="dropdown-item">bot_logging.py</a>
+</li>
+                                    
+<li>
     <a href="command_registry__py.html" class="dropdown-item">command_registry.py</a>
 </li>
                                     
@@ -387,6 +407,10 @@
                                     
 <li>
     <a href="dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="dotenv_loader__py.html" class="dropdown-item">dotenv_loader.py</a>
 </li>
                                     
 <li>
@@ -415,6 +439,14 @@
                                     
 <li>
     <a href="summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="telegram_io__py.html" class="dropdown-item">telegram_io.py</a>
+</li>
+                                    
+<li>
+    <a href="tg_markdown__py.html" class="dropdown-item">tg_markdown.py</a>
 </li>
                                     
 <li>
@@ -475,131 +507,87 @@
                     <div class="col-md-9" role="main">
 
 <h1 id="session_ui">session_ui</h1>
-<p>Модуль предоставляет пользовательский интерфейс для управления сессиями через Telegram-бота. Он позволяет просматривать список сессий, выбирать активную, переименовывать, обновлять токен возобновления, а также получать статус и управлять очередью. Взаимодействие осуществляется через inline-кнопки и текстовые сообщения.</p>
+<p>Модуль предоставляет пользовательский интерфейс для управления сессиями через Telegram-бота. Он позволяет просматривать список сессий, выбирать активную, переименовывать, обновлять resume-токен, проверять статус и управлять очередью. Взаимодействие осуществляется через inline-кнопки и текстовые сообщения. Модуль отвечает за обработку пользовательских действий с сессиями в Telegram-интерфейсе, включая просмотр состояния, управление очередью и закрытие сессий. Он взаимодействует с менеджером сессий и системой хранения состояний, обеспечивая отображение информации и выполнение операций через callback-запросы. Логика обработки разделена по префиксам входящих данных, что позволяет маршрутизировать действия в зависимости от типа запроса.</p>
 <p>Ключевые структуры данных<br />
-SessionUI — Класс для управления интерфейсом сессий в Telegram, включая построение меню и обработку действий</p>
+SessionUI — Класс для управления интерфейсом сессий в Telegram, включая построение меню, обработку колбэков и ввода<br />
+Session — объект, управляющий состоянием и очередью инструмента для конкретного пользователя<br />
+SessionManager — централизованное хранилище активных сессий с возможностью сохранения на диск</p>
 <hr />
 <p>class SessionUI<br />
-Интерфейс управления сессиями через Telegram с поддержкой inline-меню и обработки ввода.<br />
+Предоставляет интерфейс управления сессиями через Telegram: меню, колбэки, обработка ввода.<br />
 Поля<br />
 config — Конфигурация приложения.<br />
-manager — Менеджер сессий.<br />
-_send_message — Функция отправки сообщений через Telegram.<br />
+manager — Менеджер сессий, управляющий жизненным циклом сессий.<br />
+_send_message — Асинхронная функция отправки сообщений в чат.<br />
 _format_ts — Функция форматирования временных меток.<br />
 _short_label — Функция усечения текста до заданной длины.<br />
 _on_close — Опциональный колбэк, вызываемый при закрытии сессии.<br />
 _on_before_close — Опциональный асинхронный колбэк перед закрытием сессии.<br />
-pending_session_rename — Словарь: chat_id → session_id для ожидания ввода нового имени сессии.<br />
-pending_session_resume — Словарь: chat_id → session_id для ожидания ввода нового resume-токена.<br />
+pending_session_rename — Словарь: chat_id → session_id для отслеживания сессий, ожидающих переименования.<br />
+pending_session_resume — Словарь: chat_id → session_id для отслеживания сессий, ожидающих обновления resume-токена.<br />
 Методы<br />
-<strong>init</strong>(config, manager, send_message, format_ts, short_label, on_close: Optional[Callable[[str], None]] = None, on_before_close: Optional[Callable[[str, int, ContextTypes.DEFAULT_TYPE], None]] = None) — Инициализирует интерфейс управления сессиями.<br />
-build_sessions_menu() -&gt; InlineKeyboardMarkup — Возвращает inline-клавиатуру со списком всех сессий.<br />
+build_sessions_menu() -&gt; InlineKeyboardMarkup — Создаёт клавиатуру с списком всех сессий.<br />
 handle_pending_message(chat_id: int, text: str, context: ContextTypes.DEFAULT_TYPE) -&gt; bool — Обрабатывает текстовые сообщения от пользователей, ожидающие ввода (переименование, resume).<br />
-handle_callback(query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; bool — Обрабатывает нажатия на inline-кнопки, связанные с сессиями.</p>
+handle_callback(query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; bool — Обрабатывает нажатия на inline-кнопки меню сессий.</p>
 <hr />
-<p>build_sessions_menu()<br />
-Возвращает inline-клавиатуру с перечнем всех доступных сессий.<br />
+<p>build_sessions_menu() -&gt; InlineKeyboardMarkup<br />
+Создаёт inline-клавиатуру со списком всех доступных сессий.<br />
 Возвращает<br />
 InlineKeyboardMarkup — Клавиатура с кнопками для выбора сессии.</p>
 <hr />
 <p>handle_pending_message(chat_id: int, text: str, context: ContextTypes.DEFAULT_TYPE) -&gt; bool<br />
-Обрабатывает текстовые сообщения от пользователя в контексте ожидающих действий (переименование, обновление resume).<br />
+Обрабатывает текстовые сообщения от пользователя в контексте ожидания ввода (переименование или resume).<br />
 Аргументы<br />
 chat_id — Идентификатор чата.<br />
 text — Введённый пользователем текст.<br />
 context — Контекст выполнения Telegram-бота.<br />
 Возвращает<br />
-True, если сообщение было обработано как ожидающее действие; иначе False.</p>
+True, если сообщение было обработано как ожидающий ввод; иначе False.</p>
 <hr />
 <p>handle_callback(query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -&gt; bool<br />
-Обрабатывает нажатие на inline-кнопки, связанные с управлением сессиями.<br />
+Обрабатывает нажатие на inline-кнопки в меню сессий.<br />
 Аргументы<br />
-query — Объект callback-запроса от Telegram.<br />
+query — Объект колбэка от Telegram.<br />
 chat_id — Идентификатор чата.<br />
 context — Контекст выполнения Telegram-бота.<br />
 Возвращает<br />
-True, если callback был распознан и обработан; иначе False.</p>
+True, если колбэк был обработан; иначе False.</p>
 <hr />
-<p>async def query.edit_message_text(text: str) -&gt; bool<br />
-Обновляет текст сообщения в интерфейсе Telegram.<br />
+<p>async def handle_callback_query(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE) -&gt; bool<br />
+Обрабатывает callback-запросы от пользователя, связанные с управлением сессиями<br />
 Аргументы<br />
-text — отображаемый текст сообщения.<br />
+query — объект callback-запроса от Telegram<br />
+context — контекст выполнения бота, содержащий данные и методы<br />
 Возвращает<br />
-True при успешном обновлении.<br />
+True, если запрос был обработан, иначе False<br />
 Исключения<br />
-Возможны исключения Telegram API при недопустимых запросах.</p>
+Может выбрасывать исключения при ошибках взаимодействия с Telegram API или файловой системой</p>
 <hr />
-<p>async def query.answer() -&gt; None<br />
-Подтверждает получение callback-запроса без визуальных изменений.<br />
-Возвращает<br />
-None.<br />
+<p>def _send_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -&gt; None<br />
+Асинхронно отправляет сообщение в указанный чат<br />
+Аргументы<br />
+context — контекст выполнения бота<br />
+chat_id — идентификатор получателя<br />
+text — текст сообщения<br />
 Исключения<br />
-Возможны исключения Telegram API при недопустимых запросах.</p>
+Выбрасывает исключение при недоступности Telegram API</p>
 <hr />
-<p>async def self._send_message(context: Context, chat_id: int, text: str) -&gt; None<br />
-Отправляет новое сообщение пользователю.<br />
+<p>def _format_ts(timestamp: float) -&gt; str<br />
+Форматирует временную метку в человекочитаемую строку<br />
 Аргументы<br />
-context — контекст выполнения Telegram-бота.<br />
-chat_id — идентификатор чата получателя.<br />
-text — текст сообщения.<br />
+timestamp — время в формате Unix timestamp<br />
 Возвращает<br />
-None.<br />
-Исключения<br />
-Возможны исключения Telegram API при ошибках отправки.</p>
-<hr />
-<p>def self.manager.get(session_id: str) -&gt; Session | None<br />
-Возвращает сессию по её идентификатору.<br />
-Аргументы<br />
-session_id — уникальный идентификатор сессии.<br />
-Возвращает<br />
-Объект сессии или None, если не найден.</p>
-<hr />
-<p>def self.manager.close(session_id: str) -&gt; bool<br />
-Закрывает и удаляет сессию.<br />
-Аргументы<br />
-session_id — идентификатор сессии.<br />
-Возвращает<br />
-True при успешном закрытии, иначе False.</p>
-<hr />
-<p>def self.manager._persist_sessions() -&gt; None<br />
-Сохраняет текущее состояние всех сессий на диск.<br />
-Возвращает<br />
-None.</p>
-<hr />
-<p>def get_state(state_path: str, tool_name: str, workdir: str) -&gt; State | None<br />
-Загружает состояние выполнения инструмента из файловой системы.<br />
-Аргументы<br />
-state_path — путь к каталогу состояний.<br />
-tool_name — имя инструмента.<br />
-workdir — рабочий каталог сессии.<br />
-Возвращает<br />
-Объект состояния или None, если не найдено.</p>
-<hr />
-<p>def self._format_ts(timestamp: float) -&gt; str<br />
-Форматирует временную метку в человекочитаемую строку.<br />
-Аргументы<br />
-timestamp — время в формате Unix timestamp.<br />
-Возвращает<br />
-Строка в формате "ДД.ММ.ГГГГ ЧЧ:ММ:СС".</p>
-<hr />
-<p>class Session<br />
-Хранит состояние активной сессии исполнения инструмента.<br />
-Поля<br />
-session_id — уникальный идентификатор сессии.<br />
-tool — имя инструмента.<br />
-workdir — рабочий каталог.<br />
-resume_token — токен для возобновления выполнения.<br />
-queue — очередь сообщений на обработку.<br />
-updated_at — временная метка последнего обновления.<br />
-Методы<br />
-close() — завершает сессию и освобождает ресурсы.</p>
+Строка с датой и временем в локальном формате</p>
 <hr />
 <p>class SessionManager<br />
-Управляет жизненным циклом сессий: создание, получение, закрытие, сохранение.<br />
+Управляет жизненным циклом сессий: создание, получение, закрытие и сохранение<br />
+Поля<br />
+sessions — словарь активных сессий, индексированных по ID<br />
+session_file — путь к файлу для сохранения состояния сессий<br />
 Методы<br />
-get(session_id: str) -&gt; Session | None — возвращает сессию по ID.<br />
-close(session_id: str) -&gt; bool — закрывает сессию.<br />
-_persist_sessions() — сохраняет все сессии на диск.</p></div>
+get(session_id: str) -&gt; Session | None — возвращает сессию по ID или None, если не найдена<br />
+close(session_id: str) -&gt; bool — закрывает и удаляет сессию, возвращает успех операции<br />
+_persist_sessions() — сохраняет текущее состояние сессий в файл</p></div>
             </div>
         </div>
 

@@ -348,6 +348,18 @@
 </li>
             
 <li>
+    <a href="modules/agent/manager__py.html" class="dropdown-item">manager.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/manager_prompts__py.html" class="dropdown-item">manager_prompts.py</a>
+</li>
+            
+<li>
+    <a href="modules/agent/manager_store__py.html" class="dropdown-item">manager_store.py</a>
+</li>
+            
+<li>
     <a href="modules/agent/memory_policy__py.html" class="dropdown-item">memory_policy.py</a>
 </li>
             
@@ -378,6 +390,14 @@
   </li>
                                     
 <li>
+    <a href="modules/bot__py.html" class="dropdown-item">bot.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/bot_logging__py.html" class="dropdown-item">bot_logging.py</a>
+</li>
+                                    
+<li>
     <a href="modules/command_registry__py.html" class="dropdown-item">command_registry.py</a>
 </li>
                                     
@@ -387,6 +407,10 @@
                                     
 <li>
     <a href="modules/dirs_ui__py.html" class="dropdown-item">dirs_ui.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/dotenv_loader__py.html" class="dropdown-item">dotenv_loader.py</a>
 </li>
                                     
 <li>
@@ -415,6 +439,14 @@
                                     
 <li>
     <a href="modules/summary__py.html" class="dropdown-item">summary.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/telegram_io__py.html" class="dropdown-item">telegram_io.py</a>
+</li>
+                                    
+<li>
+    <a href="modules/tg_markdown__py.html" class="dropdown-item">tg_markdown.py</a>
 </li>
                                     
 <li>
@@ -471,7 +503,7 @@
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Структура данных</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Структура кода</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -479,35 +511,23 @@
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_5" class="nav-link">Безопасность</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_5" class="nav-link">Работа с данными</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_6" class="nav-link">Плагины</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_6" class="nav-link">Логирование</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#callback-" class="nav-link">Callback-данные</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_7" class="nav-link">Конфигурация</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_7" class="nav-link">Диалоги</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_8" class="nav-link">Безопасность</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_8" class="nav-link">Работа с файлами</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_9" class="nav-link">Переменные окружения</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_10" class="nav-link">Логирование</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-bs-level="2"><a href="#_11" class="nav-link">Версионирование и совместимость</a>
+            <li class="nav-item" data-bs-level="2"><a href="#_9" class="nav-link">Тестирование</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -521,81 +541,60 @@
 <h1 id="_1">Соглашения</h1>
 <h2 id="_2">Именование и форматирование</h2>
 <ul>
-<li><strong>Переменные и функции</strong>: <code>snake_case</code> (например, <code>session_manager</code>, <code>build_keyboard</code>).</li>
+<li><strong>Переменные и функции</strong>: <code>snake_case</code> (например, <code>pending_session_rename</code>, <code>build_sessions_menu</code>).</li>
 <li><strong>Классы</strong>: <code>PascalCase</code> (например, <code>SessionUI</code>, <code>GitOps</code>).</li>
-<li><strong>Константы</strong>: <code>UPPER_SNAKE_CASE</code> (например, <code>TOOL_TIMEOUT_MS</code>, <code>DIALOG_TIMEOUT</code>).</li>
-<li><strong>Файлы и модули</strong>: <code>snake_case.py</code> (например, <code>session_manager.py</code>, <code>tool_registry.py</code>).</li>
-<li><strong>Папки плагинов</strong>: <code>plugins/</code>, файлы — <code>*.py</code>, исключая <code>__init__.py</code>, <code>base.py</code>.</li>
+<li><strong>Константы</strong>: <code>UPPER_SNAKE_CASE</code> (например, <code>TOOL_TIMEOUT_MS</code>, <code>OUTPUT_TRIM_LEN</code>).</li>
+<li><strong>Файлы и модули</strong>: <code>snake_case.py</code> (например, <code>session_manager.py</code>, <code>tooling_helpers.py</code>).</li>
+<li><strong>Конфигурационные ключи</strong>: <code>snake_case</code> (например, <code>manager_auto_commit</code>, <code>idle_timeout_sec</code>).</li>
 </ul>
-<h2 id="_3">Структура данных</h2>
+<h2 id="_3">Структура кода</h2>
 <ul>
-<li><strong>Сессии</strong>: ключ в формате <code>{tool}::{workdir}</code>.</li>
-<li><strong>Состояние</strong>: хранится в <code>state.json</code>, активная сессия — в <code>_active</code>.</li>
-<li><strong>Конфигурация</strong>: <code>config.yaml</code>, загружается через <code>load_config()</code>.</li>
-<li><strong>Логи</strong>: <code>TimedRotatingFileHandler</code>, ротация в 03:00 UTC, <code>backupCount=1</code>.</li>
-<li><strong>Песочница</strong>: <code>workdir/sandbox</code>, <code>AGENT_SANDBOX_ROOT</code> — корень для изолированных данных.</li>
+<li>Классы и функции сопровождаются docstring в формате Google Style.</li>
+<li>Модули начинаются с краткого описания назначения.</li>
+<li>Импорты группируются: стандартная библиотека, сторонние, внутренние.</li>
+<li>Длинные строки разбиваются по 88 символов (PEP 8).</li>
 </ul>
 <h2 id="_4">Обработка ошибок</h2>
 <ul>
-<li>Все операции чтения/записи файлов обрабатывают исключения с логированием.</li>
-<li>При отсутствии файла или некорректных данных возвращаются значения по умолчанию.</li>
-<li>Сетевые и API-ошибки логируются через <code>logging.exception</code>, возвращаются структурированные ответы с <code>{"success": false, "error": "..."}</code>.</li>
+<li>Исключения логируются через <code>logging.exception()</code> с контекстом.</li>
+<li>Сетевые операции (Telegram, HTTP) обрабатываются с повторными попытками.</li>
+<li>Критические сбои (например, потеря соединения с MCP) не прерывают работу бота.</li>
+<li>Ошибки валидации входных данных возвращаются пользователю в понятной форме.</li>
 </ul>
-<h2 id="_5">Безопасность</h2>
+<h2 id="_5">Работа с данными</h2>
 <ul>
-<li>Проверка путей: <code>is_within_root()</code>, <code>_resolve_within_workspace()</code>.</li>
-<li>Блокировка чувствительных файлов: <code>.env</code>, <code>id_rsa</code>, <code>*.pem</code>, <code>credentials</code>.</li>
-<li>Фильтрация команд: <code>BLOCKED_PATTERNS_PATH</code>, <code>check_command()</code>.</li>
-<li>Токены: передаются через <code>GIT_ASKPASS</code>, <code>GITHUB_TOKEN</code>, <code>ZAI_API_KEY</code> и др.</li>
+<li>Состояние сессий и планов сохраняется в JSON с атомарной записью.</li>
+<li>Используются потокобезопасные операции чтения/записи (<code>read_json_locked</code>, <code>write_json_locked</code>).</li>
+<li>Пути проверяются на безопасность (<code>is_within_root</code>) перед использованием.</li>
+<li>Чувствительные данные (токены, ключи) не логируются и не передаются в вывод.</li>
 </ul>
-<h2 id="_6">Плагины</h2>
+<h2 id="_6">Логирование</h2>
 <ul>
-<li>Наследуют <code>ToolPlugin</code>, регистрируются в <code>ToolRegistry</code>.</li>
-<li>Инициализируются через <code>initialize(config, services)</code>.</li>
-<li>Используют <code>DialogMixin</code> для диалогов (наследуется первым).</li>
-<li>Имена инструментов: <code>{function_prefix}.{spec.name}</code>.</li>
-<li>Автоматическая загрузка из <code>plugins/</code>.</li>
+<li>Уровни: <code>INFO</code> — основные события, <code>ERROR</code> — сбои, <code>DEBUG</code> — отладка.</li>
+<li>Формат: <code>%(asctime)s %(levelname)s %(message)s</code>.</li>
+<li>Логи разделяются по назначению: основной, ошибки, агенты.</li>
+<li>Ротация: ежедневно, хранится один архивный файл.</li>
 </ul>
-<h2 id="callback-">Callback-данные</h2>
+<h2 id="_7">Конфигурация</h2>
 <ul>
-<li>Формат: <code>action:key:values</code>.</li>
-<li>Поддерживаемые префиксы:</li>
-<li><code>dlg:{plugin_id}:{payload}</code> — шаг диалога.</li>
-<li><code>cb:{plugin_id}:{action}</code> — автономное действие.</li>
-<li><code>dlg_cancel:{plugin_id}</code> — отмена диалога.</li>
-<li>Макс. длина <code>callback_data</code>: 64 байта.</li>
+<li>Основной файл: <code>config.yaml</code>.</li>
+<li>Переменные окружения имеют приоритет над значениями в YAML.</li>
+<li>Поддерживаются подстановки <code>${VAR}</code>.</li>
+<li>Файл <code>.env</code> загружается автоматически из той же директории, что и <code>config.yaml</code>.</li>
 </ul>
-<h2 id="_7">Диалоги</h2>
+<h2 id="_8">Безопасность</h2>
 <ul>
-<li>Управляются через <code>DialogMixin</code>.</li>
-<li>Таймаут неактивности: <code>DIALOG_TIMEOUT</code> (по умолчанию 300 сек).</li>
-<li>Отмена: слова из <code>CANCEL_WORDS</code> (<code>отмена</code>, <code>cancel</code>, <code>-</code>).</li>
-<li>Состояние хранится в <code>DialogState</code> на уровне <code>chat_id</code>.</li>
+<li>Доступ к боту ограничен <code>whitelist_chat_ids</code>.</li>
+<li>Команды проверяются на опасные паттерны (<code>BLOCKED_PATTERNS_PATH</code>).</li>
+<li>Запрещён доступ к чувствительным файлам (<code>.env</code>, <code>id_rsa</code>, <code>secrets.yaml</code>).</li>
+<li>Плагины и инструменты выполняются в изолированной среде (песочнице).</li>
 </ul>
-<h2 id="_8">Работа с файлами</h2>
+<h2 id="_9">Тестирование</h2>
 <ul>
-<li>Макс. размер загрузки: 500 КБ (текст), 10 МБ (изображения).</li>
-<li>Временные файлы: <code>tempfile</code>, удаляются после использования.</li>
-<li>Кодировка: UTF-8, игнорирование ошибок декодирования.</li>
-</ul>
-<h2 id="_9">Переменные окружения</h2>
-<ul>
-<li>Имеют приоритет над <code>config.yaml</code>.</li>
-<li>Примеры: <code>OPENAI_API_KEY</code>, <code>TAVILY_API_KEY</code>, <code>GITHUB_TOKEN</code>.</li>
-<li>Подстановка в команды: <code>${VAR}</code>.</li>
-</ul>
-<h2 id="_10">Логирование</h2>
-<ul>
-<li>Централизованное через <code>logging</code>.</li>
-<li>Формат: <code>%(asctime)s - %(name)s - %(levelname)s - %(message)s</code>.</li>
-<li>Уровень: <code>INFO</code> по умолчанию.</li>
-<li>Отдельные логи: общий, ошибки, агент.</li>
-</ul>
-<h2 id="_11">Версионирование и совместимость</h2>
-<ul>
-<li>Версии пакетов фиксируются в <code>requirements.txt</code> (например, <code>python-telegram-bot==20.7</code>).</li>
-<li>MCP-протокол: версия по умолчанию <code>2024-11-05</code>.</li>
-<li>JSON-файлы: отступы 2 пробела, <code>ensure_ascii=False</code>.</li>
+<li>Модульные тесты покрывают ключевые сценарии: загрузка конфигурации, обработка команд, восстановление состояния.</li>
+<li>Используются моки для изоляции внешних зависимостей (Telegram API, MCP).</li>
+<li>Тесты запускаются в изолированной временной директории (<code>tmp_path</code>).</li>
+<li>Проверяется устойчивость к граничным случаям и сбоям.</li>
 </ul></div>
             </div>
         </div>

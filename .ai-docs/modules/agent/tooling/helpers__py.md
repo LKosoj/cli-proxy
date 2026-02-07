@@ -1,104 +1,180 @@
 # agent/tooling/helpers
 
-```markdown
-This module provides secure execution of shell commands and file operations within a restricted workspace environment. It includes mechanisms for command approval, pattern-based blocking, workspace isolation, and output sanitization to prevent security risks. The module also handles background process launching and enforces timeouts to avoid long-running or hanging operations.
+Модуль предоставляет безопасное выполнение shell-команд, операции с файлами и веб-запросами в изолированной пользовательской среде. Включает проверку команд на соответствие блокирующим шаблонам, контроль доступа к системным путям, обработку чувствительных данных и защиту от утечек. Поддерживается асинхронное выполнение, ограничение по времени, обрезка вывода и многоуровневое получение веб-контента через внешние API и прямой парсинг. Реализована система утверждения команд и логирования.
 
 Ключевые структуры данных
-PendingCommand — Represents a shell command awaiting user approval, storing metadata such as session, chat, command, and reason
+PendingCommand — Хранит информацию о команде, ожидающей утверждения: идентификатор, сессию, чат, команду, рабочую директорию, причину и время создания.
+SENSITIVE_FILES — Список имён файлов, считающихся чувствительными (например, ключи, учётные данные).
+SENSITIVE_PATTERNS — Список регулярных выражений для определения чувствительных файлов по имени или расширению.
+MEMORY_FILE — Имя файла, используемого для хранения постоянной памяти агента.
 
+---
 set_approval_callback(cb: Callable[[int, str, str, str], None]) -> None
-Sets a callback function to be invoked when a command requires user approval.
+Устанавливает функцию обратного вызова для обработки запросов на утверждение команд.
 Аргументы
-cb — Callback function accepting chat_id, session_id, cmd_id, and reason
-Возвращает
-None
+cb — Функция, вызываемая при необходимости подтверждения выполнения команды.
 
 ---
 _store_pending_command(session_id: str, chat_id: int, command: str, cwd: str, reason: str) -> str
-Stores a new pending command and returns its unique identifier.
+Сохраняет команду в списке ожидающих утверждения и возвращает её уникальный идентификатор.
 Аргументы
-session_id — Identifier of the current session
-chat_id — Identifier of the chat initiating the command
-command — Shell command to be executed
-cwd — Current working directory for command execution
-reason — Explanation for why approval is needed
+session_id — Идентификатор сессии пользователя.
+chat_id — Идентификатор чата.
+command — Команда для выполнения.
+cwd — Текущая рабочая директория.
+reason — Причина, по которой требуется утверждение.
 Возвращает
-Unique command ID for later retrieval or approval
+Уникальный идентификатор команды (cmd_id).
 
 ---
 pop_pending_command(cmd_id: str) -> Optional[PendingCommand]
-Removes and returns a pending command by its ID, if it exists.
+Извлекает и удаляет команду из списка ожидающих по её идентификатору.
 Аргументы
-cmd_id — Unique identifier of the pending command
+cmd_id — Идентификатор команды.
 Возвращает
-The PendingCommand object if found, otherwise None
+Объект PendingCommand или None, если команда не найдена.
 
 ---
 _load_blocked_patterns() -> List[Dict[str, Any]]
-Loads and parses blocked command patterns from the configuration file.
+Загружает список запрещённых шаблонов команд из JSON-файла.
 Возвращает
-List of pattern dictionaries containing regex, category, and block status
+Список словарей с полями шаблонов (pattern, blocked, category, reason).
+Исключения
+Любые исключения логируются, возвращается пустой список.
 
 ---
 check_command(command: str, chat_type: Optional[str]) -> Tuple[bool, bool, Optional[str]]
-Checks if a command matches any blocked or approved patterns.
+Проверяет команду на соответствие блокирующим или требующим утверждения шаблонам.
 Аргументы
-command — Command string to evaluate
-chat_type — Type of chat (e.g. "group") for context-aware filtering
+command — Команда для проверки.
+chat_type — Тип чата (например, "group"), влияет на применение шаблонов.
 Возвращает
-Tuple indicating (is_approved, is_blocked, reason)
+Кортеж из (требуется_утверждение, заблокировано, причина).
 
 ---
 _check_workspace_isolation(command: str, user_workspace: str) -> Tuple[bool, Optional[str]]
-Verifies that a command does not access system-critical directories.
+Проверяет, не пытается ли команда получить доступ к системным директориям вне рабочей области.
 Аргументы
-command — Command to check for dangerous paths
-user_workspace — Root directory allowed for user operations
+command — Выполняемая команда.
+user_workspace — Корневая директория пользователя.
 Возвращает
-Tuple indicating (is_violating, error_message)
+Кортеж из (заблокировано, сообщение), если обнаружен доступ к запрещённым путям.
 
 ---
 _check_command_path_escape(command: str, cwd: str) -> Tuple[bool, Optional[str]]
-Ensures all absolute paths in the command stay within the workspace.
+Проверяет, не пытается ли команда выйти за пределы текущей рабочей директории.
 Аргументы
-command — Command to validate
-cwd — Current working directory as workspace root
+command — Команда для анализа.
+cwd — Текущая рабочая директория.
 Возвращает
-Tuple indicating (escapes_workspace, error_message)
+Кортеж из (заблокировано, сообщение), если путь команды выходит за пределы cwd.
 
 ---
 sanitize_output(output: str) -> str
-Removes ANSI escape codes from command output.
+Удаляет ANSI-коды форматирования из вывода команды.
 Аргументы
-output — Raw command output string
+output — Текст вывода.
 Возвращает
-Cleaned string safe for display
+Очищенный от ANSI-кодов текст.
 
 ---
 _trim_output(text: str) -> str
-Truncates long output by keeping head and tail portions.
+Обрезает длинный вывод, оставляя начало и конец с указанием объёма обрезанного текста.
 Аргументы
-text — Full output text
+text — Полный вывод команды.
 Возвращает
-Trimmed version with truncation indicator
+Сокращённая версия текста с уведомлением об обрезке.
+
+---
+_trim_fetch_output(text: str, *, reason: str = "превышен лимит") -> str
+Ограничивает объём текста, полученного из внешних источников, с добавлением суффикса.
+Аргументы
+text — Исходный текст.
+reason — Причина обрезки (по умолчанию "превышен лимит").
+Возвращает
+Текст, обрезанный до FETCH_MAX_CHARS символов с пояснением.
 
 ---
 execute_shell_command(command: str, cwd: str) -> Dict[str, Any]
-Executes a shell command with timeout and returns structured result.
+Асинхронно выполняет shell-команду с таймаутом, возвращает результат.
 Аргументы
-command — Command to execute
-cwd — Working directory for execution
+command — Команда для выполнения.
+cwd — Рабочая директория.
 Возвращает
-Dictionary with 'success', 'output', or 'error' keys
+Словарь с ключами success, output/error, meta (при ошибках).
 Исключения
-subprocess.TimeoutExpired — Raised when execution exceeds timeout
+subprocess.TimeoutExpired — Возвращает сообщение о превышении времени выполнения.
+Другие исключения — Логируются и возвращаются как ошибки выполнения.
 
 ---
 _resolve_within_workspace(path: str, cwd: str) -> Tuple[Optional[str], Optional[str]]
-Resolves a path and verifies it stays within the allowed workspace.
+Проверяет, находится ли путь внутри рабочей директории, и нормализует его.
 Аргументы
-path — Input file path (relative or absolute)
-cwd — Base directory for resolving relative paths
+path — Путь для проверки и разрешения.
+cwd — Текущая рабочая директория, используемая как корень.
 Возвращает
-Tuple of (resolved_path, error_message)
-```
+Кортеж из нормализованного абсолютного пути и ошибки (если есть).
+
+---
+_is_sensitive_file(path: str) -> bool
+Определяет, является ли файл чувствительным по имени или расширению.
+Аргументы
+path — Полный или относительный путь к файлу.
+Возвращает
+True, если файл соответствует списку чувствительных имён или паттернов.
+
+---
+_is_other_user_workspace(path: str, workspace: str) -> bool
+Проверяет, находится ли путь за пределами указанного рабочего пространства.
+Аргументы
+path — Путь к файлу или директории.
+workspace — Корневая директория рабочего пространства.
+Возвращает
+True, если путь находится вне рабочей директории.
+
+---
+_is_symlink_escape(path: str, workspace: str) -> Tuple[bool, Optional[str]]
+Проверяет, ведёт ли разрешённый символик-линк за пределы рабочей директории.
+Аргументы
+path — Путь, который может содержать символические ссылки.
+workspace — Корневая директория рабочего пространства.
+Возвращает
+Кортеж из признака утечки и сообщения об ошибке (если есть).
+
+---
+_contains_dangerous_code(content: str) -> Tuple[bool, Optional[str]]
+Проверяет текст на наличие потенциально опасных фрагментов (ключи, пароли и т.д.).
+Аргументы
+content — Строка с содержимым для анализа.
+Возвращает
+Кортеж из признака наличия опасного кода и найденного паттерна (если есть).
+
+---
+_format_tasks(tasks: List[Dict[str, Any]]) -> str
+Форматирует список задач в читаемую строку.
+Аргументы
+tasks — Список словарей с полями id, content, status.
+Возвращает
+Строка с отформатированным списком задач.
+
+---
+async search_web_impl(query: str, config: Any) -> Dict[str, Any]
+Выполняет веб-поиск с использованием нескольких провайдеров (Tavily, Jina, Z.AI, прокси).
+Аргументы
+query — Поисковый запрос.
+config — Конфигурация с ключами API по умолчанию.
+Возвращает
+Словарь с результатами поиска или ошибкой.
+Исключения
+Логирует исключения, но не пробрасывает; ошибка возвращается в поле "error".
+
+---
+async fetch_page_impl(url: str, config: Any) -> Dict[str, Any]
+Извлекает и извлекает содержимое веб-страницы через доверенные сервисы.
+Аргументы
+url — URL страницы для загрузки.
+config — Конфигурация с ключами API по умолчанию.
+Возвращает
+Словарь с содержимым страницы или ошибкой.
+Исключения
+Логирует исключения, но не пробрасывает; ошибка возвращается в поле "error".
