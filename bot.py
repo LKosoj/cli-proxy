@@ -1520,7 +1520,7 @@ class BotApp:
                                 text="Для работы Manager нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml.",
                             )
                         return
-                    if not session.cli or not session.alive:
+                    if not session or not os.path.isdir(session.workdir):
                         if query.message:
                             await self._edit_message(
                                 context,
