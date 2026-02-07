@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import re
 import time
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import AppConfig
 from session import Session
+from utils import strip_ansi
 
 from .contracts import DevTask, ProjectAnalysis, ProjectPlan, ReviewResult, ExecutorRequest
 from .executor import Executor
@@ -30,24 +33,70 @@ _log = logging.getLogger(__name__)
 
 MANAGER_CONTINUE_TOKEN = "__MANAGER_CONTINUE__"
 
+# Statuses eligible for retry (normalization after crash/restart).
+RETRIABLE_STATUSES = ("pending", "rejected", "in_progress", "in_review")
+
 
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 
 
+def _debug_ts() -> str:
+    """Compact timestamp for debug filenames: 20260207_143012."""
+    return time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+
+
+def _debug_write(workdir: str, prefix: str, title: str, body: str) -> None:
+    """Write a debug markdown log file to .manager/ inside the workdir."""
+    try:
+        debug_dir = os.path.join(workdir, ".manager")
+        os.makedirs(debug_dir, exist_ok=True)
+        ts = _debug_ts()
+        fname = f"{prefix}_{ts}.md"
+        path = os.path.join(debug_dir, fname)
+        content = f"# {title}\n\n**Timestamp:** {_now_iso()}\n\n---\n\n{body}\n"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception as e:
+        _log.debug("debug_write failed: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# JSON extraction helpers
+# ---------------------------------------------------------------------------
+
+_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL)
+
+
 def _extract_json_object(raw: str) -> str:
+    """Extract a JSON object from text that may contain markdown fences or extra text."""
     s = (raw or "").strip()
     if not s:
         return s
-    if s.startswith("```"):
-        s = s.strip("`")
+
+    # 1. Try to extract from ```json ... ``` block
+    m = _JSON_BLOCK_RE.search(s)
+    if m:
+        inner = m.group(1).strip()
+        if inner:
+            return inner
+
+    # 2. Already clean JSON
     if s.startswith("{") and s.endswith("}"):
         return s
+
+    # 3. Find outermost braces
     i = s.find("{")
     j = s.rfind("}")
     if i >= 0 and j > i:
         return s[i : j + 1]
+
     return s
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
 
 
 def _format_acceptance(items: List[str]) -> str:
@@ -64,6 +113,21 @@ def _plan_summary(plan: ProjectPlan) -> str:
     done = sum(1 for t in plan.tasks if t.status == "approved")
     total = len(plan.tasks)
     return f"План: {done}/{total} задач выполнено. Статус: {plan.status}."
+
+
+def _truncate_report(text: str, max_chars: int) -> str:
+    """Truncate long text preserving beginning and end with a marker in the middle."""
+    if not text or len(text) <= max_chars:
+        return text or ""
+    head_size = max_chars * 3 // 8   # ~3000 for 8000
+    tail_size = max_chars * 5 // 8   # ~5000 for 8000
+    skipped = len(text) - head_size - tail_size
+    return f"{text[:head_size]}\n\n...(обрезано {skipped} символов)...\n\n{text[-tail_size:]}"
+
+
+# ---------------------------------------------------------------------------
+# Public helpers used by bot.py
+# ---------------------------------------------------------------------------
 
 
 def needs_resume_choice(plan: Optional[ProjectPlan], *, auto_resume: bool, user_text: str) -> bool:
@@ -120,6 +184,11 @@ def format_manager_status(plan: ProjectPlan, *, max_comment_chars: int = 400) ->
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# ManagerOrchestrator
+# ---------------------------------------------------------------------------
+
+
 class ManagerOrchestrator:
     """
     Manager mode: CLI does development, Agent (Executor) does review.
@@ -131,11 +200,16 @@ class ManagerOrchestrator:
         tool_registry = get_tool_registry(config)
         self._executor = Executor(config, tool_registry)
 
+    # -----------------------------------------------------------------------
+    # Main entry point
+    # -----------------------------------------------------------------------
+
     async def run(self, session: Session, user_text: str, bot, context, dest: dict) -> str:
         chat_id = dest.get("chat_id")
         workdir = session.workdir
         plan = load_plan(workdir)
         txt = (user_text or "").strip()
+
         if plan and plan.status == "active" and (self._config.defaults.manager_auto_resume or txt == MANAGER_CONTINUE_TOKEN):
             # continue silently
             pass
@@ -150,13 +224,20 @@ class ManagerOrchestrator:
 
         # Final report
         if plan.status in ("completed", "failed"):
-            report = await self._compose_final_report(plan)
+            report = await self._compose_final_report(plan, workdir=workdir)
             plan.completion_report = report
             save_plan(workdir, plan)
             if chat_id is not None:
                 await bot._send_message(context, chat_id=chat_id, text="Готово. Результат ниже.")
                 await bot._send_message(context, chat_id=chat_id, text=report)
+            # Archive completed/failed plan
+            archive_plan(workdir, plan.status)
+
         return _plan_summary(plan)
+
+    # -----------------------------------------------------------------------
+    # Plan creation
+    # -----------------------------------------------------------------------
 
     async def _start_new_plan(self, session: Session, user_text: str, bot, context, dest: dict) -> Optional[ProjectPlan]:
         chat_id = dest.get("chat_id")
@@ -170,10 +251,21 @@ class ManagerOrchestrator:
         save_plan(session.workdir, plan)
         return plan
 
+    # -----------------------------------------------------------------------
+    # Decomposition (two-phase: CLI → direct JSON parse → Agent normalization)
+    # -----------------------------------------------------------------------
+
     async def _decompose(self, session: Session, user_goal: str) -> Optional[ProjectPlan]:
         timeout = int(self._config.defaults.manager_decompose_timeout_sec)
         max_tasks = int(self._config.defaults.manager_max_tasks)
+        debug = bool(self._config.defaults.manager_debug_log)
+        workdir = session.workdir
         instr = DECOMPOSE_INSTRUCTION.format(user_goal=user_goal, max_tasks=max_tasks)
+
+        if debug:
+            _debug_write(workdir, "manager_decompose_prompt", "Decompose Prompt → CLI", instr)
+
+        # === Phase 1: CLI analyzes the project ===
         try:
             cli_text = await asyncio.wait_for(session.run_prompt(instr), timeout=timeout)
         except asyncio.TimeoutError:
@@ -181,30 +273,115 @@ class ManagerOrchestrator:
                 session.interrupt()
             except Exception:
                 pass
+            _log.warning("decompose: CLI timeout (%ds)", timeout)
             return None
+        except Exception as exc:
+            _log.warning("decompose: CLI error: %s", exc)
+            return None
+
+        cli_text = strip_ansi(cli_text or "")
+        _log.info("decompose phase 1 done: CLI output %d chars", len(cli_text))
+
+        if debug:
+            _debug_write(workdir, "cli_decompose_response", "CLI Decompose Response", cli_text)
+
+        # === Try direct JSON parse ===
+        plan = self._try_parse_plan(cli_text, user_goal, max_tasks)
+        if plan:
+            _log.info("decompose: direct parse succeeded")
+            if debug:
+                _debug_write(workdir, "manager_decompose_result", "Decompose Result (direct parse)",
+                             json.dumps(asdict(plan), ensure_ascii=False, indent=2))
+            return plan
+
+        # === Phase 2: Agent normalization (fallback) ===
+        _log.info("decompose: direct parse failed, invoking agent normalization")
+        plan = await self._normalize_plan(cli_text, user_goal, max_tasks, workdir=workdir)
+        if plan:
+            return plan
+
+        # Retry normalization with strict mode
+        _log.warning("decompose phase 2: first normalization failed, retrying strict")
+        plan = await self._normalize_plan(cli_text, user_goal, max_tasks, strict=True, workdir=workdir)
+        if plan:
+            return plan
+
+        # Fallback: single task
+        _log.warning("decompose: all normalization failed, using single-task fallback")
+        return ProjectPlan(
+            project_goal=user_goal,
+            tasks=[DevTask(
+                id="task_1",
+                title="Выполнить задачу",
+                description=user_goal,
+                acceptance_criteria=["Задача выполнена"],
+                max_attempts=int(self._config.defaults.manager_max_attempts),
+            )],
+            status="active",
+            created_at=_now_iso(),
+            updated_at=_now_iso(),
+        )
+
+    def _try_parse_plan(self, raw_text: str, user_goal: str, max_tasks: int) -> Optional[ProjectPlan]:
+        """Try to parse CLI output directly as JSON."""
+        try:
+            json_str = _extract_json_object(raw_text)
+            if not json_str:
+                return None
+            payload = json.loads(json_str)
+            if not isinstance(payload, dict):
+                return None
+            return self._payload_to_plan(payload, user_goal, max_tasks)
         except Exception:
             return None
 
-        normalized = await chat_completion(self._config, DECOMPOSE_NORMALIZE_SYSTEM, cli_text)
-        if not normalized:
+    async def _normalize_plan(
+        self, cli_output: str, user_goal: str, max_tasks: int, strict: bool = False,
+        workdir: str = "",
+    ) -> Optional[ProjectPlan]:
+        """Phase 2: Agent extracts structured plan from free-form CLI text."""
+        debug = bool(self._config.defaults.manager_debug_log)
+        system = DECOMPOSE_NORMALIZE_SYSTEM
+        if strict:
+            system += "\n\nПРЕДЫДУЩАЯ ПОПЫТКА НЕ РАСПАРСИЛАСЬ. Верни ТОЛЬКО валидный JSON, ничего больше."
+        user_msg = (
+            f"Цель проекта: {user_goal}\n\n"
+            f"Ответ CLI (анализ проекта и план):\n{cli_output}"
+        )
+        raw = await chat_completion(self._config, system, user_msg, response_format={"type": "json_object"})
+        if debug and workdir:
+            suffix = "_strict" if strict else ""
+            _debug_write(workdir, f"agent_normalize{suffix}_response",
+                         f"Agent Normalize Response{' (strict)' if strict else ''}", raw or "(empty)")
+        if not raw:
             return None
         try:
-            payload = json.loads(_extract_json_object(normalized))
-        except Exception:
+            payload = json.loads(_extract_json_object(raw))
+            if not isinstance(payload, dict):
+                return None
+            plan = self._payload_to_plan(payload, user_goal, max_tasks)
+            if plan and debug and workdir:
+                _debug_write(workdir, "manager_decompose_result", "Decompose Result (normalized)",
+                             json.dumps(asdict(plan), ensure_ascii=False, indent=2))
+            return plan
+        except Exception as e:
+            _log.warning("normalize_plan: JSON parse error: %s", e)
             return None
-        if not isinstance(payload, dict):
-            return None
+
+    def _payload_to_plan(self, payload: dict, user_goal: str, max_tasks: int) -> Optional[ProjectPlan]:
+        """Convert a parsed JSON dict to ProjectPlan."""
         tasks_raw = payload.get("tasks") or []
         if not isinstance(tasks_raw, list) or not tasks_raw:
             return None
 
-        analysis = payload.get("analysis")
+        # Support both "project_analysis" and "analysis" keys
+        analysis_raw = payload.get("project_analysis") or payload.get("analysis")
         analysis_obj: Optional[ProjectAnalysis] = None
-        if isinstance(analysis, dict):
+        if isinstance(analysis_raw, dict):
             analysis_obj = ProjectAnalysis(
-                current_state=str(analysis.get("current_state") or ""),
-                already_done=list(analysis.get("already_done") or []),
-                remaining_work=list(analysis.get("remaining_work") or []),
+                current_state=str(analysis_raw.get("current_state") or ""),
+                already_done=list(analysis_raw.get("already_done") or []),
+                remaining_work=list(analysis_raw.get("remaining_work") or []),
             )
 
         tasks: List[DevTask] = []
@@ -224,7 +401,8 @@ class ManagerOrchestrator:
             )
         if not tasks:
             return None
-        plan = ProjectPlan(
+
+        return ProjectPlan(
             project_goal=str(payload.get("project_goal") or user_goal),
             tasks=tasks,
             analysis=analysis_obj,
@@ -233,7 +411,10 @@ class ManagerOrchestrator:
             updated_at=_now_iso(),
             current_task_id=None,
         )
-        return plan
+
+    # -----------------------------------------------------------------------
+    # Plan notification
+    # -----------------------------------------------------------------------
 
     async def _notify_plan(self, session: Session, plan: ProjectPlan, bot, context, dest: dict) -> None:
         chat_id = dest.get("chat_id")
@@ -245,24 +426,80 @@ class ManagerOrchestrator:
             lines.append(f"{i}. {t.title} [{t.status}]{dep}")
         await bot._send_message(context, chat_id=chat_id, text="\n".join(lines))
 
+    # -----------------------------------------------------------------------
+    # Next ready task (with RETRIABLE_STATUSES normalization per TZ)
+    # -----------------------------------------------------------------------
+
     def _next_ready_task(self, plan: ProjectPlan) -> Optional[DevTask]:
+        """Select the next task ready for execution, normalizing stale statuses after restart."""
         tasks_by_id = {t.id: t for t in plan.tasks}
+        has_pending = False
+        all_blocked_or_done = True
+
         for t in plan.tasks:
-            if t.status not in ("pending", "rejected"):
+            # Normalize interrupted / stale statuses
+            if t.status in ("rejected", "in_progress", "in_review"):
+                if t.attempt >= t.max_attempts:
+                    t.status = "failed"
+                else:
+                    t.status = "pending"
+
+            # Check for cascade blocking: if any dependency failed → block
+            deps = [tasks_by_id[dep_id] for dep_id in t.depends_on if dep_id in tasks_by_id]
+            if any(d.status == "failed" for d in deps):
+                if t.status not in ("approved", "failed"):
+                    t.status = "blocked"
                 continue
-            if t.attempt >= t.max_attempts:
+
+            if t.status == "blocked":
                 continue
-            # deps must be approved
-            if any(tasks_by_id.get(dep) and tasks_by_id[dep].status != "approved" for dep in t.depends_on):
+
+            if t.status in ("approved", "failed"):
                 continue
-            return t
+
+            if t.status in RETRIABLE_STATUSES:
+                has_pending = True
+
+            # All deps must be approved
+            if all(d.status == "approved" for d in deps):
+                all_blocked_or_done = False
+                return t
+
+        # No ready task found.
+        # If there are still pending tasks but they're all blocked — deadlock.
+        if has_pending and all_blocked_or_done:
+            _log.warning("_next_ready_task: deadlock or cascade block detected")
         return None
+
+    def _is_plan_blocked(self, plan: ProjectPlan) -> bool:
+        """True if all remaining non-approved tasks are blocked/failed (no more progress possible)."""
+        for t in plan.tasks:
+            if t.status in ("pending", "rejected", "in_progress", "in_review"):
+                return False
+        return True
+
+    # -----------------------------------------------------------------------
+    # Main execution loop
+    # -----------------------------------------------------------------------
 
     async def _run_loop(self, session: Session, plan: ProjectPlan, bot, context, dest: dict) -> None:
         chat_id = dest.get("chat_id")
+        max_iterations = int(self._config.defaults.manager_max_tasks) * int(self._config.defaults.manager_max_attempts)
+        iteration = 0
+
         while True:
             if plan.status in ("paused", "completed", "failed"):
                 break
+
+            iteration += 1
+            if iteration > max_iterations:
+                _log.warning("_run_loop: max iterations (%d) exceeded", max_iterations)
+                plan.status = "failed"
+                save_plan(session.workdir, plan)
+                if chat_id is not None:
+                    await bot._send_message(context, chat_id=chat_id, text=f"⛔ Превышен лимит итераций ({max_iterations}). План остановлен.")
+                break
+
             task = self._next_ready_task(plan)
             if not task:
                 # No ready tasks: either all done or blocked.
@@ -274,6 +511,8 @@ class ManagerOrchestrator:
                         if t.status in ("pending", "rejected"):
                             t.status = "blocked"
                     plan.status = "failed"
+                    if chat_id is not None:
+                        await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: невозможно продолжить (задачи заблокированы).")
                 save_plan(session.workdir, plan)
                 break
 
@@ -285,6 +524,7 @@ class ManagerOrchestrator:
             if chat_id is not None:
                 await bot._send_message(context, chat_id=chat_id, text=f"🔧 Разработка: {task.title} (попытка {task.attempt}/{task.max_attempts})")
 
+            # === DEVELOPMENT ===
             dev_ok, dev_report = await self._delegate_develop(session, plan, task)
             task.dev_report = dev_report
             save_plan(session.workdir, plan)
@@ -292,19 +532,30 @@ class ManagerOrchestrator:
                 task.status = "failed"
                 task.completed_at = _now_iso()
                 save_plan(session.workdir, plan)
+                if chat_id is not None:
+                    await bot._send_message(context, chat_id=chat_id, text=f"❌ Провал: {task.title} — {dev_report[:200]}")
+                # Check if plan is now blocked
+                if self._is_plan_blocked(plan):
+                    plan.status = "failed"
+                    save_plan(session.workdir, plan)
+                    if chat_id is not None:
+                        await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
+                    break
                 continue
 
+            # === REVIEW ===
             task.status = "in_review"
             save_plan(session.workdir, plan)
             if chat_id is not None:
-                await bot._send_message(context, chat_id=chat_id, text=f"🕵️ Ревью: {task.title}")
+                await bot._send_message(context, chat_id=chat_id, text=f"🔍 Ревью: {task.title}")
 
             review = await self._delegate_review(session, plan, task, bot, context, dest)
             task.review_verdict = "approved" if review.approved else "rejected"
             task.review_comments = review.comments
             save_plan(session.workdir, plan)
 
-            verdict, reasons = await self._make_decision(task, review)
+            # === ARBITER DECISION ===
+            verdict, reasons = await self._make_decision(task, review, workdir=session.workdir)
             if verdict == "approved":
                 task.status = "approved"
                 task.completed_at = _now_iso()
@@ -314,47 +565,96 @@ class ManagerOrchestrator:
                 continue
 
             # rejected
-            task.status = "rejected"
-            task.rejection_history.append({"attempt": task.attempt, "comments": review.comments, "timestamp": _now_iso()})
-            save_plan(session.workdir, plan)
-            if chat_id is not None:
-                await bot._send_message(context, chat_id=chat_id, text=f"❌ Отклонено: {task.title}\nПричины: {', '.join(reasons) if reasons else 'см. замечания'}")
+            task.rejection_history.append({
+                "attempt": task.attempt,
+                "comments": review.comments,
+                "timestamp": _now_iso(),
+            })
             if task.attempt >= task.max_attempts:
                 task.status = "failed"
                 task.completed_at = _now_iso()
                 save_plan(session.workdir, plan)
+                if chat_id is not None:
+                    await bot._send_message(context, chat_id=chat_id, text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts})")
+                # Check if plan is now blocked
+                if self._is_plan_blocked(plan):
+                    plan.status = "failed"
+                    save_plan(session.workdir, plan)
+                    if chat_id is not None:
+                        await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
+                    break
+            else:
+                task.status = "pending"  # will be retried
+                save_plan(session.workdir, plan)
+                if chat_id is not None:
+                    reasons_txt = ", ".join(reasons) if reasons else "см. замечания"
+                    await bot._send_message(context, chat_id=chat_id, text=f"🔄 Доработка: {task.title} (попытка {task.attempt + 1})\nПричины: {reasons_txt}")
+
+    # -----------------------------------------------------------------------
+    # Delegate development to CLI
+    # -----------------------------------------------------------------------
 
     async def _delegate_develop(self, session: Session, plan: ProjectPlan, task: DevTask) -> Tuple[bool, str]:
         timeout = int(self._config.defaults.manager_dev_timeout_sec)
-        reviewer_comments = task.review_comments or "(нет)"
-        ctx_parts = []
+        max_chars = int(self._config.defaults.manager_dev_report_max_chars)
+        debug = bool(self._config.defaults.manager_debug_log)
+
+        # Build context
+        ctx = ""
         if plan.analysis and plan.analysis.current_state:
-            ctx_parts.append(plan.analysis.current_state)
-        ctx = "\n".join(ctx_parts) if ctx_parts else "(контекст не задан)"
+            ctx = plan.analysis.current_state
+
+        already_done = ""
+        if plan.analysis and plan.analysis.already_done:
+            already_done = ", ".join(plan.analysis.already_done)
+
+        completed_tasks = [t for t in plan.tasks if t.status == "approved"]
+        completed_summary = ", ".join(t.title for t in completed_tasks) if completed_tasks else "(нет)"
+
+        # Conditional rejection block
+        rejection_block = ""
+        if task.attempt > 0 and task.review_comments:
+            rejection_block = (
+                f"### ⚠️ Замечания ревьюера (исправь обязательно):\n"
+                f"{task.review_comments}\n\n"
+                f"Это попытка {task.attempt + 1} из {task.max_attempts}. Исправь все замечания."
+            )
+
         instr = DEV_INSTRUCTION_TEMPLATE.format(
             task_title=task.title,
             task_description=task.description,
             task_acceptance=_task_acceptance(task),
-            project_context=ctx,
-            reviewer_comments=reviewer_comments,
+            rejection_block=rejection_block,
+            project_context=ctx or "(контекст не задан)",
+            already_done=already_done or "(нет данных)",
+            completed_tasks_summary=completed_summary,
         )
+        if debug:
+            _debug_write(session.workdir, f"manager_dev_prompt_{task.id}",
+                         f"Dev Prompt → CLI [{task.id}] (attempt {task.attempt})", instr)
         try:
             out = await asyncio.wait_for(session.run_prompt(instr), timeout=timeout)
-            # Truncate for later review prompt
-            max_chars = int(self._config.defaults.manager_dev_report_max_chars)
-            if len(out) > max_chars:
-                out = out[-max_chars:]
+            out = strip_ansi(out or "")
+            if debug:
+                _debug_write(session.workdir, f"cli_dev_response_{task.id}",
+                             f"CLI Dev Response [{task.id}] (attempt {task.attempt})", out)
+            out = _truncate_report(out, max_chars)
             return True, out
         except asyncio.TimeoutError:
             try:
                 session.interrupt()
             except Exception:
                 pass
-            return False, "⚠️ таймаут разработки"
+            return False, "TIMEOUT: превышено время выполнения"
         except Exception as e:
-            return False, f"⚠️ ошибка разработки: {e}"
+            return False, f"ERROR: {e}"
+
+    # -----------------------------------------------------------------------
+    # Delegate review to Agent (Executor with reviewer profile)
+    # -----------------------------------------------------------------------
 
     async def _delegate_review(self, session: Session, plan: ProjectPlan, task: DevTask, bot, context, dest: dict) -> ReviewResult:
+        debug = bool(self._config.defaults.manager_debug_log)
         tool_registry = get_tool_registry(self._config)
         profile = build_reviewer_profile(self._config, tool_registry)
         dev_report = task.dev_report or ""
@@ -364,6 +664,9 @@ class ManagerOrchestrator:
             task_acceptance=_task_acceptance(task),
             dev_report=dev_report,
         )
+        if debug:
+            _debug_write(session.workdir, f"manager_review_prompt_{task.id}",
+                         f"Review Prompt → Agent [{task.id}]", instr)
         req = ExecutorRequest(
             task_id=f"review:{task.id}",
             goal=instr,
@@ -378,26 +681,78 @@ class ManagerOrchestrator:
         except Exception as e:
             return ReviewResult(approved=False, summary="Ошибка ревью", comments=str(e))
 
-        normalized = await chat_completion(self._config, REVIEW_NORMALIZE_SYSTEM, text)
-        try:
-            payload = json.loads(_extract_json_object(normalized or text))
-        except Exception:
-            payload = {}
-        approved = bool(payload.get("approved")) if isinstance(payload, dict) else False
+        if debug:
+            _debug_write(session.workdir, f"agent_review_response_{task.id}",
+                         f"Agent Review Response [{task.id}]", text)
+
+        # Two-phase review result parsing (same as decompose)
+        # 1. Try direct parse
+        review = self._try_parse_review(text)
+        if review:
+            if debug:
+                _debug_write(session.workdir, f"manager_review_result_{task.id}",
+                             f"Review Result [{task.id}] (direct parse)",
+                             json.dumps(asdict(review), ensure_ascii=False, indent=2))
+            return review
+
+        # 2. Agent normalization
+        normalized = await chat_completion(self._config, REVIEW_NORMALIZE_SYSTEM, text, response_format={"type": "json_object"})
+        if debug:
+            _debug_write(session.workdir, f"agent_review_normalize_{task.id}",
+                         f"Agent Review Normalize Response [{task.id}]", normalized or "(empty)")
+        review = self._try_parse_review(normalized or "")
+        if review:
+            if debug:
+                _debug_write(session.workdir, f"manager_review_result_{task.id}",
+                             f"Review Result [{task.id}] (normalized)",
+                             json.dumps(asdict(review), ensure_ascii=False, indent=2))
+            return review
+
+        # 3. Fallback
         return ReviewResult(
-            approved=approved,
-            summary=str(payload.get("summary") or ""),
-            comments=str(payload.get("comments") or ""),
-            tests_passed=payload.get("tests_passed") if isinstance(payload, dict) else None,
-            files_reviewed=list(payload.get("files_reviewed") or []) if isinstance(payload, dict) else [],
+            approved=False,
+            summary="Не удалось определить вердикт",
+            comments="Не удалось распарсить ответ ревьюера, требуется доработка.",
         )
 
-    async def _make_decision(self, task: DevTask, review: ReviewResult) -> Tuple[str, List[str]]:
-        raw = await chat_completion(
-            self._config,
-            DECISION_SYSTEM,
-            f"dev_report:\n{task.dev_report or ''}\n\nreview:\n{asdict(review)}",
+    def _try_parse_review(self, text: str) -> Optional[ReviewResult]:
+        """Try to parse review text as JSON ReviewResult."""
+        try:
+            payload = json.loads(_extract_json_object(text))
+            if not isinstance(payload, dict):
+                return None
+            if "approved" not in payload:
+                return None
+            return ReviewResult(
+                approved=bool(payload.get("approved")),
+                summary=str(payload.get("summary") or ""),
+                comments=str(payload.get("comments") or ""),
+                tests_passed=payload.get("tests_passed") if isinstance(payload.get("tests_passed"), bool) else None,
+                files_reviewed=list(payload.get("files_reviewed") or []),
+            )
+        except Exception:
+            return None
+
+    # -----------------------------------------------------------------------
+    # Arbiter decision (always called; decides by acceptance criteria)
+    # -----------------------------------------------------------------------
+
+    async def _make_decision(self, task: DevTask, review: ReviewResult, workdir: str = "") -> Tuple[str, List[str]]:
+        debug = bool(self._config.defaults.manager_debug_log)
+        user_msg = (
+            f"### Задача: {task.title}\n\n"
+            f"### Описание:\n{task.description}\n\n"
+            f"### Критерии приёмки:\n{_task_acceptance(task)}\n\n"
+            f"### Отчёт разработчика:\n{task.dev_report or '(пусто)'}\n\n"
+            f"### Вердикт ревьюера:\n{json.dumps(asdict(review), ensure_ascii=False)}"
         )
+        if debug and workdir:
+            _debug_write(workdir, f"manager_decision_prompt_{task.id}",
+                         f"Decision Prompt → Arbiter [{task.id}]", user_msg)
+        raw = await chat_completion(self._config, DECISION_SYSTEM, user_msg, response_format={"type": "json_object"})
+        if debug and workdir:
+            _debug_write(workdir, f"agent_decision_response_{task.id}",
+                         f"Arbiter Decision Response [{task.id}]", raw or "(empty)")
         verdict = "approved" if review.approved else "rejected"
         reasons: List[str] = []
         if raw:
@@ -414,12 +769,24 @@ class ManagerOrchestrator:
             verdict = "approved" if review.approved else "rejected"
         return verdict, reasons
 
-    async def _compose_final_report(self, plan: ProjectPlan) -> str:
+    # -----------------------------------------------------------------------
+    # Final report
+    # -----------------------------------------------------------------------
+
+    async def _compose_final_report(self, plan: ProjectPlan, workdir: str = "") -> str:
+        debug = bool(self._config.defaults.manager_debug_log)
         payload = json.dumps(asdict(plan), ensure_ascii=False, indent=2)
+        if debug and workdir:
+            _debug_write(workdir, "manager_final_report_prompt", "Final Report Prompt → Agent", payload)
         out = await chat_completion(self._config, FINAL_REPORT_SYSTEM, payload)
+        if debug and workdir:
+            _debug_write(workdir, "agent_final_report_response", "Agent Final Report Response", out or "(empty)")
         return out or "Отчёт недоступен (пустой ответ модели)."
 
+    # -----------------------------------------------------------------------
     # External controls (UI commands)
+    # -----------------------------------------------------------------------
+
     def pause(self, session: Session) -> None:
         plan = load_plan(session.workdir)
         if not plan:

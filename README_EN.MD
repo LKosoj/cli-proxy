@@ -19,6 +19,8 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude) with multi
 - Cached tool help in `toolhelp.json`.
 - Send files from the working directory via `/files`.
 - Task templates (hidden `/preset` command).
+- **Agent mode** (`/agent`) — AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.), plans and executes tasks step by step.
+- **Manager mode** (`/manager`) — multi-agent orchestration: automatic task decomposition into subtasks, development via CLI, review via Agent, acceptance-criteria-based arbitration, and a final report.
 
 ## Quick start
 1) Install dependencies:
@@ -62,7 +64,17 @@ python bot.py
    - Use `/sessions` to switch, rename, or close sessions.
    - Resume tokens are saved and can be restored automatically.
 
-6) **Extras**
+6) **Agent mode**
+   - Enable via `/agent` — the bot will use an AI agent (ReAct) with tools (files, search, commands) to complete tasks.
+   - Agent and Manager are mutually exclusive — enabling one disables the other.
+
+7) **Manager mode**
+   - Enable via `/manager` — the system automatically decomposes a task into subtasks, delegates development to CLI, review to an Agent, and makes decisions based on acceptance criteria.
+   - Progress and task statuses are displayed in the chat.
+   - Plan management: status, pause, reset — via the `/manager` inline menu.
+   - Requires configured OpenAI API and an active CLI session.
+
+8) **Extras**
    - Git operations are available via `/git` (status, pull, diff, commit, summary, etc.).
 
 ## Configuration
@@ -72,6 +84,7 @@ python bot.py
 - `defaults.log_path`: bot log file path (main log). Errors are written to a separate `*_error.log` file with the same rotation rules.
 - `defaults.image_temp_dir`: temp image directory (relative to workdir or absolute).
 - `defaults.image_max_mb`: max size for a single image (default 10 MB).
+- `defaults.manager_*`: Manager mode settings — max tasks, max attempts, decompose/dev/review timeouts, report truncation, auto-resume, debug logging to `.manager/`
 - `mcp.*`: TCP bridge for external clients (host/port/token)
 - `presets`: task templates list (name + prompt)
 
@@ -131,6 +144,8 @@ GitHub PAT for HTTPS git:
 - `/interrupt` — interrupt generation
 - `/git` — Git actions for the active session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/files` — send a file from the working directory
+- `/agent` — enable/disable AI agent mode
+- `/manager` — project manager mode (decompose → develop → review → arbitrate)
 - `/tools` — list tools
 - `/toolhelp` — show tool /commands
 ### Available but hidden from menu

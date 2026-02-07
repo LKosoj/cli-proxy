@@ -77,6 +77,7 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
         config,
         _PLANNER_SYSTEM,
         f"Контекст:\n{context}\n\nЗапрос пользователя:\n{user_message}",
+        response_format={"type": "json_object"},
     )
     if not raw:
         _log.warning("planner: LLM returned empty response, using fallback single step")

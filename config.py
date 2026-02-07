@@ -77,6 +77,7 @@ class DefaultsConfig:
     manager_review_timeout_sec: int = 300
     manager_dev_report_max_chars: int = 8000
     manager_auto_resume: bool = True
+    manager_debug_log: bool = True           # Сохранять сырые ответы CLI/агентов в .manager/
 
 
 @dataclasses.dataclass
@@ -194,6 +195,7 @@ def load_config(path: str) -> AppConfig:
         manager_review_timeout_sec=int(defaults_raw.get("manager_review_timeout_sec", 300)),
         manager_dev_report_max_chars=int(defaults_raw.get("manager_dev_report_max_chars", 8000)),
         manager_auto_resume=bool(defaults_raw.get("manager_auto_resume", True)),
+        manager_debug_log=bool(defaults_raw.get("manager_debug_log", True)),
     )
 
     mcp_raw = raw.get("mcp", {})
@@ -310,6 +312,7 @@ def save_config(config: AppConfig) -> None:
             "manager_review_timeout_sec": config.defaults.manager_review_timeout_sec,
             "manager_dev_report_max_chars": config.defaults.manager_dev_report_max_chars,
             "manager_auto_resume": config.defaults.manager_auto_resume,
+            "manager_debug_log": config.defaults.manager_debug_log,
         },
         "mcp": {
             "enabled": config.mcp.enabled,

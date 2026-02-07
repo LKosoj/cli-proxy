@@ -67,6 +67,7 @@ defaults:
   manager_review_timeout_sec: 300
   manager_dev_report_max_chars: 8000
   manager_auto_resume: true
+  manager_debug_log: true           # сохранять сырые ответы CLI/агентов в .manager/
   clarification_enabled: true
   clarification_keywords:
     - "уточни"

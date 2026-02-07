@@ -1509,6 +1509,26 @@ class BotApp:
                     await query.edit_message_text("Активной сессии нет.")
                     return
                 mode = query.data.split(":", 1)[1]
+                if mode == "on":
+                    # Preconditions check (TZ section 16)
+                    if not self.config.defaults.openai_api_key or not self.config.defaults.openai_model:
+                        if query.message:
+                            await self._edit_message(
+                                context,
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id,
+                                text="Для работы Manager нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml.",
+                            )
+                        return
+                    if not session.cli or not session.alive:
+                        if query.message:
+                            await self._edit_message(
+                                context,
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id,
+                                text="Сначала создайте сессию через /new.",
+                            )
+                        return
                 session.manager_enabled = mode == "on"
                 if session.manager_enabled:
                     session.agent_enabled = False

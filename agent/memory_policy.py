@@ -32,7 +32,7 @@ async def decide_memory_save(
         f"Итоговый ответ:\n{final_response}\n\n"
         "Нужно ли сохранять что-то новое?"
     )
-    raw = await chat_completion(config, _DECIDER_SYSTEM, prompt)
+    raw = await chat_completion(config, _DECIDER_SYSTEM, prompt, response_format={"type": "json_object"})
     if not raw:
         return None
     try:

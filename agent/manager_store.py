@@ -18,7 +18,7 @@ def _plan_path(workdir: str) -> str:
 
 
 def _archive_dir(workdir: str) -> str:
-    return os.path.join(workdir, "archive")
+    return os.path.join(workdir, ".manager_archive")
 
 
 def _now_iso() -> str:

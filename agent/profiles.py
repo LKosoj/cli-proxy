@@ -39,10 +39,7 @@ def build_reviewer_profile(config: AppConfig, tool_registry: ToolRegistry) -> Ex
             "list_directory",
             "search_files",
             "search_text",
-            "run_command",
-            "fetch_page",
-            "search_web",
-            "ddg_image_search",
+            "run_command",      # для запуска тестов и линтера
         ],
     )
     timeout_ms = int(getattr(config.defaults, "manager_review_timeout_sec", 300)) * 1000

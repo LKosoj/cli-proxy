@@ -25,7 +25,7 @@ def build_client(config: AppConfig) -> Optional[Tuple[AsyncOpenAI, str]]:
     return client, model
 
 
-async def chat_completion(config: AppConfig, system: str, user: str) -> str:
+async def chat_completion(config: AppConfig, system: str, user: str, response_format = None) -> str:
     client_info = build_client(config)
     if not client_info:
         return ""
@@ -37,6 +37,7 @@ async def chat_completion(config: AppConfig, system: str, user: str) -> str:
             {"role": "user", "content": user},
         ],
         temperature=0.2,
+        response_format=response_format
     )
     content = resp.choices[0].message.content if resp.choices else ""
     return (content or "").strip()
