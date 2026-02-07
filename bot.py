@@ -60,6 +60,7 @@ _HTML_PROCESS_POOL = concurrent.futures.ProcessPoolExecutor(max_workers=1)
 _HTML_RENDER_TAIL_CHARS = 10_000
 _SUMMARY_PREPARE_THRESHOLD_CHARS = 20_000
 _SUMMARY_TAIL_CHARS = 50_000
+_SUMMARY_WAIT_FOR_HTML_S = 5.0
 
 
 @dataclass
@@ -575,6 +576,42 @@ class BotApp:
             # Start both heavy computations in parallel.
             html_task = asyncio.create_task(_render_html_to_file())
             summary_task = asyncio.create_task(_summarize())
+            html_sent = asyncio.Event()
+
+            async def _send_summary_when_ready() -> None:
+                summary, summary_error = await summary_task
+                # Fallback preview should still be sent even if summary timed out / HTML is slow.
+                try:
+                    text_for_preview = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
+                    preview = summary or build_preview(strip_ansi(text_for_preview), self.config.defaults.summary_max_chars)
+                except Exception:
+                    preview = summary or ""
+                if not chat_id or not preview:
+                    return
+
+                # Prefer HTML-first, but never "send nothing": wait briefly for HTML, then send anyway.
+                if not html_sent.is_set():
+                    try:
+                        await asyncio.wait_for(html_sent.wait(), timeout=_SUMMARY_WAIT_FOR_HTML_S)
+                    except asyncio.TimeoutError:
+                        pass
+
+                if summary:
+                    await self._send_message(context, chat_id=chat_id, text=preview, md2=True)
+                    return
+
+                suffix = f" (summary недоступна: {summary_error})" if summary_error else ""
+                if not html_sent.is_set():
+                    # Make it explicit why HTML might still be missing.
+                    suffix = (suffix + "\nHTML ещё готовится.").strip()
+                await self._send_message(
+                    context,
+                    chat_id=chat_id,
+                    text=f"{preview}\n\n{suffix}".strip(),
+                    md2=True,
+                )
+
+            summary_send_task = asyncio.create_task(_send_summary_when_ready())
 
             # 1) Full output first (HTML attachment)
             path = await html_task
@@ -590,21 +627,21 @@ class BotApp:
                     os.remove(path)
                 except Exception:
                     pass
+            html_sent.set()
 
-            # 2) Summary after HTML (may be slow; do not block CLI)
-            summary, summary_error = await summary_task
-
-            preview = summary or build_preview(strip_ansi(output), self.config.defaults.summary_max_chars)
-            if chat_id is not None and preview:
-                if summary:
-                    await self._send_message(context, chat_id=chat_id, text=preview, md2=True)
-                else:
-                    suffix = f" (summary недоступна: {summary_error})" if summary_error else ""
-                    await self._send_message(context, chat_id=chat_id, text=f"{preview}\n\n{suffix}".strip(), md2=True)
+            # 2) Summary may already be sent (or in-flight). Ensure completion so state is consistent.
+            try:
+                await summary_send_task
+            except Exception:
+                _so_log.exception("[send_output] summary send task failed")
 
             _so_log.info("[send_output] updating state...")
             try:
-                session.state_summary = preview
+                # Store whatever we managed to send as a session preview, if available.
+                # Prefer summary; else use local preview of the tail.
+                text_for_preview = output[-_SUMMARY_TAIL_CHARS:] if len(output) > _SUMMARY_TAIL_CHARS else output
+                state_preview = build_preview(strip_ansi(text_for_preview), self.config.defaults.summary_max_chars)
+                session.state_summary = state_preview
                 session.state_updated_at = time.time()
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
