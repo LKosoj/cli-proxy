@@ -446,10 +446,16 @@ class ManagerOrchestrator:
 
         # --- Pass 1: normalize interrupted / stale statuses ---
         for t in plan.tasks:
-            if t.status in ("in_progress", "in_review"):
-                # Interrupted during execution: reset to pending and decrement attempt
+            if t.status == "in_progress":
+                # Interrupted during development: reset to pending and decrement attempt
                 # so that the loop increment brings it back to the same attempt number.
                 t.status = "pending"
+                if t.attempt > 0:
+                    t.attempt -= 1
+            elif t.status == "in_review":
+                # Interrupted during review: dev is DONE, keep as in_review so loop
+                # skips development and goes straight to review. Decrement attempt
+                # so the loop increment restores the correct number.
                 if t.attempt > 0:
                     t.attempt -= 1
             elif t.status == "rejected":
@@ -554,39 +560,47 @@ class ManagerOrchestrator:
                 break
 
             plan.current_task_id = task.id
-            task.status = "in_progress"
+            skip_dev = task.status == "in_review"  # dev done, review was interrupted
+
             task.attempt += 1
             task.started_at = task.started_at or _now_iso()
-            save_plan(session.workdir, plan)
-            if chat_id is not None:
-                await bot._send_message(context, chat_id=chat_id, text=f"🔧 Разработка: {task.title} (попытка {task.attempt}/{task.max_attempts})")
 
-            # === DEVELOPMENT ===
-            dev_ok, dev_report = await self._delegate_develop(session, plan, task)
-            task.dev_report = dev_report
-            save_plan(session.workdir, plan)
-            if not dev_ok:
-                if task.attempt >= task.max_attempts:
-                    task.status = "failed"
-                    task.completed_at = _now_iso()
-                    save_plan(session.workdir, plan)
-                    if chat_id is not None:
-                        await bot._send_message(context, chat_id=chat_id,
-                                                text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}")
-                    # Check if plan is now blocked
-                    if self._is_plan_blocked(plan):
-                        plan.status = "failed"
+            if skip_dev:
+                # Development already completed — go straight to review
+                if chat_id is not None:
+                    await bot._send_message(context, chat_id=chat_id, text=f"🔍 Продолжаю ревью: {task.title} (попытка {task.attempt}/{task.max_attempts})")
+            else:
+                task.status = "in_progress"
+                save_plan(session.workdir, plan)
+                if chat_id is not None:
+                    await bot._send_message(context, chat_id=chat_id, text=f"🔧 Разработка: {task.title} (попытка {task.attempt}/{task.max_attempts})")
+
+                # === DEVELOPMENT ===
+                dev_ok, dev_report = await self._delegate_develop(session, plan, task)
+                task.dev_report = dev_report
+                save_plan(session.workdir, plan)
+                if not dev_ok:
+                    if task.attempt >= task.max_attempts:
+                        task.status = "failed"
+                        task.completed_at = _now_iso()
                         save_plan(session.workdir, plan)
                         if chat_id is not None:
-                            await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
-                        break
-                else:
-                    task.status = "pending"  # will be retried on next iteration
-                    save_plan(session.workdir, plan)
-                    if chat_id is not None:
-                        await bot._send_message(context, chat_id=chat_id,
-                                                text=f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): {dev_report[:150]}\n🔄 Повтор...")
-                continue
+                            await bot._send_message(context, chat_id=chat_id,
+                                                    text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}")
+                        # Check if plan is now blocked
+                        if self._is_plan_blocked(plan):
+                            plan.status = "failed"
+                            save_plan(session.workdir, plan)
+                            if chat_id is not None:
+                                await bot._send_message(context, chat_id=chat_id, text="⛔ План остановлен: критическая задача провалена.")
+                            break
+                    else:
+                        task.status = "pending"  # will be retried on next iteration
+                        save_plan(session.workdir, plan)
+                        if chat_id is not None:
+                            await bot._send_message(context, chat_id=chat_id,
+                                                    text=f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): {dev_report[:150]}\n🔄 Повтор...")
+                    continue
 
             # === REVIEW ===
             task.status = "in_review"
