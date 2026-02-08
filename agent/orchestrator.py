@@ -530,6 +530,75 @@ class OrchestratorRunner:
                 if risky and "read" not in reason.lower() and "только чтение" not in reason.lower():
                     s.parallelizable = False
 
+        def _build_non_sequential_info(selected_ids: List[str]) -> List[ExecutorResponse]:
+            if not selected_ids:
+                return []
+            order = [s.id for s in steps]
+            remaining_ids = {s.id for s in remaining}
+            selected_set = set(selected_ids)
+            first_remaining = next((sid for sid in order if sid in remaining_ids), None)
+            first_selected = next((sid for sid in order if sid in selected_set), None)
+            if not first_remaining or not first_selected or first_remaining == first_selected:
+                return []
+            if first_remaining in selected_set:
+                return []
+
+            idx_selected = order.index(first_selected)
+            ids_before_selected = [sid for sid in order[:idx_selected] if sid in remaining_ids and sid not in selected_set]
+            if not ids_before_selected:
+                return []
+
+            by_id = {s.id: s for s in remaining}
+            reasons: List[str] = []
+            for sid in ids_before_selected:
+                step_obj = by_id.get(sid)
+                if not step_obj:
+                    continue
+                deps = [d for d in (step_obj.depends_on or []) if d in ids and d != sid]
+                failed_deps = [d for d in deps if d in completed_fail]
+                pending_deps = [d for d in deps if d not in completed_ok and d not in completed_fail]
+                if failed_deps:
+                    reasons.append(f"{sid}: зависимость завершилась ошибкой ({', '.join(failed_deps)})")
+                    continue
+                if pending_deps:
+                    reasons.append(f"{sid}: ожидает зависимости ({', '.join(pending_deps)})")
+                    continue
+                reasons.append(f"{sid}: пока не готов к запуску")
+
+            if not reasons:
+                reasons.append("причина не определена")
+            corr_id = f"{session_id}:order:{first_selected}"
+            summary = (
+                f"ℹ️ Переход не по порядку: выбран шаг {first_selected}. "
+                f"Причины: {'; '.join(reasons)}."
+            )
+            resp = ExecutorResponse(
+                task_id=f"order_info:{first_selected}",
+                status="partial",
+                summary=summary,
+                outputs=[],
+                tool_calls=[
+                    {
+                        "tool": "orchestrator",
+                        "event": "non_sequential_transition",
+                        "corr_id": corr_id,
+                        "selected_step": first_selected,
+                        "selected_ids": selected_ids,
+                        "blocked_before": ids_before_selected,
+                        "reasons": reasons,
+                    }
+                ],
+                next_questions=[],
+            )
+            validate_response(resp)
+            self._log.info(
+                "non-sequential transition detected: selected=%s blocked_before=%s reasons=%s",
+                first_selected,
+                ",".join(ids_before_selected),
+                " | ".join(reasons),
+            )
+            return [resp]
+
         # Prefer one parallel group if available, else single step in original order.
         order = [s.id for s in steps]
         groups: Dict[str, List[PlanStep]] = {}
@@ -546,13 +615,19 @@ class OrchestratorRunner:
                     continue
                 gid = s.parallel_group
                 if gid and gid in groups:
-                    return groups[gid], skipped_responses
+                    selected = groups[gid]
+                    info_responses = _build_non_sequential_info([x.id for x in selected])
+                    return selected, skipped_responses + info_responses
         # fall back to first single in stable order
         singles_set = {s.id for s in singles}
         for sid in order:
             if sid in singles_set:
-                return [next(x for x in singles if x.id == sid)], skipped_responses
-        return [singles[0]], skipped_responses
+                selected = [next(x for x in singles if x.id == sid)]
+                info_responses = _build_non_sequential_info([selected[0].id])
+                return selected, skipped_responses + info_responses
+        selected = [singles[0]]
+        info_responses = _build_non_sequential_info([selected[0].id])
+        return selected, skipped_responses + info_responses
 
     async def _execute_step(
         self, step: PlanStep, session: Any, bot: Any, context: Any, dest: Dict[str, Any], orchestrator_context: str

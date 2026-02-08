@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from agent.contracts import DevTask, ProjectPlan
 from agent.manager import (
+    describe_failed_plan_reason,
     _task_progress,
     format_manager_status,
     needs_failed_resume_choice,
@@ -112,3 +113,27 @@ def test_task_progress_falls_back_to_task_id_match() -> None:
     detached_t2 = DevTask(id="t2", title="B copy", description="", acceptance_criteria=["ok"])
 
     assert _task_progress(plan, detached_t2) == (2, 2)
+
+
+def test_describe_failed_plan_reason_prefers_review_comments() -> None:
+    plan = ProjectPlan(
+        project_goal="Goal",
+        tasks=[
+            DevTask(
+                id="t1",
+                title="Retry me",
+                description="",
+                acceptance_criteria=["ok"],
+                status="failed",
+                attempt=2,
+                max_attempts=3,
+                review_comments="Упали интеграционные тесты",
+            )
+        ],
+        analysis=None,
+        status="failed",
+    )
+
+    reason = describe_failed_plan_reason(plan)
+    assert "Retry me" in reason
+    assert "Упали интеграционные тесты" in reason

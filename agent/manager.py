@@ -130,6 +130,39 @@ def _truncate_report(text: str, max_chars: int) -> str:
     return f"{text[:head_size]}\n\n...(обрезано {skipped} символов)...\n\n{text[-tail_size:]}"
 
 
+def describe_failed_plan_reason(plan: ProjectPlan) -> str:
+    """Build a human-readable reason why a failed plan is currently stopped."""
+    # 1) Primary reason: explicit comments on failed/rejected tasks.
+    for task in plan.tasks:
+        if task.status not in ("failed", "rejected"):
+            continue
+        comments = (task.review_comments or "").strip()
+        if comments:
+            return f"{task.title}: {comments}"
+
+    # 2) Final failed tasks that exhausted retries.
+    exhausted = [
+        t for t in plan.tasks
+        if t.status == "failed" and t.attempt >= t.max_attempts
+    ]
+    if exhausted:
+        first = exhausted[0]
+        return (
+            f"Задача «{first.title}» достигла лимита попыток "
+            f"({first.attempt}/{first.max_attempts})."
+        )
+
+    # 3) Blocked tasks usually mean dependency chain was broken.
+    blocked = [t for t in plan.tasks if t.status == "blocked"]
+    if blocked:
+        first = blocked[0]
+        deps = ", ".join(first.depends_on) if first.depends_on else "неизвестной зависимости"
+        return f"Задача «{first.title}» заблокирована из-за {deps}."
+
+    # 4) Fallback keeps UX explicit even when no detailed diagnostics are present.
+    return "План находится в состоянии failed (детальная причина не сохранена)."
+
+
 def _task_progress(plan: ProjectPlan, task: DevTask) -> Tuple[int, int]:
     """Return 1-based task position in plan and total tasks count."""
     total = len(plan.tasks)
