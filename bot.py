@@ -28,6 +28,7 @@ from metrics import Metrics
 from mcp_bridge import MCPBridge
 from utils import (
     ansi_to_html,
+    is_within_root as utils_is_within_root,
     make_html_file,
     sandbox_root,
     sandbox_session_dir,
@@ -223,6 +224,9 @@ class BotApp:
 
     def is_allowed(self, chat_id: int) -> bool:
         return chat_id in self.config.telegram.whitelist_chat_ids
+
+    def is_within_root(self, path: str, root: str) -> bool:
+        return utils_is_within_root(path, root)
 
     def _plugin_awaiting_input(self, chat_id: int) -> bool:
         """Check if any plugin is waiting for free-text input from the user."""
