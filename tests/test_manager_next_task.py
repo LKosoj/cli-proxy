@@ -85,23 +85,23 @@ class TestNextReadyTask:
         assert task.id == "t1"
         assert task.status == "pending"
 
-    def test_normalize_in_progress_to_pending(self):
-        """After restart, in_progress tasks should be normalized to pending."""
+    def test_keep_in_progress_stage_on_resume(self):
+        """After restart, in_progress should stay in_progress (resume from development)."""
         orch = _make_orchestrator()
         plan = _plan([_task("t1", status="in_progress", attempt=1)])
         task = orch._next_ready_task(plan)
         assert task is not None
         assert task.id == "t1"
-        assert task.status == "pending"
+        assert task.status == "in_progress"
 
-    def test_normalize_in_review_to_pending(self):
-        """After restart, in_review tasks should be normalized to pending."""
+    def test_keep_in_review_stage_on_resume(self):
+        """After restart, in_review should stay in_review (resume from review)."""
         orch = _make_orchestrator()
         plan = _plan([_task("t1", status="in_review", attempt=2)])
         task = orch._next_ready_task(plan)
         assert task is not None
         assert task.id == "t1"
-        assert task.status == "pending"
+        assert task.status == "in_review"
 
     def test_max_attempts_exceeded_becomes_failed(self):
         orch = _make_orchestrator()

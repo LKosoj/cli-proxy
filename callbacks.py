@@ -11,6 +11,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from session import run_tool_help
+from handlers import build_manager_menu
 from dirs_ui import build_dirs_keyboard, prepare_dirs
 from state import load_active_state, clear_active_state
 from toolhelp import get_toolhelp, update_toolhelp
@@ -153,8 +154,31 @@ class CallbackHandler:
                     task = self.bot_app.manager_tasks.get(session.id)
                     if task and not task.done():
                         task.cancel()
-                status = "включен" if session.manager_enabled else "выключен"
-                await self._edit_msg(context, query, f"Менеджер {status}.")
+                text, keyboard = build_manager_menu(session)
+                await query.edit_message_text(text=text, reply_markup=keyboard)
+                return
+            if query.data.startswith("manager_quiet:"):
+                session = self.bot_app.manager.active()
+                if not session:
+                    await query.edit_message_text("Активной сессии нет.")
+                    return
+                mode = query.data.split(":", 1)[1]
+                current = bool(getattr(session, "manager_quiet_mode", False))
+                if mode == "on":
+                    session.manager_quiet_mode = True
+                elif mode == "off":
+                    session.manager_quiet_mode = False
+                elif mode == "toggle":
+                    session.manager_quiet_mode = not current
+                else:
+                    await query.edit_message_text("Некорректный режим тихого режима.")
+                    return
+                try:
+                    self.bot_app.manager._persist_sessions()
+                except Exception:
+                    logging.exception("Не удалось сохранить manager_quiet_mode.")
+                text, keyboard = build_manager_menu(session)
+                await query.edit_message_text(text=text, reply_markup=keyboard)
                 return
             if query.data == "manager_resume:continue":
                 session = self.bot_app.manager.active()

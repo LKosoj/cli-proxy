@@ -236,6 +236,7 @@ class Session:
             except Exception:
                 pass
 
+        stderr_text = ""
         # Clean up stderr drain task
         if stderr_drain_task is not None:
             if not stderr_drain_task.done():
@@ -259,7 +260,8 @@ class Session:
             if not text:
                 text = "⚠️ CLI завершился, но бот не смог корректно дочитать вывод (stdout не закрыт)."
         self._update_activity(text)
-        self._maybe_update_resume(text)
+        resume_source = text if not stderr_text else f"{text}\n{stderr_text}"
+        self._maybe_update_resume(resume_source)
         return text
 
     async def _run_interactive(self, prompt: str) -> str:

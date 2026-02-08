@@ -266,6 +266,24 @@ class ManagerOrchestrator:
         tool_registry = get_tool_registry(config)
         self._executor = Executor(config, tool_registry)
 
+    async def _send_runtime_message(
+        self,
+        session: Session,
+        bot,
+        context,
+        *,
+        chat_id: Optional[int],
+        text: str,
+        important: bool = False,
+        **kwargs,
+    ) -> None:
+        """Send manager runtime message respecting per-session quiet mode."""
+        if chat_id is None:
+            return
+        if bool(getattr(session, "manager_quiet_mode", False)) and not important:
+            return
+        await bot._send_message(context, chat_id=chat_id, text=text, **kwargs)
+
     # -----------------------------------------------------------------------
     # Main entry point
     # -----------------------------------------------------------------------
@@ -731,18 +749,14 @@ class ManagerOrchestrator:
         for t in plan.tasks:
             if t.status == "in_progress":
                 # Interrupted during development.
-                # If retry budget is exhausted, mark as failed; otherwise restart from pending.
+                # Keep current stage so resume continues from development.
                 if t.attempt >= t.max_attempts:
                     t.status = "failed"
-                else:
-                    t.status = "pending"
             elif t.status == "in_review":
                 # Interrupted during review.
-                # Same rule as in_progress: retry if attempts remain, otherwise fail.
+                # Keep current stage so resume continues from review.
                 if t.attempt >= t.max_attempts:
                     t.status = "failed"
-                else:
-                    t.status = "pending"
             elif t.status == "rejected":
                 if t.attempt >= t.max_attempts:
                     t.status = "failed"
@@ -824,11 +838,14 @@ class ManagerOrchestrator:
                 _log.warning("_run_loop: max iterations (%d) exceeded", max_iterations)
                 plan.status = "failed"
                 save_plan(session.workdir, plan)
-                if chat_id is not None:
-                    await bot._send_message(
-                        context, chat_id=chat_id,
-                        text=f"⛔ Превышен лимит итераций ({max_iterations}). План остановлен.",
-                    )
+                await self._send_runtime_message(
+                    session,
+                    bot,
+                    context,
+                    chat_id=chat_id,
+                    text=f"⛔ Превышен лимит итераций ({max_iterations}). План остановлен.",
+                    important=True,
+                )
                 break
 
             task = self._next_ready_task(plan)
@@ -842,39 +859,48 @@ class ManagerOrchestrator:
                         if t.status in ("pending", "rejected"):
                             t.status = "blocked"
                     plan.status = "failed"
-                    if chat_id is not None:
-                        await bot._send_message(
-                            context, chat_id=chat_id,
-                            text="⛔ План остановлен: невозможно продолжить (задачи заблокированы).",
-                        )
+                    await self._send_runtime_message(
+                        session,
+                        bot,
+                        context,
+                        chat_id=chat_id,
+                        text="⛔ План остановлен: невозможно продолжить (задачи заблокированы).",
+                        important=True,
+                    )
                 save_plan(session.workdir, plan)
                 break
 
             plan.current_task_id = task.id
             skip_dev = task.status == "in_review"  # dev done, review was interrupted
-
-            task.attempt += 1
+            # Attempt is incremented only when starting a new development cycle.
+            # For resumed stages (in_progress/in_review), keep the current attempt.
+            if task.status in ("pending", "rejected"):
+                task.attempt += 1
             task.started_at = task.started_at or _now_iso()
 
             if skip_dev:
                 # Development already completed — go straight to review
-                if chat_id is not None:
-                    await bot._send_message(
-                        context, chat_id=chat_id,
-                        text=f"🔍 Продолжаю ревью: {task.title} (попытка {task.attempt}/{task.max_attempts})",
-                    )
+                await self._send_runtime_message(
+                    session,
+                    bot,
+                    context,
+                    chat_id=chat_id,
+                    text=f"🔍 Продолжаю ревью: {task.title} (попытка {task.attempt}/{task.max_attempts})",
+                )
             else:
                 task.status = "in_progress"
                 save_plan(session.workdir, plan)
-                if chat_id is not None:
-                    task_num, task_total = _task_progress(plan, task)
-                    await bot._send_message(
-                        context, chat_id=chat_id,
-                        text=(
-                            f"🔧 Разработка ({task_num}/{task_total}): {task.title} "
-                            f"(попытка {task.attempt}/{task.max_attempts})"
-                        ),
-                    )
+                task_num, task_total = _task_progress(plan, task)
+                await self._send_runtime_message(
+                    session,
+                    bot,
+                    context,
+                    chat_id=chat_id,
+                    text=(
+                        f"🔧 Разработка ({task_num}/{task_total}): {task.title} "
+                        f"(попытка {task.attempt}/{task.max_attempts})"
+                    ),
+                )
 
                 # === DEVELOPMENT ===
                 dev_ok, dev_report = await self._delegate_develop(session, plan, task)
@@ -885,39 +911,52 @@ class ManagerOrchestrator:
                         task.status = "failed"
                         task.completed_at = _now_iso()
                         save_plan(session.workdir, plan)
-                        if chat_id is not None:
-                            await bot._send_message(
-                                context, chat_id=chat_id,
-                                text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}",
-                            )
+                        await self._send_runtime_message(
+                            session,
+                            bot,
+                            context,
+                            chat_id=chat_id,
+                            text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts}). {dev_report[:150]}",
+                            important=True,
+                        )
                         # Check if plan is now blocked
                         if self._is_plan_blocked(plan):
                             plan.status = "failed"
                             save_plan(session.workdir, plan)
-                            if chat_id is not None:
-                                await bot._send_message(
-                                    context, chat_id=chat_id,
-                                    text="⛔ План остановлен: критическая задача провалена.",
-                                )
+                            await self._send_runtime_message(
+                                session,
+                                bot,
+                                context,
+                                chat_id=chat_id,
+                                text="⛔ План остановлен: критическая задача провалена.",
+                                important=True,
+                            )
                             break
                     else:
                         task.status = "pending"  # will be retried on next iteration
                         save_plan(session.workdir, plan)
-                        if chat_id is not None:
-                            await bot._send_message(
-                                context, chat_id=chat_id,
-                                text=(
-                                    f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): "
-                                    f"{dev_report[:150]}\n🔄 Повтор..."
-                                ),
-                            )
+                        await self._send_runtime_message(
+                            session,
+                            bot,
+                            context,
+                            chat_id=chat_id,
+                            text=(
+                                f"⚠️ Ошибка: {task.title} (попытка {task.attempt}/{task.max_attempts}): "
+                                f"{dev_report[:150]}\n🔄 Повтор..."
+                            ),
+                        )
                     continue
 
             # === REVIEW ===
             task.status = "in_review"
             save_plan(session.workdir, plan)
-            if chat_id is not None:
-                await bot._send_message(context, chat_id=chat_id, text=f"🔍 Ревью: {task.title}")
+            await self._send_runtime_message(
+                session,
+                bot,
+                context,
+                chat_id=chat_id,
+                text=f"🔍 Ревью: {task.title}",
+            )
 
             review = await self._delegate_review(session, plan, task, bot, context, dest)
             task.review_verdict = "approved" if review.approved else "rejected"
@@ -930,8 +969,13 @@ class ManagerOrchestrator:
                 task.status = "approved"
                 task.completed_at = _now_iso()
                 save_plan(session.workdir, plan)
-                if chat_id is not None:
-                    await bot._send_message(context, chat_id=chat_id, text=f"✅ Принято: {task.title}")
+                await self._send_runtime_message(
+                    session,
+                    bot,
+                    context,
+                    chat_id=chat_id,
+                    text=f"✅ Принято: {task.title}",
+                )
                 # Auto-commit approved changes
                 committed = await self._auto_commit(session, task, plan, bot, context, dest)
                 # Reconcile plan: CLI may have done more than asked
@@ -949,30 +993,38 @@ class ManagerOrchestrator:
                 task.status = "failed"
                 task.completed_at = _now_iso()
                 save_plan(session.workdir, plan)
-                if chat_id is not None:
-                    await bot._send_message(
-                        context, chat_id=chat_id,
-                        text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts})",
-                    )
+                await self._send_runtime_message(
+                    session,
+                    bot,
+                    context,
+                    chat_id=chat_id,
+                    text=f"❌ Провал: {task.title} — исчерпаны попытки ({task.max_attempts})",
+                    important=True,
+                )
                 # Check if plan is now blocked
                 if self._is_plan_blocked(plan):
                     plan.status = "failed"
                     save_plan(session.workdir, plan)
-                    if chat_id is not None:
-                        await bot._send_message(
-                            context, chat_id=chat_id,
-                            text="⛔ План остановлен: критическая задача провалена.",
-                        )
+                    await self._send_runtime_message(
+                        session,
+                        bot,
+                        context,
+                        chat_id=chat_id,
+                        text="⛔ План остановлен: критическая задача провалена.",
+                        important=True,
+                    )
                     break
             else:
                 task.status = "pending"  # will be retried
                 save_plan(session.workdir, plan)
-                if chat_id is not None:
-                    reasons_txt = ", ".join(reasons) if reasons else "см. замечания"
-                    await bot._send_message(
-                        context, chat_id=chat_id,
-                        text=f"🔄 Доработка: {task.title} (попытка {task.attempt + 1})\nПричины: {reasons_txt}",
-                    )
+                reasons_txt = ", ".join(reasons) if reasons else "см. замечания"
+                await self._send_runtime_message(
+                    session,
+                    bot,
+                    context,
+                    chat_id=chat_id,
+                    text=f"🔄 Доработка: {task.title} (попытка {task.attempt + 1})\nПричины: {reasons_txt}",
+                )
 
     # -----------------------------------------------------------------------
     # Delegate development to CLI

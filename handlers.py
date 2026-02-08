@@ -32,6 +32,36 @@ class PendingInput:
     image_path: Optional[str] = None
 
 
+def build_manager_menu(session: Session) -> tuple[str, InlineKeyboardMarkup]:
+    """Build text and keyboard for /manager menu based on current session state."""
+    enabled = bool(getattr(session, "manager_enabled", False))
+    quiet_mode = bool(getattr(session, "manager_quiet_mode", False))
+    quiet_status = "вкл" if quiet_mode else "выкл"
+    quiet_icon = "🔇" if quiet_mode else "🔈"
+
+    if enabled:
+        keyboard = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🔴 Выключить менеджера", callback_data="manager_set:off")],
+                [InlineKeyboardButton(f"{quiet_icon} Тихий режим: {quiet_status}", callback_data="manager_quiet:toggle")],
+                [InlineKeyboardButton("📋 Статус плана", callback_data="manager_status")],
+                [InlineKeyboardButton("⏸ Приостановить", callback_data="manager_pause")],
+                [InlineKeyboardButton("🗑 Сбросить план", callback_data="manager_reset")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
+            ]
+        )
+        text = f"🏗 Менеджер проекта\n\nРежим: включен\nТихий режим: {quiet_status}\n\nВыберите действие:"
+    else:
+        keyboard = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🟢 Включить менеджера", callback_data="manager_set:on")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
+            ]
+        )
+        text = f"🏗 Менеджер проекта\n\nРежим: выключен\nТихий режим: {quiet_status}\n\nВключить?"
+    return text, keyboard
+
+
 class BotHandlers:
     """
     Class containing command handlers for the Telegram bot.
@@ -299,26 +329,7 @@ class BotHandlers:
         if not s:
             await self.bot_app._send_message(context, chat_id=chat_id, text="Активной сессии нет.")
             return
-        enabled = bool(getattr(s, "manager_enabled", False))
-        if enabled:
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("🔴 Выключить менеджера", callback_data="manager_set:off")],
-                    [InlineKeyboardButton("📋 Статус плана", callback_data="manager_status")],
-                    [InlineKeyboardButton("⏸ Приостановить", callback_data="manager_pause")],
-                    [InlineKeyboardButton("🗑 Сбросить план", callback_data="manager_reset")],
-                    [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
-                ]
-            )
-            text = "🏗 Менеджер проекта\n\nРежим: включен\n\nВыберите действие:"
-        else:
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("🟢 Включить менеджера", callback_data="manager_set:on")],
-                    [InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")],
-                ]
-            )
-            text = "🏗 Менеджер проекта\n\nРежим: выключен\n\nВключить?"
+        text, keyboard = build_manager_menu(s)
         await self.bot_app._send_message(context, chat_id=chat_id, text=text, reply_markup=keyboard)
 
     async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
