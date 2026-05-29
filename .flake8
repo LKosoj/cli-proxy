@@ -1,0 +1,10 @@
+[flake8]
+max-line-length = 140
+filename = *.py,*.pyi
+per-file-ignores =
+    README.md:E999
+    README_EN.MD:E999
+exclude =
+    .venv,
+    __pycache__,
+    .git

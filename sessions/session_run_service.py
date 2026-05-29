@@ -1,0 +1,780 @@
+import asyncio
+import logging
+import time
+from collections.abc import Mapping
+from typing import Optional
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+from app.services.assistant_preview_service import (
+    assistant_preview_enabled,
+    assistant_preview_supported_dest,
+    watch_session_assistant_preview,
+)
+from app.services.logging_service import bind_session_log_context
+from app.services.runtime_progress_service import clear_runtime_progress, emit_runtime_progress
+from app.services.task_bearing_cli_hook_service import get_task_bearing_cli_hook_service
+from app.services.session_tick_history_store import clear_session_ticks
+from session import (
+    consume_session_cli_switch_notice_text,
+    session_runtime_uid,
+    switch_session_active_cli_if_needed,
+)
+from sessions.conversation_scope import ConversationScope
+from sessions.queue_item import normalize_queue_item
+from sessions.session_state_access import (
+    get_active_mode,
+    get_orchestrator_pending_input,
+    is_orchestrator_enabled,
+    set_orchestrator_last_mode_id,
+    set_orchestrator_last_mode_output,
+    set_orchestrator_pending_input,
+)
+from app.services.core_orchestration_service import CoreOrchestrationService
+from utils.text import build_preview, strip_ansi
+
+_SESSION_TASK_MODE_ID = "__session__"
+_log = logging.getLogger(__name__)
+
+
+class SessionRunService:
+    def __init__(
+        self,
+        *,
+        bot_app,
+        persist_sessions,
+        persist_session=None,
+        mode_tasks_list,
+        mode_tasks_create,
+        mode_tasks_track=None,
+        log_cli_dialog,
+        reset_session_fields_like_sessions_reset,
+    ):
+        self.bot_app = bot_app
+        self._persist_sessions = persist_sessions
+        self._persist_session = persist_session
+        self._mode_tasks_list = mode_tasks_list
+        self._mode_tasks_create = mode_tasks_create
+        self._mode_tasks_track = mode_tasks_track
+        self._log_cli_dialog = log_cli_dialog
+        self._reset_session_fields_like_sessions_reset = reset_session_fields_like_sessions_reset
+        self._core_orchestration: Optional[CoreOrchestrationService] = None
+
+    def _get_core_orchestration(self) -> CoreOrchestrationService:
+        if self._core_orchestration is None:
+            adv_orch = getattr(self.bot_app, "advanced_orchestrator_service", None)
+            if adv_orch is None:
+                from app.services.advanced_orchestrator_service import AdvancedOrchestratorService
+                adv_orch = AdvancedOrchestratorService()
+            self._core_orchestration = CoreOrchestrationService(advanced_orchestrator=adv_orch)
+        return self._core_orchestration
+
+    def _is_shutting_down(self) -> bool:
+        return bool(getattr(self.bot_app, "_shutdown_in_progress", False))
+
+    def _safe_create_task(self, coro, *, label: str) -> Optional[asyncio.Task]:
+        if self._is_shutting_down():
+            try:
+                coro.close()
+            except Exception:
+                _log.exception(
+                    "best_effort_cleanup: failed to close coroutine during shutdown operation=%s",
+                    label,
+                )
+            _log.info("skip task scheduling during shutdown: %s", label)
+            return None
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_closed():
+                try:
+                    coro.close()
+                except Exception:
+                    _log.exception(
+                        "best_effort_cleanup: failed to close coroutine for closed event loop operation=%s",
+                        label,
+                    )
+                _log.warning("event loop is closed; skip scheduling task: %s", label)
+                return None
+            return loop.create_task(coro)
+        except Exception:
+            try:
+                coro.close()
+            except Exception:
+                _log.exception(
+                    "best_effort_cleanup: failed to close coroutine after scheduling failure operation=%s",
+                    label,
+                )
+            _log.exception("failed to schedule task: %s", label)
+            return None
+
+    def _persist_for_session(self, session, *, fallback_chat_id: Optional[int] = None) -> None:
+        callback = self._persist_session
+        if callable(callback):
+            session_id = str(getattr(session, "id", "") or "").strip()
+            chat_id = getattr(session, "chat_id", None)
+            if chat_id is None:
+                chat_id = fallback_chat_id
+            if session_id and chat_id is not None:
+                try:
+                    if bool(callback(int(chat_id), session_id)):
+                        return
+                except Exception as e:
+                    logging.exception(f"tool failed {str(e)}")
+        self._persist_sessions()
+
+    def _track_session_task(self, session, *, name: str) -> None:
+        tracker = self._mode_tasks_track
+        if not callable(tracker):
+            return
+        try:
+            tracker(
+                session_id=session_runtime_uid(session),
+                mode_id=_SESSION_TASK_MODE_ID,
+                name=name,
+            )
+        except Exception:
+            logging.exception(
+                "failed to track session task session=%s name=%s",
+                getattr(session, "id", "?"),
+                name,
+            )
+
+    def start_session_task(self, session, *, coro, name: str) -> bool:
+        if self._is_shutting_down():
+            try:
+                coro.close()
+            except Exception:
+                logging.getLogger(__name__).exception("failed to close coroutine during shutdown: %s", name)
+            logging.getLogger(__name__).info("skip session task scheduling during shutdown: %s", name)
+            return False
+        self._mode_tasks_create(
+            session_id=session_runtime_uid(session),
+            mode_id=_SESSION_TASK_MODE_ID,
+            coro=coro,
+            name=name,
+        )
+        return True
+
+    def start_prompt_task(self, session, prompt: str, dest: dict, context, *, task_name: str = "run_prompt") -> bool:
+        return self.start_session_task(
+            session,
+            coro=self.run_prompt(session, prompt, dest, context),
+            name=task_name,
+        )
+
+    async def _send_output_task(self, session, dest: dict, output: str, context) -> None:
+        sent = False
+        try:
+            await self.bot_app.send_output(session, dest, output, context)
+            sent = True
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logging.getLogger("bot.send_output").exception("[send_output] task failed: %s", e)
+        finally:
+            if sent or not str(output or "").strip():
+                await self._clear_telegram_assistant_preview(session, dest, context)
+
+    @staticmethod
+    def _telegram_reply_kwargs(
+        dest: Optional[dict],
+        *,
+        fallback_chat_id: Optional[int] = None,
+        session=None,
+    ) -> dict:
+        kwargs: dict = {}
+        if isinstance(dest, dict):
+            chat_id = dest.get("chat_id")
+            if chat_id is not None:
+                kwargs["chat_id"] = chat_id
+            message_thread_id = dest.get("message_thread_id")
+            if message_thread_id is None:
+                scope = getattr(session, "conversation_scope", None)
+                if (
+                    isinstance(scope, ConversationScope)
+                    and scope.message_thread_id is not None
+                    and chat_id is not None
+                    and int(scope.chat_id) == int(chat_id)
+                ):
+                    message_thread_id = int(scope.message_thread_id)
+            if message_thread_id is not None:
+                kwargs["message_thread_id"] = message_thread_id
+            direct_messages_topic_id = dest.get("direct_messages_topic_id")
+            if direct_messages_topic_id is not None:
+                kwargs["direct_messages_topic_id"] = direct_messages_topic_id
+        if "chat_id" not in kwargs and fallback_chat_id is not None:
+            kwargs["chat_id"] = fallback_chat_id
+        return kwargs
+
+    @classmethod
+    def _merge_fallback_dest(cls, next_dest: dict, fallback_dest: dict) -> dict:
+        merged = dict(next_dest or {})
+        if merged.get("kind") == "telegram":
+            if merged.get("chat_id") is None:
+                merged["chat_id"] = fallback_dest.get("chat_id")
+            if merged.get("user_id") is None:
+                merged["user_id"] = fallback_dest.get("user_id")
+            if merged.get("message_thread_id") is None and fallback_dest.get("message_thread_id") is not None:
+                merged["message_thread_id"] = fallback_dest.get("message_thread_id")
+            if (
+                merged.get("direct_messages_topic_id") is None
+                and fallback_dest.get("direct_messages_topic_id") is not None
+            ):
+                merged["direct_messages_topic_id"] = fallback_dest.get("direct_messages_topic_id")
+        return merged
+
+    @staticmethod
+    def _reset_assistant_preview_state(session) -> None:
+        session.assistant_preview_message_id = None
+        session.assistant_preview_last_value = None
+
+    def _mode_framework_sends_output(self, mode, *, session, mode_id: str) -> bool:
+        framework_sends_output = getattr(mode, "framework_sends_output", None)
+        if not callable(framework_sends_output):
+            return True
+        try:
+            return bool(framework_sends_output())
+        except Exception:
+            _log.debug(
+                "legacy_fallback: failed to resolve framework output policy session=%s mode=%s",
+                getattr(session, "id", "?"),
+                mode_id,
+                exc_info=True,
+            )
+            return True
+
+    def _telegram_assistant_preview_enabled(self, session, dest: Optional[dict]) -> bool:
+        config = getattr(session, "config", None) or getattr(self.bot_app, "config", None)
+        if not assistant_preview_enabled(config):
+            return False
+        if not assistant_preview_supported_dest(dest):
+            return False
+        if str((dest or {}).get("kind") or "").strip().lower() != "telegram":
+            return False
+        reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
+        return reply_kwargs.get("chat_id") is not None
+
+    async def _upsert_telegram_assistant_preview(self, session, dest: dict, context, text: Optional[str]) -> None:
+        if not text:
+            return
+        send_message = getattr(self.bot_app, "_send_message", None)
+        edit_message = getattr(self.bot_app, "_edit_message", None)
+        if not callable(send_message):
+            return
+        reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
+        chat_id = reply_kwargs.get("chat_id")
+        if chat_id is None:
+            return
+        async with session.send_lock:
+            current_text = text
+            if not current_text:
+                return
+            if (
+                session.assistant_preview_message_id is not None
+                and session.assistant_preview_last_value == current_text
+            ):
+                return
+            if session.assistant_preview_message_id is not None and callable(edit_message):
+                try:
+                    edited = await edit_message(
+                        context,
+                        chat_id=int(chat_id),
+                        message_id=int(session.assistant_preview_message_id),
+                        text=current_text,
+                        md2=True,
+                    )
+                except Exception:
+                    _log.debug(
+                        "legacy_fallback: assistant preview edit failed session=%s chat_id=%s message_id=%s",
+                        getattr(session, "id", "?"),
+                        chat_id,
+                        getattr(session, "assistant_preview_message_id", None),
+                        exc_info=True,
+                    )
+                    edited = False
+                if edited:
+                    session.assistant_preview_last_value = current_text
+                    return
+                session.assistant_preview_message_id = None
+                session.assistant_preview_last_value = None
+            message = await send_message(context, text=current_text, **reply_kwargs)
+            message_id = getattr(message, "message_id", None)
+            if message_id is None:
+                return
+            session.assistant_preview_message_id = int(message_id)
+            session.assistant_preview_last_value = current_text
+
+    async def _clear_telegram_assistant_preview(self, session, dest: Optional[dict], context) -> bool:
+        message_id = getattr(session, "assistant_preview_message_id", None)
+        if message_id is None:
+            self._reset_assistant_preview_state(session)
+            return True
+        delete_message = getattr(self.bot_app, "_delete_message", None)
+        if not callable(delete_message):
+            self._reset_assistant_preview_state(session)
+            return False
+        reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
+        chat_id = reply_kwargs.get("chat_id")
+        if chat_id is None:
+            self._reset_assistant_preview_state(session)
+            return False
+        async with session.send_lock:
+            try:
+                deleted = bool(await delete_message(context, int(chat_id), int(message_id)))
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "assistant preview delete failed session=%s chat_id=%s message_id=%s",
+                    getattr(session, "id", "?"),
+                    chat_id,
+                    message_id,
+                )
+                return False
+            if deleted:
+                self._reset_assistant_preview_state(session)
+                return True
+            logging.getLogger(__name__).warning(
+                "assistant preview delete returned false session=%s chat_id=%s message_id=%s",
+                getattr(session, "id", "?"),
+                chat_id,
+                message_id,
+            )
+            return False
+
+    @staticmethod
+    def _orchestrator_keyboard(session_uid: str, target_mode_id: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "✅ Передать дальше",
+                        callback_data=f"orch_transition:apply:{session_uid}:{target_mode_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "⛔ Остановить процесс",
+                        callback_data=f"orch_transition:cancel:{session_uid}",
+                    ),
+                ]
+            ]
+        )
+
+    async def _maybe_offer_post_run_transition(
+        self,
+        *,
+        session,
+        mode_id: str,
+        output_text: str,
+        dest: dict,
+        context,
+    ) -> None:
+        if not is_orchestrator_enabled(session, False):
+            return
+        if get_orchestrator_pending_input(session, None):
+            return
+        if str(mode_id or "").strip() == "agent":
+            return
+
+        chat_id = dest.get("chat_id")
+        if chat_id is None:
+            return
+        reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
+
+        orch = getattr(self.bot_app, "advanced_orchestrator_service", None)
+        mode_registry = getattr(self.bot_app, "mode_registry_service", None)
+        if orch is None:
+            return
+
+        proposal = None
+        try:
+            proposal = await orch.propose_transition_hybrid(
+                session=session,
+                text=str(output_text or ""),
+                mode_registry=mode_registry,
+                app_config=getattr(self.bot_app, "config", None),
+                llm_router_fn=getattr(self.bot_app, "orchestrator_chat_completion", None),
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("post-run orchestrator proposal failed")
+            return
+        if proposal is None:
+            return
+        previous_mode_id = str(getattr(session, "_orchestrator_prev_mode_id", "") or "").strip()
+        is_return_to_previous = bool(
+            previous_mode_id and str(proposal.target_mode_id or "").strip() == previous_mode_id
+        )
+
+        handoff_text = orch.build_handoff_input(
+            session=session,
+            original_user_text=str(output_text or ""),
+        )
+        set_orchestrator_pending_input(session, {
+            "text": handoff_text,
+            "dest": dict(dest or {"kind": "telegram", "chat_id": int(chat_id)}),
+            "target_mode_id": str(proposal.target_mode_id),
+            "disable_orchestrator_on_cancel": True,
+        })
+        current_label = orch.current_mode_label(session=session, mode_registry=mode_registry)
+        confirm_text = "Результат текущего режима готов.\n" + orch.build_confirm_text(
+            current_mode_label=current_label,
+            proposal=proposal,
+        )
+        if is_return_to_previous:
+            confirm_text += (
+                "\n\n⚠️ Предложен возврат в предыдущий режим цепочки. "
+                "Проверьте уверенность и подтвердите вручную."
+            )
+        session_uid = session_runtime_uid(session)
+        await self.bot_app._send_message(
+            context,
+            text=confirm_text,
+            reply_markup=self._orchestrator_keyboard(
+                session_uid=session_uid,
+                target_mode_id=proposal.target_mode_id,
+            ),
+            **reply_kwargs,
+        )
+
+    async def run_prompt(self, session, prompt: str, dest: dict, context) -> None:
+        self._track_session_task(session, name="run_prompt")
+        _rp_log = logging.getLogger("bot.run_prompt")
+        with bind_session_log_context(session=session, chat_id=dest.get("chat_id")):
+            _rp_log.info("[run_prompt] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
+            async with session.run_lock:
+                _rp_log.info("[run_prompt] lock acquired session=%s", session.id)
+                session.busy = True
+                session.started_at = time.time()
+                session.last_output_ts = session.started_at
+                session.last_tick_ts = None
+                session.last_tick_value = None
+                session.last_assistant_text_ts = None
+                session.last_assistant_text_value = None
+                self._reset_assistant_preview_state(session)
+                session.tick_seen = 0
+                clear_session_ticks(session)
+                clear_runtime_progress(session)
+                image_path = dest.get("image_path")
+                image_paths = dest.get("image_paths")
+                source = "telegram_direct" if str((dest or {}).get("kind") or "").strip().lower() == "telegram" else "session_run_service"
+                cli_switch = switch_session_active_cli_if_needed(session)
+                if cli_switch.switched:
+                    self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                switch_notice = consume_session_cli_switch_notice_text(session)
+                if switch_notice and dest.get("chat_id") is not None:
+                    await self.bot_app._send_message(
+                        context,
+                        text=switch_notice,
+                        **self._telegram_reply_kwargs(dest, session=session),
+                    )
+                hook = None
+                prepared = None
+                prompt_for_cli = prompt
+                preview_stop_event: Optional[asyncio.Event] = None
+                preview_task: Optional[asyncio.Task] = None
+                send_output_scheduled = False
+                hook_config = getattr(session, "config", None) or getattr(self.bot_app, "config", None)
+                if hook_config is not None:
+                    hook = get_task_bearing_cli_hook_service(hook_config)
+                    prepared = await hook.prepare_prompt(
+                        session=session,
+                        prompt=prompt,
+                        source=source,
+                        phase="execute",
+                        task_bearing=True,
+                    )
+                    prompt_for_cli = prepared.prompt_for_cli
+                try:
+                    if self._telegram_assistant_preview_enabled(session, dest):
+                        preview_stop_event = asyncio.Event()
+                        preview_task = self._safe_create_task(
+                            watch_session_assistant_preview(
+                                session,
+                                emit_update=lambda text: self._upsert_telegram_assistant_preview(
+                                    session,
+                                    dest,
+                                    context,
+                                    text,
+                                ),
+                                stop_event=preview_stop_event,
+                            ),
+                            label=f"assistant_preview:{session.id}",
+                        )
+                    _rp_log.info("[run_prompt] calling session.run_prompt session=%s", session.id)
+                    output = await session.run_prompt(
+                        prompt_for_cli,
+                        image_path=image_path,
+                        image_paths=image_paths,
+                    )
+                    _rp_log.info("[run_prompt] session.run_prompt returned session=%s output_len=%d", session.id, len(output))
+                    if preview_stop_event is not None:
+                        preview_stop_event.set()
+                    if preview_task is not None:
+                        await asyncio.gather(preview_task, return_exceptions=True)
+                    await self._clear_telegram_assistant_preview(session, dest, context)
+                    if hook is not None and prepared is not None:
+                        hook.record_success(prepared, output=output)
+                    self._log_cli_dialog(
+                        session,
+                        prompt,
+                        output,
+                        chat_id=dest.get("chat_id"),
+                        image_path=image_path,
+                        image_paths=image_paths,
+                    )
+                    send_output_scheduled = self.start_session_task(
+                        session,
+                        coro=self._send_output_task(session, dest, output, context),
+                        name="send_output",
+                    )
+                    if not send_output_scheduled:
+                        await self._clear_telegram_assistant_preview(session, dest, context)
+                    forced = getattr(session, "headless_forced_stop", None)
+                    if forced:
+                        details = f"{session.id} ({session.name or session.tool.name}) @ {session.workdir}"
+                        msg = f"CLI для сессии {details} завершен не штатно."
+                        if dest.get("chat_id") is not None:
+                            await self.bot_app._send_message(
+                                context,
+                                text=msg,
+                                **self._telegram_reply_kwargs(dest, session=session),
+                            )
+                        session.headless_forced_stop = None
+                except Exception as e:
+                    if preview_stop_event is not None:
+                        preview_stop_event.set()
+                    if preview_task is not None:
+                        await asyncio.gather(preview_task, return_exceptions=True)
+                    if hook is not None and prepared is not None:
+                        hook.record_error(prepared, error=e)
+                    logging.exception(f"tool failed {str(e)}")
+                    if dest.get("chat_id") is not None:
+                        await self.bot_app._send_message(
+                            context,
+                            text=f"Ошибка выполнения: {e}",
+                            **self._telegram_reply_kwargs(dest, session=session),
+                        )
+                    await self._clear_telegram_assistant_preview(session, dest, context)
+                finally:
+                    if preview_stop_event is not None and not preview_stop_event.is_set():
+                        preview_stop_event.set()
+                    if preview_task is not None and not preview_task.done():
+                        await asyncio.gather(preview_task, return_exceptions=True)
+                    if not send_output_scheduled:
+                        await self._clear_telegram_assistant_preview(session, dest, context)
+                    session.busy = False
+                    try:
+                        if session.queue:
+                            raw_next_item = session.queue[0]
+                            fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
+                            next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
+                            next_prompt = next_item.text
+                            next_dest = self._merge_fallback_dest(next_item.dest, dest)
+                            if isinstance(raw_next_item, Mapping):
+                                image_paths = raw_next_item.get("image_paths")
+                                if image_paths:
+                                    next_dest["image_paths"] = list(image_paths)
+                                    next_dest["cleanup_images"] = True
+                                image_path = raw_next_item.get("image_path")
+                                if image_path:
+                                    next_dest["image_path"] = image_path
+                                    next_dest["cleanup_image"] = True
+                            if self.start_prompt_task(
+                                session,
+                                next_prompt,
+                                next_dest,
+                                context,
+                                task_name="run_prompt.queue_next",
+                            ):
+                                session.queue.popleft()
+                                self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "prompt queue drain failed session=%s", session.id,
+                        )
+
+    async def run_mode_pipeline(self, session, prompt: str, dest: dict, context, *, mode_id: str) -> None:
+        mode_id = str(mode_id or "").strip()
+        if not mode_id:
+            raise RuntimeError("mode_id is required for run_mode_pipeline")
+        _rw_log = logging.getLogger(f"bot.run_mode.{mode_id}")
+        with bind_session_log_context(session=session, chat_id=dest.get("chat_id")):
+            _rw_log.info("[run_mode] acquiring run_lock session=%s mode=%s prompt=%r", session.id, mode_id, prompt[:100])
+            async with session.run_lock:
+                _rw_log.info("[run_mode] lock acquired session=%s mode=%s", session.id, mode_id)
+                session.busy = True
+                session.started_at = time.time()
+                session.last_output_ts = session.started_at
+                session.last_tick_ts = None
+                session.last_tick_value = None
+                session.last_assistant_text_ts = None
+                session.last_assistant_text_value = None
+                self._reset_assistant_preview_state(session)
+                session.tick_seen = 0
+                clear_session_ticks(session)
+                clear_runtime_progress(session)
+                try:
+                    emit_runtime_progress(
+                        session,
+                        {
+                            "mode_id": mode_id,
+                            "source": "mode_pipeline",
+                            "phase": "start",
+                            "status": "running",
+                            "message": f"Запуск режима {mode_id}",
+                        },
+                    )
+                    registry = getattr(self.bot_app, "mode_registry", None)
+                    mode = registry.get(mode_id) if registry else None
+                    if mode is None or not hasattr(mode, "run_pipeline"):
+                        raise RuntimeError(f"Режим {mode_id} недоступен")
+                    preserve_mode_id = None
+                    if hasattr(mode, "pre_run_reset_mode_id"):
+                        preserve_mode_id = str(mode.pre_run_reset_mode_id() or "").strip() or None
+                    if preserve_mode_id:
+                        self._reset_session_fields_like_sessions_reset(session, preserve_mode_id=preserve_mode_id)
+                        self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                    output = await self._get_core_orchestration().execute_mode_run(
+                        session=session,
+                        mode=mode,
+                        mode_id=mode_id,
+                        user_text=prompt,
+                        bot_app=self.bot_app,
+                        context=context,
+                        dest=dest,
+                    )
+                    try:
+                        set_orchestrator_last_mode_output(session, str(output or ""))
+                        set_orchestrator_last_mode_id(session, str(mode_id or ""))
+                    except Exception:
+                        logging.exception("failed to capture orchestrator mode output session=%s mode=%s", session.id, mode_id)
+                    now = time.time()
+                    session.last_output_ts = now
+                    emit_runtime_progress(
+                        session,
+                        {
+                            "mode_id": mode_id,
+                            "source": "mode_pipeline",
+                            "phase": "final",
+                            "status": "ok",
+                            "message": f"Режим {mode_id} завершен",
+                        },
+                    )
+                    if self._mode_framework_sends_output(mode, session=session, mode_id=mode_id):
+                        await self.bot_app.send_output(session, dest, str(output or ""), context, send_header=False)
+                    try:
+                        await self._maybe_offer_post_run_transition(
+                            session=session,
+                            mode_id=mode_id,
+                            output_text=str(output or ""),
+                            dest=dest,
+                            context=context,
+                        )
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "post-run orchestrator transition offer failed session=%s mode=%s",
+                            session.id,
+                            mode_id,
+                        )
+                    try:
+                        preview = build_preview(strip_ansi(str(output or "")), self.bot_app.config.defaults.summary_max_chars)
+                        session.state_summary = preview
+                        session.state_updated_at = time.time()
+                        self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                    except Exception as e:
+                        logging.exception(f"tool failed {str(e)}")
+                except asyncio.CancelledError:
+                    _rw_log.warning("[run_mode] CancelledError session=%s mode=%s", session.id, mode_id)
+                    emit_runtime_progress(
+                        session,
+                        {
+                            "mode_id": mode_id,
+                            "source": "mode_pipeline",
+                            "phase": "cancelled",
+                            "status": "error",
+                            "message": f"Режим {mode_id} прерван",
+                        },
+                    )
+                    if dest.get("chat_id") is not None:
+                        await self.bot_app._send_message(
+                            context,
+                            text=f"Режим {mode_id} прерван.",
+                            **self._telegram_reply_kwargs(dest, session=session),
+                        )
+                    raise
+                except Exception as e:
+                    _rw_log.exception("[run_mode] exception session=%s mode=%s: %s", session.id, mode_id, e)
+                    emit_runtime_progress(
+                        session,
+                        {
+                            "mode_id": mode_id,
+                            "source": "mode_pipeline",
+                            "phase": "error",
+                            "status": "error",
+                            "message": f"Ошибка режима {mode_id}: {e}",
+                        },
+                    )
+                    if dest.get("chat_id") is not None:
+                        await self.bot_app._send_message(
+                            context,
+                            text=f"Ошибка режима {mode_id}: {e}",
+                            **self._telegram_reply_kwargs(dest, session=session),
+                        )
+                finally:
+                    session.busy = False
+                    try:
+                        if session.queue:
+                            raw_next_item = session.queue[0]
+                            fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
+                            next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
+                            next_prompt = next_item.text
+                            next_dest = self._merge_fallback_dest(next_item.dest, dest)
+                            if self.start_session_task(
+                                session,
+                                coro=self.dispatch_queued_input(session, next_prompt, next_dest, context, fallback_dest=dest),
+                                name="dispatch_queued_input",
+                            ):
+                                session.queue.popleft()
+                                self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "mode pipeline queue drain failed session=%s mode=%s", session.id, mode_id,
+                        )
+
+    async def dispatch_queued_input(self, session, next_prompt: str, next_dest: dict, context, *, fallback_dest: dict) -> None:
+        try:
+            next_dest = self._merge_fallback_dest(next_dest, fallback_dest)
+            chat_id = next_dest.get("chat_id")
+            if chat_id is None:
+                self.start_prompt_task(
+                    session,
+                    next_prompt,
+                    next_dest,
+                    context,
+                    task_name="dispatch_queued_input.no_chat_id",
+                )
+                return
+            await self.bot_app._handle_user_input(
+                session,
+                next_prompt,
+                int(chat_id),
+                context,
+                dest=next_dest,
+            )
+        except Exception:
+            logging.exception("failed to dispatch queued input")
+            self.start_prompt_task(
+                session,
+                next_prompt,
+                next_dest,
+                context,
+                task_name="dispatch_queued_input.fallback_run_prompt",
+            )
+
+    def start_mode_task(self, session, prompt: str, dest: dict, context, *, mode_id=None) -> None:
+        mode_id = str(mode_id or get_active_mode(session, "") or "").strip()
+        if not mode_id:
+            return
+        session_uid = session_runtime_uid(session)
+        if self._mode_tasks_list(session_id=session_uid, mode_id=mode_id):
+            return
+        coro = self.run_mode_pipeline(session, prompt, dest, context, mode_id=mode_id)
+        task_name = f"run_{mode_id}"
+        self._mode_tasks_create(session_id=session_uid, mode_id=mode_id, coro=coro, name=task_name)

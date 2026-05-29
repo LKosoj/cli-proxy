@@ -1,0 +1,15 @@
+prompts:
+  openai_error_text: |
+    Для работы Агента нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml.
+
+  workdir_error_text: |
+    Сначала создайте сессию через /sessions.
+
+  projects_not_configured: |
+    Проекты не настроены. Обратитесь к администратору.
+
+  project_select_text: |
+    Выберите проект:
+
+  project_dir_select_text: |
+    Выберите каталог проекта.

@@ -1,0 +1,120 @@
+admin:
+  allowlist:
+    local:
+      clear_logs:
+        argv: ["bash", "-lc", "find /var/log -type f -name '*.log' -mtime +7 -delete"]
+        timeout_sec: 60
+        risk_level: medium
+      clear_tmp:
+        argv: ["bash", "-lc", "find /tmp -mindepth 1 -maxdepth 2 -mtime +2 -delete"]
+        timeout_sec: 60
+        risk_level: medium
+      clear_cache:
+        argv: ["bash", "-lc", "sync && echo 3 > /proc/sys/vm/drop_caches"]
+        timeout_sec: 20
+        risk_level: high
+    ssh: {}
+  monitor:
+    enabled: true
+    interval_sec: 30
+    servers: []
+  notifications:
+    level: info
+  runtime:
+    pinned_cli: {}
+    pinned_executor_profile: null
+    initialized_at: null
+    last_scan_at: null
+    scan_status: not_started
+    scan_error: null
+  environment:
+    services: {}
+    server_roles: []
+    stack_facts: {}
+  diagnostics:
+    checks: []
+  incidents:
+    rules: []
+  runbooks:
+    templates: {}
+  actions:
+    local:
+      clear_logs:
+        argv: ["bash", "-lc", "find /var/log -type f -name '*.log' -mtime +7 -delete"]
+        timeout_sec: 60
+        risk_level: medium
+      clear_tmp:
+        argv: ["bash", "-lc", "find /tmp -mindepth 1 -maxdepth 2 -mtime +2 -delete"]
+        timeout_sec: 60
+        risk_level: medium
+      clear_cache:
+        argv: ["bash", "-lc", "sync && echo 3 > /proc/sys/vm/drop_caches"]
+        timeout_sec: 20
+        risk_level: high
+    ssh: {}
+    remediation:
+      clear_logs:
+        action_id: clear_logs
+        target: local
+        risk_level: medium
+        description: "Очистить старые логи"
+      clear_tmp:
+        action_id: clear_tmp
+        target: local
+        risk_level: medium
+        description: "Очистить временные файлы"
+      clear_cache:
+        action_id: clear_cache
+        target: local
+        risk_level: high
+        description: "Сбросить page cache"
+      notify_admin:
+        action_id: notify_admin
+        target: logical
+        risk_level: low
+        description: "Безопасный fallback без автоматической remediation"
+  policies:
+    version: v2
+    analyzer:
+      allow_secondary_cli: true
+      allow_internet_secondary_cli: true
+      require_secondary_confirmation_on_low_confidence: true
+      require_secondary_confirmation_on_risky_action: true
+      require_secondary_confirmation_on_signal_conflict: true
+      require_secondary_confirmation_on_policy_conflict: true
+      require_secondary_confirmation_before_remediation: true
+    executor:
+      mandatory_notify_actions: []
+      auto_actions_per_hour: 6
+      cooldown_sec: 120
+      maintenance_window:
+        enabled: false
+        start_ts: 0
+        end_ts: 0
+    per_action: {}
+  # autonomy:                                  # см. modes/admin/README.md → "Autonomy"
+  #   enabled: false                            # общий kill-switch (monitor-loop + chat autopilot)
+  #   auto_apply_severities: [info]             # monitor-loop: какие severity можно авто-фиксить
+  #   auto_exec_actions: []                     # action_id, разрешённые к авто-запуску
+  #   auto_exec_adhoc_commands: []              # chat-autopilot: argv[0] разрешённых ad-hoc команд
+  #   max_actions_per_hour: 5                   # monitor-loop rate-limit (к chat-autopilot не применяется)
+  #   cooldown_sec: 300                         # monitor-loop per-check cooldown
+  generated:
+    environment: {}
+    diagnostics:
+      checks: []
+    incidents:
+      rules: []
+    runbooks:
+      templates: {}
+    actions:
+      remediation: {}
+      targets:
+        local: {}
+        ssh: {}
+    policies: {}
+    monitor:
+      servers: []
+    manual: {}
+    scan_meta: {}
+    scan_summary: {}

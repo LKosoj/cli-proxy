@@ -1,0 +1,55 @@
+# API Spec: `tests/test_admin_mode_plugin.py`
+
+Generated: 2026-04-27T22:43:22Z
+
+## Classes
+### `class _FakeMessage` (line 28)
+- `def __init__(chat_id, message_id)` (line 29)
+
+### `class _FakeQuery` (line 34)
+- `def __init__(data)` (line 35)
+- `async def answer()` (line 40)
+
+### `class _RecordingModeMessaging` (line 44)
+- `def __init__()` (line 45)
+- `async def send_text(chat_id, text)` (line 48)
+- `async def send_or_edit()` (line 58)
+
+### `class _FakeAdminRunnerRuntime` (line 65)
+- `def __init__()` (line 68)
+- `def ensure_notifier()` (line 76)
+- `def is_pipeline_ready()` (line 81)
+- `async def run_pipeline_once()` (line 84)
+
+## Symbols
+- `def test_admin_monitor_server_readiness_requires_poll_spec()` (line 263)
+- `def test_admin_enable_with_malformed_monitor_servers_does_not_start_runner(tmp_path)` (line 271)
+- `def test_admin_mode_loaded_and_command_registered_in_menu(tmp_path)` (line 320)
+- `def test_admin_command_not_registered_when_mode_not_loaded(tmp_path)` (line 336)
+- `def test_admin_registry_exposes_only_root_admin_command(tmp_path)` (line 346)
+- `def test_admin_requires_selected_session_before_dispatch(tmp_path)` (line 357)
+- `def test_admin_help_and_status_subcommands_use_ui_and_md2(tmp_path)` (line 373)
+- `def test_admin_enable_disable_updates_state_and_preserves_active_mode(tmp_path)` (line 415)
+- `def test_admin_state_isolated_between_sequential_sessions(tmp_path)` (line 452)
+- `def test_admin_runner_stops_on_admin_disable(tmp_path)` (line 491)
+- `def test_admin_runner_continues_after_ui_switch(tmp_path)` (line 526)
+- `def test_admin_callbacks_blocked_by_busy_three_signals_and_recovery(tmp_path)` (line 571)
+- `def test_admin_rescan_callback_blocked_by_all_busy_signals_and_recovers(tmp_path)` (line 659)
+- `def test_admin_session_close_cancels_runner_tasks(tmp_path)` (line 737)
+- `def test_admin_enable_bootstraps_local_config_and_secrets(tmp_path)` (line 779)
+- `def test_admin_enable_persists_pinned_cli_to_runtime_config(tmp_path)` (line 813)
+- `def test_admin_enable_starts_initial_environment_scan_and_merges_generated_config(tmp_path)` (line 840)
+- `def test_admin_enable_applies_admin_schema_in_shared_db(tmp_path)` (line 955)
+- `def test_admin_unknown_subcommand_rejected(tmp_path)` (line 992)
+- `def test_admin_run_check_and_dry_run_flags_passed_to_executor(tmp_path)` (line 1015)
+- `def test_admin_watch_loop_generates_run_artifacts_with_snapshot_ids_and_transport(tmp_path)` (line 1082)
+- `def test_admin_manual_check_run_artifacts_bypass_skill_selector_and_capture_transport(tmp_path)` (line 1214)
+- `def test_admin_run_artifacts_isolate_sequential_runs_with_different_commands(tmp_path)` (line 1265)
+- `def test_admin_run_rejects_invalid_server_and_not_allowlisted_action(tmp_path)` (line 1318)
+- `def test_admin_run_blocks_free_text_arguments(tmp_path)` (line 1356)
+- `def test_admin_incidents_and_actions_commands_are_session_scoped(tmp_path)` (line 1385)
+- `def test_admin_ack_command_updates_ack_and_alert_state(tmp_path)` (line 1422)
+- `def test_admin_mute_and_unmute_update_session_state(tmp_path)` (line 1464)
+- `def test_admin_approvals_commands_are_scoped_and_manage_entries(tmp_path)` (line 1499)
+- `def test_admin_skill_install_commands_are_scoped_and_manage_pending_entries(tmp_path)` (line 1563)
+- `def test_admin_chat_approve_plan_callback_sends_plan_result(tmp_path)` (line 1628)

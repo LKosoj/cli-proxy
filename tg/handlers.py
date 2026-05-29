@@ -1,0 +1,2107 @@
+"""
+Module containing command handlers for the Telegram bot.
+"""
+
+import asyncio
+import copy
+import json
+import logging
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, model_validator
+from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
+    ContextTypes,
+)
+
+from modes.sdk import MessageModel
+from modes.sdk.services.callback_data import (
+    build_session_mode_pick_callback_data,
+    build_session_overview_callback_data,
+)
+from app.services.menu_visibility_policy import (
+    build_mode_menu_visibility,
+    build_session_overview_visibility,
+    call_mode_build_menu,
+)
+from app.services.input_dispatch_models import PendingInput as PendingInput  # noqa: F401
+from app.services.session_files_service import FilesServiceError
+from app.services.path_normalization import normalize_optional_state_path
+from app.services.state_repository import get_state_repository
+from session import Session, session_runtime_uid
+from sessions.session_state_access import get_active_mode, is_orchestrator_enabled, is_ssh_remote_enabled
+from app.services.ssh_config_loader import ssh_remote_available
+from tg.command_registry import build_command_registry
+from sessions.session_status import build_session_status_text, visible_modes
+from tg.files_service_adapter import (
+    files_display_path,
+    files_rel_path,
+    resolve_files_payload,
+    session_files_service,
+    session_uid_for_files,
+)
+from utils.ui import status_dot
+
+
+class TelegramRuntimePayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    chat_id: int
+    session_uid: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_session_uid(self) -> "TelegramRuntimePayload":
+        if str(self.session_uid or "").strip():
+            return self
+        raise ValueError("telegram runtime payload is invalid: session_uid is required")
+
+
+class BotHandlers:
+    """
+    Class containing command handlers for the Telegram bot.
+    """
+
+    def __init__(self, bot_app):
+        self.bot_app = bot_app
+
+    def _persist_sessions(self) -> None:
+        try:
+            self.bot_app.mode_session_control.persist()
+        except Exception as e:
+            logging.exception("persist sessions failed: %s", e)
+
+    def _persist_session(self, chat_id: int, session_id: str) -> None:
+        manager = getattr(self.bot_app, "manager", None)
+        if manager is not None and hasattr(manager, "persist_session"):
+            try:
+                if bool(manager.persist_session(int(chat_id), str(session_id))):
+                    return
+            except Exception as e:
+                logging.exception("persist single session failed: %s", e)
+        self._persist_sessions()
+
+    @staticmethod
+    def _project_root() -> str:
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    @staticmethod
+    def _bot_service_name() -> str:
+        return str(os.environ.get("CLI_PROXY_SERVICE_NAME") or "cli-proxy-bot").strip() or "cli-proxy-bot"
+
+    @staticmethod
+    def _trim_output(text: str, limit: int = 3500) -> str:
+        value = str(text or "").strip()
+        if len(value) <= int(limit):
+            return value
+        return "...\n" + value[-int(limit):]
+
+    @staticmethod
+    def _validate_telegram_runtime_payload(payload: dict) -> dict:
+        TelegramRuntimePayload.model_validate(dict(payload or {}))
+        return payload
+
+    def _state_repository(self):
+        cfg = getattr(self.bot_app, "config", None)
+        defaults = getattr(cfg, "defaults", None) if cfg is not None else None
+        raw_state_path = getattr(defaults, "state_path", None)
+        try:
+            state_path = normalize_optional_state_path(raw_state_path)
+        except TypeError:
+            logging.getLogger(__name__).warning(
+                "telegram state repository disabled: invalid state_path type=%s",
+                type(raw_state_path).__name__,
+            )
+            return None
+        if not state_path:
+            return None
+        return get_state_repository(state_path)
+
+    def _selfupdate_marker_path(self) -> Optional[str]:
+        cfg = getattr(self.bot_app, "config", None)
+        defaults = getattr(cfg, "defaults", None) if cfg is not None else None
+        try:
+            state_path = normalize_optional_state_path(getattr(defaults, "state_path", None))
+        except TypeError:
+            return None
+        if not state_path:
+            return None
+        return f"{state_path}.selfupdate_pending.json"
+
+    def _save_selfupdate_marker(
+        self,
+        *,
+        chat_id: int,
+        service_name: str,
+        message_thread_id: Optional[int] = None,
+    ) -> None:
+        path = self._selfupdate_marker_path()
+        if not path:
+            return
+        payload = {
+            "chat_id": int(chat_id),
+            "service_name": str(service_name or ""),
+            "requested_at": float(time.time()),
+        }
+        if message_thread_id is not None:
+            payload["message_thread_id"] = int(message_thread_id)
+        directory = os.path.dirname(path) or "."
+        os.makedirs(directory, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".selfupdate_", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                logging.getLogger(__name__).exception("selfupdate marker cleanup failed tmp_path=%s", tmp_path)
+            raise
+
+    def _load_selfupdate_marker(self) -> Optional[dict]:
+        path = self._selfupdate_marker_path()
+        if not path or not os.path.exists(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            logging.exception("selfupdate marker read failed")
+            return None
+        if not isinstance(data, dict):
+            return None
+        try:
+            chat_id = int(data.get("chat_id"))
+        except Exception:
+            return None
+        if chat_id <= 0:
+            return None
+        service_name = str(data.get("service_name") or "").strip()
+        try:
+            requested_at = float(data.get("requested_at") or 0.0)
+        except Exception:
+            requested_at = 0.0
+        try:
+            message_thread_id = int(data.get("message_thread_id")) if data.get("message_thread_id") is not None else None
+        except Exception:
+            message_thread_id = None
+        return {
+            "chat_id": chat_id,
+            "service_name": service_name,
+            "requested_at": requested_at,
+            "message_thread_id": message_thread_id if message_thread_id is not None and message_thread_id > 0 else None,
+        }
+
+    def _clear_selfupdate_marker(self) -> None:
+        path = self._selfupdate_marker_path()
+        if not path:
+            return
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            logging.exception("selfupdate marker cleanup failed")
+
+    async def notify_pending_selfupdate(self, application: Application) -> None:
+        marker = self._load_selfupdate_marker()
+        if not marker:
+            return
+        chat_id = int(marker["chat_id"])
+        service_name = str(marker.get("service_name") or self._bot_service_name())
+        requested_at = float(marker.get("requested_at") or 0.0)
+        delay_sec = max(0, int(time.time() - requested_at)) if requested_at > 0 else None
+        text = f"Selfupdate подтверждён: сервис {service_name} перезапущен и бот снова в сети."
+        if delay_sec is not None:
+            text += f"\nЗадержка запуска: {delay_sec}с."
+        try:
+            send_kwargs = {"chat_id": chat_id, "text": text}
+            message_thread_id = marker.get("message_thread_id")
+            if message_thread_id is not None:
+                send_kwargs["message_thread_id"] = int(message_thread_id)
+            await self.bot_app._send_message(application, **send_kwargs)
+        except Exception as e:
+            logging.exception("selfupdate startup confirmation failed: %s", e)
+            return
+        self._clear_selfupdate_marker()
+
+    async def _run_subprocess(self, *argv: str, cwd: Optional[str] = None) -> tuple[int, str]:
+        proc = await asyncio.create_subprocess_exec(
+            *[str(x) for x in argv],
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        return int(proc.returncode), (out or b"").decode(errors="replace")
+
+    @staticmethod
+    def _requirements_files_from_pull_output(output: str) -> list[str]:
+        text = str(output or "").lower()
+        found: list[str] = []
+        for name in ("requirements.txt", "requirement.txt"):
+            if name in text:
+                found.append(name)
+        return found
+
+    @staticmethod
+    def _venv_python_path(project_root: str) -> Optional[str]:
+        root = str(project_root or "").strip()
+        if not root:
+            return None
+        candidates = [
+            os.path.join(root, ".venv", "bin", "python"),
+            os.path.join(root, ".venv", "Scripts", "python.exe"),
+        ]
+        for candidate in candidates:
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    def _spawn_selfupdate_watchdog(self, *, marker_path: str, timeout_sec: int) -> None:
+        token = str(getattr(getattr(getattr(self.bot_app, "config", None), "telegram", None), "token", "") or "").strip()
+        if not token:
+            return
+        project_root = self._project_root()
+        argv = [
+            str(sys.executable),
+            "-m",
+            "app.services.selfupdate_watchdog",
+            "--marker-path",
+            str(marker_path),
+            "--bot-token",
+            token,
+            "--timeout-sec",
+            str(int(timeout_sec)),
+        ]
+        subprocess.Popen(
+            argv,
+            cwd=project_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+
+    def _route_reply_kwargs(self, update: Update) -> Optional[dict]:
+        resolver = getattr(self.bot_app, "resolve_telegram_inbound_route", None)
+        if not callable(resolver):
+            return None
+        try:
+            route = resolver(update)
+        except Exception:
+            logging.getLogger(__name__).exception("failed to resolve telegram inbound route reply kwargs")
+            return None
+        reply_builder = getattr(route, "reply_kwargs", None)
+        if callable(reply_builder):
+            try:
+                kwargs = dict(reply_builder() or {})
+            except Exception:
+                logging.getLogger(__name__).exception("failed to build telegram inbound route reply kwargs")
+                kwargs = {}
+        else:
+            kwargs = {}
+            reply_chat_id = getattr(route, "reply_chat_id", None)
+            if reply_chat_id is not None:
+                kwargs["chat_id"] = int(reply_chat_id)
+            message_thread_id = getattr(route, "message_thread_id", None)
+            if message_thread_id is not None:
+                kwargs["message_thread_id"] = int(message_thread_id)
+        filtered = {
+            key: value
+            for key, value in kwargs.items()
+            if key in {"chat_id", "message_thread_id", "direct_messages_topic_id"}
+        }
+        return filtered or None
+
+    @staticmethod
+    def _same_reply_scope(lhs: Optional[dict], rhs: Optional[dict]) -> bool:
+        left = dict(lhs or {})
+        right = dict(rhs or {})
+        try:
+            left_chat = int(left.get("chat_id") or 0)
+        except Exception:
+            left_chat = 0
+        try:
+            right_chat = int(right.get("chat_id") or 0)
+        except Exception:
+            right_chat = 0
+        try:
+            left_thread = int(left.get("message_thread_id") or 0) or None
+        except Exception:
+            left_thread = None
+        try:
+            right_thread = int(right.get("message_thread_id") or 0) or None
+        except Exception:
+            right_thread = None
+        return left_chat == right_chat and left_thread == right_thread
+
+    def _reply_kwargs(self, update: Update, session: Optional[Session] = None) -> dict:
+        chat = getattr(update, "effective_chat", None)
+        ui_chat_id = int(getattr(chat, "id", 0) or 0)
+        builder = getattr(self.bot_app, "build_telegram_reply_dest", None)
+        session_kwargs = None
+        if callable(builder) and session is not None:
+            dest = builder(session, ui_chat_id)
+            session_kwargs = {
+                key: value
+                for key, value in dest.items()
+                if key in {"chat_id", "message_thread_id", "direct_messages_topic_id"}
+            }
+        route_kwargs = self._route_reply_kwargs(update)
+        if session_kwargs and not self._same_reply_scope(route_kwargs, session_kwargs):
+            return session_kwargs
+        if route_kwargs is not None:
+            return route_kwargs
+        if session_kwargs:
+            return session_kwargs
+        if callable(builder):
+            dest = builder(session, ui_chat_id)
+            return {
+                key: value
+                for key, value in dest.items()
+                if key in {"chat_id", "message_thread_id", "direct_messages_topic_id"}
+            }
+        return {"chat_id": ui_chat_id}
+
+    def _owner_chat_id(self, update: Update) -> int:
+        chat = getattr(update, "effective_chat", None)
+        chat_id = int(getattr(chat, "id", 0) or 0)
+        resolver = getattr(self.bot_app, "resolve_telegram_inbound_route", None)
+        if callable(resolver):
+            try:
+                return int(resolver(update).owner_chat_id)
+            except Exception:
+                logging.getLogger(__name__).exception("failed to resolve telegram inbound route owner chat")
+        return chat_id
+
+    async def _ensure_allowed(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        update: Optional[Update] = None,
+        allow_outside_topic: bool = False,
+    ) -> bool:
+        if update is not None and hasattr(self.bot_app, "ensure_telegram_inbound_authorized"):
+            route = await self.bot_app.ensure_telegram_inbound_authorized(
+                update,
+                context,
+                allow_outside_topic=allow_outside_topic,
+            )
+            return bool(route is not None)
+        return bool(await self.bot_app.access_policy_service.ensure_allowed(chat_id, context))
+
+    async def _require_admin(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        scope: str,
+        update: Optional[Update] = None,
+        allow_outside_topic: bool = False,
+    ) -> bool:
+        if update is not None and hasattr(self.bot_app, "ensure_telegram_inbound_authorized"):
+            route = await self.bot_app.ensure_telegram_inbound_authorized(
+                update,
+                context,
+                scope=scope,
+                require_admin=True,
+                allow_outside_topic=allow_outside_topic,
+            )
+            return bool(route is not None)
+        return bool(await self.bot_app.access_policy_service.require_admin(chat_id, context, scope=scope))
+
+    async def _require_scope_session(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        auto_create: bool = False,
+        update: Optional[Update] = None,
+        allow_outside_topic: bool = False,
+    ) -> Optional[Session]:
+        if update is not None and hasattr(self.bot_app, "ensure_telegram_inbound_session"):
+            _route, session = await self.bot_app.ensure_telegram_inbound_session(
+                update,
+                context,
+                auto_create=auto_create,
+                allow_outside_topic=allow_outside_topic,
+            )
+            return session
+        return await self.bot_app.access_policy_service.require_scope_session(
+            chat_id,
+            context,
+            auto_create=auto_create,
+        )
+
+    def _is_admin(self, chat_id: int) -> bool:
+        policy = getattr(self.bot_app, "access_policy_service", None)
+        checker = getattr(policy, "is_admin", None) if policy is not None else None
+        if callable(checker):
+            return bool(checker(int(chat_id)))
+        fallback = getattr(self.bot_app, "is_admin", None)
+        if callable(fallback):
+            return bool(fallback(int(chat_id)))
+        return False
+
+    def _is_session_visible_for_chat(self, chat_id: int, session: Optional[Session]) -> bool:
+        if session is None:
+            return False
+        if self._is_admin(chat_id):
+            return True
+        checker = getattr(self.bot_app, "is_session_allowed_for_chat", None)
+        if not callable(checker):
+            return False
+        try:
+            return bool(checker(int(chat_id), session))
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "failed to check session visibility chat_id=%s session_id=%s",
+                chat_id,
+                getattr(session, "id", None),
+            )
+            return False
+
+    def _visible_sessions_for_chat(self, chat_id: int) -> list[Session]:
+        manager = getattr(self.bot_app, "manager", None)
+        getter = getattr(manager, "sessions_for_chat", None) if manager is not None else None
+        if not callable(getter):
+            return []
+        sessions = list((getter(int(chat_id)) or {}).values())
+        if self._is_admin(chat_id):
+            return sessions
+        return [item for item in sessions if self._is_session_visible_for_chat(chat_id, item)]
+
+    def _is_workdir_visible_for_chat(self, chat_id: int, workdir: Optional[str]) -> bool:
+        if self._is_admin(chat_id):
+            return True
+        getter = getattr(self.bot_app, "user_projects", None)
+        if not callable(getter):
+            return False
+        try:
+            allowed = {os.path.realpath(str(item)) for item in getter(int(chat_id)) or []}
+            target = os.path.realpath(str(workdir or ""))
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "failed to check workdir visibility chat_id=%s workdir=%s",
+                chat_id,
+                workdir,
+            )
+            return False
+        return bool(target) and target in allowed
+
+    async def _cancel_mode_tasks_session(self, session_id: str) -> None:
+        try:
+            await self.bot_app.mode_session_control.cancel_session(session_id=session_id, timeout_s=0.2)
+        except Exception as e:
+            logging.exception("cancel mode tasks session=%s failed: %s", session_id, e)
+
+    def _active_session_status_text(self, s: Session, *, chat_id: Optional[int] = None) -> str:
+        access_policy = getattr(self.bot_app, "access_policy_service", None)
+        show_orchestrator = True
+        if chat_id is not None:
+            checker = getattr(access_policy, "is_orchestrator_allowed_for_chat", None) if access_policy is not None else None
+            if callable(checker):
+                try:
+                    show_orchestrator = bool(checker(int(chat_id)))
+                except Exception:
+                    show_orchestrator = False
+            else:
+                show_orchestrator = False
+        return build_session_status_text(
+            s,
+            mode_registry=getattr(self.bot_app, "mode_registry_service", None),
+            mode_items=self._registered_modes(chat_id=chat_id) if chat_id is not None else None,
+            show_orchestrator=show_orchestrator,
+            title_prefix="Активная сессия",
+        )
+
+    def _registered_modes(self, *, chat_id: Optional[int] = None) -> list[tuple[str, str]]:
+        svc = getattr(self.bot_app, "mode_registry_service", None)
+        policy = getattr(self.bot_app, "access_policy_service", None)
+        return visible_modes(svc, chat_id=chat_id, access_policy=policy)
+
+    def _build_mode_buttons_rows(
+        self,
+        *,
+        chat_id: int,
+        session: Optional[Session] = None,
+        active_mode: str = "",
+    ) -> list[list[InlineKeyboardButton]]:
+        modes = self._registered_modes(chat_id=chat_id)
+        if not modes:
+            return []
+        rows: list[list[InlineKeyboardButton]] = []
+        row: list[InlineKeyboardButton] = []
+        for mode_id, label in modes:
+            enabled = str(active_mode or "").strip() == mode_id
+            row.append(
+                InlineKeyboardButton(
+                    f"{status_dot(enabled)} {label}",
+                    callback_data=build_session_mode_pick_callback_data(session, mode_id),
+                )
+            )
+            if len(row) >= 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+        return rows
+
+    def build_user_project_picker(
+        self,
+        owner_chat_id: int,
+        *,
+        session_uid: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        force_new: bool = False,
+        back_callback: Optional[str] = "sess_active",
+        back_text: str = "⬅️ Назад",
+        include_cancel: bool = False,
+    ) -> tuple[str, InlineKeyboardMarkup]:
+        projects = self.bot_app.user_projects(owner_chat_id)
+        if not projects:
+            rows = [[InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")]]
+            return "Проекты не настроены. Обратитесь к администратору.", InlineKeyboardMarkup(rows)
+
+        callback_prefix = "user_project_pick_new" if force_new else "user_project_pick"
+        token = str(session_uid or "").strip()
+        tool = str(tool_name or "").strip()
+
+        def _callback_data(idx: int) -> str:
+            parts: list[str] = []
+            if token:
+                parts.append(token)
+            if tool:
+                parts.append(f"tool={tool}")
+            parts.append(str(idx))
+            return f"{callback_prefix}:{':'.join(parts)}"
+
+        rows = [
+            [
+                InlineKeyboardButton(
+                    self.bot_app._short_label(path, 60),
+                    callback_data=_callback_data(idx),
+                )
+            ]
+            for idx, path in enumerate(projects)
+        ]
+        if include_cancel:
+            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")])
+        elif back_callback:
+            rows.append([InlineKeyboardButton(back_text, callback_data=back_callback)])
+        if tool:
+            return f"Выбран инструмент {tool}. Выберите проект.", InlineKeyboardMarkup(rows)
+        return "Выберите проект:", InlineKeyboardMarkup(rows)
+
+    def _resolve_overview_session(
+        self,
+        chat_id: int,
+        *,
+        session: Optional[Session] = None,
+        session_uid: Optional[str] = None,
+    ) -> Optional[Session]:
+        if session is not None:
+            return session
+        uid = str(session_uid or "").strip()
+        if uid:
+            manager = getattr(self.bot_app, "manager", None)
+            getter = getattr(manager, "get_by_uid", None) if manager is not None else None
+            if callable(getter):
+                resolved = getter(uid)
+                if resolved is not None:
+                    return resolved
+        resolver = getattr(self.bot_app, "resolve_telegram_scope_session", None)
+        if callable(resolver):
+            return resolver(reply_chat_id=int(chat_id), owner_chat_id=int(chat_id))
+        return None
+
+    @staticmethod
+    def _orchestrator_button(session: Session) -> InlineKeyboardButton:
+        enabled = bool(is_orchestrator_enabled(session, False))
+        prefix = "🧠✅" if enabled else "🧠⬜"
+        text = f"{prefix} Оркестратор: {'вкл' if enabled else 'выкл'}"
+        return InlineKeyboardButton(text, callback_data=f"sess_orch_toggle:{session.id}")
+
+    @staticmethod
+    def _ssh_remote_button(session: Session) -> Optional[InlineKeyboardButton]:
+        if not ssh_remote_available(session.workdir):
+            return None
+        enabled = is_ssh_remote_enabled(session)
+        prefix = "🔗✅" if enabled else "🔗⬜"
+        label = f"{prefix} SSH: {'вкл' if enabled else 'выкл'}"
+        explicit_uid = session_runtime_uid(session)
+        callback_data = f"sess_ssh_toggle:{explicit_uid}" if explicit_uid else f"sess_ssh_toggle:{session.id}"
+        return InlineKeyboardButton(label, callback_data=callback_data)
+
+    def build_sessions_active_overview(
+        self,
+        chat_id: int,
+        *,
+        session: Optional[Session] = None,
+        session_uid: Optional[str] = None,
+    ) -> tuple[str, InlineKeyboardMarkup]:
+        is_admin = self._is_admin(chat_id)
+        if not is_admin and not self.bot_app.user_projects(chat_id):
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")]])
+            return "Проекты не настроены. Обратитесь к администратору.", keyboard
+
+        sessions = self._visible_sessions_for_chat(chat_id)
+        if not sessions:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("➕ Новая сессия", callback_data="sess_new")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")],
+                ]
+            )
+            return "Активных сессий нет.", keyboard
+        s = self._resolve_overview_session(chat_id, session=session, session_uid=session_uid)
+        if s and not is_admin and not self._is_session_visible_for_chat(chat_id, s):
+            s = None
+        if not s:
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("📚 Список сессий", callback_data="sess_list")],
+                    [InlineKeyboardButton("➕ Новая сессия", callback_data="sess_new")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")],
+                ]
+            )
+            return "Текущая scope-bound сессия не определена. Откройте нужный topic или выберите сессию через список.", keyboard
+
+        cli_rows: list[list[InlineKeyboardButton]] = []
+        available = list(sorted(self.bot_app._available_tools()))
+        explicit_session_uid = session_runtime_uid(s)
+        modes = self._registered_modes(chat_id=chat_id)
+        visibility = build_session_overview_visibility(
+            session=s,
+            chat_id=chat_id,
+            access_policy=getattr(self.bot_app, "access_policy_service", None),
+            available_tool_count=len(available),
+            registered_mode_count=len(modes),
+            visible_session_count=len(sessions),
+        )
+        if visibility.allows("cli_selector") and available:
+            row: list[InlineKeyboardButton] = []
+            for name in available:
+                prefix = "✅" if str(getattr(s, "active_cli", "") or s.tool.name) == name else "⬜"
+                callback_data = (
+                    f"sess_cli:{explicit_session_uid}:{name}"
+                    if explicit_session_uid
+                    else f"sess_cli:{name}"
+                )
+                row.append(InlineKeyboardButton(f"{prefix} {name}", callback_data=callback_data))
+                if len(row) >= 2:
+                    cli_rows.append(row)
+                    row = []
+            if row:
+                cli_rows.append(row)
+        elif visibility.allows("cli_selector"):
+            cli_rows.append([InlineKeyboardButton("CLI недоступны", callback_data=build_session_overview_callback_data(s))])
+
+        overview_buttons: list[InlineKeyboardButton] = []
+        if visibility.allows("status"):
+            overview_buttons.append(InlineKeyboardButton("📋 Status", callback_data=f"sess_status:{s.id}"))
+        if visibility.allows("rename"):
+            overview_buttons.append(InlineKeyboardButton("✏️ Rename", callback_data=f"sess_rename:{s.id}"))
+        if visibility.allows("resume"):
+            overview_buttons.append(InlineKeyboardButton("🔄 Resume", callback_data=f"sess_resume:{s.id}"))
+        if visibility.allows("queue"):
+            overview_buttons.append(InlineKeyboardButton("📥 Queue", callback_data=f"sess_queue:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton("🗑 Clear queue", callback_data=f"sess_clearqueue:{s.id}"))
+        if visibility.allows("state"):
+            overview_buttons.append(InlineKeyboardButton("💾 State", callback_data=f"sess_state:{s.id}"))
+        if visibility.allows("close"):
+            overview_buttons.append(InlineKeyboardButton("🚫 Close", callback_data=f"sess_close:{s.id}"))
+        if visibility.allows("reset"):
+            overview_buttons.append(InlineKeyboardButton("♻️ Reset", callback_data=f"sess_reset:{s.id}"))
+
+        keyboard_rows = list(cli_rows)
+        for idx in range(0, len(overview_buttons), 2):
+            keyboard_rows.append(overview_buttons[idx:idx + 2])
+
+        ssh_btn = self._ssh_remote_button(s)
+        if ssh_btn and visibility.allows("ssh"):
+            keyboard_rows.append([ssh_btn])
+
+        if visibility.allows("orchestrator"):
+            keyboard_rows.append([self._orchestrator_button(s)])
+        if visibility.allows("mode_selector"):
+            keyboard_rows.extend(
+                self._build_mode_buttons_rows(
+                    chat_id=chat_id,
+                    session=s,
+                    active_mode=str(get_active_mode(s, "") or "").strip(),
+                )
+            )
+        footer_buttons: list[InlineKeyboardButton] = []
+        if visibility.allows("new_session"):
+            footer_buttons.append(InlineKeyboardButton("➕ Новая сессия", callback_data="sess_new"))
+        if visibility.allows("list_sessions"):
+            footer_buttons.append(InlineKeyboardButton("📚 Список сессий", callback_data="sess_list"))
+        if footer_buttons:
+            keyboard_rows.append(footer_buttons)
+        keyboard_rows.append([InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")])
+
+        keyboard = InlineKeyboardMarkup(keyboard_rows)
+        return self._active_session_status_text(s, chat_id=chat_id), keyboard
+
+    async def show_new_session_menu(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        edit_message: Optional[object] = None,
+        reply_kwargs: Optional[dict] = None,
+    ) -> None:
+        tools = list(sorted(self.bot_app._available_tools()))
+        if not tools:
+            text = (
+                "CLI не найдены. Сначала установите нужные инструменты. "
+                f"Ожидаемые: {self.bot_app._expected_tools()}"
+            )
+            if edit_message:
+                if getattr(edit_message, "message", None):
+                    await self.bot_app._edit_message(
+                        context,
+                        chat_id=edit_message.message.chat_id,
+                        message_id=edit_message.message.message_id,
+                        text=text,
+                        md2=True,
+                    )
+            else:
+                await self.bot_app._send_message(
+                    context,
+                    text=text,
+                    **dict(reply_kwargs or {"chat_id": int(chat_id)}),
+                )
+            return
+        rows = [[InlineKeyboardButton(t, callback_data=f"new_tool:{t}")] for t in tools]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="sess_active")])
+        keyboard = InlineKeyboardMarkup(rows)
+        text = "Выберите инструмент для новой сессии:"
+        if edit_message:
+            if getattr(edit_message, "message", None):
+                await self.bot_app._edit_message(
+                    context,
+                    chat_id=edit_message.message.chat_id,
+                    message_id=edit_message.message.message_id,
+                    text=text,
+                    md2=True,
+                    reply_markup=keyboard,
+                )
+        else:
+            await self.bot_app._send_message(
+                context,
+                text=text,
+                reply_markup=keyboard,
+                **dict(reply_kwargs or {"chat_id": int(chat_id)}),
+            )
+
+    async def cmd_tools(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update, allow_outside_topic=True):
+            return
+        reply_kwargs = self._reply_kwargs(update)
+        tools = sorted(self.bot_app._available_tools())
+        if not tools:
+            await self.bot_app._send_message(
+                context,
+                text=(
+                    "CLI не найдены. Сначала установите нужные инструменты. "
+                    f"Ожидаемые: {self.bot_app._expected_tools()}"
+                ),
+                **reply_kwargs,
+            )
+            return
+        await self.bot_app._send_message(context, text=f"Доступные инструменты: {', '.join(tools)}", **reply_kwargs)
+
+    async def cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ui_chat_id = update.effective_chat.id
+        owner_chat_id = self._owner_chat_id(update)
+        if not await self._ensure_allowed(owner_chat_id, context, update=update):
+            return
+        if not await self._require_admin(owner_chat_id, context, scope="new_projects", update=update):
+            return
+        args = context.args
+        if len(args) < 2:
+            await self.show_new_session_menu(ui_chat_id, context, reply_kwargs=self._reply_kwargs(update))
+            return
+        tool, path = args[0], " ".join(args[1:])
+        session, err = await self.bot_app.session_creation_service.create_session(
+            owner_chat_id=owner_chat_id,
+            tool=tool,
+            path=path,
+            bot=getattr(context, "bot", None),
+            ui_chat_id=ui_chat_id,
+            register_project=True,
+        )
+        if err:
+            if err == "Инструмент не найден.":
+                err = "Неизвестный инструмент."
+            await self.bot_app._send_message(context, text=err, **self._reply_kwargs(update))
+            return
+        await self.bot_app._send_message(
+            context,
+            text=f"Сессия {session.id} создана и выбрана.",
+            **self._reply_kwargs(update, session),
+        )
+
+    async def cmd_newpath(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ui_chat_id = update.effective_chat.id
+        owner_chat_id = self._owner_chat_id(update)
+        if not await self._ensure_allowed(owner_chat_id, context, update=update, allow_outside_topic=True):
+            return
+        if not await self._require_admin(
+            owner_chat_id,
+            context,
+            scope="new_projects",
+            update=update,
+            allow_outside_topic=True,
+        ):
+            return
+        if not context.args:
+            await self.bot_app._send_message(context, text="Использование: /newpath <path>", **self._reply_kwargs(update))
+            return
+        path = " ".join(context.args)
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=ui_chat_id)
+        root = self.bot_app.ui_state.dirs_root.get(ui_key, self.bot_app.config.defaults.workdir)
+        session, err = await self.bot_app.session_creation_service.create_from_pending_tool(
+            owner_chat_id=owner_chat_id,
+            path=path,
+            root=root,
+            bot=getattr(context, "bot", None),
+            message_thread_id=ui_key.message_thread_id,
+            ui_chat_id=ui_key.chat_id,
+        )
+        if err:
+            if err == "Инструмент не выбран.":
+                err = "Сначала выберите инструмент через /sessions."
+            await self.bot_app._send_message(context, text=err, **self._reply_kwargs(update))
+            return
+        if int(getattr(session, "chat_id", 0) or 0) != owner_chat_id:
+            logging.getLogger(__name__).warning(
+                "cmd_newpath created session outside inbound owner scope owner_chat_id=%s session_chat_id=%s",
+                owner_chat_id,
+                getattr(session, "chat_id", None),
+            )
+        await self.bot_app._send_message(
+            context,
+            text=f"Сессия {session.id} создана и выбрана.",
+            **self._reply_kwargs(update, session),
+        )
+
+    async def cmd_sessions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        route = await self.bot_app.ensure_telegram_inbound_authorized(
+            update,
+            context,
+            allow_outside_topic=True,
+        )
+        if route is None:
+            return
+        owner_chat_id = int(route.owner_chat_id)
+        text, keyboard = self.build_sessions_active_overview(
+            owner_chat_id,
+            session=route.session,
+            session_uid=route.session_uid,
+        )
+        await self.bot_app._send_message(context, text=text, reply_markup=keyboard, **route.reply_kwargs())
+
+    async def cmd_close(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="new_projects", update=update):
+            return
+        owner_chat_id = self._owner_chat_id(update)
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
+        if not context.args:
+            items = list(self.bot_app.manager.sessions_for_chat(owner_chat_id).keys())
+            if not items:
+                await self.bot_app._send_message(context, text="Сессий нет.", **self._reply_kwargs(update))
+                return
+            self.bot_app.ui_state.close_menu[ui_key] = items
+            rows = [
+                [InlineKeyboardButton(sid, callback_data=f"close_pick:{i}")]
+                for i, sid in enumerate(items)
+            ]
+            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+            keyboard = InlineKeyboardMarkup(rows)
+            await self.bot_app._send_message(
+                context,
+                text="Выберите сессию для закрытия:",
+                reply_markup=keyboard,
+                **self._reply_kwargs(update),
+            )
+            return
+        ok = await self.bot_app.close_session_with_cleanup(context.args[0], owner_chat_id, context)
+        if ok:
+            await self.bot_app._send_message(context, text="Сессия закрыта.", **self._reply_kwargs(update))
+        else:
+            await self.bot_app._send_message(context, text="Сессия не найдена.", **self._reply_kwargs(update))
+
+    async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
+        if not s:
+            return
+        await self.bot_app._send_message(context, text=self._active_session_status_text(s), **self._reply_kwargs(update, s))
+
+    async def cmd_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        route = await self.bot_app.ensure_telegram_inbound_authorized(
+            update,
+            context,
+            allow_outside_topic=True,
+        )
+        if route is None:
+            return
+        manager = getattr(self.bot_app, "manager", None)
+        service = getattr(self.bot_app, "cli_limits_service", None)
+        if manager is None or not hasattr(manager, "sessions_for_chat") or service is None:
+            await self.bot_app._send_message(
+                context,
+                text="Сервис лимитов недоступен.",
+                **route.reply_kwargs(),
+            )
+            return
+        try:
+            sessions = self._visible_sessions_for_chat(int(route.owner_chat_id))
+            config = getattr(self.bot_app, "config", None)
+            tools = getattr(config, "tools", None)
+            available_clis = None
+            if isinstance(tools, dict):
+                available_clis = [
+                    name
+                    for name, tool in tools.items()
+                    if str(name or "").strip().lower() in service.SUPPORTED_CLI_NAMES
+                    and bool(getattr(tool, "enabled", True))
+                ]
+            preferred_session = getattr(route, "session", None)
+            if preferred_session is not None and not self._is_session_visible_for_chat(int(route.owner_chat_id), preferred_session):
+                preferred_session = None
+            preferred_workdir = str(getattr(preferred_session, "workdir", "") or "").strip() or None
+            text = await service.describe_for_sessions(
+                sessions,
+                available_clis=available_clis,
+                preferred_workdir=preferred_workdir,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("limits command failed owner_chat_id=%s", route.owner_chat_id)
+            text = "Не удалось собрать лимиты CLI."
+        await self.bot_app._send_message(context, text=text, **route.reply_kwargs())
+
+    async def cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mode_id: str) -> None:
+        mode_id = str(mode_id or "").strip()
+        if mode_id == "admin":
+            route = self.bot_app.resolve_telegram_inbound_route(update)
+            session = route.session or self.bot_app.resolve_telegram_scope_session(
+                reply_chat_id=int(route.reply_chat_id),
+                message_thread_id=route.message_thread_id,
+                owner_chat_id=int(route.owner_chat_id),
+            )
+            if not session:
+                await self.bot_app._send_message(
+                    context,
+                    text="Сначала откройте нужный topic или выберите сессию через /sessions.",
+                    **route.reply_kwargs(),
+                )
+                return
+        args = list(getattr(context, "args", []) or [])
+        subcommand = str(args[0] or "").strip().lower() if args else ""
+        await self._show_mode_menu(update, context, mode_id, subcommand=subcommand, command_args=args)
+
+    async def _show_mode_menu(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        mode_id: str,
+        *,
+        subcommand: str = "",
+        command_args: Optional[list[str]] = None,
+    ) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
+        if not s:
+            return
+        reply_kwargs = self._reply_kwargs(update, s)
+        svc = getattr(self.bot_app, "mode_registry_service", None)
+        plugin = svc.get(mode_id) if svc else None
+        policy = getattr(self.bot_app, "access_policy_service", None)
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        policy_chat_id = int(route.owner_chat_id)
+        is_mode_allowed = policy.is_mode_allowed_for_chat(policy_chat_id, mode_id) if policy else True
+        if not is_mode_allowed:
+            await self.bot_app._send_message(context, text=f"Режим `{mode_id}` недоступен для вашего пользователя.", **reply_kwargs)
+            return
+        if plugin is None or not hasattr(plugin, "build_menu"):
+            await self.bot_app._send_message(context, text=f"Режим `{mode_id}` недоступен.", **reply_kwargs)
+            return
+
+        if mode_id == "admin":
+            if not hasattr(plugin, "handle_input"):
+                await self.bot_app._send_message(context, text=f"Режим `{mode_id}` недоступен.", **reply_kwargs)
+                return
+            payload_args = [str(x) for x in (command_args or []) if str(x).strip()]
+            command_text = "/admin"
+            if payload_args:
+                command_text = f"/admin {' '.join(payload_args)}"
+            runtime_payload = self._validate_telegram_runtime_payload(
+                {
+                    "bot_app": self.bot_app,
+                    "session": s,
+                    "chat_id": chat_id,
+                    "session_uid": str(
+                        route.session_uid
+                        or getattr(getattr(s, "conversation_scope", None), "session_uid", "")
+                        or ""
+                    ).strip(),
+                    "context": (
+                        self.bot_app.build_telegram_transport_context(
+                            context,
+                            session=s,
+                            chat_id=chat_id,
+                            dest=self.bot_app.build_telegram_reply_dest(
+                                s,
+                                chat_id,
+                                user_id=getattr(getattr(update, "effective_user", None), "id", None),
+                            ),
+                            user_id=getattr(getattr(update, "effective_user", None), "id", None),
+                        )
+                        if hasattr(self.bot_app, "build_telegram_transport_context")
+                        else context
+                    ),
+                    "mode_id": mode_id,
+                }
+            )
+            await plugin.handle_input(
+                MessageModel(
+                    text=command_text,
+                    chat_id=int(chat_id),
+                    user_id=getattr(getattr(update, "effective_user", None), "id", None),
+                ),
+                runtime_payload,
+            )
+            return
+
+        menu_visibility = build_mode_menu_visibility(
+            session=s,
+            mode_id=mode_id,
+            access_policy=getattr(self.bot_app, "access_policy_service", None),
+            user_id=getattr(getattr(update, "effective_user", None), "id", None),
+        )
+        text, keyboard = call_mode_build_menu(
+            plugin,
+            s,
+            back_callback=build_session_overview_callback_data(s),
+            back_text="⬅️ Назад",
+            menu_visibility=menu_visibility,
+        )
+        await self.bot_app._send_message(context, text=text, reply_markup=keyboard, **reply_kwargs)
+
+    async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
+        if not s:
+            return
+        reply_kwargs = self._reply_kwargs(update, s)
+        interrupt_runtime = getattr(getattr(self.bot_app, "session_management", None), "interrupt_session_runtime", None)
+        message_text = "Прерывание отправлено."
+        if callable(interrupt_runtime):
+            report = await interrupt_runtime(
+                s,
+                owner_chat_id=int(getattr(s, "chat_id", 0) or self._owner_chat_id(update)),
+                reply_chat_id=reply_kwargs.get("chat_id"),
+                message_thread_id=reply_kwargs.get("message_thread_id"),
+                reason="telegram_command",
+            )
+            formatter = getattr(self.bot_app.session_management, "format_interrupt_user_message", None)
+            if callable(formatter):
+                message_text = str(formatter(report) or message_text)
+        else:
+            s.interrupt()
+            try:
+                await self._cancel_mode_tasks_session(session_runtime_uid(s))
+            except Exception as e:
+                logging.exception("failed to cancel mode tasks for session=%s: %s", s.id, e)
+        await self.bot_app._send_message(context, text=message_text, **reply_kwargs)
+
+    async def cmd_queue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
+        if not s:
+            return
+        if not s.queue:
+            await self.bot_app._send_message(context, text="Очередь пуста.", **self._reply_kwargs(update, s))
+            return
+        await self.bot_app._send_message(context, text=f"В очереди {len(s.queue)} сообщений.", **self._reply_kwargs(update, s))
+
+    async def cmd_clearqueue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
+        if not s:
+            return
+        s.queue.clear()
+        self._persist_session(chat_id, s.id)
+        await self.bot_app._send_message(context, text="Очередь очищена.", **self._reply_kwargs(update, s))
+
+    async def cmd_rename(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        owner_chat_id = int(route.owner_chat_id)
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text="Использование: /rename <name> или /rename <id> <name>",
+                **self._reply_kwargs(update, route.session),
+            )
+            return
+        session = None
+        if len(context.args) >= 2 and context.args[0] in self.bot_app.manager.sessions_for_chat(owner_chat_id):
+            session = self.bot_app.manager.get(owner_chat_id, context.args[0])
+            name = " ".join(context.args[1:])
+        else:
+            session = route.session or self.bot_app.resolve_telegram_scope_session(
+                reply_chat_id=int(route.reply_chat_id),
+                message_thread_id=route.message_thread_id,
+                owner_chat_id=owner_chat_id,
+            )
+            name = " ".join(context.args)
+        if not session:
+            await self.bot_app._send_message(
+                context,
+                text="Сессия не определена для текущего scope.",
+                **self._reply_kwargs(update),
+            )
+            return
+        if not self._is_session_visible_for_chat(owner_chat_id, session):
+            await self.bot_app._send_message(
+                context,
+                text="Сессия недоступна.",
+                **self._reply_kwargs(update),
+            )
+            return
+        session.name = name.strip()
+        self._persist_session(owner_chat_id, session.id)
+        thread_manager = getattr(self.bot_app, "session_thread_manager", None)
+        if thread_manager is not None:
+            try:
+                await thread_manager.rename_topic_for_session(
+                    owner_chat_id=owner_chat_id,
+                    session=session,
+                    bot=getattr(context, "bot", None),
+                )
+            except Exception as e:
+                logging.exception("session topic rename failed: %s", e)
+        await self.bot_app._send_message(context, text="Имя сессии обновлено.", **self._reply_kwargs(update, session))
+
+    async def cmd_dirs(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="new_projects", update=update):
+            return
+        path = " ".join(context.args) if context.args else self.bot_app.config.defaults.workdir
+        if not os.path.isdir(path):
+            await self.bot_app._send_message(context, text="Каталог не существует.", **self._reply_kwargs(update))
+            return
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        await self.bot_app.dirs_service.start_flow(
+            chat_id,
+            context,
+            root=path,
+            mode_token="browse",
+            message_thread_id=route.message_thread_id,
+        )
+
+    async def cmd_cwd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ui_chat_id = update.effective_chat.id
+        owner_chat_id = self._owner_chat_id(update)
+        if not await self._ensure_allowed(owner_chat_id, context, update=update, allow_outside_topic=True):
+            return
+        if not await self._require_admin(
+            owner_chat_id,
+            context,
+            scope="new_projects",
+            update=update,
+            allow_outside_topic=True,
+        ):
+            return
+        if not context.args:
+            await self.bot_app._send_message(context, text="Использование: /cwd <path>", **self._reply_kwargs(update))
+            return
+        path = " ".join(context.args)
+        if not os.path.isdir(path):
+            await self.bot_app._send_message(context, text="Каталог не существует.", **self._reply_kwargs(update))
+            return
+        s = await self._require_scope_session(
+            ui_chat_id,
+            context,
+            auto_create=False,
+            update=update,
+            allow_outside_topic=True,
+        )
+        if not s:
+            return
+        session, err = await self.bot_app.session_creation_service.create_session(
+            owner_chat_id=owner_chat_id,
+            tool=s.tool.name,
+            path=path,
+            bot=getattr(context, "bot", None),
+            ui_chat_id=ui_chat_id,
+            register_project=True,
+        )
+        if err:
+            await self.bot_app._send_message(context, text=err, **self._reply_kwargs(update, s))
+            return
+        await self.bot_app._send_message(
+            context,
+            text=f"Новая сессия {session.id} создана и выбрана.",
+            **self._reply_kwargs(update, session),
+        )
+
+    async def cmd_git(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="git", update=update):
+            return
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        session = await self.bot_app.git.ensure_git_session(
+            chat_id,
+            context,
+            message_thread_id=route.message_thread_id,
+        )
+        if not session:
+            return
+        if not await self.bot_app.git.ensure_git_repo(
+            session,
+            chat_id,
+            context,
+            message_thread_id=route.message_thread_id,
+        ):
+            return
+        reply_kwargs = self._reply_kwargs(update)
+        await self.bot_app._send_message(
+            context,
+            text="Git-операции:",
+            reply_markup=self.bot_app.git.build_git_keyboard(),
+            **reply_kwargs,
+        )
+
+    async def cmd_selfupdate(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update, allow_outside_topic=True):
+            return
+        if not await self._require_admin(
+            chat_id,
+            context,
+            scope="generic",
+            update=update,
+            allow_outside_topic=True,
+        ):
+            return
+        reply_kwargs = self._reply_kwargs(update)
+
+        repo_root = self._project_root()
+        if not os.path.isdir(os.path.join(repo_root, ".git")):
+            await self.bot_app._send_message(
+                context,
+                text=f"Ошибка git pull: репозиторий не найден в `{repo_root}`.",
+                md2=True,
+                **reply_kwargs,
+            )
+            return
+
+        await self.bot_app._send_message(context, text="Запускаю git pull...", md2=True, **reply_kwargs)
+        try:
+            rc, output = await self._run_subprocess("git", "pull", "--ff-only", cwd=repo_root)
+        except Exception as e:
+            logging.exception("selfupdate git pull failed: %s", e)
+            await self.bot_app._send_message(context, text=f"Ошибка git pull: {e}", md2=True, **reply_kwargs)
+            return
+
+        pull_out = self._trim_output(output)
+        if rc != 0:
+            text = "Ошибка git pull."
+            if pull_out:
+                text += f"\n\n{pull_out}"
+            await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
+            return
+
+        req_files = self._requirements_files_from_pull_output(output)
+        if req_files:
+            req_file = None
+            for candidate in ("requirements.txt", "requirement.txt"):
+                if candidate in req_files and os.path.isfile(os.path.join(repo_root, candidate)):
+                    req_file = candidate
+                    break
+            if req_file is None:
+                for candidate in ("requirements.txt", "requirement.txt"):
+                    if os.path.isfile(os.path.join(repo_root, candidate)):
+                        req_file = candidate
+                        break
+            if req_file:
+                venv_python = self._venv_python_path(repo_root)
+                if not venv_python:
+                    await self.bot_app._send_message(
+                        context,
+                        text="git pull выполнен, но `.venv` не найден. Перезапуск отменен.",
+                        md2=True,
+                        **reply_kwargs,
+                    )
+                    return
+                await self.bot_app._send_message(
+                    context,
+                    text=f"Обнаружены изменения в `{req_file}`. Обновляю зависимости в .venv...",
+                    md2=True,
+                    **reply_kwargs,
+                )
+                dep_rc, dep_output = await self._run_subprocess(
+                    venv_python,
+                    "-m",
+                    "pip",
+                    "install",
+                    "-r",
+                    req_file,
+                    cwd=repo_root,
+                )
+                if dep_rc != 0:
+                    dep_out = self._trim_output(dep_output)
+                    text = "git pull выполнен, но обновление зависимостей завершилось ошибкой."
+                    if dep_out:
+                        text += f"\n\n{dep_out}"
+                    await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
+                    return
+
+        service_name = self._bot_service_name()
+        marker_path = self._selfupdate_marker_path()
+        try:
+            self._save_selfupdate_marker(
+                chat_id=int(reply_kwargs.get("chat_id") or chat_id),
+                service_name=service_name,
+                message_thread_id=reply_kwargs.get("message_thread_id"),
+            )
+        except Exception as e:
+            logging.exception("selfupdate marker save failed: %s", e)
+        if marker_path:
+            try:
+                self._spawn_selfupdate_watchdog(marker_path=marker_path, timeout_sec=30)
+            except Exception as e:
+                logging.exception("selfupdate watchdog spawn failed: %s", e)
+
+        restart_invoked = False
+        try:
+            restart_rc, restart_output = await self._run_subprocess(
+                "systemctl",
+                "restart",
+                "--no-block",
+                service_name,
+            )
+            restart_invoked = True
+            logging.info("selfupdate: systemctl restart requested service=%s rc=%s", service_name, restart_rc)
+        except Exception as e:
+            logging.exception("selfupdate service restart failed: %s", e)
+            restart_rc, restart_output = 1, str(e)
+
+        if not restart_invoked:
+            self._clear_selfupdate_marker()
+            restart_out = self._trim_output(restart_output)
+            text = f"git pull выполнен успешно, но не удалось запустить перезапуск сервиса `{service_name}`."
+            if restart_out:
+                text += f"\n\n{restart_out}"
+            await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
+            return
+
+        restart_confirmed = restart_rc == 0
+        restart_state = ""
+        if not restart_confirmed:
+            # systemctl can return non-zero in self-restart scenarios even when
+            # the unit transitions to active/activating right after.
+            try:
+                state_rc, state_output = await self._run_subprocess(
+                    "systemctl",
+                    "is-active",
+                    service_name,
+                )
+                restart_state = str(state_output or "").strip().splitlines()[-1].strip().lower() if state_output else ""
+                logging.info(
+                    "selfupdate: systemctl is-active service=%s rc=%s state=%s",
+                    service_name,
+                    state_rc,
+                    restart_state,
+                )
+                if restart_state in {"active", "activating", "reloading", "deactivating"}:
+                    restart_confirmed = True
+            except Exception as e:
+                logging.exception("selfupdate service state check failed: %s", e)
+
+        if restart_confirmed:
+            text = "git pull выполнен успешно. Перезапуск сервиса запущен."
+            await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
+            return
+
+        if restart_state:
+            restart_out = self._trim_output(restart_output)
+            text = (
+                f"git pull выполнен успешно. Команда перезапуска сервиса `{service_name}` отправлена, "
+                "но состояние не удалось подтвердить мгновенно."
+            )
+            text += f"\n\nsystemctl restart вернул код {restart_rc}, текущее состояние: {restart_state}."
+            if restart_out:
+                text += f"\n\n{restart_out}"
+            await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
+            return
+
+        restart_out = self._trim_output(restart_output)
+        text = f"git pull выполнен успешно, но не удалось перезапустить сервис `{service_name}`."
+        if restart_out:
+            text += f"\n\n{restart_out}"
+        await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
+
+    async def cmd_setprompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="generic", update=update):
+            return
+        reply_kwargs = self._reply_kwargs(update)
+        args = context.args
+        if len(args) < 2:
+            await self.bot_app._send_message(context, text="Использование: /setprompt <tool> <regex>", **reply_kwargs)
+            return
+        tool_name = args[0]
+        regex = " ".join(args[1:])
+        container = getattr(self.bot_app, "container", None)
+        config_service = getattr(container, "config_service", None)
+        if config_service is None:
+            await self.bot_app._send_message(
+                context,
+                text="ConfigService недоступен: prompt_regex не сохранен.",
+                **reply_kwargs,
+            )
+            return
+
+        current_config = await config_service.load()
+        tool = current_config.tools.get(tool_name)
+        if not tool:
+            await self.bot_app._send_message(context, text="Инструмент не найден.", **reply_kwargs)
+            return
+        expected_revision = await config_service.current_revision(current_config)
+        draft_config = copy.deepcopy(current_config)
+        draft_config.tools[tool_name].prompt_regex = regex
+
+        result = await config_service.save_config_draft_with_revision(
+            draft_config,
+            expected_revision=expected_revision,
+        )
+        reload_result = None
+        if result.ok:
+            reload_runtime_config = getattr(self.bot_app, "reload_runtime_config", None)
+            if callable(reload_runtime_config):
+                reload_result = await reload_runtime_config()
+
+        text = self._config_save_summary(
+            result,
+            success_prefix="prompt_regex сохранен." if result.ok else "prompt_regex не сохранен.",
+            reload_result=reload_result,
+        )
+        await self.bot_app._send_message(context, text=text, **reply_kwargs)
+
+    @staticmethod
+    def _config_save_summary(result, *, success_prefix: str, reload_result: Optional[dict] = None) -> str:
+        def _paths(values) -> str:
+            items = [str(value) for value in (values or [])]
+            return ", ".join(items) if items else "none"
+
+        lines = [
+            success_prefix,
+            f"changed: {'yes' if bool(result.changed) else 'no'}",
+            f"restart_required: {_paths(result.restart_required)}",
+            f"reloadable: {_paths(result.reloadable)}",
+            f"not_applied: {_paths(getattr(result, 'not_applied', []))}",
+            f"errors: {_paths(result.errors)}",
+        ]
+        if result.backup_path:
+            lines.append(f"backup_path: {result.backup_path}")
+        if reload_result is None:
+            return "\n".join(lines)
+
+        lines.append(f"runtime_reload: {reload_result.get('status', 'unknown')}")
+        lines.append(f"runtime_applied: {_paths(reload_result.get('applied'))}")
+        lines.append(f"runtime_restart_required: {_paths(reload_result.get('restart_required'))}")
+        warnings = reload_result.get("warnings") or []
+        if warnings:
+            lines.append(f"runtime_warnings: {_paths(warnings)}")
+        return "\n".join(lines)
+
+    async def cmd_resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
+        if not s:
+            return
+        if not context.args:
+            token = s.resume_token or "нет"
+            await self.bot_app._send_message(context, text=f"Текущий resume: {token}", **self._reply_kwargs(update, s))
+            return
+        token = " ".join(context.args).strip()
+        s.resume_token = token
+        self._persist_session(chat_id, s.id)
+        await self.bot_app._send_message(context, text="Resume сохранен.", **self._reply_kwargs(update, s))
+
+    async def cmd_state(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        owner_chat_id = int(route.owner_chat_id)
+        s = route.session or self.bot_app.resolve_telegram_scope_session(
+            reply_chat_id=int(route.reply_chat_id),
+            message_thread_id=route.message_thread_id,
+            owner_chat_id=owner_chat_id,
+        )
+        repo = self._state_repository()
+        if repo is None:
+            await self.bot_app._send_message(
+                context,
+                text="Состояние недоступно: state_path не настроен.",
+                **self._reply_kwargs(update, s),
+            )
+            return
+        if context.args:
+            # Prefer session_id to avoid ambiguity when multiple sessions share tool/workdir.
+            st = None
+            sid = context.args[0]
+            if sid in self.bot_app.manager.sessions_for_chat(owner_chat_id):
+                s0 = self.bot_app.manager.get(owner_chat_id, sid)
+                if s0 and self._is_session_visible_for_chat(owner_chat_id, s0):
+                    st = repo.get_state(
+                        tool=s0.tool.name,
+                        workdir=s0.workdir,
+                        session_id=s0.id,
+                        chat_id=owner_chat_id,
+                    )
+                elif s0 is not None:
+                    await self.bot_app._send_message(
+                        context,
+                        text="Сессия недоступна.",
+                        **self._reply_kwargs(update, s),
+                    )
+                    return
+            if not st and len(context.args) >= 2:
+                tool = context.args[0]
+                workdir = " ".join(context.args[1:])
+                if self._is_workdir_visible_for_chat(owner_chat_id, workdir):
+                    st = repo.get_state(tool=tool, workdir=workdir, chat_id=owner_chat_id)
+            if not st:
+                await self.bot_app._send_message(
+                    context,
+                    text="Состояние не найдено (используйте /state <session_id> или /state <tool> <workdir>)",
+                    **self._reply_kwargs(update, s),
+                )
+                return
+            text = (
+                f"Session: {st.session_id or 'нет'}\\n"
+                f"Tool: {st.tool}\\n"
+                f"Workdir: {st.workdir}\\n"
+                f"Resume: {st.resume_token or 'нет'}\\n"
+                f"Name: {st.name or 'нет'}\\n"
+                f"Summary: {st.summary or 'нет'}\\n"
+                f"Updated: {self.bot_app._format_ts(st.updated_at)}"
+            )
+            await self.bot_app._send_message(context, text=text, **self._reply_kwargs(update, s))
+            return
+        if not s:
+            await self.bot_app._send_message(
+                context,
+                text="Сессия не определена для текущего scope.",
+                **self._reply_kwargs(update),
+            )
+            return
+        try:
+            data = repo.load_state(chat_id=owner_chat_id)
+        except Exception as e:
+            logging.exception(f"tool failed {str(e)}")
+            await self.bot_app._send_message(context, text=f"Ошибка чтения состояния: {e}", **self._reply_kwargs(update, s))
+            return
+        if not data:
+            await self.bot_app._send_message(context, text="Состояние не найдено.", **self._reply_kwargs(update, s))
+            return
+        keys = list(data.keys())
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
+        self.bot_app.ui_state.state_menu[ui_key] = keys
+        self.bot_app.ui_state.state_menu_page[ui_key] = 0
+        keyboard = self.bot_app._build_state_keyboard(ui_key)
+        await self.bot_app._send_message(context,
+                                         text="Выберите запись состояния:",
+                                         reply_markup=keyboard,
+                                         **self._reply_kwargs(update, s),
+                                         )
+
+    async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not context.args:
+            await self.bot_app._send_message(context, text="Использование: /send <текст>", **self._reply_kwargs(update))
+            return
+        _route, session = await self.bot_app.ensure_telegram_inbound_session(update, context, auto_create=True)
+        if not session:
+            return
+        text = " ".join(context.args)
+        await self.bot_app._handle_cli_input(
+            session,
+            text,
+            chat_id,
+            context,
+            dest=self.bot_app.build_telegram_reply_dest(
+                session,
+                chat_id,
+                user_id=getattr(getattr(update, "effective_user", None), "id", None),
+            ),
+        )
+
+    def _bot_commands(self, *, include_admin: bool = False) -> list[BotCommand]:
+        commands = []
+        for entry in build_command_registry(self.bot_app):
+            if not entry["menu"]:
+                continue
+            if bool(entry.get("admin_only")) and not include_admin:
+                continue
+            commands.append(BotCommand(command=entry["name"], description=str(entry["desc"])))
+        return commands
+
+    async def set_bot_commands(self, app: Application) -> None:
+        await app.bot.set_my_commands(
+            self._bot_commands(include_admin=False),
+            scope=BotCommandScopeDefault(),
+        )
+        admin_commands = self._bot_commands(include_admin=True)
+        for chat_id in list(getattr(self.bot_app.config.telegram, "admlist_chat_ids", []) or []):
+            await app.bot.set_my_commands(
+                admin_commands,
+                scope=BotCommandScopeChat(chat_id=int(chat_id)),
+            )
+
+    async def cmd_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="files", update=update):
+            return
+        _route, session = await self.bot_app.ensure_telegram_inbound_session(update, context, auto_create=True)
+        if not session:
+            return
+        base = session.workdir
+        owner_chat_id = int(getattr(session, "chat_id", None) or chat_id)
+        try:
+            await resolve_files_payload(
+                session_files_service(self.bot_app).meta(
+                    owner_chat_id,
+                    session_uid_for_files(owner_chat_id, session),
+                    ".",
+                    protect_sensitive=False,
+                )
+            )
+        except FilesServiceError:
+            await self.bot_app._send_message(context, text="Рабочий каталог недоступен.", **self._reply_kwargs(update, session))
+            return
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
+        self.bot_app.ui_state.files_dir[ui_key] = base
+        self.bot_app.ui_state.files_page[ui_key] = 0
+        await self.bot_app._send_files_menu(
+            chat_id,
+            session,
+            context,
+            edit_message=None,
+            message_thread_id=ui_key.message_thread_id,
+        )
+
+    async def _send_dirs_menu(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        base: str,
+        *,
+        message_thread_id: Optional[int] = None,
+    ) -> None:
+        await self.bot_app.dirs_service.send_menu(
+            chat_id,
+            context,
+            base,
+            message_thread_id=message_thread_id,
+        )
+
+    async def _send_files_menu(
+        self,
+        chat_id: int,
+        session: Session,
+        context: ContextTypes.DEFAULT_TYPE,
+        edit_message: Optional[object],
+        message_thread_id: Optional[int] = None,
+    ) -> None:
+        if edit_message and getattr(edit_message, "message", None):
+            ui_key = self.bot_app.telegram_ui_key_from_query(edit_message) or self.bot_app.telegram_ui_key(
+                chat_id,
+                message_thread_id,
+            )
+        else:
+            scope = getattr(session, "conversation_scope", None)
+            thread_id = message_thread_id
+            if (
+                thread_id is None
+                and getattr(scope, "message_thread_id", None) is not None
+                and int(getattr(scope, "chat_id", 0) or 0) == int(chat_id)
+            ):
+                thread_id = int(scope.message_thread_id)
+            ui_key = self.bot_app.telegram_ui_key(chat_id, thread_id)
+        base = self.bot_app.ui_state.files_dir.get(ui_key, session.workdir)
+        owner_chat_id = int(getattr(session, "chat_id", None) or chat_id)
+        session_uid = session_uid_for_files(owner_chat_id, session)
+        rel_base = files_rel_path(session, base)
+        try:
+            tree = await resolve_files_payload(
+                session_files_service(self.bot_app).tree(
+                    owner_chat_id,
+                    session_uid,
+                    rel_base,
+                    protect_sensitive=False,
+                )
+            )
+        except FilesServiceError:
+            rel_base = "."
+            base = session.workdir
+            self.bot_app.ui_state.files_dir[ui_key] = base
+            self.bot_app.ui_state.files_page[ui_key] = 0
+            try:
+                tree = await resolve_files_payload(
+                    session_files_service(self.bot_app).tree(
+                        owner_chat_id,
+                        session_uid,
+                        ".",
+                        protect_sensitive=False,
+                    )
+                )
+            except FilesServiceError:
+                tree = {"path": ".", "items": []}
+        current_rel_path = str(tree.get("path") or rel_base or ".")
+        base = files_display_path(session, current_rel_path)
+        self.bot_app.ui_state.files_dir[ui_key] = base
+        entries = []
+        for item in list(tree.get("items") or []):
+            if not isinstance(item, dict):
+                continue
+            rel_path = str(item.get("path") or "")
+            if not rel_path:
+                continue
+            entry = dict(item)
+            entry["rel_path"] = rel_path
+            entry["path"] = files_display_path(session, rel_path)
+            entries.append(entry)
+        self.bot_app.ui_state.files_entries[ui_key] = entries
+        page = max(0, self.bot_app.ui_state.files_page.get(ui_key, 0))
+        page_size = 20
+        start = page * page_size
+        end = start + page_size
+        page_entries = entries[start:end]
+        total_pages = max(1, (len(entries) + page_size - 1) // page_size)
+        if page >= total_pages:
+            page = max(0, total_pages - 1)
+            self.bot_app.ui_state.files_page[ui_key] = page
+            start = page * page_size
+            end = start + page_size
+            page_entries = entries[start:end]
+        rows = []
+        for idx, entry in enumerate(page_entries, start=start):
+            if entry["is_dir"]:
+                open_cb = f"file_nav:open:{idx}"
+                label = f"📁 {entry['name']}"
+            else:
+                open_cb = f"file_pick:{idx}"
+                label = f"📄 {entry['name']}"
+            rows.append(
+                [
+                    InlineKeyboardButton(self.bot_app._short_label(label, 60), callback_data=open_cb),
+                    InlineKeyboardButton("✏️", callback_data=f"file_rename:{idx}"),
+                    InlineKeyboardButton("🗑", callback_data=f"file_del:{idx}"),
+                ]
+            )
+        nav_row = []
+        nav_row.append(InlineKeyboardButton("⬅️ вверх", callback_data="file_nav:up"))
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("◀️", callback_data="file_nav:prev"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton("▶️", callback_data="file_nav:next"))
+        if nav_row:
+            rows.append(nav_row)
+        if current_rel_path not in ("", "."):
+            rows.append([InlineKeyboardButton("🗑 Удалить эту папку", callback_data="file_del_current")])
+        rows.append([InlineKeyboardButton("💾 Сохранить сюда (2 мин)", callback_data="file_save_here")])
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="file_nav:cancel")])
+        text = f"Каталог: {base}\nСтраница {page + 1}/{total_pages}"
+        pending_upload = self.bot_app.ui_state.files_pending_upload.get(ui_key)
+        if pending_upload:
+            expires_at = float(pending_upload.get("expires_at", 0.0))
+            remaining = max(0, int(expires_at - time.time()))
+            pending_dir = os.path.abspath(str(pending_upload.get("dir") or ""))
+            if pending_dir == os.path.abspath(base):
+                text += f"\n⏳ Ожидание файла: {remaining} сек."
+            else:
+                text += f"\n⏳ Ожидание файла включено в другом каталоге: {remaining} сек."
+        keyboard = InlineKeyboardMarkup(rows)
+        if edit_message:
+            if getattr(edit_message, "message", None):
+                await self.bot_app._edit_message(
+                    context,
+                    chat_id=edit_message.message.chat_id,
+                    message_id=edit_message.message.message_id,
+                    text=text,
+                    md2=True,
+                    reply_markup=keyboard,
+                )
+        else:
+            await self.bot_app._send_message(
+                context,
+                text=text,
+                reply_markup=keyboard,
+                **ui_key.reply_kwargs(),
+            )
+
+    async def cmd_preset(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        presets = self.bot_app._preset_commands()
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(k, callback_data=f"preset_run:{k}")] for k in presets.keys()]
+            + [[InlineKeyboardButton("❌ Отмена", callback_data="preset_run:cancel")]]
+        )
+        await self.bot_app._send_message(
+            context,
+            text="Выберите шаблон:",
+            reply_markup=keyboard,
+            **self._reply_kwargs(update),
+        )
+
+    async def cmd_metrics(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        await self.bot_app._send_message(context, text=self.bot_app.metrics.snapshot(), **self._reply_kwargs(update))
+
+    def _lint_evolution_workdir(self, update: Update) -> str:
+        chat_id = int(getattr(update.effective_chat, "id", 0) or 0)
+        thread_id = getattr(getattr(update, "effective_message", None), "message_thread_id", None)
+        session = self.bot_app.resolve_telegram_scope_session(
+            reply_chat_id=chat_id,
+            message_thread_id=thread_id,
+        )
+        wd = str(getattr(session, "workdir", "") or "").strip() if session else ""
+        if wd:
+            return wd
+        return str(self.bot_app.config.defaults.workdir or self._project_root())
+
+    async def _lint_evolution_admin_guard(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> bool:
+        chat_id = int(getattr(update.effective_chat, "id", 0) or 0)
+        if not await self._ensure_allowed(chat_id, context, update=update, allow_outside_topic=True):
+            return False
+        if not await self._require_admin(
+            chat_id, context, scope="generic", update=update, allow_outside_topic=True
+        ):
+            return False
+        return True
+
+    async def cmd_lint_evolution_status(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._lint_evolution_admin_guard(update, context):
+            return
+        from app.services.lint_evolution import autopause as _ap
+        from app.services.lint_evolution import (
+            rules_store as _rs,
+            schema_store as _ss,
+            state as _state_store,
+            weights_store as _ws,
+        )
+        from app.services.lint_evolution.paths import lint_root, project_id_for
+
+        workdir = self._lint_evolution_workdir(update)
+        pid = project_id_for(workdir)
+        st = _state_store.load_state(workdir)
+        project = st.projects.get(pid)
+        ap = _ap.status(workdir)
+
+        lines = [
+            "Lint Evolution status",
+            f"workdir: {workdir}",
+            f"project_id: {pid}",
+            f"lint_root: {lint_root(workdir)}",
+            f"active_rules: {sum(1 for r in _rs.load_rules(workdir) if r.state == 'active')}",
+            f"schema_version: {_ss.load_state(workdir).active_version}",
+            f"weights_history: {_ws.history_count(workdir)}",
+        ]
+        if project is not None:
+            for level_name, lvl in (
+                ("L1", project.level1),
+                ("L2", project.level2),
+                ("L3", project.level3),
+            ):
+                lines.append(
+                    f"{level_name}: last_run={int(lvl.last_run_ts)} "
+                    f"fails={lvl.consecutive_failures} lock={lvl.lock_owner or '-'}"
+                )
+        for key in ("1", "2", "3"):
+            entry = ap.get(key)
+            if entry and entry.paused:
+                lines.append(f"autopause L{key}: PAUSED ({entry.reason})")
+            else:
+                lines.append(f"autopause L{key}: ok")
+
+        await self.bot_app._send_message(
+            context, text="\n".join(lines), **self._reply_kwargs(update)
+        )
+
+    async def cmd_lint_autopause_resume(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._lint_evolution_admin_guard(update, context):
+            return
+        from app.services.lint_evolution import autopause as _ap
+
+        args = list(getattr(context, "args", None) or [])
+        if not args:
+            await self.bot_app._send_message(
+                context,
+                text="Использование: /lint_autopause_resume <level: 1|2|3>",
+                **self._reply_kwargs(update),
+            )
+            return
+        try:
+            level = int(args[0])
+        except (TypeError, ValueError):
+            await self.bot_app._send_message(
+                context, text="level должен быть целым числом 1/2/3.", **self._reply_kwargs(update)
+            )
+            return
+        if level not in (1, 2, 3):
+            await self.bot_app._send_message(
+                context, text="level должен быть 1, 2 или 3.", **self._reply_kwargs(update)
+            )
+            return
+
+        workdir = self._lint_evolution_workdir(update)
+        try:
+            resumed = _ap.resume(workdir, level)
+        except ValueError as exc:
+            await self.bot_app._send_message(
+                context, text=f"Ошибка: {exc}", **self._reply_kwargs(update)
+            )
+            return
+        if resumed:
+            text = f"Lint Evolution L{level}: autopause снят."
+        else:
+            text = f"Lint Evolution L{level}: пауза не была активна — изменений нет."
+        await self.bot_app._send_message(context, text=text, **self._reply_kwargs(update))
+
+    async def cmd_lint_schema_history(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._lint_evolution_admin_guard(update, context):
+            return
+        from app.services.lint_evolution import schema_store as _ss
+
+        workdir = self._lint_evolution_workdir(update)
+        state = _ss.load_state(workdir)
+        fields = _ss.existing_field_names(workdir)
+        proposals = _ss.load_proposals(workdir)
+        deprecated = _ss.load_deprecated(workdir)
+        lines = [
+            f"Schema active_version: {state.active_version}",
+            f"last_bump_ts: {int(state.last_bump_ts)}",
+            f"fields ({len(fields)}): {', '.join(fields) or '-'}",
+            f"pending proposals: {len(proposals)}",
+            f"deprecated fields: {len(deprecated)}",
+        ]
+        if proposals:
+            for p in proposals[:5]:
+                name = p.get("proposed_name") or "?"
+                decision = p.get("decision") or "?"
+                lines.append(f"  · {name} → {decision}")
+        await self.bot_app._send_message(
+            context, text="\n".join(lines), **self._reply_kwargs(update)
+        )
+
+    async def cmd_lint_gate_dry_run(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._lint_evolution_admin_guard(update, context):
+            return
+        from pathlib import Path as _Path
+
+        from app.services.lint_evolution import rules_store as _rs
+        from app.services.lint_evolution.gate_service import LintGateService
+
+        workdir = self._lint_evolution_workdir(update)
+        project_root = _Path(workdir)
+        active = [r for r in _rs.load_rules(workdir) if r.state == "active"]
+        if not active:
+            await self.bot_app._send_message(
+                context,
+                text="Lint Evolution: активных правил нет — нечего применять.",
+                **self._reply_kwargs(update),
+            )
+            return
+
+        py_files = sorted(project_root.rglob("*.py"))[:200]
+        try:
+            gate = LintGateService(workdir=workdir, project_root=project_root)
+            result = gate.run_on_files(py_files)
+        except Exception as exc:
+            logging.exception("lint_gate_dry_run failed: %s", exc)
+            await self.bot_app._send_message(
+                context, text=f"Ошибка lint-gate: {exc}", **self._reply_kwargs(update)
+            )
+            return
+
+        lines = [
+            f"Lint Gate dry-run: rules={result.rules_evaluated} files={result.files_scanned}",
+            f"skipped (non-regex): {result.skipped_rules}",
+            f"findings: {len(result.findings)}",
+        ]
+        for f in result.findings[:10]:
+            try:
+                rel = _Path(f.file).relative_to(project_root)
+            except ValueError:
+                rel = _Path(f.file)
+            lines.append(f"  · {f.rule_id} {rel}:{f.line}")
+        if len(result.findings) > 10:
+            lines.append(f"  … ещё {len(result.findings) - 10}")
+        await self.bot_app._send_message(
+            context, text="\n".join(lines), **self._reply_kwargs(update)
+        )

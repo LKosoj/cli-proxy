@@ -1,0 +1,58 @@
+# flake8: noqa
+prompts:
+  openai_error_text: |
+    Для работы Аналитика нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml.
+
+  audit_openai_error_text: |
+    Для работы Аудита нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml.
+
+  workdir_error_text: |
+    Сначала создайте сессию через /sessions.
+
+  run_pipeline_codebase_tail: |
+    Учитывай карту кодовой базы как навигационный индекс и подтверждай вывод по реальным файлам проекта.
+
+  # Source of truth для repo-grounded prompt'ов = код/конфиги/тесты проекта.
+  # Артефакты Codebase Mapper допустимы только как навигационный индекс, но не как нормативный источник истины.
+  codebase_intro: |
+    В проекте есть артефакты Codebase Mapper. Используй их как навигационный индекс по репозиторию, затем проверяй вывод по реальным файлам проекта:
+
+  codebase_stack: |
+    - `.cli-proxy/.codebase_map/STACK.md`: стек, языки, зависимости и toolchain.
+
+  codebase_architecture: |
+    - `.cli-proxy/.codebase_map/ARCHITECTURE.md`: слои, модули, ключевые архитектурные зоны.
+
+  codebase_structure: |
+    - `.cli-proxy/.codebase_map/STRUCTURE.md`: структура каталогов и навигация по файлам.
+
+  codebase_integrations: |
+    - `.cli-proxy/.codebase_map/INTEGRATIONS.md`: внешние интеграции, API/MCP/миниапп.
+
+  codebase_conventions: |
+    - `.cli-proxy/.codebase_map/CONVENTIONS.md`: соглашения по коду и style-правила.
+
+  codebase_testing: |
+    - `.cli-proxy/.codebase_map/TESTING.md`: подход к тестам и test surface.
+
+  codebase_concerns: |
+    - `.cli-proxy/.codebase_map/CONCERNS.md`: риски, техдолг и проблемные места.
+
+  codebase_outro: |
+    Если ответ требует деталей, явно опирайся на релевантные файлы карты.
+
+  repo_consistency_review_rules: |
+    Repo consistency review rules:
+    - при архитектурных или cross-surface изменениях проверяй, какие поверхности реально затронуты кодом или требованием;
+    - сверяй вывод между кодом, конфигами, документами и тестами, а не опирайся на один артефакт;
+    - если данных недостаточно для уверенного вывода, явно фиксируй это как допущение или открытый вопрос;
+    - перед финальными рекомендациями перепроверь, нет ли противоречий между реализацией, конфигурацией и пользовательским запросом.
+
+  affected_surfaces_checklist: |
+    Affected surfaces checklist:
+    - перечисляй только те поверхности и артефакты, которые прямо следуют из задачи и подтверждены проектом;
+    - не подставляй фиксированный список платформ, каналов, конфигов, docs или tests "по умолчанию";
+    - если поверхность отсутствует в проекте или не затронута текущей задачей, не упоминай её.
+
+  audit_pick_path_hint: |
+    Выберите файл или папку для аудита.

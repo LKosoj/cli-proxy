@@ -1,0 +1,34 @@
+# Startup weights for lint_evolution decision engine. Tunable without code release.
+# Layer 3 (regressor) updates this in place via weights_store; weights_history.yaml
+# preserves prior versions.
+schema_version: 1
+generated_by: bootstrap
+thresholds:
+  apply: 2.5
+  revise: 1.0
+  merge: 1.5
+  # Layer 2 thresholds (schema decision)
+  extend_schema: 1.5
+  propose: 0.8
+weights:
+  category_security: 2.0
+  category_correctness: 1.5
+  category_architecture: 1.0
+  category_style: 0.0
+  category_performance: 1.0
+  detector_regex: 1.0
+  detector_ast: 1.0
+  detector_shell: 0.5
+  detector_llm_only: 0.0
+  fp_risk_high: -2.0
+  fp_risk_medium: -1.0
+  fp_risk_low: 0.0
+  scope_objective: 0.5
+  scope_context_dependent: -0.5
+  scope_subjective: -1.5
+  confidence_multiplier: 0.5
+  # Layer 2 (schema)
+  examples_count_norm: 1.0
+  distinct_cases_norm: 1.0
+  proposed_type_bool: 0.5
+  proposal_repeat_penalty: -1.0

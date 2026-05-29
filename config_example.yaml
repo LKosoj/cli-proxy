@@ -1,0 +1,317 @@
+telegram:
+  token: "YOUR_TELEGRAM_BOT_TOKEN"
+  whitelist_chat_ids: [111111111]
+  # Admins: full access (including /files, /git, git clone, session creation).
+  admlist_chat_ids: [123456789]
+  # Allowed projects for non-admin users (key: chat_id).
+  # Users can ONLY switch between these exact paths; they cannot pick nested dirs.
+  user_workdirs:
+    111111111:
+      - "/Users/you/projects/projectA"
+      - "/Users/you/projects/projectB"
+  # Allowed modes for non-admin users (key: chat_id).
+  # If user_modes is not set for a user -> no modes are available.
+  # Use "all" to allow all registered modes plus virtual `direct_cli` and `orchestrator`,
+  # or list explicit mode IDs including those virtual entries.
+  user_modes:
+    111111111: ["agent", "analyst", "direct_cli", "orchestrator"]
+    # 222222222: "all"
+  # Telegram API request timeouts (python-telegram-bot / httpx)
+  connection_pool_size: 8
+  connect_timeout_sec: 20
+  read_timeout_sec: 20
+  write_timeout_sec: 20
+  pool_timeout_sec: 10
+  # getUpdates long-poll timeout (seconds). Lower means more frequent requests when idle.
+  polling_timeout_sec: 5
+  # Delay between polls (seconds). Keep 0 for best responsiveness.
+  poll_interval_sec: 0
+
+tools:
+  codex:
+    mode: headless
+    cmd: ["codex", "exec", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
+    enabled: true
+    interactive_cmd: ["codex"]
+    resume_cmd: ["codex", "exec", "resume", "{resume}", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
+    image_cmd: ["--image", "{image}"]
+    resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
+    help_cmd: "/status"
+    auto_commands: ["/approvals full"]
+    separate_stderr: true  # codex exec пишет ответ в stdout, прогресс/эхо в stderr
+    env:
+      ENV1: null
+      ENV2: null
+      ENV3: null
+  claude:
+    mode: headless
+    cmd: ["claude", "-p", "--verbose", "--output-format", "stream-json", "--continue", "--dangerously-skip-permissions", "{prompt}", "--resume", "{resume}"]
+    enabled: true
+    interactive_cmd: ["claude"]
+    help_cmd: "/help"
+    # Opt-in: добавлять `--no-session-persistence` для fresh-стартов claude.
+    # Уменьшает шум в ~/.claude/projects, НО ломает session_transfer
+    # (reader_claude не сможет прочитать transcript с диска). По умолчанию false.
+    no_session_persistence_on_fresh: false
+    env:
+      ENV4: null
+  gemini:
+    mode: headless
+    cmd: ["gemini", "--output-format", "stream-json", "--approval-mode", "yolo", "--resume", "{resume}", "-p", "{prompt}"]
+    enabled: true
+    interactive_cmd: ["gemini"]
+    help_cmd: "/help"
+    env:
+      ENV5: null
+  qwen:
+    mode: headless
+    cmd: ["qwen", "--output-format", "stream-json", "--yolo", "--continue", "--prompt", "{prompt}", "--resume", "{resume}"]
+    enabled: true
+    interactive_cmd: ["qwen"]
+    help_cmd: "/help"
+    env:
+      ENV6: null
+
+defaults:
+  workdir: "/Users/you/projects"
+  default_cli: "qwen"
+  idle_timeout_sec: 100
+  summary_max_chars: 4000
+  html_filename_prefix: "cli-output"
+  state_path: "state.json"
+  desktop_state_path: "desktop_state.json"
+  toolhelp_path: "toolhelp.json"
+  openai_api_key: null
+  openai_model: null
+  openai_big_model: null
+  openai_base_url: "https://api.openai.com"
+  zai_api_key: null
+  tavily_api_key: null
+  jina_api_key: null
+  github_token: null
+  gemini_oauth_client_secret: null
+  log_path: "./logs/bot.log"
+  image_temp_dir: ".cli-proxy/.attachments"
+  image_max_mb: 10
+  memory_max_kb: 32
+  memory_compact_target_kb: 24
+
+  memory_events_enabled: false            # shadow append-only события для будущей консолидации памяти; выключено по умолчанию
+  memory_native_cli_hooks_enabled: false  # opt-in adapter для native Codex/Claude hooks; не включает хуки автоматически
+  memory_outcomes_enabled: false          # shadow outcome/rubric records; не влияет на решения агента
+  memory_dreaming_enabled: false          # async consolidation preview/apply pipeline; выключено по умолчанию
+  memory_events_retention_days: 30        # TTL для memory events, отдельно от run_artifacts_retention_days
+  memory_events_max_payload_chars: 6000   # максимум redacted payload на событие
+  memory_events_redaction_enabled: true   # редактирует очевидные секреты перед записью memory events
+  memory_dreaming_batch_size: 20          # максимум runs/events-batches за один dreaming pass
+  pending_input_confirmation_enabled: true  # если true, любое входящее сообщение сначала требует confirm; после confirm busy-сессия отдельно спрашивает о постановке в очередь. Если false, первое confirm пропускается, но вопрос о постановке в очередь для busy-сессии все равно показывается
+
+  # Manager mode (multi-agent orchestration: CLI developer + Agent reviewer)
+  manager_max_tasks: 10
+  manager_max_attempts: 3
+  manager_decompose_timeout_sec: 600
+  manager_dev_timeout_sec: 3600
+  manager_review_timeout_sec: 600
+  analyst_use_cli_timeout_sec: 3600
+  webmaster_use_cli_timeout_sec: 3600
+  webmaster_validation_max_fix_iterations: 2
+  manager_dev_report_max_chars: 8000
+  manager_auto_resume: true
+  manager_auto_commit: true         # git commit после каждого одобренного шага плана
+  manager_response_archive: true           # сохранять сырые ответы CLI/агентов в .cli-proxy/.manager/response/
+  cli_json_stream_archive_enabled: false   # если true, JSON-stream CLIs архивируют сырые raw.jsonl и normalized.jsonl события в .cli-proxy/cli-json-stream/
+  assistant_preview_enabled: false         # если true, Telegram/Desktop показывают во время run один live preview из assistant_text и убирают его после финального ответа
+  codebase_mapper_usage: "auto"     # auto|enabled|disabled (сейчас auto работает как enabled)
+  run_artifacts_enabled: true       # включает durable run trace: STATE/PLAN/CHECKPOINTS/METRICS/RECOVERY/EVENTS для mode-run и shared recovery tooling
+  run_artifacts_retention_days: 30  # prune_old_runs() удаляет завершённые run старше этого TTL; активные running run всегда shielded от cleanup
+  run_doctor_enabled: true          # включает backend doctor/recover/resume: doctor читает run artifacts + legacy state и пишет рекомендации в RECOVERY.json
+  run_boundary_validation_enabled: true  # запрещает phase transition при несогласованном STATE/PLAN/legacy store; влияет на review/validation/complete gates
+  run_metrics_enabled: true         # пишет unit-level token/cost/duration aggregates в METRICS.json; Desktop/MiniApp и doctor используют эти данные для диагностики
+
+  # Progressive Disclosure: "full" отправляет полные схемы всех инструментов в LLM;
+  # "progressive" отправляет краткие описания + мета-tool get_tool_details.
+  # При progressive экономится 30-50% контекстного окна при 40+ плагинах.
+  tool_disclosure: "full"
+
+  # Token counting и управление контекстом.
+  # context_window_tokens: размер контекстного окна модели (в токенах).
+  # context_reserve_tokens: резерв токенов для ответа модели.
+  # summarization_threshold: доля окна (0.0-1.0), при превышении которой происходит суммаризация.
+  context_window_tokens: 128000
+  context_reserve_tokens: 8000
+  summarization_threshold: 0.75
+
+  # LLM trace logging: записывает llm_request/llm_response/tool_execution события в EVENTS.jsonl.
+  # Полезно для отладки агентных цепочек, но увеличивает объём артефактов.
+  llm_trace_enabled: false
+  skill_discovery_mode: "suggest"   # off=не выбирать skills; suggest=подмешивать только уже доступные; auto=искать и ставить allowlisted skills локально в проект
+  skill_install_policy: "manual"    # manual=только предложить skill; admin_approve=создать pending approval в .cli-proxy/skills/.skill_install_approval_ledger.json и ждать explicit approve/reject от администратора; allowlisted_auto=автоставить allowlisted skill в project-local registry
+  # project-local registry остаётся каноническим target для auto-install; при конфликте project skill перекрывает global.
+  skill_registry_paths:
+    - ".cli-proxy/skills"           # project-local registry для discover/install/promote flows; безопасен для экспериментальных skill без влияния на другие проекты
+  skill_allowlisted_sources:
+    - "local:global-registry"       # разрешает переиспользовать уже установленные общие skills без новой загрузки
+    - "local:project-registry"      # разрешает project-local skills, которые selector подмешивает в prompt первыми
+    - "path:absolute"               # разрешает вручную подключать skill из абсолютного пути на локальной машине
+    - "registry:npx-skills"         # разрешает discovery через npx registry adapter; без allowlist auto-install не произойдёт
+    - "ref:owner-repo-skill"        # разрешает explicit owner/repo@skill refs; удобно для controlled install/promote сценариев
+  # Актуальные runtime-заметки (без дополнительных ключей):
+  # - Analyst pre-run reset выполняется mode-scoped и сохраняет project_root/agent_memory/active_mode/manager_quiet_mode.
+  # - Pending busy-вводы: FIFO deque per chat, жёсткий лимит 5, при переполнении отправляется уведомление.
+  # - Manager pending prompt очищается только после успешного resume; при сбое ask_user сохраняется.
+  clarification_enabled: true
+  clarification_keywords:
+    - "уточни"
+    - "уточните"
+    - "не ясно"
+    - "непонятно"
+    # Важно: не используйте слишком общие слова типа "какой/сколько/когда",
+    # иначе уточнение будет срабатывать почти на любой вопрос.
+
+  cli_routing:
+    analytics:
+    - gemini
+    - qwen
+    - codex
+    - claude
+    planning:
+    - gemini
+    - qwen
+    - codex
+    - claude
+    development:
+    - codex
+    - claude
+    - gemini
+    - qwen
+    backend_dev:
+    - codex
+    - gemini
+    - claude
+    - qwen
+    frontend_dev:
+    - gemini
+    - claude
+    - qwen
+    - codex
+    administration:
+    - claude
+    - gemini
+    - codex
+    - claude
+    website_administration:
+    - codex
+    - gemini
+    - claude
+    - qwen
+    default:
+    - codex
+    - gemini
+    - claude
+    - qwen
+mcp:
+  enabled: false
+  host: "127.0.0.1"
+  port: 8765
+  token: null
+
+miniapp:
+  enabled: true
+  bind_host: "127.0.0.1"
+  bind_port: 8088
+  base_path: "/cli-proxy"
+  public_url: ""
+  max_edit_file_size_kb: 5120
+  enable_delete: true
+
+# Thread Mode happy path: one Telegram session -> one forum topic in topics_chat_id.
+# Runbook copy/paste:
+# - validated config load failed ... topics_chat_id is required when mode='group'
+# - startup capability check failed ... BotFather -> /mybots -> Bot Settings -> Group Topics
+thread_mode:
+  enabled: true  # Enable scope-bound forum topics routing and auto-manage per-session topics.
+  mode: "group"  # private -> direct chat routing; group -> strict message_thread_id routing in forum topics.
+  topics_chat_id: -1001234567890  # Supergroup id that stores session topics; required when mode='group'.
+  topic_title_prefix: ""  # Prefix used when SessionThreadManager creates or repairs topic titles. Default is empty (no prefix).
+  inactivity_ttl_sec: 86400  # Seconds before inactive topic metadata is considered stale for reconcile/repair.
+
+# Webhook happy path: shared aiohttp ingress accepts /webhooks/{provider} and emits WebhookReceivedEvent.
+webhooks:
+  enabled: true  # Turn on shared HTTP ingress for external webhook providers.
+  path: "/webhooks/telegram"  # Public Telegram webhook path; must start with "/" and usually lives behind HTTPS.
+  public_base_url: "https://bot.example.com"  # External HTTPS base URL used in support runbooks and reverse proxy config.
+  secret_token: "change-me-webhook-secret"  # Shared secret checked via X-Telegram-Bot-Api-Secret-Token / X-Webhook-Secret-Token.
+  request_timeout_sec: 30  # Max seconds to process one webhook request before the ingress returns timeout.
+  max_payload_bytes: 1048576  # Hard request body limit to reject oversized webhook payloads early.
+
+# Scheduler happy path: persistent SQLite jobs emit ScheduledJobEvent and reports return to notification_target.telegram_session_uid.
+scheduler:
+  enabled: true  # Start embedded scheduler service and restore persisted jobs on startup.
+  timezone: "Europe/Moscow"  # Cron timezone used for next_run_at calculation and operator mental model.
+  tick_interval_sec: 60  # Poll interval between scheduler wakeups; lower means faster trigger latency.
+  max_concurrent_jobs: 1  # Max simultaneous job executions emitted by the scheduler service.
+  job_timeout_sec: 3600  # Safety timeout for one job emission pipeline before it is treated as failed.
+  misfire_grace_sec: 30  # Allowed lateness window before a missed cron fire is skipped.
+
+security:
+  rate_limits:
+    enabled: false
+    backend: "sqlite"
+    sqlite_path: null  # null -> reuse defaults.state_path SQLite DB
+    default: null
+    policies: {}
+
+# Self-evolving lint rules (classify→decide→feedback fractal). Triggers in the
+# background on session activity; never blocks the user reply. Defaults are
+# conservative — system stays no-op until enabled and signals accumulate.
+lint_evolution:
+  enabled: false  # Master switch; when off, no levels run and no admin commands act on data.
+  level1_cooldown_hours: 24  # Curator (signals→rules) — runs at most once per project per day.
+  level2_cooldown_hours: 720  # Meta-curator (notes→schema fields) — monthly cadence.
+  level3_cooldown_hours: 720  # Regressor (outcomes→weights) — monthly cadence.
+  lock_ttl_minutes: 30  # Per-level lock TTL; protects against stuck runs.
+  error_retry_hours: 1  # Cooldown applied after a failed run before retry.
+  fp_growth_threshold_pct: 50  # Canary: rolling/baseline fp_rate growth that triggers autopause(L1+L2).
+  canary_rolling_days: 7  # Window for the recent fp_rate measurement.
+  canary_baseline_days: 30  # Window for the baseline fp_rate measurement.
+  canary_max_schema_fields_per_180d: 3  # Schema-thrash cap; over this triggers autopause(L2).
+
+mcp_clients:
+  # MCP client connections (external servers). Use `transport=stdio` for local
+  # processes and `transport=http` for HTTP MCP endpoints.
+  - name: "context7"
+    enabled: true
+    transport: "http"
+    url: "http://127.0.0.1:8888/servers/context7/mcp"
+    timeout_ms: 30000
+  - name: "notebooklm"
+    enabled: true
+    transport: "http"
+    url: "http://127.0.0.1:8888/servers/notebooklm/mcp"
+    timeout_ms: 30000
+  - name: "vsegpt_image"
+    enabled: true
+    transport: "http"
+    url: "http://127.0.0.1:8888/servers/vsegpt_image/mcp"
+    timeout_ms: 30000
+  - name: "vsegpt_tts"
+    enabled: true
+    transport: "http"
+    url: "http://127.0.0.1:8888/servers/vsegpt_tts/mcp"
+    timeout_ms: 30000
+  - name: "chrome-devtools"
+    enabled: true
+    transport: "http"
+    url: "http://127.0.0.1:8888/servers/chrome-devtools/mcp"
+    timeout_ms: 30000
+  - name: "sequentialthinking-tools"
+    enabled: true
+    transport: "http"
+    url: "http://127.0.0.1:8888/servers/sequentialthinking-tools/mcp"
+    timeout_ms: 30000
+
+presets:
+  - name: "tests"
+    prompt: "Запусти тесты и дай краткий отчёт."
+  - name: "lint"
+    prompt: "Запусти линтер/форматтер и дай краткий отчёт."

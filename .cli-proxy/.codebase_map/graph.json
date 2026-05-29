@@ -1,0 +1,2646 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-27T22:43:23Z",
+  "operation": "init_full",
+  "force": true,
+  "nodes": [
+    {
+      "id": "node:tests",
+      "type": "instruction_node",
+      "title": "tests",
+      "path": "nodes/tests.md",
+      "source_glob": "tests/**",
+      "file_count": 483
+    },
+    {
+      "id": "node:modes",
+      "type": "instruction_node",
+      "title": "modes",
+      "path": "nodes/modes.md",
+      "source_glob": "modes/**",
+      "file_count": 168
+    },
+    {
+      "id": "node:app",
+      "type": "instruction_node",
+      "title": "app",
+      "path": "nodes/app.md",
+      "source_glob": "app/**",
+      "file_count": 145
+    },
+    {
+      "id": "node:agent",
+      "type": "instruction_node",
+      "title": "agent",
+      "path": "nodes/agent.md",
+      "source_glob": "agent/**",
+      "file_count": 61
+    },
+    {
+      "id": "node:desktop",
+      "type": "instruction_node",
+      "title": "desktop",
+      "path": "nodes/desktop.md",
+      "source_glob": "desktop/**",
+      "file_count": 29
+    },
+    {
+      "id": "node:tg",
+      "type": "instruction_node",
+      "title": "tg",
+      "path": "nodes/tg.md",
+      "source_glob": "tg/**",
+      "file_count": 16
+    },
+    {
+      "id": "node:miniapp",
+      "type": "instruction_node",
+      "title": "miniapp",
+      "path": "nodes/miniapp.md",
+      "source_glob": "miniapp/**",
+      "file_count": 19
+    },
+    {
+      "id": "node:sessions",
+      "type": "instruction_node",
+      "title": "sessions",
+      "path": "nodes/sessions.md",
+      "source_glob": "sessions/**",
+      "file_count": 10
+    },
+    {
+      "id": "node:utils",
+      "type": "instruction_node",
+      "title": "utils",
+      "path": "nodes/utils.md",
+      "source_glob": "utils/**",
+      "file_count": 7
+    },
+    {
+      "id": "node:session-json",
+      "type": "instruction_node",
+      "title": "SESSION.json",
+      "path": "nodes/session-json.md",
+      "source_glob": "SESSION.json",
+      "file_count": 0
+    },
+    {
+      "id": "node:bot-py",
+      "type": "instruction_node",
+      "title": "bot.py",
+      "path": "nodes/bot-py.md",
+      "source_glob": "bot.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:code-stats-py",
+      "type": "instruction_node",
+      "title": "code_stats.py",
+      "path": "nodes/code-stats-py.md",
+      "source_glob": "code_stats.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:config-py",
+      "type": "instruction_node",
+      "title": "config.py",
+      "path": "nodes/config-py.md",
+      "source_glob": "config.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:config-example-yaml",
+      "type": "instruction_node",
+      "title": "config_example.yaml",
+      "path": "nodes/config-example-yaml.md",
+      "source_glob": "config_example.yaml",
+      "file_count": 1
+    },
+    {
+      "id": "node:conftest-py",
+      "type": "instruction_node",
+      "title": "conftest.py",
+      "path": "nodes/conftest-py.md",
+      "source_glob": "conftest.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:fix-permissions-sh",
+      "type": "instruction_node",
+      "title": "fix-permissions.sh",
+      "path": "nodes/fix-permissions-sh.md",
+      "source_glob": "fix-permissions.sh",
+      "file_count": 1
+    },
+    {
+      "id": "node:full-ui-yaml",
+      "type": "instruction_node",
+      "title": "full_ui.yaml",
+      "path": "nodes/full-ui-yaml.md",
+      "source_glob": "full_ui.yaml",
+      "file_count": 0
+    },
+    {
+      "id": "node:gen-init-data-py",
+      "type": "instruction_node",
+      "title": "gen_init_data.py",
+      "path": "nodes/gen-init-data-py.md",
+      "source_glob": "gen_init_data.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:miniapp-pid",
+      "type": "instruction_node",
+      "title": "miniapp.pid",
+      "path": "nodes/miniapp-pid.md",
+      "source_glob": "miniapp.pid",
+      "file_count": 0
+    },
+    {
+      "id": "node:mkdocs-yml",
+      "type": "instruction_node",
+      "title": "mkdocs.yml",
+      "path": "nodes/mkdocs-yml.md",
+      "source_glob": "mkdocs.yml",
+      "file_count": 1
+    },
+    {
+      "id": "node:parse-status-py",
+      "type": "instruction_node",
+      "title": "parse_status.py",
+      "path": "nodes/parse-status-py.md",
+      "source_glob": "parse_status.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:playwright-config-json",
+      "type": "instruction_node",
+      "title": "playwright_config.json",
+      "path": "nodes/playwright-config-json.md",
+      "source_glob": "playwright_config.json",
+      "file_count": 1
+    },
+    {
+      "id": "node:pytest-ini",
+      "type": "instruction_node",
+      "title": "pytest.ini",
+      "path": "nodes/pytest-ini.md",
+      "source_glob": "pytest.ini",
+      "file_count": 1
+    },
+    {
+      "id": "node:requirements-txt",
+      "type": "instruction_node",
+      "title": "requirements.txt",
+      "path": "nodes/requirements-txt.md",
+      "source_glob": "requirements.txt",
+      "file_count": 1
+    },
+    {
+      "id": "node:scripts",
+      "type": "instruction_node",
+      "title": "scripts",
+      "path": "nodes/scripts.md",
+      "source_glob": "scripts/**",
+      "file_count": 1
+    },
+    {
+      "id": "node:session-py",
+      "type": "instruction_node",
+      "title": "session.py",
+      "path": "nodes/session-py.md",
+      "source_glob": "session.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:setup-bot-sh",
+      "type": "instruction_node",
+      "title": "setup_bot.sh",
+      "path": "nodes/setup-bot-sh.md",
+      "source_glob": "setup_bot.sh",
+      "file_count": 1
+    },
+    {
+      "id": "node:skills-lock-json",
+      "type": "instruction_node",
+      "title": "skills-lock.json",
+      "path": "nodes/skills-lock-json.md",
+      "source_glob": "skills-lock.json",
+      "file_count": 1
+    },
+    {
+      "id": "node:start-miniapp-py",
+      "type": "instruction_node",
+      "title": "start_miniapp.py",
+      "path": "nodes/start-miniapp-py.md",
+      "source_glob": "start_miniapp.py",
+      "file_count": 1
+    },
+    {
+      "id": "node:summary-py",
+      "type": "instruction_node",
+      "title": "summary.py",
+      "path": "nodes/summary-py.md",
+      "source_glob": "summary.py",
+      "file_count": 1
+    }
+  ],
+  "organizational_rules": [
+    {
+      "id": "rule-sync-playwright-cli-orchestrator",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `_orchestrator`",
+      "areas": [
+        ".playwright-cli",
+        "_orchestrator"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-playwright-cli-agent",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `agent`",
+      "areas": [
+        ".playwright-cli",
+        "agent"
+      ],
+      "source_class": "observed",
+      "confidence": 0.85,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:11/120"
+      ]
+    },
+    {
+      "id": "rule-sync-playwright-cli-app",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `app`",
+      "areas": [
+        ".playwright-cli",
+        "app"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-playwright-cli-modes",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `modes`",
+      "areas": [
+        ".playwright-cli",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.93,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:26/120"
+      ]
+    },
+    {
+      "id": "rule-sync-playwright-cli-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `session.py`",
+      "areas": [
+        ".playwright-cli",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-playwright-cli-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `sessions`",
+      "areas": [
+        ".playwright-cli",
+        "sessions"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-playwright-cli-tests",
+      "kind": "sync_areas",
+      "title": "Sync `.playwright-cli` with `tests`",
+      "areas": [
+        ".playwright-cli",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.95,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:35/120"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-app",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `app`",
+      "areas": [
+        "README_EN.MD",
+        "app"
+      ],
+      "source_class": "observed",
+      "confidence": 0.79,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/120"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-config-example-yaml",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `config_example.yaml`",
+      "areas": [
+        "README_EN.MD",
+        "config_example.yaml"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-miniapp",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `miniapp`",
+      "areas": [
+        "README_EN.MD",
+        "miniapp"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-modes",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `modes`",
+      "areas": [
+        "README_EN.MD",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-tests",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `tests`",
+      "areas": [
+        "README_EN.MD",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.79,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/120"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-tg",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `tg`",
+      "areas": [
+        "README_EN.MD",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-orchestrator-agent",
+      "kind": "sync_areas",
+      "title": "Sync `_orchestrator` with `agent`",
+      "areas": [
+        "_orchestrator",
+        "agent"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-orchestrator-app",
+      "kind": "sync_areas",
+      "title": "Sync `_orchestrator` with `app`",
+      "areas": [
+        "_orchestrator",
+        "app"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-orchestrator-docs",
+      "kind": "sync_areas",
+      "title": "Sync `_orchestrator` with `docs`",
+      "areas": [
+        "_orchestrator",
+        "docs"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-orchestrator-modes",
+      "kind": "sync_areas",
+      "title": "Sync `_orchestrator` with `modes`",
+      "areas": [
+        "_orchestrator",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:8/120"
+      ]
+    },
+    {
+      "id": "rule-sync-orchestrator-tests",
+      "kind": "sync_areas",
+      "title": "Sync `_orchestrator` with `tests`",
+      "areas": [
+        "_orchestrator",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.85,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:9/120"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-app",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `app`",
+      "areas": [
+        "agent",
+        "app"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-desktop",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `desktop`",
+      "areas": [
+        "agent",
+        "desktop"
+      ],
+      "source_class": "observed",
+      "confidence": 0.79,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/120"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-docs",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `docs`",
+      "areas": [
+        "agent",
+        "docs"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-modes",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `modes`",
+      "areas": [
+        "agent",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.94,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:27/120"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `session.py`",
+      "areas": [
+        "agent",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-tests",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `tests`",
+      "areas": [
+        "agent",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.94,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:28/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-bot-py",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `bot.py`",
+      "areas": [
+        "app",
+        "bot.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:5/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-config-py",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `config.py`",
+      "areas": [
+        "app",
+        "config.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-config-example-yaml",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `config_example.yaml`",
+      "areas": [
+        "app",
+        "config_example.yaml"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-desktop",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `desktop`",
+      "areas": [
+        "app",
+        "desktop"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:11/120",
+        "declared:README.md",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-app-docs",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `docs`",
+      "areas": [
+        "app",
+        "docs"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-miniapp",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `miniapp`",
+      "areas": [
+        "app",
+        "miniapp"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-modes",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `modes`",
+      "areas": [
+        "app",
+        "modes"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:19/120",
+        "declared:README.md",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-app-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `session.py`",
+      "areas": [
+        "app",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:7/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `sessions`",
+      "areas": [
+        "app",
+        "sessions"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:7/120",
+        "declared:README.md",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-app-tests",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `tests`",
+      "areas": [
+        "app",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.95,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:30/120"
+      ]
+    },
+    {
+      "id": "rule-sync-app-tg",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `tg`",
+      "areas": [
+        "app",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:8/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-config-py",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `config.py`",
+      "areas": [
+        "bot.py",
+        "config.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-config-example-yaml",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `config_example.yaml`",
+      "areas": [
+        "bot.py",
+        "config_example.yaml"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-desktop",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `desktop`",
+      "areas": [
+        "bot.py",
+        "desktop"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-modes",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `modes`",
+      "areas": [
+        "bot.py",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:5/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `session.py`",
+      "areas": [
+        "bot.py",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-tests",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `tests`",
+      "areas": [
+        "bot.py",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.85,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:10/120"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-tg",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `tg`",
+      "areas": [
+        "bot.py",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.79,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-py-config-example-yaml",
+      "kind": "sync_areas",
+      "title": "Sync `config.py` with `config_example.yaml`",
+      "areas": [
+        "config.py",
+        "config_example.yaml"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-py-desktop",
+      "kind": "sync_areas",
+      "title": "Sync `config.py` with `desktop`",
+      "areas": [
+        "config.py",
+        "desktop"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-py-miniapp",
+      "kind": "sync_areas",
+      "title": "Sync `config.py` with `miniapp`",
+      "areas": [
+        "config.py",
+        "miniapp"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-py-modes",
+      "kind": "sync_areas",
+      "title": "Sync `config.py` with `modes`",
+      "areas": [
+        "config.py",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-py-tests",
+      "kind": "sync_areas",
+      "title": "Sync `config.py` with `tests`",
+      "areas": [
+        "config.py",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-py-tg",
+      "kind": "sync_areas",
+      "title": "Sync `config.py` with `tg`",
+      "areas": [
+        "config.py",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-desktop",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `desktop`",
+      "areas": [
+        "config_example.yaml",
+        "desktop"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-miniapp",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `miniapp`",
+      "areas": [
+        "config_example.yaml",
+        "miniapp"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:5/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-modes",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `modes`",
+      "areas": [
+        "config_example.yaml",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-tests",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `tests`",
+      "areas": [
+        "config_example.yaml",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-tg",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `tg`",
+      "areas": [
+        "config_example.yaml",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-miniapp",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `miniapp`",
+      "areas": [
+        "desktop",
+        "miniapp"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:8/120",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-modes",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `modes`",
+      "areas": [
+        "desktop",
+        "modes"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:11/120",
+        "declared:README.md",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `session.py`",
+      "areas": [
+        "desktop",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.79,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/120"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `sessions`",
+      "areas": [
+        "desktop",
+        "sessions"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:3/120",
+        "declared:README.md",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-tests",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `tests`",
+      "areas": [
+        "desktop",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.89,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:17/120"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-tg",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `tg`",
+      "areas": [
+        "desktop",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:7/120"
+      ]
+    },
+    {
+      "id": "rule-sync-docs-modes",
+      "kind": "sync_areas",
+      "title": "Sync `docs` with `modes`",
+      "areas": [
+        "docs",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:8/120"
+      ]
+    },
+    {
+      "id": "rule-sync-docs-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `docs` with `session.py`",
+      "areas": [
+        "docs",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-docs-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `docs` with `sessions`",
+      "areas": [
+        "docs",
+        "sessions"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-docs-tests",
+      "kind": "sync_areas",
+      "title": "Sync `docs` with `tests`",
+      "areas": [
+        "docs",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:8/120"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-modes",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `modes`",
+      "areas": [
+        "miniapp",
+        "modes"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-tests",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `tests`",
+      "areas": [
+        "miniapp",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.85,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:10/120"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-tg",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `tg`",
+      "areas": [
+        "miniapp",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.7,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/120"
+      ]
+    },
+    {
+      "id": "rule-sync-modes-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `modes` with `session.py`",
+      "areas": [
+        "modes",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:8/120"
+      ]
+    },
+    {
+      "id": "rule-sync-modes-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `modes` with `sessions`",
+      "areas": [
+        "modes",
+        "sessions"
+      ],
+      "source_class": "declared",
+      "confidence": 0.95,
+      "status": "active",
+      "needs_review": false,
+      "evidence": [
+        "observed:git_cochange:4/120",
+        "declared:README.md",
+        "declared:README_EN.MD"
+      ]
+    },
+    {
+      "id": "rule-sync-modes-tests",
+      "kind": "sync_areas",
+      "title": "Sync `modes` with `tests`",
+      "areas": [
+        "modes",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.95,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:84/120"
+      ]
+    },
+    {
+      "id": "rule-sync-modes-tg",
+      "kind": "sync_areas",
+      "title": "Sync `modes` with `tg`",
+      "areas": [
+        "modes",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.84,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:8/120"
+      ]
+    },
+    {
+      "id": "rule-sync-session-py-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `session.py` with `sessions`",
+      "areas": [
+        "session.py",
+        "sessions"
+      ],
+      "source_class": "observed",
+      "confidence": 0.62,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/120"
+      ]
+    },
+    {
+      "id": "rule-sync-session-py-tests",
+      "kind": "sync_areas",
+      "title": "Sync `session.py` with `tests`",
+      "areas": [
+        "session.py",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.85,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:10/120"
+      ]
+    },
+    {
+      "id": "rule-sync-session-py-tg",
+      "kind": "sync_areas",
+      "title": "Sync `session.py` with `tg`",
+      "areas": [
+        "session.py",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.79,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/120"
+      ]
+    },
+    {
+      "id": "rule-sync-sessions-tests",
+      "kind": "sync_areas",
+      "title": "Sync `sessions` with `tests`",
+      "areas": [
+        "sessions",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.86,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:12/120"
+      ]
+    },
+    {
+      "id": "rule-sync-sessions-tg",
+      "kind": "sync_areas",
+      "title": "Sync `sessions` with `tg`",
+      "areas": [
+        "sessions",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.83,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:6/120"
+      ]
+    },
+    {
+      "id": "rule-sync-tests-tg",
+      "kind": "sync_areas",
+      "title": "Sync `tests` with `tg`",
+      "areas": [
+        "tests",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.88,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:15/120"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "index",
+      "to": "node:tests",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:modes",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:app",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:agent",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:desktop",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:tg",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:miniapp",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:sessions",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:utils",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:session-json",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:bot-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:code-stats-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:config-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:config-example-yaml",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:conftest-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:fix-permissions-sh",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:full-ui-yaml",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:gen-init-data-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:miniapp-pid",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:mkdocs-yml",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:parse-status-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:playwright-config-json",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:pytest-ini",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:requirements-txt",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:scripts",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:session-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:setup-bot-sh",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:skills-lock-json",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:start-miniapp-py",
+      "type": "references"
+    },
+    {
+      "from": "index",
+      "to": "node:summary-py",
+      "type": "references"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.94",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.95",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.95",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tests",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.94",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.85",
+      "levels": "L0"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:scripts",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.95",
+      "levels": "L0"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:modes",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:app",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.85",
+      "levels": "L0"
+    },
+    {
+      "from": "node:app",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.95",
+      "levels": "L0"
+    },
+    {
+      "from": "node:app",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:app",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.79",
+      "levels": "L0"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.94",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.94",
+      "levels": "L0"
+    },
+    {
+      "from": "node:agent",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.89",
+      "levels": "L0"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.84",
+      "levels": "L0"
+    },
+    {
+      "from": "node:desktop",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.79",
+      "levels": "L0"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.84",
+      "levels": "L0"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.88",
+      "levels": "L0"
+    },
+    {
+      "from": "node:tg",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.84",
+      "levels": "L0"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.85",
+      "levels": "L0"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:miniapp",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.86",
+      "levels": "L0"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:sessions",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:utils",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:utils",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:session-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:summary-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.85",
+      "levels": "L0"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:bot-py",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:config-example-yaml",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-py",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:miniapp",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.83",
+      "levels": "L0"
+    },
+    {
+      "from": "node:config-example-yaml",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:agent",
+      "type": "related",
+      "confidence": "0.70",
+      "levels": "L0"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.62",
+      "levels": "L0"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:desktop",
+      "type": "related",
+      "confidence": "0.79",
+      "levels": "L0"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:sessions",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L0,L1,L2"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:tests",
+      "type": "related",
+      "confidence": "0.85",
+      "levels": "L0"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:tg",
+      "type": "related",
+      "confidence": "0.79",
+      "levels": "L0"
+    },
+    {
+      "from": "node:session-py",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:start-miniapp-py",
+      "to": "node:app",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:start-miniapp-py",
+      "to": "node:bot-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:start-miniapp-py",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:summary-py",
+      "to": "node:config-py",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L2"
+    },
+    {
+      "from": "node:summary-py",
+      "to": "node:modes",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    },
+    {
+      "from": "node:summary-py",
+      "to": "node:utils",
+      "type": "related",
+      "confidence": "0.90",
+      "levels": "L1,L2"
+    }
+  ],
+  "tree": [
+    ".cli-proxy/.codebase_map/",
+    "  INDEX.md",
+    "  nodes/",
+    "    tests.md",
+    "    modes.md",
+    "    app.md",
+    "    agent.md",
+    "    desktop.md",
+    "    tg.md",
+    "    miniapp.md",
+    "    sessions.md",
+    "    utils.md",
+    "    session-json.md",
+    "    bot-py.md",
+    "    code-stats-py.md",
+    "    config-py.md",
+    "    config-example-yaml.md",
+    "    conftest-py.md",
+    "    fix-permissions-sh.md",
+    "    full-ui-yaml.md",
+    "    gen-init-data-py.md",
+    "    miniapp-pid.md",
+    "    mkdocs-yml.md",
+    "    parse-status-py.md",
+    "    playwright-config-json.md",
+    "    pytest-ini.md",
+    "    requirements-txt.md",
+    "    scripts.md",
+    "    session-py.md",
+    "    setup-bot-sh.md",
+    "    skills-lock-json.md",
+    "    start-miniapp-py.md",
+    "    summary-py.md"
+  ]
+}

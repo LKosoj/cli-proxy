@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>cli-proxy MiniApp</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/src-min-noconflict/ace.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/css/ace.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260323-01" />
+</head>
+<body>
+  <header>
+    <h1>cli-proxy MiniApp</h1>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Навигация MiniApp">
+    <button type="button" role="tab" aria-selected="true" aria-controls="tab-config" data-tab="config" class="active">Config</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-files" data-tab="files">Файлы</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-logs" data-tab="logs">Логи</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-status" data-tab="status">Статус</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-scheduler" data-tab="scheduler">Scheduler</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings">Настройки</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-admin" data-tab="admin">Админ</button>
+  </nav>
+
+  <main>
+    <section id="tab-config" class="tab active">
+      <div class="toolbar">
+        <button id="cfgRefresh">Обновить</button>
+        <button id="cfgValidate">Проверить</button>
+        <button id="cfgDiff">Preview diff</button>
+        <button id="cfgSave" disabled>Сохранить</button>
+      </div>
+      <div id="cfgRestartBanner" class="banner hidden">Требуется перезапуск для части изменений</div>
+      <div id="cfgDirty"></div>
+      <div id="cfgValidation"></div>
+      <div id="cfgReloadResult"></div>
+      <div id="cfgDiffResult"></div>
+      <div id="cfgSections"></div>
+    </section>
+
+    <section id="tab-files" class="tab">
+      <div id="filesExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
+      <div id="filesRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Remote FS</div>
+      <div class="toolbar">
+        <label for="filesSession">Сессия</label>
+        <select id="filesSession"></select>
+        <button id="filesApply">Применить</button>
+        <button id="filesUp">Вверх</button>
+        <button id="filesRefresh">Обновить</button>
+        <button id="filesCreateFile">Создать файл</button>
+        <button id="filesCreateDir">Создать папку</button>
+        <button id="filesDelete">Удалить</button>
+      </div>
+      <div id="filesPath"></div>
+      <div id="filesStatus"></div>
+      <ul id="filesTree" class="tree"></ul>
+    </section>
+
+    <section id="tab-editor" class="tab">
+      <div id="editorExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
+      <div id="editorRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Remote FS</div>
+      <div class="toolbar">
+        <span id="editorPath">Файл не выбран</span>
+        <button id="editorClose">Закрыть</button>
+        <button id="editorReload">Обновить</button>
+        <button id="editorDownload">Скачать</button>
+        <button id="editorSave">Сохранить</button>
+        <button id="editorForceSave" style="display: none; background-color: var(--danger);">Force Save</button>
+        <button id="editorUndo">Отменить</button>
+      </div>
+      <div id="editorMeta"></div>
+      <div id="editorConflictDialog" style="display: none; margin-bottom: 16px; border: 1px solid var(--danger); padding: 16px; border-radius: 4px; background-color: var(--bg);">
+        <h3 style="color: var(--danger); margin-top: 0;">Обнаружен конфликт версий!</h3>
+        <p>Файл был изменён на сервере с момента последнего открытия.</p>
+        <pre id="editorConflictDiff" style="background: var(--card-bg); padding: 12px; overflow-x: auto; font-family: monospace; font-size: 12px; border: 1px solid var(--border);"></pre>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+          <button id="editorConflictCancel">Отменить сохранение</button>
+          <button id="editorConflictReload">Перезагрузить файл (потерять мои изменения)</button>
+          <button id="editorConflictForceSave" style="background-color: var(--danger); color: white;">Force Save (перезаписать)</button>
+        </div>
+      </div>
+      <div id="ace"></div>
+    </section>
+
+    <section id="tab-logs" class="tab">
+      <div class="toolbar logs-toolbar">
+        <label for="logsType">Лог</label>
+        <select id="logsType"></select>
+        <label for="logsHistory">История</label>
+        <select id="logsHistory">
+          <option value="0">Только новые</option>
+          <option value="100">100 предыдущих</option>
+          <option value="200">200 предыдущих</option>
+          <option value="500">500 предыдущих</option>
+          <option value="1000">1000 предыдущих</option>
+        </select>
+        <label for="logsSession">Сессия</label>
+        <select id="logsSession"></select>
+        <button id="logsApply">Применить</button>
+        <button id="logsClear">Очистить</button>
+        <button id="logsDownload">Скачать</button>
+        <label for="logsAutoScroll" class="toolbar-checkbox">
+          <input type="checkbox" id="logsAutoScroll" checked>
+          <span>Автопрокрутка</span>
+        </label>
+      </div>
+      <div id="logsStatus"></div>
+      <pre id="logsOutput" class="log-output"></pre>
+    </section>
+
+    <section id="tab-status" class="tab">
+      <div id="statusExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
+      <div class="toolbar status-toolbar">
+        <label for="statusSession">Сессия</label>
+        <select id="statusSession"></select>
+        <button id="statusApply">Применить</button>
+      </div>
+      
+      <div class="status-dashboard">
+        <div id="statusEmpty" class="status-empty">Загрузка или сессия не выбрана...</div>
+
+        <div id="statusDashboard" class="hidden">
+          <div class="status-header-card">
+            <div class="status-meta" id="stStatusMeta">
+              <div class="meta-item"><span id="stWorkdir">/path</span></div>
+              <div class="meta-item" id="stStatusContainer">
+                <span class="meta-icon" id="stStatusIcon">RUN</span> <span id="stStatusText">Ожидает</span>
+              </div>
+              <div class="meta-item" id="stQueueContainer">
+                <span class="meta-icon">Q</span> <span id="stQueueLabel">0</span>
+              </div>
+              <div class="meta-item"><span class="meta-icon">OUT</span> <span id="stLastOutput">0s</span></div>
+              <div class="meta-item" id="stGitContainer">
+                <span class="meta-icon">GIT</span> <span id="stGitText">Свободен</span>
+              </div>
+              <div class="meta-item" id="stOrchestratorContainer">
+                <span class="meta-icon">ORCH</span> <span id="stOrchestratorLabel">выкл</span>
+              </div>
+              <div class="meta-item"><span class="meta-icon">UP</span> <span id="stUptime">0s</span></div>
+              <div class="meta-item"><span class="meta-icon">CNT</span> <span id="stSessionCount">0</span></div>
+              <div class="meta-item"><span id="stServerTime">-</span></div>
+            </div>
+          </div>
+
+          <details class="status-card-details" id="statusModeDetails" style="margin-top: 12px;">
+            <summary>
+              <span class="status-summary-label">
+                <span>Инструмент и Режим</span>
+                <span class="pulse-dot" id="stPulseDot" style="display: none;"></span>
+              </span>
+            </summary>
+            <div class="status-card-body card-body-flex">
+              <div class="kv-list">
+                <div class="kv-row"><span class="kv-key">Режим (Mode):</span> <span class="kv-val" id="stMode">-</span></div>
+                <div class="kv-row"><span class="kv-key">Инструмент:</span> <span class="kv-val" id="stTool">-</span></div>
+                <div class="kv-row"><span class="kv-key">CLI / Профиль:</span> <span class="kv-val" id="stCli">-</span></div>
+                <div class="kv-row"><span class="kv-key">Work type:</span> <span class="kv-val" id="stWorkType">-</span></div>
+                <div class="kv-row"><span class="kv-key">Resume Token:</span> <span class="kv-val" id="stResumeToken">-</span></div>
+                <div class="kv-row"><span class="kv-key">Проект:</span> <span class="kv-val" id="stProjectRoot">-</span></div>
+              </div>
+            </div>
+          </details>
+
+          <details class="status-card-details hidden" id="stManagerPlanCard">
+            <summary>План Менеджера</summary>
+            <div class="status-card-body pre-wrap" id="statusManagerPlanText"></div>
+          </details>
+
+          <details class="status-card-details hidden" id="stAnalystCard">
+            <summary>Статус Аналитика</summary>
+            <div class="status-card-body pre-wrap" id="statusAnalystModeText"></div>
+          </details>
+
+          <details class="status-card-details hidden" id="stWebmasterCard">
+            <summary>Статус Вебмастера</summary>
+            <div class="status-card-body pre-wrap" id="statusWebmasterModeText"></div>
+          </details>
+
+          <details class="status-card-details hidden" id="stAgentCard">
+            <summary>Статус Агента</summary>
+            <div class="status-card-body pre-wrap" id="statusAgentModeText"></div>
+          </details>
+
+          <details class="status-card-details hidden" id="stRuntimeCard">
+            <summary>Runtime Progress</summary>
+            <div class="status-card-body pre-wrap" id="statusRuntimeText"></div>
+          </details>
+
+          <details class="status-card-details hidden" id="statusQueueDetails">
+            <summary>Очередь (Queue: <span id="stQueueLen">0</span>)</summary>
+            <div class="status-card-body pre-wrap" id="stQueueText"></div>
+          </details>
+
+          <details class="status-card-details" id="statusSummaryDetails">
+            <summary>State Summary</summary>
+            <div class="status-card-body pre-wrap" id="statusSummaryText"></div>
+          </details>
+
+          <details class="status-card-details" id="statusLastTickDetails">
+            <summary>Last Tick Value (<span id="stTickCount">0</span>)</summary>
+            <div class="status-card-body pre-wrap" id="statusLastTickText"></div>
+          </details>
+
+          <details class="status-card-details" id="statusTicksDetails">
+            <summary style="cursor: pointer;">
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <span>Все тики</span>
+                <label style="font-size: 0.85em; font-weight: normal; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; padding: 0;" onclick="event.stopPropagation()">
+                  <input type="checkbox" id="ticksAutoScroll" checked style="margin: 0;">
+                  <span>Автопрокрутка</span>
+                </label>
+              </div>
+            </summary>
+            <div class="status-card-body" id="statusTicksText">
+              <div class="tick-list" id="tickListContainer"></div>
+            </div>
+          </details>
+
+          <details class="status-card-details" id="statusExtraDetails">
+            <summary>Дополнительные параметры</summary>
+            <div class="status-card-body" id="statusExtraText"></div>
+          </details>
+
+          <details class="status-card-details" id="statusRunsDetails">
+            <summary>Run Operations</summary>
+            <div class="status-card-body">
+              <div id="statusRunsMessage" class="status-empty">Выберите сессию, чтобы просмотреть run artifacts.</div>
+              <div id="statusRunsPanel" class="hidden">
+                <div id="statusRunsActionMessage" class="status-empty hidden"></div>
+                <div class="status-cards-grid" style="margin-top: 12px;">
+                  <div class="status-card">
+                    <div class="status-card-header">Запуски</div>
+                    <div class="status-card-body">
+                      <ul id="statusRunsList" class="tree"></ul>
+                    </div>
+                  </div>
+                  <div class="status-card">
+                    <div class="status-card-header">Выбранный run</div>
+                    <div class="status-card-body">
+                      <div id="statusRunDetailText" class="pre-wrap">Выберите запуск.</div>
+                      <div id="statusRunSkillLog" class="pre-wrap" style="margin-top: 12px;"></div>
+                      <div class="toolbar" style="margin-top: 12px;">
+                        <button id="statusRunDoctor" type="button">Doctor</button>
+                        <button id="statusRunRecover" type="button">Recover</button>
+                        <button id="statusRunResume" type="button">Resume</button>
+                        <button id="statusRunApplyRecommendation" type="button">Apply Recommendation</button>
+                        <button id="statusRunPromote" type="button">Promote Skills</button>
+                    </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <details class="status-card-details status-raw">
+          <summary>Показать JSON (диагностика)</summary>
+          <div class="status-card-body">
+            <pre id="statusJson"></pre>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section id="tab-scheduler" class="tab">
+      <div class="toolbar status-toolbar">
+        <label for="schedulerProject">Проект</label>
+        <select id="schedulerProject"></select>
+        <label for="schedulerSession">Telegram session_uid</label>
+        <select id="schedulerSession"></select>
+        <button id="schedulerRefresh">Обновить</button>
+      </div>
+      <div id="schedulerStatus" class="status-empty">Выберите проект для управления расписанием.</div>
+      <div id="schedulerPanel" class="hidden">
+        <div class="status-cards-grid" style="margin-top: 12px;">
+          <div class="status-card">
+            <div class="status-card-header">Job</div>
+            <div class="status-card-body">
+              <div class="field">
+                <label for="schedulerJobName">Название</label>
+                <input id="schedulerJobName" type="text" />
+              </div>
+              <div class="field">
+                <label for="schedulerCron">Cron</label>
+                <input id="schedulerCron" type="text" placeholder="*/15 * * * *" />
+              </div>
+              <div class="field">
+                <label for="schedulerTargetMode">Target mode</label>
+                <select id="schedulerTargetMode"></select>
+              </div>
+              <div class="field">
+                <label for="schedulerEnabled">Enabled</label>
+                <input id="schedulerEnabled" type="checkbox" checked />
+              </div>
+              <div class="field">
+                <label for="schedulerPayload">Payload (JSON)</label>
+                <textarea id="schedulerPayload" rows="5" placeholder='{"key": "value"}'></textarea>
+              </div>
+              <div class="toolbar">
+                <button id="schedulerSave">Создать</button>
+                <button id="schedulerDelete">Удалить</button>
+                <button id="schedulerRunNow">Run now</button>
+                <button id="schedulerReset">Сбросить</button>
+              </div>
+            </div>
+          </div>
+          <div class="status-card">
+            <div class="status-card-header">Jobs</div>
+            <div class="status-card-body">
+              <div id="schedulerSelectedMeta" class="pre-wrap"></div>
+              <ul id="schedulerJobsList" class="tree"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-settings" class="tab">
+      <div class="toolbar status-toolbar">
+        <label for="settingsSession">Сессия</label>
+        <select id="settingsSession"></select>
+        <button id="settingsApply">Применить</button>
+      </div>
+      <div id="settingsEmpty" class="status-empty">Загрузка или сессия не выбрана...</div>
+      <div id="settingsPanel" class="hidden">
+        <div class="status-dashboard">
+          <div class="status-card">
+            <div class="status-card-header">Параметры сессии</div>
+            <div class="status-card-body">
+              <div id="settingsExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center;">Execution Target: Local</div>
+              <div class="field">
+                <label for="settingsSshEnabled">SSH Remote</label>
+                <input type="checkbox" id="settingsSshEnabled" />
+                <small id="settingsSshNote">Включает/выключает удаленное выполнение команд через SSH.</small>
+              </div>
+              <div class="field" style="margin-top: 12px;">
+                <label for="settingsRemoteControlEnabled">Remote Control</label>
+                <input type="checkbox" id="settingsRemoteControlEnabled" />
+                <small>Переводит сессию в строгий remote-only режим (без fallback на local).</small>
+              </div>
+              <div class="field" id="settingsRemoteControlHostField" style="margin-top: 12px; display: none;">
+                <label for="settingsRemoteControlHost">Target Host</label>
+                <select id="settingsRemoteControlHost" style="width: 200px;"></select>
+                <button id="settingsRemoteControlRecheck" class="btn-sm" style="margin-left: 8px;">Recheck</button>
+              </div>
+              <div id="settingsRemoteControlError" style="color: var(--danger); margin-top: 8px; font-size: 0.9em; display: none;"></div>
+              <div class="toolbar" style="margin-top: 16px;">
+                <button id="settingsSave">Сохранить изменения</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="settingsSshHostsCard" class="status-card hidden">
+            <div class="status-card-header flex-header">
+              <span>SSH-хосты проекта</span>
+              <button id="sshHostAdd" class="btn-sm">Добавить хост</button>
+            </div>
+            <div class="status-card-body">
+              <div id="sshHostsEmpty" class="status-empty">Хосты не настроены.</div>
+              <div id="sshHostsList" class="hidden">
+                <table class="admin-table" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                  <thead>
+                    <tr style="text-align: left; border-bottom: 1px solid var(--border);">
+                      <th style="padding: 8px;">Alias</th>
+                      <th style="padding: 8px;">Host</th>
+                      <th style="padding: 8px;">User</th>
+                      <th style="padding: 8px;">Auth</th>
+                      <th style="padding: 8px;">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sshHostsTableBody"></tbody>
+                </table>
+              </div>
+
+              <div id="sshHostForm" class="hidden" style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
+                <h4 id="sshHostFormTitle" style="margin-top: 0;">Добавить хост</h4>
+                <input type="hidden" id="sshHostAliasOriginal" />
+                <div class="field">
+                  <label for="sshHostAlias">Alias</label>
+                  <input type="text" id="sshHostAlias" placeholder="e.g. prod" />
+                </div>
+                <div class="field">
+                  <label for="sshHostAddr">Host</label>
+                  <input type="text" id="sshHostAddr" placeholder="1.2.3.4 or example.com" />
+                </div>
+                <div class="field">
+                  <label for="sshHostPort">Port</label>
+                  <input type="number" id="sshHostPort" value="22" />
+                </div>
+                <div class="field">
+                  <label for="sshHostUser">User</label>
+                  <input type="text" id="sshHostUser" />
+                </div>
+                <div class="field">
+                  <label for="sshHostAuth">Auth</label>
+                  <select id="sshHostAuth">
+                    <option value="key">Key</option>
+                    <option value="password">Password</option>
+                  </select>
+                </div>
+                <div id="sshHostKeyFields">
+                  <div class="field">
+                    <label for="sshHostKeyFile">Key File Path</label>
+                    <input type="text" id="sshHostKeyFile" placeholder=".cli-proxy/ssh_keys/id_rsa" />
+                  </div>
+                  <div class="field">
+                    <label for="sshHostKeyPassEnv">Passphrase Env</label>
+                    <input type="text" id="sshHostKeyPassEnv" placeholder="SSH_KEY_PASSPHRASE" />
+                  </div>
+                </div>
+                <div id="sshHostPasswordFields" class="hidden">
+                  <div class="field">
+                    <label for="sshHostPasswordEnv">Password Env</label>
+                    <input type="text" id="sshHostPasswordEnv" placeholder="SSH_PASSWORD" />
+                  </div>
+                  <div class="field">
+                    <label for="sshHostPassword">Password (Value)</label>
+                    <input type="password" id="sshHostPassword" />
+                    <small>Если указано, будет сохранено в секреты проекта.</small>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="sshHostSudo">Sudo</label>
+                  <input type="checkbox" id="sshHostSudo" />
+                </div>
+                <div id="sshHostSudoFields" class="hidden">
+                  <div class="field">
+                    <label for="sshHostSudoPassEnv">Sudo Pass Env</label>
+                    <input type="text" id="sshHostSudoPassEnv" placeholder="SSH_SUDO_PASSWORD" />
+                  </div>
+                  <div class="field">
+                    <label for="sshHostSudoPassword">Sudo Password</label>
+                    <input type="password" id="sshHostSudoPassword" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="sshHostRoles">Roles</label>
+                  <input type="text" id="sshHostRoles" placeholder="web,db (через запятую)" />
+                </div>
+                <div class="field">
+                  <label for="sshHostDesc">Description</label>
+                  <input type="text" id="sshHostDesc" />
+                </div>
+                <div class="field">
+                  <label for="sshHostRemoteProjectRoot">Remote Project Root</label>
+                  <input type="text" id="sshHostRemoteProjectRoot" placeholder="/absolute/path/to/project" />
+                  <small>Обязателен для Remote Control и remote file operations.</small>
+                </div>
+                <div class="field">
+                  <label for="sshHostTimeout">Idle Timeout (s)</label>
+                  <input type="number" id="sshHostTimeout" value="1200" />
+                </div>
+                <div class="toolbar" style="margin-top: 16px;">
+                  <button id="sshHostSave">Сохранить</button>
+                  <button id="sshHostCancel">Отмена</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="tab-admin" class="tab"></div>
+  </main>
+
+  <script src="./app.js?v=20260329-03"></script>
+</body>
+</html>

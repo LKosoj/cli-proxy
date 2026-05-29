@@ -1,0 +1,1532 @@
+version: 1
+node_rules:
+  - id: update-nodetests
+    when:
+      any_path_matches:
+        - "tests/**"
+    update:
+      docs:
+        - "nodes/tests.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodemodes
+    when:
+      any_path_matches:
+        - "modes/**"
+    update:
+      docs:
+        - "nodes/modes.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeapp
+    when:
+      any_path_matches:
+        - "app/**"
+    update:
+      docs:
+        - "nodes/app.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeagent
+    when:
+      any_path_matches:
+        - "agent/**"
+    update:
+      docs:
+        - "nodes/agent.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodedesktop
+    when:
+      any_path_matches:
+        - "desktop/**"
+    update:
+      docs:
+        - "nodes/desktop.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodetg
+    when:
+      any_path_matches:
+        - "tg/**"
+    update:
+      docs:
+        - "nodes/tg.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeminiapp
+    when:
+      any_path_matches:
+        - "miniapp/**"
+    update:
+      docs:
+        - "nodes/miniapp.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodesessions
+    when:
+      any_path_matches:
+        - "sessions/**"
+    update:
+      docs:
+        - "nodes/sessions.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeutils
+    when:
+      any_path_matches:
+        - "utils/**"
+    update:
+      docs:
+        - "nodes/utils.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodesession-json
+    when:
+      any_path_matches:
+        - "SESSION.json"
+    update:
+      docs:
+        - "nodes/session-json.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodebot-py
+    when:
+      any_path_matches:
+        - "bot.py"
+    update:
+      docs:
+        - "nodes/bot-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodecode-stats-py
+    when:
+      any_path_matches:
+        - "code_stats.py"
+    update:
+      docs:
+        - "nodes/code-stats-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeconfig-py
+    when:
+      any_path_matches:
+        - "config.py"
+    update:
+      docs:
+        - "nodes/config-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeconfig-example-yaml
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+    update:
+      docs:
+        - "nodes/config-example-yaml.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeconftest-py
+    when:
+      any_path_matches:
+        - "conftest.py"
+    update:
+      docs:
+        - "nodes/conftest-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodefix-permissions-sh
+    when:
+      any_path_matches:
+        - "fix-permissions.sh"
+    update:
+      docs:
+        - "nodes/fix-permissions-sh.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodefull-ui-yaml
+    when:
+      any_path_matches:
+        - "full_ui.yaml"
+    update:
+      docs:
+        - "nodes/full-ui-yaml.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodegen-init-data-py
+    when:
+      any_path_matches:
+        - "gen_init_data.py"
+    update:
+      docs:
+        - "nodes/gen-init-data-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeminiapp-pid
+    when:
+      any_path_matches:
+        - "miniapp.pid"
+    update:
+      docs:
+        - "nodes/miniapp-pid.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodemkdocs-yml
+    when:
+      any_path_matches:
+        - "mkdocs.yml"
+    update:
+      docs:
+        - "nodes/mkdocs-yml.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeparse-status-py
+    when:
+      any_path_matches:
+        - "parse_status.py"
+    update:
+      docs:
+        - "nodes/parse-status-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeplaywright-config-json
+    when:
+      any_path_matches:
+        - "playwright_config.json"
+    update:
+      docs:
+        - "nodes/playwright-config-json.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodepytest-ini
+    when:
+      any_path_matches:
+        - "pytest.ini"
+    update:
+      docs:
+        - "nodes/pytest-ini.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-noderequirements-txt
+    when:
+      any_path_matches:
+        - "requirements.txt"
+    update:
+      docs:
+        - "nodes/requirements-txt.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodescripts
+    when:
+      any_path_matches:
+        - "scripts/**"
+    update:
+      docs:
+        - "nodes/scripts.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodesession-py
+    when:
+      any_path_matches:
+        - "session.py"
+    update:
+      docs:
+        - "nodes/session-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodesetup-bot-sh
+    when:
+      any_path_matches:
+        - "setup_bot.sh"
+    update:
+      docs:
+        - "nodes/setup-bot-sh.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodeskills-lock-json
+    when:
+      any_path_matches:
+        - "skills-lock.json"
+    update:
+      docs:
+        - "nodes/skills-lock-json.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodestart-miniapp-py
+    when:
+      any_path_matches:
+        - "start_miniapp.py"
+    update:
+      docs:
+        - "nodes/start-miniapp-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+  - id: update-nodesummary-py
+    when:
+      any_path_matches:
+        - "summary.py"
+    update:
+      docs:
+        - "nodes/summary-py.md"
+    policy:
+      severity: medium
+      self_heal: true
+organizational_rules:
+  - id: rule-sync-playwright-cli-orchestrator
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "_orchestrator/**"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "_orchestrator"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-playwright-cli-agent
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.85
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "agent/**"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "agent"
+    evidence:
+      - "observed:git_cochange:11/120"
+  - id: rule-sync-playwright-cli-app
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "app/**"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "app"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-playwright-cli-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.93
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:26/120"
+  - id: rule-sync-playwright-cli-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-playwright-cli-sessions
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-playwright-cli-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - ".playwright-cli"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - ".playwright-cli"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:35/120"
+  - id: rule-sync-readme-en-md-app
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.79
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "app/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "app"
+    evidence:
+      - "observed:git_cochange:4/120"
+  - id: rule-sync-readme-en-md-config-example-yaml
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "config_example.yaml"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "config_example.yaml"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-readme-en-md-miniapp
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "miniapp/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "miniapp"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-readme-en-md-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-readme-en-md-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.79
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:4/120"
+  - id: rule-sync-readme-en-md-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-orchestrator-agent
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "_orchestrator/**"
+        - "agent/**"
+    then:
+      enforce_sync_with:
+        - "_orchestrator"
+        - "agent"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-orchestrator-app
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "_orchestrator/**"
+        - "app/**"
+    then:
+      enforce_sync_with:
+        - "_orchestrator"
+        - "app"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-orchestrator-docs
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "_orchestrator/**"
+        - "docs/**"
+    then:
+      enforce_sync_with:
+        - "_orchestrator"
+        - "docs"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-orchestrator-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "_orchestrator/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "_orchestrator"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:8/120"
+  - id: rule-sync-orchestrator-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.85
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "_orchestrator/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "_orchestrator"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:9/120"
+  - id: rule-sync-agent-app
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "app/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "app"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-agent-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.79
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:4/120"
+  - id: rule-sync-agent-docs
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "docs/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "docs"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-agent-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.94
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:27/120"
+  - id: rule-sync-agent-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-agent-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.94
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:28/120"
+  - id: rule-sync-app-bot-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "bot.py"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "bot.py"
+    evidence:
+      - "observed:git_cochange:5/120"
+  - id: rule-sync-app-config-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "config.py"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "config.py"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-app-config-example-yaml
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "config_example.yaml"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "config_example.yaml"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-app-desktop
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "app/**"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:11/120"
+      - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-app-docs
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "docs/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "docs"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-app-miniapp
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "miniapp/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "miniapp"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-app-modes
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "app/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:19/120"
+      - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-app-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:7/120"
+  - id: rule-sync-app-sessions
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "app/**"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:7/120"
+      - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-app-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:30/120"
+  - id: rule-sync-app-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "app/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:8/120"
+  - id: rule-sync-bot-py-config-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "config.py"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "config.py"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-bot-py-config-example-yaml
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "config_example.yaml"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "config_example.yaml"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-bot-py-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-bot-py-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:5/120"
+  - id: rule-sync-bot-py-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-bot-py-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.85
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:10/120"
+  - id: rule-sync-bot-py-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.79
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:4/120"
+  - id: rule-sync-config-py-config-example-yaml
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config.py"
+        - "config_example.yaml"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "config_example.yaml"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-config-py-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config.py"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-config-py-miniapp
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config.py"
+        - "miniapp/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "miniapp"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-config-py-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config.py"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-config-py-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config.py"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-config-py-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config.py"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-config-example-yaml-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-config-example-yaml-miniapp
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "miniapp/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "miniapp"
+    evidence:
+      - "observed:git_cochange:5/120"
+  - id: rule-sync-config-example-yaml-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-config-example-yaml-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-config-example-yaml-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-desktop-miniapp
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "miniapp/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "miniapp"
+    evidence:
+      - "observed:git_cochange:8/120"
+      - "declared:README_EN.MD"
+  - id: rule-sync-desktop-modes
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:11/120"
+      - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-desktop-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.79
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:4/120"
+  - id: rule-sync-desktop-sessions
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:3/120"
+      - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-desktop-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.89
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:17/120"
+  - id: rule-sync-desktop-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:7/120"
+  - id: rule-sync-docs-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "docs/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "docs"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:8/120"
+  - id: rule-sync-docs-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "docs/**"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - "docs"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-docs-sessions
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "docs/**"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "docs"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-docs-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "docs/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "docs"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:8/120"
+  - id: rule-sync-miniapp-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "miniapp/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "miniapp"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-miniapp-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.85
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "miniapp/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "miniapp"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:10/120"
+  - id: rule-sync-miniapp-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.70
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "miniapp/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "miniapp"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:3/120"
+  - id: rule-sync-modes-session-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "modes/**"
+        - "session.py"
+    then:
+      enforce_sync_with:
+        - "modes"
+        - "session.py"
+    evidence:
+      - "observed:git_cochange:8/120"
+  - id: rule-sync-modes-sessions
+    kind: sync_areas
+    source_class: declared
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "modes/**"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "modes"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:4/120"
+      - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-modes-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "modes/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "modes"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:84/120"
+  - id: rule-sync-modes-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.84
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "modes/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "modes"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:8/120"
+  - id: rule-sync-session-py-sessions
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.62
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "session.py"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "session.py"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:2/120"
+  - id: rule-sync-session-py-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.85
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "session.py"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "session.py"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:10/120"
+  - id: rule-sync-session-py-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.79
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "session.py"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "session.py"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:4/120"
+  - id: rule-sync-sessions-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.86
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "sessions/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "sessions"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:12/120"
+  - id: rule-sync-sessions-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.83
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "sessions/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "sessions"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:6/120"
+  - id: rule-sync-tests-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.88
+    status: proposed
+    needs_review: true
+    when:
+      any_path_matches:
+        - "tests/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "tests"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:15/120"
