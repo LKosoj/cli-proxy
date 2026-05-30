@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
 import json
 import logging
 import os
@@ -21,6 +22,8 @@ from session import session_active_cli_name
 
 
 logger = logging.getLogger(__name__)
+
+_RGLOB_ROLLOUT_LIMIT = 10_000
 
 
 @dataclass(frozen=True)
@@ -452,10 +455,13 @@ class CliLimitsService:
             if not root.is_dir():
                 continue
             try:
-                jsonl_files = sorted(
+                # Берём _RGLOB_ROLLOUT_LIMIT самых свежих по mtime. nlargest проходит
+                # весь генератор (как и прежний sorted), но держит в памяти только N,
+                # и, в отличие от islice-перед-сортировкой, не теряет новейшие файлы.
+                jsonl_files = heapq.nlargest(
+                    _RGLOB_ROLLOUT_LIMIT,
                     root.rglob("rollout-*.jsonl"),
                     key=lambda path: path.stat().st_mtime,
-                    reverse=True,
                 )
             except Exception:
                 logger.exception("failed to scan codex sessions root=%s", root)

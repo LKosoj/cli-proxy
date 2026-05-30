@@ -12,6 +12,8 @@ from modes.sdk.runtime.tooling.spec import ToolSpec
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+logger = logging.getLogger(__name__)
+
 
 class TextDocumentQATool(DialogMixin, ToolPlugin):
     def get_source_name(self) -> str:
@@ -349,7 +351,7 @@ class TextDocumentQATool(DialogMixin, ToolPlugin):
                 if os.path.exists(meta):
                     os.remove(meta)
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                logger.exception("text_document_qa: failed to delete document doc_id=%r", doc_id)
                 return {"success": False, "error": f"Не удалось удалить: {e}"}
             return {"success": True, "output": f"🗑️ Удалено: {doc_id}"}
 
@@ -387,7 +389,7 @@ class TextDocumentQATool(DialogMixin, ToolPlugin):
                 )
                 answer = (resp.choices[0].message.content or "").strip()
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                logger.exception("text_document_qa: LLM ask failed doc_id=%r", doc_id)
                 return {"success": False, "error": f"LLM failed: {e}"}
             return {"success": True, "output": answer or "Нет ответа в документе."}
 

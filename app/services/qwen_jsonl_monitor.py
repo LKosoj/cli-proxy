@@ -325,24 +325,20 @@ class QwenJsonlMonitor:
                 )
                 self._log.info("Discovered Qwen session: %s", session_id)
 
+    def _poll_sync(self) -> None:
+        """Synchronous poll step: discover sessions and read new events."""
+        chat_dir = self._find_chat_dir()
+        if chat_dir:
+            self._discover_sessions(chat_dir)
+            for monitor in list(self.monitors.values()):
+                monitor.read_new_events()
+
     async def _poll_loop(self) -> None:
         """Main polling loop."""
         while self._running:
             try:
-                # Find chat directory
-                chat_dir = self._find_chat_dir()
-                if chat_dir:
-                    # Discover new sessions
-                    self._discover_sessions(chat_dir)
-
-                    # Read new events from all monitors
-                    for monitor in list(self.monitors.values()):
-                        monitor.read_new_events()
-                        # Monitors already call callback in read_new_events
-
-                # Wait for next poll
+                await asyncio.to_thread(self._poll_sync)
                 await asyncio.sleep(self.poll_interval)
-
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -361,12 +357,8 @@ class QwenJsonlMonitor:
     def stop(self) -> None:
         """Stop the monitoring loop."""
         self._running = False
-        if self._task:
+        if self._task is not None:
             self._task.cancel()
-            try:
-                asyncio.get_event_loop().run_until_complete(self._task)
-            except Exception:
-                pass
             self._task = None
         self._log.info("Qwen JSONL monitor stopped")
 

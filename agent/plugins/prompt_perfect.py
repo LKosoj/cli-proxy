@@ -8,6 +8,8 @@ from modes.sdk.runtime.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class PromptPerfectTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -59,7 +61,7 @@ class PromptPerfectTool(ToolPlugin):
             )
             optimized = (resp.choices[0].message.content or "").strip()
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("prompt_perfect: LLM optimization request failed model=%r", model)
             return {"success": False, "error": f"Prompt optimization failed: {e}"}
 
         if not optimized:

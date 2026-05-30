@@ -8,12 +8,16 @@ from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
-from bs4 import BeautifulSoup
 from openai import AsyncOpenAI
 
 from modes.sdk.runtime.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
+from agent.tooling.helpers import (
+    extract_html_title as _helpers_extract_title,
+    clean_html_with_bs4 as _helpers_clean_html,
+    clean_extra_spaces as _helpers_clean_extra_spaces,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -368,7 +372,7 @@ class WebResearchTool(ToolPlugin):
                         }
 
                 html_content = response.text
-                title = self._extract_title(html_content)
+                title = _helpers_extract_title(html_content) or "Без заголовка"
 
                 # trafilatura (основной метод)
                 try:
@@ -383,7 +387,7 @@ class WebResearchTool(ToolPlugin):
                         output_format="markdown",
                     )
                     if clean_content and clean_content.strip():
-                        clean_content = self._clean_extra_spaces(clean_content)
+                        clean_content = _helpers_clean_extra_spaces(clean_content)
                         logger.info(f"Успешно загружен через trafilatura: {url}")
                         return {"url": url, "title": title, "content": clean_content}
                 except ImportError:
@@ -392,7 +396,7 @@ class WebResearchTool(ToolPlugin):
                     logger.warning(f"Ошибка trafilatura для {url}: {e}")
 
                 # BeautifulSoup fallback
-                clean_content = self._clean_html_content(html_content)
+                clean_content = _helpers_clean_html(html_content) or html_content
                 if clean_content and clean_content.strip():
                     logger.info(f"Успешно загружен через BeautifulSoup: {url}")
                     return {"url": url, "title": title, "content": clean_content}
@@ -507,7 +511,7 @@ class WebResearchTool(ToolPlugin):
             text = extract_text(pdf_stream)
 
             if text and text.strip():
-                clean_text = self._clean_extra_spaces(text)
+                clean_text = _helpers_clean_extra_spaces(text)
                 title = url.split("/")[-1] or "PDF-документ"
                 logger.info(f"Успешно извлечен текст из PDF: {url} ({len(clean_text)} символов)")
                 return clean_text, title
@@ -569,53 +573,6 @@ class WebResearchTool(ToolPlugin):
                 return markdown_content, extracted_title
             else:
                 raise Exception("Не удалось извлечь контент через Jina API")
-
-    def _extract_title(self, html_content: str) -> str:
-        """Извлекает заголовок из HTML."""
-        try:
-            soup = BeautifulSoup(html_content, "html.parser")
-
-            title_tag = soup.find("title")
-            if title_tag and title_tag.string:
-                return title_tag.string.strip()
-
-            og_title = soup.find("meta", property="og:title")
-            if og_title and og_title.get("content"):
-                return og_title.get("content").strip()
-
-            h1_tag = soup.find("h1")
-            if h1_tag:
-                return h1_tag.get_text().strip()
-
-        except Exception as e:
-            logger.warning(f"Ошибка извлечения заголовка: {e}")
-
-        return "Без заголовка"
-
-    def _clean_extra_spaces(self, text: str) -> str:
-        """Удаляет лишние пробелы и переносы строк."""
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        return "\n".join(lines)
-
-    def _clean_html_content(self, html_content: str) -> str:
-        """Fallback очистка HTML контента через BeautifulSoup."""
-        try:
-            soup = BeautifulSoup(html_content, "html.parser")
-
-            for element in soup(["script", "style", "iframe", "noscript", "nav",
-                                 "footer", "header", "aside", "form", "button"]):
-                element.decompose()
-
-            for element in soup(["br", "p", "h1", "h2", "h3", "h4", "h5", "h6",
-                                 "ul", "ol", "li", "div", "table", "tr", "td", "th"]):
-                element.append("\n")
-
-            text = soup.get_text(separator="\n", strip=True)
-            return self._clean_extra_spaces(text)
-
-        except Exception as e:
-            logger.error(f"Ошибка при очистке HTML: {e}")
-            return html_content
 
     async def _generate_search_queries_lang(self, user_query: str, lang: str, n: int) -> List[str]:
         """Генерирует поисковые запросы для конкретного языка."""

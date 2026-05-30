@@ -1,4 +1,5 @@
 import json
+import os
 import types
 from pathlib import Path
 
@@ -776,3 +777,89 @@ async def test_analyst_syncs_step_results_into_meta_before_runtime_returns(tmp_p
     meta = latest_run.load_meta()
     assert [item["id"] for item in (meta.get("steps") or [])] == ["research_step"]
     assert Path(latest_run.step_artifact_path("research_step")).exists()
+
+
+# ---------------------------------------------------------------------------
+# Тесты сортировки latest_run по created_at (M4 fix)
+# ---------------------------------------------------------------------------
+
+def test_analyst_latest_run_uses_created_at_not_lexicographic_name(tmp_path) -> None:
+    """latest_run выбирает прогон с наибольшим created_at, а не лексикографически последний."""
+    base = cli_proxy_artifact_path(str(tmp_path), ".analyst_runs")
+
+    # Два прогона в один день: лексикографически "2026-05-01_zzzzzz" > "2026-05-01_aaaaaa",
+    # но created_at у aaaaaa позже — значит, latest_run должен вернуть aaaaaa.
+    early_run = AnalystRunDirectory(base, run_id="2026-05-01_zzzzzz")
+    early_run.create(
+        analysis_profile="codebase",
+        document_kind="spec",
+        detail_level="standard",
+        template_id="default",
+        summary="Ранний прогон",
+        user_request="Запрос 1",
+        session_id="s-ts",
+    )
+    late_run = AnalystRunDirectory(base, run_id="2026-05-01_aaaaaa")
+    late_run.create(
+        analysis_profile="codebase",
+        document_kind="spec",
+        detail_level="standard",
+        template_id="default",
+        summary="Поздний прогон",
+        user_request="Запрос 2",
+        session_id="s-ts",
+    )
+
+    # Патчим created_at: zzzzzz — более ранний, aaaaaa — более поздний.
+    early_meta = early_run.load_meta()
+    early_meta["created_at"] = "2026-05-01T10:00:00+00:00"
+    early_run.save_meta(early_meta)
+
+    late_meta = late_run.load_meta()
+    late_meta["created_at"] = "2026-05-01T12:00:00+00:00"
+    late_run.save_meta(late_meta)
+
+    result = AnalystRunDirectory.latest_run(base, session_id="s-ts")
+    assert result is not None
+    assert result.run_id == "2026-05-01_aaaaaa"
+
+
+def test_analyst_latest_run_falls_back_to_mtime_when_no_created_at(tmp_path) -> None:
+    """При отсутствии created_at в meta.json latest_run использует mtime каталога."""
+    base = cli_proxy_artifact_path(str(tmp_path), ".analyst_runs")
+
+    old_run = AnalystRunDirectory(base, run_id="2026-05-02_zzz000")
+    old_run.create(
+        analysis_profile="codebase",
+        document_kind="spec",
+        detail_level="standard",
+        template_id="default",
+        summary="Старый по mtime",
+        user_request="Запрос A",
+    )
+    new_run = AnalystRunDirectory(base, run_id="2026-05-02_aaa999")
+    new_run.create(
+        analysis_profile="codebase",
+        document_kind="spec",
+        detail_level="standard",
+        template_id="default",
+        summary="Новый по mtime",
+        user_request="Запрос B",
+    )
+
+    # Удаляем created_at из обоих meta.json, чтобы форсировать fallback на mtime.
+    for run in (old_run, new_run):
+        m = run.load_meta()
+        m.pop("created_at", None)
+        run.save_meta(m)
+
+    # Устанавливаем mtime: zzz000 старее, aaa999 новее.
+    old_ts = 1_700_000_000.0
+    new_ts = 1_800_000_000.0
+    os.utime(old_run.run_path, (old_ts, old_ts))
+    os.utime(new_run.run_path, (new_ts, new_ts))
+
+    result = AnalystRunDirectory.latest_run(base)
+    assert result is not None
+    # aaa999 лексикографически меньше zzz000, но mtime у него больше.
+    assert result.run_id == "2026-05-02_aaa999"

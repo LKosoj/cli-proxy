@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -7,6 +8,8 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from modes.sdk.runtime.mcp.stdio_client import MCPToolInfo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,12 +34,19 @@ class HttpMCPClient:
         self.cfg = cfg
         self._client: Optional[httpx.AsyncClient] = None
         self._next_id = 1
+        self._id_lock = asyncio.Lock()
 
     async def start(self) -> None:
         if self._client:
             return
         self._client = httpx.AsyncClient(timeout=self.cfg.timeout_ms / 1000)
-        await self._initialize()
+        # Если handshake падает, обязаны закрыть клиента, иначе httpx.AsyncClient утечёт:
+        # вызывающий не добавит клиента в _clients и close_all() его не остановит.
+        try:
+            await self._initialize()
+        except Exception:
+            await self.stop()
+            raise
 
     async def stop(self) -> None:
         if self._client:
@@ -75,8 +85,12 @@ class HttpMCPClient:
                 },
             )
             await self._notify("notifications/initialized", {})
-        except Exception as e:
-            logging.exception(f"tool failed MCP http initialize failed for '{self.cfg.name}': {str(e)}")
+        except RuntimeError as e:
+            # JSON-RPC ошибка сервера — сервер может всё равно работать для tools/list.
+            logger.debug("mcp http '%s': JSON-RPC ошибка при initialize: %s", self.cfg.name, e)
+        except Exception:
+            logger.exception("mcp http '%s': IO/сетевая ошибка при initialize", self.cfg.name)
+            raise
 
     async def _notify(self, method: str, params: Dict[str, Any]) -> None:
         await self._request(method, params, notification=True)
@@ -86,9 +100,12 @@ class HttpMCPClient:
     ) -> Optional[Dict[str, Any]]:
         if not self._client:
             raise RuntimeError("HTTP MCP client not started")
-        req_id = None if notification else self._next_id
-        if req_id is not None:
-            self._next_id += 1
+
+        req_id = None
+        if not notification:
+            async with self._id_lock:
+                req_id = self._next_id
+                self._next_id += 1
 
         msg: Dict[str, Any] = {"jsonrpc": "2.0", "method": method, "params": params or {}}
         if req_id is not None:

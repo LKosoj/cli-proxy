@@ -57,6 +57,9 @@ _CLI_RESPONSE_FORMAT_RE = re.compile(r"CLI_RESPONSE_FORMAT:\s*([a-z0-9_]+)", re.
 
 _gitignore_checked: set = set()
 
+# Singleton lock serialising save_config() from prompt/resume-regex autodetection (H3).
+_CONFIG_SAVE_LOCK = threading.Lock()
+
 
 def ensure_cli_proxy_gitignored(workdir: str) -> None:
     """Ensure ``.cli-proxy/`` is listed in the project's ``.gitignore``.
@@ -297,6 +300,8 @@ class GitState:
     conflict: bool = False
     conflict_files: list[str] = field(default_factory=list)
     conflict_kind: Optional[str] = None
+    # Мьютекс для атомарного check-and-set busy; не сериализуется
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
 
 @dataclass
@@ -1313,7 +1318,7 @@ class Session:
         lines = output.splitlines()
         regex = detect_prompt_regex(lines)
         if regex:
-            with threading.Lock():
+            with _CONFIG_SAVE_LOCK:
                 self.tool.prompt_regex = regex
                 save_config(self.config)
         return output
@@ -1489,8 +1494,9 @@ class Session:
             return
         regex = detect_resume_regex(output)
         if regex:
-            self.tool.resume_regex = regex
-            save_config(self.config)
+            with _CONFIG_SAVE_LOCK:
+                self.tool.resume_regex = regex
+                save_config(self.config)
 
     def _update_activity(
         self,
@@ -1903,7 +1909,7 @@ class Session:
         if pid is None:
             return False
         signaled = self._signal_process_group(pid, sig)
-        signaled_groups = {int(pid)} if signaled else set()
+        signaled_groups: set[int] = {int(pid)} if signaled else set()
         descendants = self._headless_process_descendants(pid)
         current_group = os.getpgrp()
         for child_pid in descendants:
@@ -2046,6 +2052,8 @@ class SessionManager:
         # Chat-scoped sessions: different Telegram chats must not share sessions/active state.
         self.sessions_by_chat: Dict[int, Dict[str, Session]] = {}
         self._counter_by_chat: Dict[int, int] = {}
+        # uid -> Session fast-lookup index (M9-uid). Keyed by session_runtime_uid(session).
+        self._session_by_uid: Dict[str, "Session"] = {}
         # Optional callback invoked whenever the session inventory changes.
         # Signature: callback(chat_id) -> None
         self.on_session_change: Optional[Callable[[int], None]] = None
@@ -2087,6 +2095,21 @@ class SessionManager:
             self.sessions_by_chat[chat_id] = {}
         if chat_id not in self._counter_by_chat:
             self._counter_by_chat[chat_id] = 0
+
+    def _index_session(self, session: "Session") -> None:
+        """Add session to the uid index."""
+        uid = session_runtime_uid(session)
+        if uid:
+            self._session_by_uid[uid] = session
+
+    def _unindex_session(self, session: "Session") -> None:
+        """Remove session from the uid index."""
+        uid = session_runtime_uid(session)
+        if uid and self._session_by_uid.get(uid) is session:
+            del self._session_by_uid[uid]
+        for key, indexed in list(self._session_by_uid.items()):
+            if indexed is session:
+                del self._session_by_uid[key]
 
     def _clear_session_sandbox_dir(self, scoped_key: str) -> bool:
         token = _sanitize_scoped_key_token(scoped_key)
@@ -2185,6 +2208,7 @@ class SessionManager:
         session.name = f"{tool.name}@{workdir}"
         # Do not load state by (tool, workdir): it is ambiguous when multiple sessions share them.
         self.sessions_by_chat[chat_id][sid] = session
+        self._index_session(session)
         self._persist_sessions()
         self._fire_session_change(chat_id)
         return session
@@ -2230,6 +2254,12 @@ class SessionManager:
         token = str(session_uid or "").strip()
         if not token:
             return None
+        # Fast path: O(1) index lookup (M9-uid).
+        indexed = self._session_by_uid.get(token)
+        if indexed is not None:
+            if session_runtime_uid(indexed) == token:
+                return indexed
+            self._session_by_uid.pop(token, None)
         if token.startswith("chat:"):
             chat_parts = token.split(":", 2)
             if len(chat_parts) == 3:
@@ -2238,17 +2268,21 @@ class SessionManager:
                 except Exception:
                     resolved = None
                 if resolved is not None and session_runtime_uid(resolved) == token:
+                    self._index_session(resolved)
                     return resolved
         if token.startswith("desktop:"):
             desktop_session_id = token.split(":", 1)[1].strip()
             if desktop_session_id:
                 desktop_session = self.get("desktop", desktop_session_id)
                 if desktop_session is not None and session_runtime_uid(desktop_session) == token:
+                    self._index_session(desktop_session)
                     return desktop_session
+        # Fallback: linear scan (handles index de-sync and scope-uid / raw-id matches).
         scope_matches: list[Session] = []
         for sessions in self.sessions_by_chat.values():
             for session in sessions.values():
                 if session_runtime_uid(session) == token:
+                    self._index_session(session)
                     return session
                 scope = getattr(session, "scope", None)
                 if scope is None:
@@ -2287,6 +2321,7 @@ class SessionManager:
         session = self.sessions_by_chat[chat_id].pop(session_id, None)
         if not session:
             return False
+        self._unindex_session(session)
         session.close()
         self._clear_session_sandbox_dir(session_scoped_key(session))
         self._persist_sessions()
@@ -2395,25 +2430,40 @@ class SessionManager:
             "counter": int(self._counter_by_chat.get(chat_id, 0)),
         }
 
-    def persist_session(self, chat_id: int, session_id: str) -> bool:
+    def serialize_chat_entry_for_persist(self, chat_id: int, session_id: str) -> Optional[Dict[str, Any]]:
+        """Сериализует chat-entry на ВЫЗЫВАЮЩЕМ потоке (ожидается event loop).
+
+        H1: _serialize_session_payload итерирует живые session.queue/dict, поэтому
+        снимать снапшот можно только на loop-потоке — параллельная мутация очереди
+        из корутин при сериализации в worker-потоке ломает обход
+        ("deque mutated during iteration"). Возвращает None, если сессии нет.
+        """
         self._ensure_chat(chat_id)
         sid = str(session_id or "").strip()
         if not sid:
-            return False
-        session = self.sessions_by_chat.get(chat_id, {}).get(sid)
-        if session is None:
-            return False
+            return None
+        if self.sessions_by_chat.get(chat_id, {}).get(sid) is None:
+            return None
+        return self._serialize_chat_entry(chat_id)
+
+    def write_chat_entry(self, chat_id: int, entry: Dict[str, Any]) -> bool:
+        """Пишет уже сериализованную chat-entry в state-repo. Безопасно из worker-потока."""
         try:
             with self._persist_lock:
-                self._state_repo.replace_chat_entry(
-                    chat_id=chat_id,
-                    entry=self._serialize_chat_entry(chat_id),
-                )
+                self._state_repo.replace_chat_entry(chat_id=chat_id, entry=entry)
             return True
         except Exception:
-            logger.exception("failed to persist single session chat_id=%s session_id=%s", chat_id, sid)
-            self._persist_sessions()
+            logger.exception("failed to write chat entry chat_id=%s", chat_id)
             return False
+
+    def persist_session(self, chat_id: int, session_id: str) -> bool:
+        entry = self.serialize_chat_entry_for_persist(chat_id, session_id)
+        if entry is None:
+            return False
+        if self.write_chat_entry(chat_id, entry):
+            return True
+        self._persist_sessions()
+        return False
 
     def _persist_sessions(self) -> None:
         try:
@@ -2584,6 +2634,7 @@ class SessionManager:
                     session.queue = deque(self._normalize_queue_items_for_persistence(val.get("queue", [])))
                     self._cleanup_legacy_session_sandbox_dir(session.id, scoped_key=session.scoped_key or "")
                     self.sessions_by_chat[chat_id][str(sid)] = session
+                    self._index_session(session)
             return
 
         return

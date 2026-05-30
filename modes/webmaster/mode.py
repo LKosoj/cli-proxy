@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -17,19 +16,21 @@ from app.services.project_prompts_service import (
     load_mode_prompt_texts,
     save_mode_learning,
 )
-from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore, is_terminal_status
+from app.services.run_artifact_store import RunArtifactHandle
 
 from modes.sdk.runtime.openai_client import chat_completion
 from modes.sdk.runtime.cli_contracts import CLIResponseFormat, wrap_prompt_for_response_format
 from modes.sdk.runtime.json_normalizer import loads_safe, parse_normalize_validate
 from modes.sdk import BaseMode, CallbackModel, MessageModel, MessagingService, ToolResult
+from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.services import ModeStatusService
 from sessions.session_state_access import get_active_mode
 from utils.paths import cli_proxy_artifact_path
 
 from .feedback_optimizer import apply_prompt_learning, normalize_general_patch, normalize_learning_payload
+from .intent_service import IntentService
 from .models import FeedbackDecision, ValidationDecision, WebmasterContext
-from .schemas import WebmasterIntentOutputSchema, WebmasterValidationReportSchema
+from .schemas import WebmasterValidationReportSchema
 from .state_store import WebmasterStateStore, build_user_key
 
 
@@ -37,10 +38,9 @@ class _InvalidConfirmationSelection(RuntimeError):
     """Raised when ask_user returns a non-button value."""
 
 
-_WEBMASTER_RUN_HANDLE_SESSION_ATTR = "_webmaster_run_handle"
+class WebmasterMode(BaseMode, RunArtifactsMixin):
+    _RUN_HANDLE_SESSION_ATTR = "_webmaster_run_handle"
 
-
-class WebmasterMode(BaseMode):
     mode_id = "webmaster"
     display_name = "🌐 Вебмастер"
     description = "Управление web-сайтом через use_cli с подтверждением намерений"
@@ -48,6 +48,7 @@ class WebmasterMode(BaseMode):
     def __init__(self, dependencies: Optional[ModeDependencies] = None) -> None:
         super().__init__(dependencies)
         self._log = logging.getLogger(__name__)
+        self._intent = IntentService(self)
         self._invalid_prompts_enable_text = (
             "❌ Не удалось включить Вебмастер: повреждён файл project prompts "
             "`.cli-proxy/.webmaster/prompt/prompts.yaml`. "
@@ -1367,12 +1368,7 @@ class WebmasterMode(BaseMode):
         }
         return WebmasterContext.from_dict(payload, webmaster_user_key)
 
-    def _artifact_store(self) -> Optional[RunArtifactStore]:
-        config = getattr(self, "config", None)
-        if config is None:
-            return None
-        return RunArtifactStore(config)
-
+    # Override: лог-сообщение не содержит mode_id= (расхождение с RunArtifactsMixin).
     def _is_run_artifacts_enabled(self) -> bool:
         service = self._optional_run_artifacts()
         if service is None:
@@ -1383,15 +1379,7 @@ class WebmasterMode(BaseMode):
             self._log.exception("webmaster run artifacts: failed to resolve enabled flag")
             return False
 
-    @staticmethod
-    def _prompt_hash(prompt: str) -> str:
-        digest = hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest()
-        return f"sha256:{digest}"
-
-    @staticmethod
-    def _is_terminal_run_status(status: Any) -> bool:
-        return is_terminal_status(status)
-
+    # Override: оборачивает вызов artifact_store.latest_run в try/except (расхождение с RunArtifactsMixin).
     def _latest_mode_run(self, session: Any) -> Optional[RunArtifactHandle]:
         artifact_store = self._artifact_store()
         if artifact_store is None:
@@ -1600,6 +1588,8 @@ class WebmasterMode(BaseMode):
             payload["boundary_report"] = dict(boundary_report)
         return payload
 
+    # Override: нет параметра merge_execution_context (всегда shallow); phase fallback — "intent" vs "complete" в миксине;
+    # run.run_id в логе используется напрямую (расхождения с RunArtifactsMixin).
     def _save_run_state(
         self,
         run: Optional[RunArtifactHandle],
@@ -1607,7 +1597,10 @@ class WebmasterMode(BaseMode):
         phase: str,
         status: str,
         mode_context: Optional[Dict[str, Any]] = None,
+        merge_execution_context: MergeStrategy = "shallow",
     ) -> None:
+        # merge_execution_context присутствует для совместимости сигнатуры с RunArtifactsMixin (LSP);
+        # webmaster всегда выполняет shallow-merge с phase-fallback "intent", поэтому параметр игнорируется.
         if run is None:
             return
         artifact_store = self._artifact_store()
@@ -1635,6 +1628,7 @@ class WebmasterMode(BaseMode):
         except Exception:
             self._log.exception("webmaster run artifacts: save_state failed phase=%s run_id=%s", phase, run.run_id)
 
+    # Override: run.run_id в логе напрямую (расхождение с RunArtifactsMixin, где getattr(run, "run_id", "")).
     def _save_run_plan(self, run: Optional[RunArtifactHandle], plan: Dict[str, Any]) -> None:
         if run is None:
             return
@@ -1646,6 +1640,7 @@ class WebmasterMode(BaseMode):
         except Exception:
             self._log.exception("webmaster run artifacts: save_plan failed run_id=%s", run.run_id)
 
+    # Override: run.run_id в логе напрямую (расхождение с RunArtifactsMixin, где getattr(run, "run_id", "")).
     def _append_checkpoint(self, run: Optional[RunArtifactHandle], checkpoint: Dict[str, Any]) -> None:
         if run is None:
             return
@@ -1665,6 +1660,8 @@ class WebmasterMode(BaseMode):
             return None
         return validator.validate(run, mode_id=self.mode_id, phase=phase)
 
+    # Override: использует вспомогательный _boundary_report (вызываемый также из run_pipeline напрямую)
+    # и иной текст RuntimeError; RunArtifactsMixin вызывает validator.validate напрямую.
     def _validate_run_boundary(self, run: Optional[RunArtifactHandle], *, phase: str) -> None:
         report = self._boundary_report(run, phase=phase)
         if report is None or str(report.status or "") == "ok":
@@ -1672,6 +1669,7 @@ class WebmasterMode(BaseMode):
         issues = ", ".join(issue.code for issue in report.issues)
         raise RuntimeError(f"Webmaster run boundary validation failed phase={phase}: {issues}")
 
+    # Override: run.run_id в логе напрямую (расхождение с RunArtifactsMixin, где getattr(run, "run_id", "")).
     def _mark_run_finished(self, run: Optional[RunArtifactHandle], *, status: str, phase: str) -> None:
         if run is None:
             return
@@ -1682,20 +1680,6 @@ class WebmasterMode(BaseMode):
             artifact_store.mark_finished(run, status=status, phase=phase)
         except Exception:
             self._log.exception("webmaster run artifacts: mark_finished failed run_id=%s", run.run_id)
-
-    @staticmethod
-    def _set_active_run_handle(session: Any, run: RunArtifactHandle) -> None:
-        setattr(session, _WEBMASTER_RUN_HANDLE_SESSION_ATTR, run)
-
-    @staticmethod
-    def _active_run_handle(session: Any) -> Optional[RunArtifactHandle]:
-        handle = getattr(session, _WEBMASTER_RUN_HANDLE_SESSION_ATTR, None)
-        return handle if isinstance(handle, RunArtifactHandle) else None
-
-    @staticmethod
-    def _clear_active_run_handle(session: Any) -> None:
-        if hasattr(session, _WEBMASTER_RUN_HANDLE_SESSION_ATTR):
-            setattr(session, _WEBMASTER_RUN_HANDLE_SESSION_ATTR, None)
 
     def _state_root(self, session: Any) -> str:
         workdir = str(getattr(session, "workdir", "") or "").strip()
@@ -1805,52 +1789,14 @@ class WebmasterMode(BaseMode):
         user_text: str,
         wm_ctx: WebmasterContext,
     ) -> Dict[str, Any]:
-        tooling = self._tooling()
-        tool_ctx = self._tool_ctx(session, context, dest, bot_app)
-        resp = await tooling.execute(
-            "intent_plugin",
-            {
-                "user_text": user_text,
-                "previous_goal": wm_ctx.goal,
-                "previous_actions": wm_ctx.actions,
-            },
-            tool_ctx,
-        )
-        if not resp.get("success"):
-            raise RuntimeError(f"intent_plugin failed: {resp.get('error')}")
-        raw = str(resp.get("output") or "{}").strip()
-        if not raw:
-            self._log.warning("webmaster intent_plugin returned empty output; using fallback intent payload")
-            return self._fallback_intent_payload(user_text=user_text, wm_ctx=wm_ctx)
-        try:
-            data = parse_normalize_validate(raw, WebmasterIntentOutputSchema)
-        except Exception:
-            self._log.exception("webmaster intent_plugin output normalize/parse failed")
-            return self._fallback_intent_payload(user_text=user_text, wm_ctx=wm_ctx)
-        return self._normalize_intent_payload(
-            payload=data,
+        return await self._intent.analyze_intent(
+            bot_app=bot_app,
+            session=session,
+            context=context,
+            dest=dest,
             user_text=user_text,
             wm_ctx=wm_ctx,
         )
-
-    @staticmethod
-    def _normalize_text_list(values: Any, *, limit: int = 20) -> List[str]:
-        if not isinstance(values, list):
-            return []
-        out: List[str] = []
-        seen: set[str] = set()
-        for item in values:
-            text = str(item or "").strip()
-            if not text:
-                continue
-            folded = text.casefold()
-            if folded in seen:
-                continue
-            seen.add(folded)
-            out.append(text)
-            if len(out) >= int(limit):
-                break
-        return out
 
     def _normalize_intent_payload(
         self,
@@ -1859,33 +1805,7 @@ class WebmasterMode(BaseMode):
         user_text: str,
         wm_ctx: WebmasterContext,
     ) -> Dict[str, Any]:
-        goal = str(payload.get("goal") or "").strip()
-        if not goal:
-            goal = str(user_text or "").strip()
-        if not goal:
-            goal = str(wm_ctx.goal or "").strip()
-        goal = goal or "Уточнить задачу"
-        actions = self._normalize_text_list(payload.get("actions"))
-        if not actions:
-            actions = self._normalize_text_list(getattr(wm_ctx, "actions", []))
-        if not actions:
-            actions = [goal]
-        constraints = self._normalize_text_list(payload.get("constraints"))
-        if not constraints:
-            constraints = self._normalize_text_list(getattr(wm_ctx, "constraints", []))
-        acceptance_criteria = self._normalize_text_list(payload.get("acceptance_criteria"))
-        if not acceptance_criteria:
-            acceptance_criteria = self._normalize_text_list(getattr(wm_ctx, "acceptance_criteria", []))
-        ambiguities = self._normalize_text_list(payload.get("ambiguities"))
-        assumptions = self._normalize_text_list(payload.get("assumptions"))
-        return {
-            "goal": goal,
-            "actions": actions,
-            "constraints": constraints,
-            "acceptance_criteria": acceptance_criteria,
-            "ambiguities": ambiguities,
-            "assumptions": assumptions,
-        }
+        return self._intent.normalize_intent_payload(payload=payload, user_text=user_text, wm_ctx=wm_ctx)
 
     def _fallback_intent_payload(
         self,
@@ -1893,11 +1813,7 @@ class WebmasterMode(BaseMode):
         user_text: str,
         wm_ctx: WebmasterContext,
     ) -> Dict[str, Any]:
-        return self._normalize_intent_payload(
-            payload={},
-            user_text=user_text,
-            wm_ctx=wm_ctx,
-        )
+        return self._intent.fallback_intent_payload(user_text=user_text, wm_ctx=wm_ctx)
 
     async def _confirm_intent(self, bot_app: Any, session: Any, context: Any, dest: Dict[str, Any], wm_ctx: WebmasterContext) -> str:
         tooling = self._tooling()
@@ -1950,35 +1866,7 @@ class WebmasterMode(BaseMode):
         *,
         session: Any,
     ) -> FeedbackDecision:
-        prompts = self._load_prompts(session=session)
-        system = (
-            "Определи тип пользовательского сообщения. Верни только JSON: "
-            "{\"kind\":\"new_task|continue_task|requirement_change|wrong_execution|unclear\",\"reason\":\"...\"}."
-        )
-        user = json.dumps(
-            {
-                "feedback_prompt": prompts["feedback_analysis"],
-                "user_text": user_text,
-                "context": {
-                    "stage": wm_ctx.stage,
-                    "goal": wm_ctx.goal,
-                    "actions": wm_ctx.actions,
-                    "last_cli_report": wm_ctx.last_cli_report[:1500],
-                },
-            },
-            ensure_ascii=False,
-        )
-        out = await self._chat_completion(
-            bot_app,
-            system,
-            user,
-            response_format={"type": "json_object"},
-        )
-        parsed = self._parse_llm_json(out, required_fields=("kind", "reason"))
-        kind = str(parsed.get("kind") or "").strip()
-        if kind not in ("new_task", "continue_task", "requirement_change", "wrong_execution", "unclear"):
-            raise RuntimeError(f"LLM classify_feedback returned invalid kind: {kind}")
-        return FeedbackDecision(kind=kind, reason=str(parsed.get("reason") or "").strip())
+        return await self._intent.classify_feedback_llm(bot_app, user_text, wm_ctx, session=session)
 
     async def _build_prompt_patch_llm(
         self,
@@ -2148,7 +2036,7 @@ class WebmasterMode(BaseMode):
         if int(chat_id or 0) > 0:
             # Fallback to chat scope when explicit user id is unavailable.
             # This avoids unstable `user_id=0` bucket collisions.
-            return str(chat_id)
+            return int(chat_id)
         return None
 
     async def _chat_completion(

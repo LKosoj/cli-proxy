@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Dict, Optional, TYPE_CHECKING, cast
+from typing import Any, Awaitable, Callable, Dict, Optional, Type, TypeVar, TYPE_CHECKING, cast
 
 from sessions.queue_item import append_session_queue_item
 from sessions.session_state_access import get_active_mode, set_active_mode
@@ -27,6 +27,8 @@ if TYPE_CHECKING:
         ModeRunLifecycleService,
         SkillRuntimeService,
     )
+
+T = TypeVar("T")
 
 
 def _session_runtime_uid(session: Any) -> str:
@@ -120,11 +122,18 @@ class BaseMode(ABC):
             raise RuntimeError(f"{self.get_mode_id()} mode dependencies are not configured")
         return deps
 
+    def _require_service(self, key: str, service_type: Type[T]) -> T:
+        value = self.get_service(key)
+        if value is None:
+            raise RuntimeError(f"{key} service is not configured")
+        return cast(T, value)
+
+    def _optional_service(self, key: str, service_type: Type[T]) -> Optional[T]:
+        value = self.get_service(key)
+        return cast(T, value) if value is not None else None
+
     def _pipeline(self) -> ModePipelineService:
-        pipeline = self.get_service("pipeline")
-        if pipeline is None:
-            raise RuntimeError("pipeline service is not configured")
-        return cast(ModePipelineService, pipeline)
+        return self._require_service("pipeline", ModePipelineService)
 
     def _runtime_getter(self) -> Callable[[str], Any]:
         runtime_getter = self.get_service("runtime_by_capability")
@@ -134,159 +143,82 @@ class BaseMode(ABC):
 
     def _optional_runtime_getter(self) -> Optional[Callable[[str], Any]]:
         runtime_getter = self.get_service("runtime_by_capability")
-        if runtime_getter is None:
-            return None
-        return cast(Callable[[str], Any], runtime_getter)
+        return cast(Callable[[str], Any], runtime_getter) if runtime_getter is not None else None
 
     def _tooling(self) -> ModeToolingService:
-        tooling = self.get_service("tooling")
-        if tooling is None:
-            raise RuntimeError("tooling service is not configured")
-        return cast(ModeToolingService, tooling)
+        return self._require_service("tooling", ModeToolingService)
 
     def _optional_tooling(self) -> Optional[ModeToolingService]:
-        tooling = self.get_service("tooling")
-        if tooling is None:
-            return None
-        return cast(ModeToolingService, tooling)
+        return self._optional_service("tooling", ModeToolingService)
 
     def _run_artifacts(self) -> RunArtifactsService:
         from app.mode_dependencies import RunArtifactsService
-
-        service = self.get_service("run_artifacts")
-        if service is None:
-            raise RuntimeError("run_artifacts service is not configured")
-        return cast(RunArtifactsService, service)
+        return self._require_service("run_artifacts", RunArtifactsService)
 
     def _optional_run_artifacts(self) -> Optional[RunArtifactsService]:
         from app.mode_dependencies import RunArtifactsService
-
-        service = self.get_service("run_artifacts")
-        if service is None:
-            return None
-        return cast(RunArtifactsService, service)
+        return self._optional_service("run_artifacts", RunArtifactsService)
 
     def _run_observability(self) -> RunObservabilityService:
         from app.mode_dependencies import RunObservabilityService
-
-        service = self.get_service("run_observability")
-        if service is None:
-            raise RuntimeError("run_observability service is not configured")
-        return cast(RunObservabilityService, service)
+        return self._require_service("run_observability", RunObservabilityService)
 
     def _optional_run_observability(self) -> Optional[RunObservabilityService]:
         from app.mode_dependencies import RunObservabilityService
-
-        service = self.get_service("run_observability")
-        if service is None:
-            return None
-        return cast(RunObservabilityService, service)
+        return self._optional_service("run_observability", RunObservabilityService)
 
     def _run_doctor(self) -> RunDoctorService:
         from app.mode_dependencies import RunDoctorService
-
-        service = self.get_service("run_doctor")
-        if service is None:
-            raise RuntimeError("run_doctor service is not configured")
-        return cast(RunDoctorService, service)
+        return self._require_service("run_doctor", RunDoctorService)
 
     def _optional_run_doctor(self) -> Optional[RunDoctorService]:
         from app.mode_dependencies import RunDoctorService
-
-        service = self.get_service("run_doctor")
-        if service is None:
-            return None
-        return cast(RunDoctorService, service)
+        return self._optional_service("run_doctor", RunDoctorService)
 
     def _run_boundary_validation(self) -> RunBoundaryValidationService:
         from app.mode_dependencies import RunBoundaryValidationService
-
-        service = self.get_service("run_boundary_validation")
-        if service is None:
-            raise RuntimeError("run_boundary_validation service is not configured")
-        return cast(RunBoundaryValidationService, service)
+        return self._require_service("run_boundary_validation", RunBoundaryValidationService)
 
     def _optional_run_boundary_validation(self) -> Optional[RunBoundaryValidationService]:
         from app.mode_dependencies import RunBoundaryValidationService
-
-        service = self.get_service("run_boundary_validation")
-        if service is None:
-            return None
-        return cast(RunBoundaryValidationService, service)
+        return self._optional_service("run_boundary_validation", RunBoundaryValidationService)
 
     def _mode_run_lifecycle(self) -> ModeRunLifecycleService:
         from app.mode_dependencies import ModeRunLifecycleService
-
-        service = self.get_service("mode_run_lifecycle")
-        if service is None:
-            raise RuntimeError("mode_run_lifecycle service is not configured")
-        return cast(ModeRunLifecycleService, service)
+        return self._require_service("mode_run_lifecycle", ModeRunLifecycleService)
 
     def _optional_mode_run_lifecycle(self) -> Optional[ModeRunLifecycleService]:
         from app.mode_dependencies import ModeRunLifecycleService
-
-        service = self.get_service("mode_run_lifecycle")
-        if service is None:
-            return None
-        return cast(ModeRunLifecycleService, service)
+        return self._optional_service("mode_run_lifecycle", ModeRunLifecycleService)
 
     def _skill_runtime(self) -> SkillRuntimeService:
         from app.mode_dependencies import SkillRuntimeService
-
-        service = self.get_service("skill_runtime")
-        if service is None:
-            raise RuntimeError("skill_runtime service is not configured")
-        return cast(SkillRuntimeService, service)
+        return self._require_service("skill_runtime", SkillRuntimeService)
 
     def _optional_skill_runtime(self) -> Optional[SkillRuntimeService]:
         from app.mode_dependencies import SkillRuntimeService
-
-        service = self.get_service("skill_runtime")
-        if service is None:
-            return None
-        return cast(SkillRuntimeService, service)
+        return self._optional_service("skill_runtime", SkillRuntimeService)
 
     def _agent_runtime(self) -> AgentRuntimeService:
-        runtime = self.get_service("agent_runtime")
-        if runtime is None:
-            raise RuntimeError("agent_runtime service is not configured")
-        return cast(AgentRuntimeService, runtime)
+        return self._require_service("agent_runtime", AgentRuntimeService)
 
     def _dirs_flow(self) -> DirsFlowService:
-        dirs_flow = self.get_service("dirs_flow")
-        if dirs_flow is None:
-            raise RuntimeError("dirs_flow service is not configured")
-        return cast(DirsFlowService, dirs_flow)
+        return self._require_service("dirs_flow", DirsFlowService)
 
     def _optional_dirs_flow(self) -> Optional[DirsFlowService]:
-        dirs_flow = self.get_service("dirs_flow")
-        if dirs_flow is None:
-            return None
-        return cast(DirsFlowService, dirs_flow)
+        return self._optional_service("dirs_flow", DirsFlowService)
 
     def _manager_pending(self) -> DictStateService:
-        store = self.get_service("manager_pending")
-        if store is None:
-            raise RuntimeError("manager_pending service is not configured")
-        return cast(DictStateService, store)
+        return self._require_service("manager_pending", DictStateService)
 
     def _agent_pending(self) -> DictStateService:
-        store = self.get_service("agent_pending")
-        if store is None:
-            raise RuntimeError("agent_pending service is not configured")
-        return cast(DictStateService, store)
+        return self._require_service("agent_pending", DictStateService)
 
     def _optional_agent_pending(self) -> Optional[DictStateService]:
-        store = self.get_service("agent_pending")
-        if store is None:
-            return None
-        return cast(DictStateService, store)
+        return self._optional_service("agent_pending", DictStateService)
 
     def _optional_dialogs(self) -> Optional[DialogService]:
-        dialogs = self.get_service("dialogs")
-        if dialogs is None:
-            return None
-        return cast(DialogService, dialogs)
+        return self._optional_service("dialogs", DialogService)
 
     def _has_messaging_factory(self) -> bool:
         return callable(self.get_service("messaging_factory"))

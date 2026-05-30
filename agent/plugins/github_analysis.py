@@ -12,6 +12,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class GitHubAnalysisTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -49,7 +51,7 @@ class GitHubAnalysisTool(ToolPlugin):
         try:
             out = await asyncio.to_thread(self._fetch_sync, owner, repo, path, max_files, token)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("github_analysis: fetch failed for %s/%s path=%r", owner, repo, path)
             return {"success": False, "error": f"GitHub failed: {e}"}
         return {"success": True, "output": helpers._trim_output(out)}
 

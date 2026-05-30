@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from modes.sdk.file_lock import lock_file, unlock_file
 from utils.paths import sandbox_root
+
+logger = logging.getLogger(__name__)
 
 MEMORY_FILE = "MEMORY.md"
 _LINE_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\s*(.*)$")
@@ -18,7 +22,7 @@ _ALLOWED_LAYERS = {"semantic", "task_state"}
 
 def _normalize_chat_id(chat_id: Any) -> int:
     try:
-        return max(0, int(chat_id or 0))
+        return int(chat_id or 0)
     except Exception:
         return 0
 
@@ -38,19 +42,47 @@ def _memory_path(cwd: str) -> str:
     return os.path.join(cwd, MEMORY_FILE)
 
 
-def read_memory(cwd: str) -> str:
-    path = _memory_path(cwd)
+def _read_locked(path: str) -> str:
+    """Читает файл с shared-локом. Если файла нет — возвращает ""."""
     if not os.path.exists(path):
         return ""
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        return f.read()
+    try:
+        with open(path, "a+", encoding="utf-8", errors="replace") as f:
+            lock_file(f, shared=True)
+            try:
+                f.seek(0)
+                return f.read()
+            finally:
+                unlock_file(f)
+    except PermissionError:
+        logger.debug("_read_locked: нет прав на чтение %s", path)
+        return ""
+    except OSError as exc:
+        logger.debug("_read_locked: ошибка чтения %s: %s", path, exc)
+        return ""
+
+
+def _write_locked_atomic(path: str, content: str) -> None:
+    """Записывает content в файл с exclusive-локом и fsync."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a+", encoding="utf-8") as f:
+        lock_file(f, shared=False)
+        try:
+            f.seek(0)
+            f.truncate(0)
+            f.write(content or "")
+            f.flush()
+            os.fsync(f.fileno())
+        finally:
+            unlock_file(f)
+
+
+def read_memory(cwd: str) -> str:
+    return _read_locked(_memory_path(cwd))
 
 
 def write_memory(cwd: str, content: str) -> None:
-    path = _memory_path(cwd)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content or "")
+    _write_locked_atomic(_memory_path(cwd), content)
 
 
 def memory_size_bytes(content: str) -> int:
@@ -261,27 +293,40 @@ def append_memory_structured(
     exp = ""
     if entry_layer == "task_state" and isinstance(ttl_days, int) and ttl_days > 0:
         exp = (datetime.now(UTC).replace(tzinfo=None) + timedelta(days=ttl_days)).strftime("%Y-%m-%d")
-    existing = parse_entries(read_memory(cwd))
-    norm_new = _normalize_text(clean_text)
-    for entry in existing:
-        if _is_expired(entry):
-            continue
-        if entry.get("tag", "").upper() == clean_tag and _normalize_text(entry.get("text", "")) == norm_new:
-            return False
-    entry = {
-        "ts": now_ts,
-        "tag": clean_tag,
-        "layer": entry_layer,
-        "source": source or "agent",
-        "confidence": confidence,
-        "id": _mk_id(now_ts, clean_tag, clean_text),
-        "expires_at": exp,
-        "text": clean_text,
-    }
+
     path = _memory_path(cwd)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(_render_entry(entry) + "\n")
+
+    # Единый exclusive-lock: read → проверка дублей → append
+    with open(path, "a+", encoding="utf-8") as f:
+        lock_file(f, shared=False)
+        try:
+            f.seek(0)
+            existing_raw = f.read()
+            existing = parse_entries(existing_raw)
+            norm_new = _normalize_text(clean_text)
+            for entry in existing:
+                if _is_expired(entry):
+                    continue
+                if entry.get("tag", "").upper() == clean_tag and _normalize_text(entry.get("text", "")) == norm_new:
+                    return False
+            new_entry = {
+                "ts": now_ts,
+                "tag": clean_tag,
+                "layer": entry_layer,
+                "source": source or "agent",
+                "confidence": confidence,
+                "id": _mk_id(now_ts, clean_tag, clean_text),
+                "expires_at": exp,
+                "text": clean_text,
+            }
+            # Дописываем в конец файла (EOF)
+            f.seek(0, 2)
+            f.write(_render_entry(new_entry) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        finally:
+            unlock_file(f)
     return True
 
 
@@ -311,20 +356,36 @@ def update_memory_entry(
     clean_text = _sanitize_atomic(content)
     if not clean_text:
         return False
-    entries = parse_entries(read_memory(cwd))
-    changed = False
-    for entry in entries:
-        if str(entry.get("id") or "").strip() != target:
-            continue
-        entry["text"] = clean_text
-        entry["source"] = source or entry.get("source") or "agent"
-        entry["confidence"] = confidence
-        entry["ts"] = _now_ts()
-        changed = True
-        break
-    if not changed:
-        return False
-    write_memory(cwd, "\n".join(_render_entry(e) for e in entries) + ("\n" if entries else ""))
+
+    path = _memory_path(cwd)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    with open(path, "a+", encoding="utf-8") as f:
+        lock_file(f, shared=False)
+        try:
+            f.seek(0)
+            raw = f.read()
+            entries = parse_entries(raw)
+            changed = False
+            for entry in entries:
+                if str(entry.get("id") or "").strip() != target:
+                    continue
+                entry["text"] = clean_text
+                entry["source"] = source or entry.get("source") or "agent"
+                entry["confidence"] = confidence
+                entry["ts"] = _now_ts()
+                changed = True
+                break
+            if not changed:
+                return False
+            new_content = "\n".join(_render_entry(e) for e in entries) + ("\n" if entries else "")
+            f.seek(0)
+            f.truncate(0)
+            f.write(new_content)
+            f.flush()
+            os.fsync(f.fileno())
+        finally:
+            unlock_file(f)
     return True
 
 
@@ -332,11 +393,27 @@ def forget_memory_entry(cwd: str, *, entry_id: str) -> bool:
     target = str(entry_id or "").strip()
     if not target:
         return False
-    entries = parse_entries(read_memory(cwd))
-    kept = [e for e in entries if str(e.get("id") or "").strip() != target]
-    if len(kept) == len(entries):
-        return False
-    write_memory(cwd, "\n".join(_render_entry(e) for e in kept) + ("\n" if kept else ""))
+
+    path = _memory_path(cwd)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    with open(path, "a+", encoding="utf-8") as f:
+        lock_file(f, shared=False)
+        try:
+            f.seek(0)
+            raw = f.read()
+            entries = parse_entries(raw)
+            kept = [e for e in entries if str(e.get("id") or "").strip() != target]
+            if len(kept) == len(entries):
+                return False
+            new_content = "\n".join(_render_entry(e) for e in kept) + ("\n" if kept else "")
+            f.seek(0)
+            f.truncate(0)
+            f.write(new_content)
+            f.flush()
+            os.fsync(f.fileno())
+        finally:
+            unlock_file(f)
     return True
 
 
@@ -344,16 +421,32 @@ def forget_memory_by_query(cwd: str, *, query: str) -> int:
     needle = _normalize_text(query)
     if not needle:
         return 0
-    entries = parse_entries(read_memory(cwd))
-    kept: List[Dict[str, Any]] = []
-    removed = 0
-    for e in entries:
-        if needle in _normalize_text(str(e.get("text") or "")):
-            removed += 1
-            continue
-        kept.append(e)
-    if removed:
-        write_memory(cwd, "\n".join(_render_entry(e) for e in kept) + ("\n" if kept else ""))
+
+    path = _memory_path(cwd)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    with open(path, "a+", encoding="utf-8") as f:
+        lock_file(f, shared=False)
+        try:
+            f.seek(0)
+            raw = f.read()
+            entries = parse_entries(raw)
+            kept: List[Dict[str, Any]] = []
+            removed = 0
+            for e in entries:
+                if needle in _normalize_text(str(e.get("text") or "")):
+                    removed += 1
+                    continue
+                kept.append(e)
+            if removed:
+                new_content = "\n".join(_render_entry(e) for e in kept) + ("\n" if kept else "")
+                f.seek(0)
+                f.truncate(0)
+                f.write(new_content)
+                f.flush()
+                os.fsync(f.fileno())
+        finally:
+            unlock_file(f)
     return removed
 
 

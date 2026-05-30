@@ -47,6 +47,20 @@ from tg.files_service_adapter import (
     session_uid_for_files,
 )
 from utils.ui import status_dot
+from app.services.session_state import SessionState
+
+
+def format_session_state(st: SessionState, updated_at_str: str) -> str:
+    """Форматирует объект SessionState в читаемую строку для отображения в Telegram."""
+    return "\n".join([
+        f"Session: {st.session_id or 'нет'}",
+        f"Tool: {st.tool}",
+        f"Workdir: {st.workdir}",
+        f"Resume: {st.resume_token or 'нет'}",
+        f"Name: {st.name or 'нет'}",
+        f"Summary: {st.summary or 'нет'}",
+        f"Updated: {updated_at_str}",
+    ])
 
 
 class TelegramRuntimePayload(BaseModel):
@@ -85,6 +99,26 @@ class BotHandlers:
             except Exception as e:
                 logging.exception("persist single session failed: %s", e)
         self._persist_sessions()
+
+    async def _persist_session_async(self, chat_id: int, session_id: str) -> None:
+        # H1: снапшот session.queue/dict сериализуем СИНХРОННО на event-loop
+        # (мутация очереди из корутин ломает обход), в worker-поток уходит только запись.
+        manager = getattr(self.bot_app, "manager", None)
+        if manager is None or not hasattr(manager, "serialize_chat_entry_for_persist"):
+            # Легаси/тесты без нового API менеджера — синхронный путь.
+            self._persist_session(int(chat_id), str(session_id))
+            return
+        try:
+            entry = manager.serialize_chat_entry_for_persist(int(chat_id), str(session_id))
+            if entry is None:
+                return  # сессия исчезла — персистить нечего
+            ok = await asyncio.to_thread(manager.write_chat_entry, int(chat_id), entry)
+            if bool(ok):
+                return
+            self._persist_sessions()
+        except Exception as e:
+            logging.exception("persist single session async failed: %s", e)
+            self._persist_sessions()
 
     @staticmethod
     def _project_root() -> str:
@@ -1160,7 +1194,7 @@ class BotHandlers:
         if not s:
             return
         s.queue.clear()
-        self._persist_session(chat_id, s.id)
+        await self._persist_session_async(chat_id, s.id)
         await self.bot_app._send_message(context, text="Очередь очищена.", **self._reply_kwargs(update, s))
 
     async def cmd_rename(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1202,7 +1236,7 @@ class BotHandlers:
             )
             return
         session.name = name.strip()
-        self._persist_session(owner_chat_id, session.id)
+        await self._persist_session_async(owner_chat_id, session.id)
         thread_manager = getattr(self.bot_app, "session_thread_manager", None)
         if thread_manager is not None:
             try:
@@ -1568,7 +1602,7 @@ class BotHandlers:
             return
         token = " ".join(context.args).strip()
         s.resume_token = token
-        self._persist_session(chat_id, s.id)
+        await self._persist_session_async(chat_id, s.id)
         await self.bot_app._send_message(context, text="Resume сохранен.", **self._reply_kwargs(update, s))
 
     async def cmd_state(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1622,15 +1656,7 @@ class BotHandlers:
                     **self._reply_kwargs(update, s),
                 )
                 return
-            text = (
-                f"Session: {st.session_id or 'нет'}\\n"
-                f"Tool: {st.tool}\\n"
-                f"Workdir: {st.workdir}\\n"
-                f"Resume: {st.resume_token or 'нет'}\\n"
-                f"Name: {st.name or 'нет'}\\n"
-                f"Summary: {st.summary or 'нет'}\\n"
-                f"Updated: {self.bot_app._format_ts(st.updated_at)}"
-            )
+            text = format_session_state(st, self.bot_app._format_ts(st.updated_at))
             await self.bot_app._send_message(context, text=text, **self._reply_kwargs(update, s))
             return
         if not s:

@@ -207,6 +207,59 @@ class GitOps:
             git_state.conflict_files = []
         if not hasattr(git_state, "conflict_kind"):
             git_state.conflict_kind = None
+        # Guard: восстанавливаем lock при десериализации из состояния
+        if not hasattr(git_state, "lock"):
+            git_state.lock = asyncio.Lock()
+
+    async def _try_acquire_git_busy(
+        self,
+        session: Session,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        message_thread_id: Optional[int] = None,
+    ) -> bool:
+        """Атомарный check-and-set для session.git.busy.
+
+        Возвращает True и выставляет busy=True, если операцию можно начать.
+        Возвращает False и отправляет сообщение об ошибке в противном случае.
+        """
+        self._ensure_git_state(session)
+        if session.busy or session.is_active_by_tick():
+            await self._send_git_message(
+                context,
+                chat_id,
+                session,
+                "CLI-сессия занята. Дождитесь завершения и попробуйте снова.",
+                message_thread_id=message_thread_id,
+            )
+            return False
+        git_lock = getattr(session.git, "lock", None)
+        if git_lock is None:
+            # Fallback: lock недоступен — используем простую проверку без атомарности
+            if session.git.busy:
+                await self._send_git_message(
+                    context,
+                    chat_id,
+                    session,
+                    "Git уже выполняется. Дождитесь завершения.",
+                    message_thread_id=message_thread_id,
+                )
+                return False
+            session.git.busy = True
+            return True
+        async with git_lock:
+            if session.git.busy:
+                await self._send_git_message(
+                    context,
+                    chat_id,
+                    session,
+                    "Git уже выполняется. Дождитесь завершения.",
+                    message_thread_id=message_thread_id,
+                )
+                return False
+            session.git.busy = True
+        return True
 
     def _resolve_scope_session(self, chat_id: int, *, message_thread_id: Optional[int] = None) -> Optional[Session]:
         resolver = getattr(self.manager, "get_by_scope", None)
@@ -571,7 +624,8 @@ class GitOps:
         *,
         message_thread_id: Optional[int] = None,
     ) -> None:
-        session.git.busy = True
+        if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+            return
         try:
             code, add_out = await self._run_git(session, ["add", "-A"])
             if code != 0:
@@ -637,7 +691,8 @@ class GitOps:
         *,
         message_thread_id: Optional[int] = None,
     ) -> None:
-        session.git.busy = True
+        if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+            return
         try:
             code, output = await self._run_git(session, [action, ref])
             await self._send_git_output(
@@ -807,7 +862,8 @@ class GitOps:
                 return True
             if data == "git_fetch":
                 await self._edit_msg(context, query, "Выполняю git fetch…")
-                session.git.busy = True
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                    return True
                 try:
                     code, output = await self._run_git(session, ["fetch", "--prune"])
                     await self._send_git_output(
@@ -832,7 +888,8 @@ class GitOps:
                 return True
             if data == "git_pull":
                 await self._edit_msg(context, query, "Проверяю возможность fast-forward…")
-                session.git.busy = True
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                    return True
                 try:
                     await self._run_git(session, ["fetch", "--prune"])
                     branch = await self._git_current_branch(session)
@@ -1041,7 +1098,8 @@ class GitOps:
                 return True
             if data == "git_summary":
                 await self._edit_msg(context, query, "Собираю git summary…")
-                session.git.busy = True
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                    return True
                 try:
                     code_status, status = await self._run_git(session, ["status", "--short", "--branch"])
                     code_stat, stat = await self._run_git(session, ["diff", "--stat"])
@@ -1065,7 +1123,8 @@ class GitOps:
                 return True
             if data == "git_stash":
                 await self._edit_msg(context, query, "Выполняю stash…")
-                session.git.busy = True
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                    return True
                 try:
                     code, output = await self._run_git(session, ["stash", "push", "-u"])
                     await self._send_git_output(
@@ -1142,7 +1201,8 @@ class GitOps:
                 return True
             if data == "git_push":
                 await self._edit_msg(context, query, "Выполняю push…")
-                session.git.busy = True
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                    return True
                 try:
                     branch = await self._git_current_branch(session)
                     upstream = await self._git_upstream(session)

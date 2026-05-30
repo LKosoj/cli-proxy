@@ -6,12 +6,16 @@ import re
 import time
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from modes.sdk.json_store import read_json_locked, write_json_locked
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.sdk.runtime.manage_tasks_progress import ManageTasksProgressBridge
-from modes.sdk.runtime.openai_client import create_async_openai_client, chat_completion as runtime_chat_completion
+from modes.sdk.runtime.openai_client import (
+    create_async_openai_client,
+    chat_completion as runtime_chat_completion,
+    resolve_openai_config,
+)
 from modes.sdk.runtime.tooling.registry import ToolRegistry as PluginToolRegistry
 
 from config import AppConfig
@@ -56,24 +60,6 @@ _PROGRESSIVE_CORE_TOOL_SCHEMAS = frozenset(
         "use_cli",
     }
 )
-# ==== OpenAI config ====
-
-
-def _get_openai_config(config: Optional[AppConfig] = None) -> Optional[Tuple[str, str, str]]:
-    api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL")
-    base_url = os.getenv("OPENAI_BASE_URL")
-    if config:
-        api_key = api_key or config.defaults.openai_api_key
-        model = model or config.defaults.openai_model
-        base_url = base_url or config.defaults.openai_base_url
-    if not base_url:
-        base_url = "https://api.openai.com"
-    if not api_key or not model:
-        return None
-    return api_key, model, base_url.rstrip("/")
-
-
 # ==== Memory & chat history ====
 MEMORY_FILE = "MEMORY.md"
 
@@ -261,14 +247,26 @@ def _compact_working_message(message: Dict[str, Any]) -> Dict[str, Any]:
 class ReActAgent:
     def __init__(self, config: AppConfig, tool_registry: PluginToolRegistry):
         self.config = config
-        self._openai_cfg = _get_openai_config(config)
+        self._openai_cfg = resolve_openai_config(config, model_key="openai_model", env_priority=True)
         self._openai_client = None
         if self._openai_cfg:
             api_key, _, base_url = self._openai_cfg
             self._openai_client = create_async_openai_client(api_key=api_key, base_url=base_url)
         self._sessions: Dict[str, Dict[str, Any]] = {}
+        # Обратный индекс: raw_session_id → {scoped_keys} для корректного clear_session_cache
+        self._session_id_index: Dict[str, set] = {}
+        # Лок удерживается только при load/save кэша сессии по scoped-ключу;
+        # тело run выполняется БЕЗ удержания лока. Локи не удаляем: удаление
+        # удерживаемого lock может разнести ожидающие корутины по разным lock.
+        self._session_locks: Dict[str, asyncio.Lock] = {}
         # ToolRegistry must be a singleton shared across executor/orchestrator/agent.
         self._tool_registry = tool_registry
+
+    def _get_session_lock(self, key: str) -> asyncio.Lock:
+        """Лениво создаёт и кэширует Lock для scoped-ключа сессии."""
+        if key not in self._session_locks:
+            self._session_locks[key] = asyncio.Lock()
+        return self._session_locks[key]
 
     def record_message(self, chat_id: int, message_id: int) -> None:
         self._tool_registry.record_message(chat_id, message_id)
@@ -698,9 +696,13 @@ class ReActAgent:
                     _log.debug("llm trace tool exec failed", exc_info=True)
 
         await _emit_progress("start", "running", "ReAct запущен")
-        if runtime_session_key not in self._sessions:
-            self._sessions[runtime_session_key] = self._load_session(state_root)
-        session = self._sessions[runtime_session_key]
+        async with self._get_session_lock(runtime_session_key):
+            if runtime_session_key not in self._sessions:
+                self._sessions[runtime_session_key] = self._load_session(state_root)
+            # Регистрируем обратный индекс raw_session_id → scoped_key
+            if raw_session_id and raw_session_id != runtime_session_key:
+                self._session_id_index.setdefault(raw_session_id, set()).add(runtime_session_key)
+            session = self._sessions[runtime_session_key]
         working: List[Dict[str, Any]] = []
         final_response = ""
         final_status = "ok"
@@ -1233,9 +1235,17 @@ class ReActAgent:
         )
         while len(session["history_by_task"][history_key]) > AGENT_MAX_HISTORY:
             session["history_by_task"][history_key].pop(0)
-        self._save_session(state_root, session)
-        # Ensure next run reloads from disk instead of cached memory.
-        self._sessions.pop(runtime_session_key, None)
+        async with self._get_session_lock(runtime_session_key):
+            self._save_session(state_root, session)
+            # Ensure next run reloads from disk instead of cached memory.
+            self._sessions.pop(runtime_session_key, None)
+            # Чистим обратный индекс от orphan-ключа
+            if raw_session_id and raw_session_id != runtime_session_key:
+                bucket = self._session_id_index.get(raw_session_id)
+                if bucket is not None:
+                    bucket.discard(runtime_session_key)
+                    if not bucket:
+                        del self._session_id_index[raw_session_id]
         _log.info("ReAct end session=%s task=%s status=%s iterations=%d tool_calls=%d response_len=%d",
                   runtime_session_key, task_id, final_status, iterations_done,
                   len(tool_facts), len(final_response))
@@ -1259,7 +1269,11 @@ class ReActAgent:
         )
 
     def clear_session_cache(self, session_id: str) -> None:
+        # Прямое совпадение (scoped-ключ или legacy bare id)
         self._sessions.pop(session_id, None)
+        # Все scoped-ключи, связанные с raw session_id через обратный индекс
+        for scoped in self._session_id_index.pop(session_id, set()):
+            self._sessions.pop(scoped, None)
 
 
 class AgentRunner:
@@ -1294,7 +1308,7 @@ class AgentRunner:
         observability: Optional[Any] = None,
         run_handle: Optional[Any] = None,
     ) -> "AgentRunResult":
-        if not _get_openai_config(self.config):
+        if not resolve_openai_config(self.config, model_key="openai_model", env_priority=True):
             _log.error("AgentRunner: OpenAI not configured")
             return AgentRunResult(
                 output="Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL.",

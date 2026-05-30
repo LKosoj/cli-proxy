@@ -4,11 +4,13 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 from config import AppConfig, MCPClientServerConfig
 from modes.sdk.runtime.mcp.http_client import HttpMCPClient, HttpMCPClientConfig
 from modes.sdk.runtime.mcp.stdio_client import MCPToolInfo, StdioMCPClient
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_tool_name(name: str) -> str:
@@ -28,9 +30,11 @@ def _sanitize_tool_name(name: str) -> str:
 class MCPManager:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
-        self._clients: Dict[str, StdioMCPClient] = {}
+        self._clients: Dict[str, Union[StdioMCPClient, HttpMCPClient]] = {}
         self._tools_cache: Dict[str, List[MCPToolInfo]] = {}
         self._init_lock = asyncio.Lock()
+        self._close_lock = asyncio.Lock()
+        self._closing = False
 
     def _shared_root(self) -> str:
         sandbox_root = os.getenv("AGENT_SANDBOX_ROOT")
@@ -51,8 +55,8 @@ class MCPManager:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+        except Exception:
+            logger.exception("mcp: не удалось прочитать кэш инструментов %s", path)
             return []
         if not isinstance(data, dict):
             return []
@@ -85,8 +89,31 @@ class MCPManager:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
 
+    async def close_all(self) -> None:
+        """Остановить все MCP-клиенты и сбросить состояние."""
+        async with self._close_lock:
+            # Захватываем _init_lock, чтобы не разойтись с ensure_started(): иначе клиент,
+            # создаваемый в момент close_all(), мог бы попасть в уже очищенный _clients и утечь.
+            async with self._init_lock:
+                self._closing = True
+                clients = self._clients.copy()
+                self._clients.clear()
+                self._tools_cache.clear()
+            try:
+                # stop() может быть медленным (терминирование процессов) — выполняем вне лока.
+                for name, client in clients.items():
+                    try:
+                        await client.stop()
+                    except Exception:
+                        logger.exception("mcp '%s': ошибка при stop в close_all", name)
+            finally:
+                async with self._init_lock:
+                    self._closing = False
+
     async def ensure_started(self) -> None:
         async with self._init_lock:
+            if self._closing:
+                return
             for server in self.configured_servers():
                 if not server.enabled:
                     continue
@@ -118,25 +145,25 @@ class MCPManager:
                         await client.start()
                         self._clients[server.name] = client
                     else:
-                        logging.exception(
-                            f"tool failed Unsupported MCP transport for '{server.name}': {server.transport}"
-                        )
+                        logger.error("mcp '%s': unsupported transport=%r, skipping", server.name, server.transport)
                         continue
-                except Exception as e:
-                    logging.exception(f"tool failed MCP start failed for '{server.name}': {str(e)}")
+                except Exception:
+                    logger.exception("mcp '%s': ошибка запуска MCP-клиента", server.name)
                     continue
 
     async def list_all_tools(self) -> List[Tuple[str, MCPToolInfo]]:
         await self.ensure_started()
         out: List[Tuple[str, MCPToolInfo]] = []
-        for server_name, client in self._clients.items():
+        # Снапшот: close_all() может очистить _clients во время await client.list_tools(),
+        # что вызвало бы "dictionary changed size during iteration".
+        for server_name, client in list(self._clients.items()):
             try:
                 tools = await client.list_tools()
                 self._tools_cache[server_name] = tools
                 for t in tools:
                     out.append((server_name, t))
-            except Exception as e:
-                logging.exception(f"tool failed MCP tools/list failed for '{server_name}': {str(e)}")
+            except Exception:
+                logger.exception("mcp '%s': ошибка tools/list", server_name)
         return out
 
     async def call(self, server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

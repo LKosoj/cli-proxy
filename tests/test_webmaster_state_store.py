@@ -6,6 +6,65 @@ from modes.webmaster.models import WebmasterContext
 from modes.webmaster.state_store import WebmasterStateStore, build_user_key
 
 
+# --- H11: _resolve_user_id возвращает int, а не str ---
+
+def _make_session(last_user_id: int = 0) -> types.SimpleNamespace:
+    return types.SimpleNamespace(webmaster_last_user_id=last_user_id)
+
+
+def test_resolve_user_id_fallback_returns_int() -> None:
+    """H11: когда user_id не найден, fallback к chat_id должен возвращать int."""
+    mode = WebmasterMode()
+    session = _make_session()
+    context = types.SimpleNamespace()
+
+    result = mode._resolve_user_id(
+        user_id=None,
+        chat_id=12345,
+        chat_type="",
+        context=context,
+        session=session,
+    )
+
+    assert isinstance(result, int), f"Expected int, got {type(result).__name__}: {result!r}"
+    assert result == 12345
+
+
+def test_resolve_user_id_fallback_returns_none_for_zero_chat_id() -> None:
+    """H11: chat_id=0 → вернуть None (без str-конвертации)."""
+    mode = WebmasterMode()
+    session = _make_session()
+    context = types.SimpleNamespace()
+
+    result = mode._resolve_user_id(
+        user_id=None,
+        chat_id=0,
+        chat_type="",
+        context=context,
+        session=session,
+    )
+
+    assert result is None
+
+
+def test_resolve_user_id_explicit_user_id_returns_int() -> None:
+    """_resolve_user_id: явный user_id всегда возвращает int."""
+    mode = WebmasterMode()
+    session = _make_session()
+    context = types.SimpleNamespace()
+
+    result = mode._resolve_user_id(
+        user_id=99,
+        chat_id=12345,
+        chat_type="",
+        context=context,
+        session=session,
+    )
+
+    assert isinstance(result, int)
+    assert result == 99
+
+
 def test_webmaster_store_is_user_scoped(tmp_path):
     store = WebmasterStateStore(str(tmp_path))
     key1 = build_user_key(100, 1, "s1")

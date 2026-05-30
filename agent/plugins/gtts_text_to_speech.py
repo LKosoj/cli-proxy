@@ -10,6 +10,8 @@ from typing import Any, Dict
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class GTTSTextToSpeechTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -40,7 +42,7 @@ class GTTSTextToSpeechTool(ToolPlugin):
         try:
             path = await asyncio.to_thread(self._tts_sync, text, lang)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("gtts_text_to_speech: TTS generation failed for lang=%r", lang)
             return {"success": False, "error": f"gTTS failed: {e}"}
 
         return {"success": True, "output": path}

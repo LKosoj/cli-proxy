@@ -7,7 +7,7 @@ Generated: 2026-04-27T22:43:23Z
 
 ## Scope
 - Source glob: `tg/**`
-- Current files: 16 under `tg/**` as of last review.
+- Current files: 17 under `tg/**` as of last review.
 - Entry and registration: `tg/wiring.py`, `tg/command_registry.py`, `tg/command_policy.py`.
 - Command/UI handlers: `tg/handlers.py`.
 - Inbound message and attachment processing: `tg/message_processor.py`.
@@ -59,4 +59,4 @@ Generated: 2026-04-27T22:43:23Z
 - `.cli-proxy/.codebase_map/nodes/tests.md` - targeted coverage includes Telegram handler, callback, markdown, routing, ingress security, SSH UI, file, git, and self-update tests.
 
 ## Last reviewed
-- 2026-05-17
+- 2026-05-30

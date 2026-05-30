@@ -265,11 +265,11 @@ class ToolRegistry:
 
     def _validate_and_normalize_handler(self, item: Any, plugin_name: str, kind: str) -> Optional[Dict[str, Any]]:
         if not isinstance(item, dict):
-            logging.exception(f"tool failed Invalid {kind} handler definition from {plugin_name}: not a dict")
+            logging.warning("tool registry: invalid %s handler definition from plugin %r: not a dict", kind, plugin_name)
             return None
         handler = item.get("handler")
         if handler is None:
-            logging.exception(f"tool failed Invalid {kind} handler definition from {plugin_name}: missing handler")
+            logging.warning("tool registry: invalid %s handler definition from plugin %r: missing handler", kind, plugin_name)
             return None
         normalized = dict(item)
         normalized.setdefault("handler_kwargs", {})
@@ -481,6 +481,10 @@ class ToolRegistry:
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
                 continue
+
+    async def close_mcp(self) -> None:
+        """Остановить все MCP-клиенты через менеджер."""
+        await self._mcp_manager.close_all()
 
     def get_missing_suggestions(self, name: str) -> List[str]:
         candidates = list(self.specs.keys())

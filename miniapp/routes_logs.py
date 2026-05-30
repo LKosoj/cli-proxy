@@ -126,6 +126,59 @@ async def _run_logs_ws_stream(
         await asyncio.gather(receive_task, stream_task, return_exceptions=True)
 
 
+def _read_available_lines(
+    path: str,
+    stream,
+    stream_inode,
+    start_pos: int,
+) -> tuple:
+    """Open (if needed) and drain all available lines from the log file.
+
+    Returns (stream, stream_inode, start_pos, lines) where ``lines`` is a
+    list of raw text lines read during this call.
+    """
+    if stream is None and os.path.exists(path):
+        stream = open(path, "r", encoding="utf-8", errors="replace")
+        stream.seek(max(0, int(start_pos)))
+        stream_inode = os.fstat(stream.fileno()).st_ino
+        start_pos = int(stream.tell())
+
+    lines: List[str] = []
+    if stream is not None:
+        while True:
+            raw_line = stream.readline()
+            if not raw_line:
+                break
+            lines.append(raw_line)
+
+    return stream, stream_inode, start_pos, lines
+
+
+def _check_stream_rotation(
+    path: str,
+    stream,
+    stream_inode,
+    start_pos: int,
+) -> tuple:
+    """Detect log file rotation/truncation and close the stream if needed.
+
+    Returns (stream, stream_inode, start_pos).
+    """
+    if stream is None:
+        return stream, stream_inode, start_pos
+    try:
+        st = os.stat(path)
+        current_pos = int(stream.tell())
+        if st.st_ino != stream_inode or int(st.st_size) < current_pos:
+            stream.close()
+            start_pos = 0 if st.st_size < current_pos else current_pos
+            return None, None, start_pos
+    except FileNotFoundError:
+        stream.close()
+        return None, None, 0
+    return stream, stream_inode, start_pos
+
+
 async def _stream_log_updates(
     ctx: MiniAppRouteContext,
     services: LogsRouteServices,
@@ -161,30 +214,26 @@ async def _stream_log_updates(
                 allowed_session_pairs = services.logs.allowed_session_pairs(user_id=user_id, is_admin=is_admin)
                 last_permissions_ts = now_ts
 
-            if stream is None and os.path.exists(path):
-                stream = open(path, "r", encoding="utf-8", errors="replace")
-                stream.seek(max(0, int(start_pos)))
-                stream_inode = os.fstat(stream.fileno()).st_ino
-                start_pos = int(stream.tell())
+            stream, stream_inode, start_pos, raw_lines = await asyncio.to_thread(
+                _read_available_lines, path, stream, stream_inode, start_pos
+            )
 
             append_payload: List[Dict[str, str]] = []
+            for raw_line in raw_lines:
+                completed = accumulator.feed_line(raw_line)
+                for entry in completed:
+                    if services.logs.entry_allowed(
+                        entry,
+                        user_id=user_id,
+                        is_admin=is_admin,
+                        session_uid_filter=session_uid_filter,
+                        session_id_filter=session_id_filter,
+                        allowed_session_uids=allowed_session_uids,
+                        allowed_session_pairs=allowed_session_pairs,
+                    ):
+                        append_payload.append(entry.to_payload())
+
             if stream is not None:
-                while True:
-                    raw_line = stream.readline()
-                    if not raw_line:
-                        break
-                    completed = accumulator.feed_line(raw_line)
-                    for entry in completed:
-                        if services.logs.entry_allowed(
-                            entry,
-                            user_id=user_id,
-                            is_admin=is_admin,
-                            session_uid_filter=session_uid_filter,
-                            session_id_filter=session_id_filter,
-                            allowed_session_uids=allowed_session_uids,
-                            allowed_session_pairs=allowed_session_pairs,
-                        ):
-                            append_payload.append(entry.to_payload())
                 stale = accumulator.flush_stale(now=now_ts, idle_sec=idle_flush_sec)
                 if stale is not None and services.logs.entry_allowed(
                     stale,
@@ -205,23 +254,9 @@ async def _stream_log_updates(
                 await ws.send_json({"type": "keepalive"})
                 last_emit_ts = now_ts
 
-            if stream is not None:
-                try:
-                    st = os.stat(path)
-                    current_pos = int(stream.tell())
-                    if st.st_ino != stream_inode or int(st.st_size) < current_pos:
-                        stream.close()
-                        if st.st_size < current_pos:
-                            start_pos = 0
-                        else:
-                            start_pos = current_pos
-                        stream = None
-                        stream_inode = None
-                except FileNotFoundError:
-                    stream.close()
-                    stream = None
-                    stream_inode = None
-                    start_pos = 0
+            stream, stream_inode, start_pos = await asyncio.to_thread(
+                _check_stream_rotation, path, stream, stream_inode, start_pos
+            )
 
             await asyncio.sleep(0.25)
         except asyncio.CancelledError:

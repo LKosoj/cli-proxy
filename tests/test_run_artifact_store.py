@@ -361,3 +361,77 @@ def test_run_artifact_store_prune_old_runs_dry_run_reports_without_deleting(tmp_
     assert [item["run_id"] for item in report["would_delete"]] == ["run_20260301T000000Z_expired"]
     assert [item["run_id"] for item in report["shielded"]] == ["run_20260301T000500Z_running"]
     assert report["deleted"] == []
+
+
+def test_latest_run_uses_started_at_not_lexicographic_name(tmp_path) -> None:
+    """latest_run выбирает прогон по started_at из STATE.json, а не по лексике имени."""
+    cfg = _build_config(tmp_path, intent="started_at_latest")
+    store = RunArtifactStore(cfg)
+    session = _session(tmp_path, session_uid="thread:-100:ts-order", session_id="s-ts-order")
+
+    # Оба run_id имеют одинаковый timestamp-префикс, но разный hex-суффикс.
+    # Лексикографически "run_20260501T120000Z_ffff9999" > "run_20260501T120000Z_aaaa0001",
+    # но started_at у aaaa0001 будет больше — значит, latest_run должен вернуть aaaa0001.
+    older = store.start_run(session=session, mode_id="analyst", run_id="run_20260501T120000Z_ffff9999")
+    newer = store.start_run(session=session, mode_id="analyst", run_id="run_20260501T120000Z_aaaa0001")
+
+    # Патчим started_at в STATE.json: ffff9999 — более ранний, aaaa0001 — более поздний.
+    older_state = json.loads(Path(older.state_path).read_text(encoding="utf-8"))
+    older_state["started_at"] = 1_000_000.0
+    Path(older.state_path).write_text(json.dumps(older_state), encoding="utf-8")
+
+    newer_state = json.loads(Path(newer.state_path).read_text(encoding="utf-8"))
+    newer_state["started_at"] = 2_000_000.0
+    Path(newer.state_path).write_text(json.dumps(newer_state), encoding="utf-8")
+
+    latest = store.latest_run(session=session, mode_id="analyst")
+    assert latest is not None
+    assert latest.run_id == "run_20260501T120000Z_aaaa0001"
+
+
+def test_list_runs_orders_by_started_at_not_run_id(tmp_path) -> None:
+    """list_runs упорядочивает прогоны по started_at (убывание), а не по имени."""
+    cfg = _build_config(tmp_path, intent="list_order")
+    store = RunArtifactStore(cfg)
+    session = _session(tmp_path, session_uid="thread:-100:list-order", session_id="s-list-order")
+
+    # Лексикографически ffff9999 > aaaa0001, но по started_at aaaa0001 новее.
+    older = store.start_run(session=session, mode_id="analyst", run_id="run_20260501T120000Z_ffff9999")
+    newer = store.start_run(session=session, mode_id="analyst", run_id="run_20260501T120000Z_aaaa0001")
+
+    older_state = json.loads(Path(older.state_path).read_text(encoding="utf-8"))
+    older_state["started_at"] = 1_000_000.0
+    Path(older.state_path).write_text(json.dumps(older_state), encoding="utf-8")
+
+    newer_state = json.loads(Path(newer.state_path).read_text(encoding="utf-8"))
+    newer_state["started_at"] = 2_000_000.0
+    Path(newer.state_path).write_text(json.dumps(newer_state), encoding="utf-8")
+
+    runs = store.list_runs(session=session, mode_id="analyst")
+    assert len(runs) == 2
+    # Первым (самым новым) должен быть aaaa0001, у которого больший started_at.
+    assert runs[0].run_id == "run_20260501T120000Z_aaaa0001"
+    assert runs[1].run_id == "run_20260501T120000Z_ffff9999"
+
+
+def test_list_mode_runs_orders_by_started_at_not_run_id(tmp_path) -> None:
+    cfg = _build_config(tmp_path, intent="list_mode_order")
+    store = RunArtifactStore(cfg)
+    session = _session(tmp_path, session_uid="thread:-100:list-mode-order", session_id="s-list-mode-order")
+
+    older = store.start_run(session=session, mode_id="agent", run_id="run_20260501T120000Z_ffff9999")
+    newer = store.start_run(session=session, mode_id="agent", run_id="run_20260501T120000Z_aaaa0001")
+
+    older_state = json.loads(Path(older.state_path).read_text(encoding="utf-8"))
+    older_state["started_at"] = 1_000_000.0
+    Path(older.state_path).write_text(json.dumps(older_state), encoding="utf-8")
+
+    newer_state = json.loads(Path(newer.state_path).read_text(encoding="utf-8"))
+    newer_state["started_at"] = 2_000_000.0
+    Path(newer.state_path).write_text(json.dumps(newer_state), encoding="utf-8")
+
+    runs = store.list_mode_runs(session=session, mode_id="agent")
+    assert [run.run_id for run in runs] == [
+        "run_20260501T120000Z_aaaa0001",
+        "run_20260501T120000Z_ffff9999",
+    ]

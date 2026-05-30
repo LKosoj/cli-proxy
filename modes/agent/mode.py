@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -10,10 +9,11 @@ import yaml
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.mode_dependencies import ModeDependencies
-from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore, is_terminal_status
+from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore
 from app.services.telegram_ui_scope import TelegramUiKey
 from modes.sdk import BaseMode, CallbackModel, MessageModel, ToolResult, decode_mode_dirs, encode_mode_dirs
 from modes.sdk.json_store import read_json_locked
+from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.runtime.json_normalizer import parse_normalize_validate
 from modes.sdk.session_busy import is_session_busy
 from modes.sdk.services import ModeStatusService
@@ -27,7 +27,6 @@ from app.services.runtime_progress_service import build_runtime_progress_payload
 from modes.agent.ui import build_agent_menu, build_agent_status_payload, build_agent_status_text
 from utils.paths import is_within_root
 
-_AGENT_RUN_HANDLE_SESSION_ATTR = "agent_run_artifact_handle"
 _AGENT_RUN_RESUME_GUARD_SESSION_ATTR = "agent_run_resume_guard"
 _AGENT_PROJECT_SELECTION_STALE_TEXT = "Меню выбора проекта устарело. Откройте меню агента снова."
 
@@ -83,8 +82,9 @@ def normalize_agent_project_pending_entry(raw: Any) -> Optional[Dict[str, Any]]:
     }
 
 
-class AgentMode(BaseMode):
+class AgentMode(BaseMode, RunArtifactsMixin):
     mode_id = "agent"
+    _RUN_HANDLE_SESSION_ATTR = "agent_run_artifact_handle"
     display_name = "🤖 Агент"
     description = "ИИ-агент (оркестратор) с инструментами и планированием"
 
@@ -1636,25 +1636,6 @@ class AgentMode(BaseMode):
         self._cached_artifact_store = store
         return store
 
-    def _is_run_artifacts_enabled(self) -> bool:
-        service = self._optional_run_artifacts()
-        if service is None:
-            return False
-        try:
-            return bool(service.is_enabled())
-        except Exception:
-            self._log.exception("agent run artifacts: failed to resolve enabled flag")
-            return False
-
-    @staticmethod
-    def _prompt_hash(prompt: str) -> str:
-        digest = hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest()
-        return f"sha256:{digest}"
-
-    @staticmethod
-    def _is_terminal_run_status(status: Any) -> bool:
-        return is_terminal_status(status)
-
     def _prepare_run_artifacts(
         self,
         *,
@@ -1734,7 +1715,10 @@ class AgentMode(BaseMode):
         phase: str,
         status: str,
         mode_context: Optional[Dict[str, Any]] = None,
+        merge_execution_context: MergeStrategy = "shallow",
     ) -> None:
+        # merge_execution_context присутствует для совместимости сигнатуры с RunArtifactsMixin (LSP);
+        # agent всегда выполняет shallow-merge через lifecycle, поэтому параметр игнорируется.
         if run is None:
             return
         artifact_store = self._artifact_store()
@@ -1764,17 +1748,6 @@ class AgentMode(BaseMode):
             )
         except Exception:
             self._log.exception("agent run artifacts: save_state failed phase=%s run_id=%s", phase, run.run_id)
-
-    def _save_run_plan(self, run: Optional[RunArtifactHandle], plan: Dict[str, Any]) -> None:
-        if run is None:
-            return
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return
-        try:
-            artifact_store.save_plan(run, dict(plan or {}))
-        except Exception:
-            self._log.exception("agent run artifacts: save_plan failed run_id=%s", run.run_id)
 
     def _validate_run_boundary(self, run: Optional[RunArtifactHandle], *, phase: str) -> None:
         if run is None:
@@ -1827,19 +1800,8 @@ class AgentMode(BaseMode):
         except Exception:
             self._log.exception("agent run artifacts: mark_finished failed run_id=%s", run.run_id)
 
-    @staticmethod
-    def _set_active_run_handle(session: Any, run: RunArtifactHandle) -> None:
-        setattr(session, _AGENT_RUN_HANDLE_SESSION_ATTR, run)
-
-    @staticmethod
-    def _active_run_handle(session: Any) -> Optional[RunArtifactHandle]:
-        handle = getattr(session, _AGENT_RUN_HANDLE_SESSION_ATTR, None)
-        return handle if isinstance(handle, RunArtifactHandle) else None
-
-    @staticmethod
-    def _clear_active_run_handle(session: Any) -> None:
-        if hasattr(session, _AGENT_RUN_HANDLE_SESSION_ATTR):
-            setattr(session, _AGENT_RUN_HANDLE_SESSION_ATTR, None)
+    def _clear_active_run_handle(self, session: Any) -> None:
+        super()._clear_active_run_handle(session)  # type: ignore[misc]
         if hasattr(session, _AGENT_RUN_RESUME_GUARD_SESSION_ATTR):
             setattr(session, _AGENT_RUN_RESUME_GUARD_SESSION_ATTR, {})
 
@@ -1860,23 +1822,7 @@ class AgentMode(BaseMode):
             return latest
 
         try:
-            root_dir = artifact_store._resolve_root_dir(session)
-            session_uid = artifact_store._resolve_session_uid(session)
-            mode_token = self.mode_id
-            mode_root = os.path.join(root_dir, ".cli-proxy", "runs", session_uid, mode_token)
-            if not os.path.isdir(mode_root):
-                return None
-            candidates = sorted(
-                [
-                    name
-                    for name in os.listdir(mode_root)
-                    if os.path.isdir(os.path.join(mode_root, name))
-                    and os.path.exists(os.path.join(mode_root, name, "STATE.json"))
-                ],
-                reverse=True,
-            )
-            for run_id in candidates:
-                handle = artifact_store._build_handle(session=session, mode_id=self.mode_id, run_id=run_id)
+            for handle in artifact_store.list_mode_runs(session=session, mode_id=self.mode_id):
                 state = artifact_store.load_state(handle)
                 if self._is_top_level_mode_run(state):
                     return handle

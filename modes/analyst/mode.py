@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -14,7 +13,7 @@ import yaml
 
 from app.mode_dependencies import ModeDependencies
 from app.services.session_run_service import ModeScopedPreRunResetService
-from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore, is_terminal_status
+from app.services.run_artifact_store import RunArtifactHandle
 from modes.analyst import template_service as analyst_templates
 from modes.analyst.draft_service import build_draft_text, resolve_draft_document_profile
 from modes.analyst.routing_rules import build_template_from_profile, classify_profile_from_text
@@ -41,6 +40,7 @@ from modes.sdk.runtime.final_qc import runtime_readiness_allows_finalization
 from agent.analyst_prompts import build_analyst_prompt
 from modes.analyst.ui import build_analyst_menu, build_analyst_status_text
 from modes.sdk import BaseMode, CallbackModel, MessageModel, ToolResult, encode_mode_dirs
+from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.session_busy import is_session_busy
 from modes.sdk.services import CodebaseContextService, CodebaseContextText, MessagingService
 from session import session_scoped_key
@@ -49,7 +49,6 @@ from utils.text import strip_ansi
 
 _TOOL_CALL_BLOCK_RE = re.compile(r"\[TOOL_CALL\].*?\[/TOOL_CALL\]", re.IGNORECASE | re.DOTALL)
 _TOOL_CALL_TAG_RE = re.compile(r"(?im)^\s*\[/?TOOL_CALL\]\s*$")
-_ANALYST_RUN_HANDLE_SESSION_ATTR = "analyst_run_artifact_handle"
 _ANALYST_RUN_RESUME_GUARD_SESSION_ATTR = "analyst_run_resume_guard"
 _ANALYST_STEP_RESULTS_SYNC_HOOK_SESSION_ATTR = "analyst_step_results_sync_hook"
 _ANALYST_FINAL_CANDIDATE_PATH_SESSION_ATTR = "analyst_runtime_final_candidate_path"
@@ -66,10 +65,12 @@ def _sanitize_final_analyst_output(text: Any) -> str:
     return cleaned.strip()
 
 
-class AnalystMode(BaseMode):
+class AnalystMode(BaseMode, RunArtifactsMixin):
     mode_id = "analyst"
     display_name = "🧠 Аналитик"
     description = "Формирует ТЗ по запросу и поддерживает аудит-поток"
+
+    _RUN_HANDLE_SESSION_ATTR = "analyst_run_artifact_handle"
 
     def __init__(self, dependencies: Optional[ModeDependencies] = None) -> None:
         super().__init__(dependencies)
@@ -460,7 +461,7 @@ class AnalystMode(BaseMode):
             if runtime is None:
                 raise RuntimeError("Analyst runtime is not configured")
 
-            run_handle = getattr(session, _ANALYST_RUN_HANDLE_SESSION_ATTR, None)
+            run_handle = self._active_run_handle(session)
             self._set_step_results_sync_hook(
                 session,
                 lambda step_results, active_run_handle=run_handle: self._sync_analyst_step_results(
@@ -1935,12 +1936,6 @@ class AnalystMode(BaseMode):
         active_store = store or self._store(session)
         return active_store.load(self._context_key(session))
 
-    def _artifact_store(self) -> Optional[RunArtifactStore]:
-        config = getattr(self, "config", None)
-        if config is None:
-            return None
-        return RunArtifactStore(config)
-
     def _is_run_artifacts_enabled(self) -> bool:
         service = self._optional_run_artifacts()
         if service is None:
@@ -1950,15 +1945,6 @@ class AnalystMode(BaseMode):
         except Exception:
             self._log.exception("analyst run artifacts: failed to resolve enabled flag")
             return False
-
-    @staticmethod
-    def _prompt_hash(prompt: str) -> str:
-        digest = hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest()
-        return f"sha256:{digest}"
-
-    @staticmethod
-    def _is_terminal_run_status(status: Any) -> bool:
-        return is_terminal_status(status)
 
     def _diagnose_resume_boundary(self, run: RunArtifactHandle) -> Any:
         doctor = self._optional_run_doctor()
@@ -1980,7 +1966,10 @@ class AnalystMode(BaseMode):
         phase: str,
         status: str,
         mode_context: Optional[Dict[str, Any]] = None,
+        merge_execution_context: MergeStrategy = "shallow",
     ) -> None:
+        # merge_execution_context присутствует для совместимости сигнатуры с RunArtifactsMixin (LSP);
+        # analyst всегда выполняет deep-merge и сохраняет полный payload, поэтому параметр игнорируется.
         if run is None:
             return
         artifact_store = self._artifact_store()
@@ -2005,17 +1994,6 @@ class AnalystMode(BaseMode):
             artifact_store.save_state(run, payload)
         except Exception:
             self._log.exception("analyst run artifacts: save_state failed phase=%s run_id=%s", phase, run.run_id)
-
-    @staticmethod
-    def _deep_merge_execution_context(existing: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
-        merged = dict(existing)
-        for key, value in incoming.items():
-            current_value = merged.get(key)
-            if isinstance(current_value, dict) and isinstance(value, dict):
-                merged[key] = AnalystMode._deep_merge_execution_context(current_value, value)
-                continue
-            merged[key] = value
-        return merged
 
     def _save_run_plan(self, run: Optional[RunArtifactHandle], plan: Dict[str, Any]) -> None:
         if run is None:
@@ -2368,14 +2346,9 @@ class AnalystMode(BaseMode):
             self._log.exception("analyst run artifacts: failed to set resume guard session attr")
         return run, resume_guard
 
-    @staticmethod
-    def _set_active_run_handle(session: Any, run: RunArtifactHandle) -> None:
-        setattr(session, _ANALYST_RUN_HANDLE_SESSION_ATTR, run)
-
-    @staticmethod
-    def _clear_active_run_handle(session: Any) -> None:
-        if hasattr(session, _ANALYST_RUN_HANDLE_SESSION_ATTR):
-            setattr(session, _ANALYST_RUN_HANDLE_SESSION_ATTR, None)
+    def _clear_active_run_handle(self, session: Any) -> None:
+        # Override: дополнительно очищает resume-guard и final-candidate-path атрибуты.
+        super()._clear_active_run_handle(session)
         if hasattr(session, _ANALYST_RUN_RESUME_GUARD_SESSION_ATTR):
             setattr(session, _ANALYST_RUN_RESUME_GUARD_SESSION_ATTR, {})
         if hasattr(session, _ANALYST_FINAL_CANDIDATE_PATH_SESSION_ATTR):
@@ -2414,22 +2387,7 @@ class AnalystMode(BaseMode):
         if latest is not None and self._is_top_level_mode_run(artifact_store.load_state(latest)):
             return latest
         try:
-            root_dir = artifact_store._resolve_root_dir(session)
-            session_uid = artifact_store._resolve_session_uid(session)
-            mode_root = os.path.join(root_dir, ".cli-proxy", "runs", session_uid, self.mode_id)
-            if not os.path.isdir(mode_root):
-                return None
-            candidates = sorted(
-                [
-                    name
-                    for name in os.listdir(mode_root)
-                    if os.path.isdir(os.path.join(mode_root, name))
-                    and os.path.exists(os.path.join(mode_root, name, "STATE.json"))
-                ],
-                reverse=True,
-            )
-            for run_id in candidates:
-                handle = artifact_store._build_handle(session=session, mode_id=self.mode_id, run_id=run_id)
+            for handle in artifact_store.list_mode_runs(session=session, mode_id=self.mode_id):
                 state = artifact_store.load_state(handle)
                 if self._is_top_level_mode_run(state):
                     return handle

@@ -290,6 +290,9 @@ class BotApp:
         self.session_management = SessionManagement(self)
         self.session_management.set_html_process_pool(self._html_process_pool)
 
+        from tg.file_upload_handler import FileUploadHandler
+        self._file_upload_handler = FileUploadHandler(self)
+
         # Initialize mode plugins with shared SDK services to keep modes decoupled from BotApp internals.
         self._initialize_mode_plugins()
 
@@ -1240,6 +1243,11 @@ class BotApp:
     async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
         return await self.transport_service.send_message(context, **kwargs)
 
+    async def send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
+        """Public wrapper over the internal Telegram send so callers outside BotApp
+        do not depend on the private `_send_message`."""
+        return await self._send_message(context, **kwargs)
+
     async def _send_document(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> bool:
         return await self.transport_service.send_document(context, **kwargs)
 
@@ -1959,33 +1967,13 @@ class BotApp:
         await self.message_processor.process_document(update, context)
 
     def _resolve_unique_file_path(self, target_dir: str, file_name: str) -> str:
-        safe_name = os.path.basename(file_name.strip()) or "attachment.txt"
-        base, ext = os.path.splitext(safe_name)
-        if not base:
-            base = "attachment"
-        path = os.path.join(target_dir, safe_name)
-        if not os.path.exists(path):
-            return path
-        i = 1
-        while True:
-            candidate = os.path.join(target_dir, f"{base}_{i}{ext}")
-            if not os.path.exists(candidate):
-                return candidate
-            i += 1
+        return self._file_upload_handler._resolve_unique_file_path(target_dir, file_name)
 
     def _stop_files_upload_wait(self, chat_id: int, *, message_thread_id: Optional[int] = None) -> None:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        task = self.ui_state.files_pending_upload_tasks.pop(ui_key, None)
-        if task and not task.done():
-            task.cancel()
-        self.ui_state.files_pending_upload.pop(ui_key, None)
+        self._file_upload_handler._stop_files_upload_wait(chat_id, message_thread_id=message_thread_id)
 
     def _stop_files_rename_wait(self, chat_id: int, *, message_thread_id: Optional[int] = None) -> None:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        task = self.ui_state.files_pending_rename_tasks.pop(ui_key, None)
-        if task and not task.done():
-            task.cancel()
-        self.ui_state.files_pending_rename.pop(ui_key, None)
+        self._file_upload_handler._stop_files_rename_wait(chat_id, message_thread_id=message_thread_id)
 
     async def _files_upload_wait_expire(
         self,
@@ -1994,26 +1982,7 @@ class BotApp:
         expires_at: float,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        try:
-            delay = max(0.0, expires_at - time.time())
-            await asyncio.sleep(delay)
-            pending = self.ui_state.files_pending_upload.get(ui_key)
-            if not pending:
-                return
-            if float(pending.get("expires_at", 0.0)) != expires_at:
-                return
-            self.ui_state.files_pending_upload.pop(ui_key, None)
-            self.ui_state.files_pending_upload_tasks.pop(ui_key, None)
-            await self._send_message(
-                context,
-                **ui_key.reply_kwargs(),
-                text="Режим сохранения файла сброшен: за 2 минуты файл не был отправлен.",
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logging.exception("Ошибка таймера ожидания сохранения файла.")
+        await self._file_upload_handler._files_upload_wait_expire(chat_id, message_thread_id, expires_at, context)
 
     def _start_files_upload_wait(
         self,
@@ -2024,16 +1993,8 @@ class BotApp:
         *,
         message_thread_id: Optional[int] = None,
     ) -> None:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-        expires_at = time.time() + 120
-        self.ui_state.files_pending_upload[ui_key] = {
-            "dir": os.path.abspath(target_dir),
-            "root": os.path.abspath(root_dir),
-            "expires_at": expires_at,
-        }
-        self.ui_state.files_pending_upload_tasks[ui_key] = asyncio.create_task(
-            self._files_upload_wait_expire(chat_id, ui_key.message_thread_id, expires_at, context)
+        self._file_upload_handler._start_files_upload_wait(
+            chat_id, target_dir, root_dir, context, message_thread_id=message_thread_id
         )
 
     async def _files_rename_wait_expire(
@@ -2043,26 +2004,7 @@ class BotApp:
         expires_at: float,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        try:
-            delay = max(0.0, expires_at - time.time())
-            await asyncio.sleep(delay)
-            pending = self.ui_state.files_pending_rename.get(ui_key)
-            if not pending:
-                return
-            if float(pending.get("expires_at", 0.0)) != expires_at:
-                return
-            self.ui_state.files_pending_rename.pop(ui_key, None)
-            self.ui_state.files_pending_rename_tasks.pop(ui_key, None)
-            await self._send_message(
-                context,
-                **ui_key.reply_kwargs(),
-                text="Режим переименования отменен: за 2 минуты новое имя не введено.",
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logging.exception("Ошибка таймера ожидания переименования файла.")
+        await self._file_upload_handler._files_rename_wait_expire(chat_id, message_thread_id, expires_at, context)
 
     def _start_files_rename_wait(
         self,
@@ -2073,16 +2015,8 @@ class BotApp:
         *,
         message_thread_id: Optional[int] = None,
     ) -> None:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        self._stop_files_rename_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-        expires_at = time.time() + 120
-        self.ui_state.files_pending_rename[ui_key] = {
-            "path": os.path.abspath(source_path),
-            "root": os.path.abspath(root_dir),
-            "expires_at": expires_at,
-        }
-        self.ui_state.files_pending_rename_tasks[ui_key] = asyncio.create_task(
-            self._files_rename_wait_expire(chat_id, ui_key.message_thread_id, expires_at, context)
+        self._file_upload_handler._start_files_rename_wait(
+            chat_id, source_path, root_dir, context, message_thread_id=message_thread_id
         )
 
     async def _maybe_save_pending_uploaded_file(
@@ -2094,58 +2028,9 @@ class BotApp:
         *,
         message_thread_id: Optional[int] = None,
     ) -> bool:
-        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
-        pending = self.ui_state.files_pending_upload.get(ui_key)
-        if not pending:
-            return False
-        expires_at = float(pending.get("expires_at", 0.0))
-        if time.time() > expires_at:
-            self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-            await self._send_message(
-                context,
-                **ui_key.reply_kwargs(),
-                text="Режим сохранения файла уже истек. Нажмите кнопку сохранения снова.",
-            )
-            return False
-        target_dir = str(pending.get("dir") or "")
-        root_dir = str(pending.get("root") or "")
-        if not target_dir or not os.path.isdir(target_dir):
-            self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-            await self._send_message(
-                context,
-                **ui_key.reply_kwargs(),
-                text="Целевой каталог больше недоступен. Режим сохранения отключен.",
-            )
-            return True
-        if not self.is_within_root(target_dir, root_dir):
-            self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-            await self._send_message(
-                context,
-                **ui_key.reply_kwargs(),
-                text="Целевой каталог вне рабочей директории. Режим сохранения отключен.",
-            )
-            return True
-        file_name = getattr(doc, "file_name", None) or "attachment.txt"
-        out_path = self._resolve_unique_file_path(target_dir, file_name)
-        try:
-            with open(out_path, "wb") as f:
-                f.write(bytes(data))
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
-            self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-            await self._send_message(
-                context,
-                **ui_key.reply_kwargs(),
-                text=f"Не удалось сохранить файл: {e}",
-            )
-            return True
-        self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
-        await self._send_message(
-            context,
-            **ui_key.reply_kwargs(),
-            text=f"Файл сохранен: {out_path}",
+        return await self._file_upload_handler._maybe_save_pending_uploaded_file(
+            chat_id, doc, data, context, message_thread_id=message_thread_id
         )
-        return True
 
     async def on_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.message_processor.process_photo(update, context)
@@ -2155,21 +2040,7 @@ class BotApp:
         chat_id: int,
         exclude_media_group_id: Optional[str] = None,
     ) -> None:
-        exclude = str(exclude_media_group_id or "").strip()
-        image_keys = [
-            key
-            for key in list(self.ui_state.media_group_images.keys())
-            if int(key[0]) == int(chat_id) and (not exclude or str(key[1]) != exclude)
-        ]
-        for key in image_keys:
-            await self._flush_media_group(key)
-        document_keys = [
-            key
-            for key in list(self.ui_state.media_group_documents.keys())
-            if int(key[0]) == int(chat_id) and (not exclude or str(key[1]) != exclude)
-        ]
-        for key in document_keys:
-            await self._flush_media_group(key)
+        await self._file_upload_handler._flush_media_groups_for_chat(chat_id, exclude_media_group_id)
 
     def _clear_media_groups_for_session(self, session: Session) -> int:
         session_id = str(getattr(session, "id", "") or "").strip()
@@ -2817,6 +2688,15 @@ class BotApp:
                     await svc.shutdown()
                 except Exception:
                     logging.getLogger(__name__).debug("shutdown %s failed", svc_name, exc_info=True)
+
+        # Останавливаем MCP-клиенты через plugin_registry.
+        plugin_registry = getattr(self, "_tool_registry", None)
+        close_mcp = getattr(plugin_registry, "close_mcp", None) if plugin_registry is not None else None
+        if callable(close_mcp):
+            try:
+                await close_mcp()
+            except Exception:
+                logging.getLogger(__name__).exception("shutdown mcp clients failed")
 
     def shutdown_html_process_pool(self) -> None:
         pool = getattr(self, "_html_process_pool", None)

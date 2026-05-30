@@ -20,13 +20,26 @@ _ROLLOUT_NAME_RE = re.compile(
     r"^rollout-\d{4}-\d{2}-\d{2}T[\d-]+-([0-9a-fA-F-]{36})\.jsonl$"
 )
 
+_RGLOB_ROLLOUT_WARNING_THRESHOLD = 10_000
+
 
 def _find_session_file(session_id: str, workdir: str) -> Optional[Path]:
     sid = session_id.strip().lower()
     if not sid or not CODEX_SESSIONS_BASE.is_dir():
         return None
     # Codex stores rollouts under YYYY/MM/DD; scan recursively for the matching uuid.
+    count = 0
+    warned = False
     for path in CODEX_SESSIONS_BASE.rglob("rollout-*.jsonl"):
+        count += 1
+        if not warned and count > _RGLOB_ROLLOUT_WARNING_THRESHOLD:
+            warned = True
+            logger.warning(
+                "codex reader: rglob scan exceeded %d files in %s - continuing full scan for session %s",
+                _RGLOB_ROLLOUT_WARNING_THRESHOLD,
+                CODEX_SESSIONS_BASE,
+                session_id,
+            )
         match = _ROLLOUT_NAME_RE.match(path.name)
         if match and match.group(1).lower() == sid:
             return path

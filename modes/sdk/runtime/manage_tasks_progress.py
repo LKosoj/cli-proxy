@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from app.events.bus import ManageTasksChangedEvent
-
 
 _log = logging.getLogger(__name__)
 
@@ -28,51 +26,57 @@ class ManageTasksProgressBridge:
         if not isinstance(payload, dict) or not bool(payload.get("changed")):
             return
 
-        bot = ctx.get("bot")
-        bus = getattr(bot, "system_event_bus", None)
-        if bus is None or not callable(getattr(bus, "publish", None)):
-            return
+        tasks: List[Dict[str, Any]] = payload.get("tasks") if isinstance(payload.get("tasks"), list) else []
+        progress: Dict[str, Any] = payload.get("progress") if isinstance(payload.get("progress"), dict) else {}
+        action: str = str(payload.get("action") or "")
+        scope_key: str = _message_key(ctx)
+        run_id: str = str(ctx.get("run_id") or "")
 
-        event = ManageTasksChangedEvent(
-            session_uid=_session_uid(ctx),
-            chat_id=ctx.get("chat_id") or "",
-            scope_key=_message_key(ctx),
-            run_id=str(ctx.get("run_id") or ""),
-            correlation_id=str(ctx.get("corr_id") or ""),
-            action=str(payload.get("action") or ""),
-            tasks=payload.get("tasks") if isinstance(payload.get("tasks"), list) else [],
-            progress=payload.get("progress") if isinstance(payload.get("progress"), dict) else {},
+        await self._render(
+            tasks=tasks,
+            progress=progress,
+            action=action,
+            scope_key=scope_key,
+            run_id=run_id,
+            ctx=ctx,
         )
-        unsubscribe = None
-        subscribe = getattr(bus, "subscribe", None)
-        if callable(subscribe):
-            unsubscribe = subscribe(ManageTasksChangedEvent, lambda event_: self._render_event(event_, ctx))
-        try:
-            await bus.publish(event)
-        except Exception:
-            _log.exception("manage_tasks event publish failed scope=%s", event.scope_key)
-        finally:
-            if callable(unsubscribe):
-                unsubscribe()
 
-    async def _render_event(self, event: ManageTasksChangedEvent, ctx: Dict[str, Any]) -> None:
+    async def _render(
+        self,
+        *,
+        tasks: List[Dict[str, Any]],
+        progress: Dict[str, Any],
+        action: str,
+        scope_key: str,
+        run_id: str,
+        ctx: Dict[str, Any],
+    ) -> None:
         bot = ctx.get("bot")
         notify = getattr(bot, "notify", None)
         if callable(notify):
-            if _has_open_tasks(event.tasks):
-                self._show_desktop(notify, ctx, event)
+            if _has_open_tasks(tasks):
+                self._show_desktop(notify, ctx, tasks=tasks, progress=progress, action=action, scope_key=scope_key, run_id=run_id)
             else:
                 self._clear_desktop(notify, ctx)
             return
 
-        text = render_manage_tasks_progress(event.tasks)
+        text = render_manage_tasks_progress(tasks)
         if text:
             await self._show_telegram(bot, ctx, text)
         else:
             await self._clear_telegram(bot, ctx)
 
     @staticmethod
-    def _show_desktop(notify: Any, ctx: Dict[str, Any], event: ManageTasksChangedEvent) -> None:
+    def _show_desktop(
+        notify: Any,
+        ctx: Dict[str, Any],
+        *,
+        tasks: List[Dict[str, Any]],
+        progress: Dict[str, Any],
+        action: str,
+        scope_key: str,
+        run_id: str,
+    ) -> None:
         session_uid = _session_uid(ctx)
         if not session_uid:
             return
@@ -80,11 +84,11 @@ class ManageTasksProgressBridge:
             notify(
                 "ui:manage_tasks_progress",
                 session_id=session_uid,
-                scope_key=event.scope_key,
-                run_id=event.run_id,
-                action=event.action,
-                tasks=list(event.tasks),
-                progress=dict(event.progress),
+                scope_key=scope_key,
+                run_id=run_id,
+                action=action,
+                tasks=list(tasks),
+                progress=dict(progress),
             )
         except Exception:
             _log.exception("manage_tasks desktop progress notify failed session=%s", session_uid)

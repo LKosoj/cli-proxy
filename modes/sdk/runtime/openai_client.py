@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any, Callable, Optional, Tuple
 
@@ -92,7 +93,57 @@ def create_async_openai_client(
     return AsyncOpenAI(**kwargs)
 
 
+_MODEL_ENV_VARS: dict[str, str] = {
+    "openai_model": "OPENAI_MODEL",
+    "openai_big_model": "OPENAI_BIG_MODEL",
+}
+
+
+def resolve_openai_config(
+    config: Optional[Any] = None,
+    *,
+    model_key: str = "openai_model",
+    env_priority: bool = True,
+) -> Optional[Tuple[str, str, str]]:
+    """Return (api_key, model, base_url) merging config.defaults and environment variables.
+
+    When *env_priority* is True the environment overrides config (agent_core behaviour).
+    When *env_priority* is False config takes precedence, env is used only as fallback (summary behaviour).
+    """
+    cfg_api_key: Optional[str] = None
+    cfg_model: Optional[str] = None
+    cfg_base_url: Optional[str] = None
+    if config is not None:
+        defaults = getattr(config, "defaults", None)
+        if defaults is not None:
+            cfg_api_key = getattr(defaults, "openai_api_key", None) or None
+            cfg_model = getattr(defaults, model_key, None) or None
+            cfg_base_url = getattr(defaults, "openai_base_url", None) or None
+
+    env_api_key: Optional[str] = os.getenv("OPENAI_API_KEY") or None
+    model_env_var = _MODEL_ENV_VARS.get(model_key, "OPENAI_MODEL")
+    env_model: Optional[str] = os.getenv(model_env_var) or None
+    env_base_url: Optional[str] = os.getenv("OPENAI_BASE_URL") or None
+
+    if env_priority:
+        api_key = env_api_key or cfg_api_key
+        model = env_model or cfg_model
+        base_url = env_base_url or cfg_base_url
+    else:
+        api_key = cfg_api_key or env_api_key
+        model = cfg_model or env_model
+        base_url = cfg_base_url or env_base_url
+
+    if not base_url:
+        base_url = "https://api.openai.com"
+    if not api_key or not model:
+        return None
+    return api_key, model, base_url.rstrip("/")
+
+
 def get_openai_config(config: AppConfig) -> Optional[Tuple[str, str, str]]:
+    # Сохраняем историческое поведение build_client: только config.defaults, без env-fallback.
+    # (Дедупликация env-логики из M8 применяется к agent_core/summary через resolve_openai_config.)
     api_key = config.defaults.openai_api_key
     model = config.defaults.openai_model
     base_url = config.defaults.openai_base_url or "https://api.openai.com"

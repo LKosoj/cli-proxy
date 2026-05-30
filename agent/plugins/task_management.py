@@ -16,6 +16,8 @@ from telegram.ext import ContextTypes
 from agent.plugins.base import DialogMixin, ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 def _now_ts() -> float:
     return time.time()
@@ -46,8 +48,8 @@ def _load_all_tasks() -> Dict[str, Dict[str, Any]]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
-    except Exception as e:
-        logging.exception(f"tool failed {str(e)}")
+    except Exception:
+        logger.exception("task_management: failed to load tasks from storage path=%r", _tasks_path())
         return {}
 
 
@@ -512,11 +514,11 @@ async def run_task_deadline_checker(application: Any, is_allowed_cb) -> None:
                                 await application.bot.send_message(chat_id=chat_id, text=text)
                                 notify["overdue_sent_at"] = now
                                 dirty = True
-                    except Exception as e:
-                        logging.exception(f"tool failed {str(e)}")
+                    except Exception:
+                        logger.exception("task_management: deadline notification failed task_id=%r chat_id=%s", tid, chat_id)
                         continue
             if dirty:
                 _save_all_tasks(all_tasks)
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+        except Exception:
+            logger.exception("task_management: deadline checker loop error")
         await asyncio.sleep(policy.check_interval_sec)

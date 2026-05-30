@@ -8,6 +8,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class ReadFileTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -57,5 +59,5 @@ class ReadFileTool(ToolPlugin):
             content = "\n".join(slice_lines)
             return {"success": True, "output": content if content else "(empty file)"}
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("read_file: failed to read file path=%r", full_path)
             return {"success": False, "error": str(e)}

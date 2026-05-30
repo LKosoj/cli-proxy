@@ -8,6 +8,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class YouTubeTranscriptTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -40,7 +42,7 @@ class YouTubeTranscriptTool(ToolPlugin):
         try:
             text = await asyncio.to_thread(self._fetch_sync, video_id, languages)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("youtube_transcript: transcript fetch failed video_id=%r", video_id)
             return {"success": False, "error": f"Transcript failed: {e}"}
 
         return {"success": True, "output": helpers._trim_output(text)}

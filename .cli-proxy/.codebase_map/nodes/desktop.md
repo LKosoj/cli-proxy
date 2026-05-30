@@ -7,7 +7,7 @@ Generated: 2026-04-27T22:43:23Z
 
 ## Scope
 - Source glob: `desktop/**`
-- Current files: 31 under `desktop/**` as of last review.
+- Current files: 32 under `desktop/**` as of last review.
 - Entry point: `desktop/main.py`
 - Main shell: `desktop/main_window.py`
 - Desktop orchestration and services: `desktop/services/application_facade.py`, `desktop/services/desktop_state_service.py`, `desktop/services/desktop_identity_provider.py`, `desktop/services/desktop_git_service.py`, `desktop/services/theme_service.py`

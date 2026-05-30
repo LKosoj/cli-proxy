@@ -14,6 +14,8 @@ from telegram.ext import ContextTypes
 from agent.plugins.base import DialogMixin, ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class RemindersTool(DialogMixin, ToolPlugin):
     def get_source_name(self) -> str:
@@ -244,8 +246,8 @@ class RemindersTool(DialogMixin, ToolPlugin):
             self._user_task_ids(user_id).discard(reminder_id)
             try:
                 await msg.reply_text(f"⏰ Напоминание: {reminder_msg}")
-            except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+            except Exception:
+                logger.exception("reminders: failed to send reminder message id=%r", reminder_id)
 
         asyncio.create_task(_job())
         self.end_dialog(chat_id)
@@ -307,8 +309,8 @@ class RemindersTool(DialogMixin, ToolPlugin):
                 if bot and context:
                     try:
                         await bot._send_message(context, chat_id=chat_id, text=f"⏰ Напоминание: {msg}")
-                    except Exception as e:
-                        logging.exception(f"tool failed {str(e)}")
+                    except Exception:
+                        logger.exception("reminders: failed to deliver reminder id=%r chat_id=%s", reminder_id, chat_id)
 
             asyncio.create_task(_job())
             return {"success": True, "output": f"✅ Напоминание создано\nID: {reminder_id}\nВремя: {when}\nТекст: {msg[:80]}"}

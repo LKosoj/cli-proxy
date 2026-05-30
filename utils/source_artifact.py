@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
+import logging
 import os
 import pathlib
 import zipfile
 from typing import Iterable, Sequence
+
+logger = logging.getLogger(__name__)
+
+_RGLOB_FILES_LIMIT = 5_000
 
 
 SOURCE_ARTIFACT_INCLUDE: tuple[str, ...] = (
@@ -120,7 +126,14 @@ def iter_source_artifact_files(
             continue
         if not candidate.is_dir():
             continue
-        for file_path in sorted(p for p in candidate.rglob("*") if p.is_file()):
+        raw_files = list(itertools.islice((p for p in candidate.rglob("*") if p.is_file()), _RGLOB_FILES_LIMIT))
+        if len(raw_files) >= _RGLOB_FILES_LIMIT:
+            logger.warning(
+                "source_artifact: rglob scan truncated at %d files under %s",
+                _RGLOB_FILES_LIMIT,
+                candidate,
+            )
+        for file_path in sorted(raw_files):
             arcname = file_path.relative_to(root_path).as_posix()
             if _is_noise_relative(pathlib.PurePosixPath(arcname)):
                 continue

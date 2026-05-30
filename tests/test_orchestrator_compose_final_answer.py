@@ -25,6 +25,9 @@ class _FakeBot:
     async def _send_message(self, _context, *, chat_id: int, text: str, **_kwargs):
         self.events.append(("msg", chat_id, text))
 
+    async def send_message(self, _context, *, chat_id: int, text: str, **_kwargs):
+        self.events.append(("msg", chat_id, text))
+
     async def send_output(self, _session, _dest, output: str, _context, **kwargs):
         self.events.append(("send_output", output, kwargs))
         self.sent_outputs.append((output, kwargs))

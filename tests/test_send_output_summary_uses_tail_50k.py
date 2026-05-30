@@ -52,7 +52,7 @@ def test_send_output_summary_uses_tail_70k(tmp_path, monkeypatch):
         monkeypatch.setattr(app, "_send_document", _send_document)
 
         # Avoid threads for html conversion and file IO.
-        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s: "<html/>")
+        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s, **_kw: "<html/>")
 
         def _make_html_file(_html, _prefix):
             p = tmp_path / "out.html"

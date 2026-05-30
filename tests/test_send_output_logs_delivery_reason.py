@@ -49,7 +49,7 @@ def test_send_output_logs_reason_when_document_send_fails(tmp_path, monkeypatch)
         # Make HTML conversion fast/pure.
         import sessions.session_management as sm_mod
 
-        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda text: "<html><body>x</body></html>")
+        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda text, **_kw: "<html><body>x</body></html>")
 
         def _make_html_file(html_text, prefix):
             path = Path(tmp_path) / f"{prefix}-x.html"

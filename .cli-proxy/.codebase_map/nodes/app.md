@@ -7,7 +7,7 @@ Generated: 2026-04-27T22:43:22Z
 
 ## Scope
 - Source glob: `app/**`
-- Current files: 147 under `app/**` as of last review.
+- Current files: 149 under `app/**` as of last review.
 - Top-level modules: `app/bootstrap.py`, `app/mode_dependencies.py`, `app/config_runtime/**`, `app/events/**`, `app/security/**`, `app/services/**`
 - Service subareas include runtime config reload, session/task orchestration, Telegram/UI state transport, run artifacts/observability/doctor/recovery, scheduler/webhook ingress, SSH/remote control, skill runtime/registry, `app/services/lint_evolution/**`, and `app/services/session_transfer/**`.
 
@@ -51,4 +51,4 @@ Generated: 2026-04-27T22:43:22Z
 - `nodes/tests.md` - contains targeted coverage for app services, config runtime, events, security, MiniApp/Desktop integration, and mode launch paths.
 
 ## Last reviewed
-- 2026-05-15
+- 2026-05-30

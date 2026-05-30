@@ -562,31 +562,42 @@ class SessionRunService:
                     session.busy = False
                     try:
                         if session.queue:
-                            raw_next_item = session.queue[0]
-                            fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
-                            next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
-                            next_prompt = next_item.text
-                            next_dest = self._merge_fallback_dest(next_item.dest, dest)
-                            if isinstance(raw_next_item, Mapping):
-                                image_paths = raw_next_item.get("image_paths")
-                                if image_paths:
-                                    next_dest["image_paths"] = list(image_paths)
-                                    next_dest["cleanup_images"] = True
-                                image_path = raw_next_item.get("image_path")
-                                if image_path:
-                                    next_dest["image_path"] = image_path
-                                    next_dest["cleanup_image"] = True
-                            if self.start_prompt_task(
-                                session,
-                                next_prompt,
-                                next_dest,
-                                context,
-                                task_name="run_prompt.queue_next",
-                            ):
-                                session.queue.popleft()
-                                self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                            raw_next_item = session.queue.popleft()
+                            try:
+                                fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
+                                next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
+                                next_prompt = next_item.text
+                                next_dest = self._merge_fallback_dest(next_item.dest, dest)
+                                if isinstance(raw_next_item, Mapping):
+                                    image_paths = raw_next_item.get("image_paths")
+                                    if image_paths:
+                                        next_dest["image_paths"] = list(image_paths)
+                                        next_dest["cleanup_images"] = True
+                                    image_path = raw_next_item.get("image_path")
+                                    if image_path:
+                                        next_dest["image_path"] = image_path
+                                        next_dest["cleanup_image"] = True
+                                if not self.start_prompt_task(
+                                    session,
+                                    next_prompt,
+                                    next_dest,
+                                    context,
+                                    task_name="run_prompt.queue_next",
+                                ):
+                                    session.queue.appendleft(raw_next_item)
+                                    _log.warning(
+                                        "prompt queue drain: task start rejected, item rolled back session=%s",
+                                        session.id,
+                                    )
+                                else:
+                                    self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                            except Exception:
+                                session.queue.appendleft(raw_next_item)
+                                _log.exception(
+                                    "prompt queue drain: item prep failed, rolled back session=%s", session.id,
+                                )
                     except Exception:
-                        logging.getLogger(__name__).exception(
+                        _log.exception(
                             "prompt queue drain failed session=%s", session.id,
                         )
 
@@ -721,52 +732,56 @@ class SessionRunService:
                     session.busy = False
                     try:
                         if session.queue:
-                            raw_next_item = session.queue[0]
-                            fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
-                            next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
-                            next_prompt = next_item.text
-                            next_dest = self._merge_fallback_dest(next_item.dest, dest)
-                            if self.start_session_task(
-                                session,
-                                coro=self.dispatch_queued_input(session, next_prompt, next_dest, context, fallback_dest=dest),
-                                name="dispatch_queued_input",
-                            ):
-                                session.queue.popleft()
-                                self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                            raw_next_item = session.queue.popleft()
+                            try:
+                                fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
+                                next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
+                                next_prompt = next_item.text
+                                next_dest = self._merge_fallback_dest(next_item.dest, dest)
+                                if not self.start_session_task(
+                                    session,
+                                    coro=self.dispatch_queued_input(session, next_prompt, next_dest, context, fallback_dest=dest),
+                                    name="dispatch_queued_input",
+                                ):
+                                    session.queue.appendleft(raw_next_item)
+                                    _log.warning(
+                                        "mode pipeline queue drain: task start rejected, item rolled back session=%s mode=%s",
+                                        session.id,
+                                        mode_id,
+                                    )
+                                else:
+                                    self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                            except Exception:
+                                session.queue.appendleft(raw_next_item)
+                                _log.exception(
+                                    "mode pipeline queue drain: item prep failed, rolled back session=%s mode=%s",
+                                    session.id,
+                                    mode_id,
+                                )
                     except Exception:
-                        logging.getLogger(__name__).exception(
+                        _log.exception(
                             "mode pipeline queue drain failed session=%s mode=%s", session.id, mode_id,
                         )
 
     async def dispatch_queued_input(self, session, next_prompt: str, next_dest: dict, context, *, fallback_dest: dict) -> None:
-        try:
-            next_dest = self._merge_fallback_dest(next_dest, fallback_dest)
-            chat_id = next_dest.get("chat_id")
-            if chat_id is None:
-                self.start_prompt_task(
-                    session,
-                    next_prompt,
-                    next_dest,
-                    context,
-                    task_name="dispatch_queued_input.no_chat_id",
-                )
-                return
-            await self.bot_app._handle_user_input(
-                session,
-                next_prompt,
-                int(chat_id),
-                context,
-                dest=next_dest,
-            )
-        except Exception:
-            logging.exception("failed to dispatch queued input")
+        next_dest = self._merge_fallback_dest(next_dest, fallback_dest)
+        chat_id = next_dest.get("chat_id")
+        if chat_id is None:
             self.start_prompt_task(
                 session,
                 next_prompt,
                 next_dest,
                 context,
-                task_name="dispatch_queued_input.fallback_run_prompt",
+                task_name="dispatch_queued_input.no_chat_id",
             )
+            return
+        await self.bot_app._handle_user_input(
+            session,
+            next_prompt,
+            int(chat_id),
+            context,
+            dest=next_dest,
+        )
 
     def start_mode_task(self, session, prompt: str, dest: dict, context, *, mode_id=None) -> None:
         mode_id = str(mode_id or get_active_mode(session, "") or "").strip()

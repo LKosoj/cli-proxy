@@ -4,7 +4,10 @@ import dataclasses
 import logging
 import os
 import time
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from miniapp.auth import TelegramMiniAppUser
 
 from .audit import EventBusAuditService, build_audit_service
 from .auth import ConfigAuthService, build_auth_service
@@ -124,7 +127,7 @@ class SecurityFacade:
             if bot_token:
                 from miniapp.auth import verify_telegram_init_data
 
-                def _verify_init_data(init_data: str, _bot_token: str = bot_token) -> bool:
+                def _verify_init_data(init_data: str, _bot_token: str = bot_token) -> TelegramMiniAppUser:
                     return verify_telegram_init_data(init_data, _bot_token)
 
                 resolved_init_data_verifier = _verify_init_data

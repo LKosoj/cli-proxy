@@ -395,7 +395,10 @@ class ModeCallbackRouterService:
                 )
             return True
         policy = getattr(bot_app, "access_policy_service", None)
-        is_mode_allowed = policy.is_mode_allowed_for_chat(chat_id, target_mode)
+        if policy is None:
+            is_mode_allowed = True
+        else:
+            is_mode_allowed = policy.is_mode_allowed_for_chat(chat_id, target_mode)
         security = self._build_mode_launch_security(bot_app)
         if action_token in ("enable", "on"):
             if security is None or not hasattr(security, "authorize_mode_launch"):

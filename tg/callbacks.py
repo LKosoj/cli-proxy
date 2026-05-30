@@ -95,6 +95,26 @@ class CallbackHandler(CallbackActionsMixin):
                 logging.exception("persist single session failed: %s", e)
         self._persist_sessions()
 
+    async def _persist_session_async(self, chat_id: int, session_id: str) -> None:
+        # H1: снапшот session.queue/dict сериализуем СИНХРОННО на event-loop
+        # (мутация очереди из корутин ломает обход), в worker-поток уходит только запись.
+        manager = getattr(self.bot_app, "manager", None)
+        if manager is None or not hasattr(manager, "serialize_chat_entry_for_persist"):
+            # Легаси/тесты без нового API менеджера — синхронный путь.
+            self._persist_session(int(chat_id), str(session_id))
+            return
+        try:
+            entry = manager.serialize_chat_entry_for_persist(int(chat_id), str(session_id))
+            if entry is None:
+                return  # сессия исчезла — персистить нечего
+            ok = await asyncio.to_thread(manager.write_chat_entry, int(chat_id), entry)
+            if bool(ok):
+                return
+            self._persist_sessions()
+        except Exception as e:
+            logging.exception("persist single session async failed: %s", e)
+            self._persist_sessions()
+
     async def _cancel_mode_tasks_session(self, session_id: str) -> None:
         try:
             await self.bot_app.mode_session_control.cancel_session(session_id=session_id, timeout_s=0.2)
@@ -248,11 +268,11 @@ class CallbackHandler(CallbackActionsMixin):
 
         if action == "apply":
             orch.apply_mode(session=session, target_mode_id=target_mode_id)
-            self._persist_session(int(chat_id), session.id)
+            await self._persist_session_async(int(chat_id), session.id)
             await self._edit_msg(context, query, "Переход применен. Выполняю запрос.")
         elif disable_on_cancel:
             set_orchestrator_enabled(session, False)
-            self._persist_session(int(chat_id), session.id)
+            await self._persist_session_async(int(chat_id), session.id)
             await self._edit_msg(
                 context,
                 query,
@@ -391,7 +411,7 @@ class CallbackHandler(CallbackActionsMixin):
             queue.popleft()
         else:
             queue.pop(0)
-        self._persist_session(int(chat_id), session.id)
+        await self._persist_session_async(int(chat_id), session.id)
         next_prompt = str(next_item.text or "")
         next_dest = dict(next_item.dest)
         if isinstance(raw_next_item, dict):
@@ -446,7 +466,7 @@ class CallbackHandler(CallbackActionsMixin):
                     queue_ref.appendleft(raw_next_item)
                 elif isinstance(queue_ref, list):
                     queue_ref.insert(0, raw_next_item)
-                self._persist_session(int(chat_id), session.id)
+                await self._persist_session_async(int(chat_id), session.id)
             except Exception:
                 logging.exception(
                     "failed to restore queued input after dispatch failure session_id=%s",
@@ -739,7 +759,7 @@ class CallbackHandler(CallbackActionsMixin):
                 ok = InputDispatchService.append_pending_to_queue_tail(session, pending)
                 if not ok:
                     raise RuntimeError("queue append rejected")
-                self._persist_session(int(chat_id), session.id)
+                await self._persist_session_async(int(chat_id), session.id)
             except Exception:
                 logging.exception(
                     "failed to append pending input to queued tail session_id=%s",
@@ -784,7 +804,7 @@ class CallbackHandler(CallbackActionsMixin):
                 if not InputDispatchService.append_queue_item(session, item):
                     raise RuntimeError("queue append rejected")
                 InputDispatchService.pop_pending(pending_map, ui_key)
-                self._persist_session(int(chat_id), session.id)
+                await self._persist_session_async(int(chat_id), session.id)
             except Exception:
                 logging.exception("failed to enqueue pending input into session queue session_id=%s", getattr(session, "id", "?"))
                 await self._respond_callback(

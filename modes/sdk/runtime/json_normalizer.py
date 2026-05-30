@@ -234,6 +234,21 @@ def _extract_json_from_json_fence(raw: str) -> str:
 
 
 def loads_safe(raw: str, strict_first: bool = True) -> Any:
+    """Parse a JSON payload that may be wrapped in markdown, prose, or noisy output.
+
+    Contract:
+    - *raw*: any string, including None-like values (coerced via ``str(raw or "")``)
+    - *strict_first*: when True (default), attempt a full ``json.loads`` on the
+      stripped input before any extraction/repair heuristics. Preserves valid JSON
+      documents that happen to contain code-fence fragments inside string fields.
+    - Returns the parsed Python object (dict, list, scalar) on success.
+    - Raises ``json.JSONDecodeError`` if *raw* is empty/whitespace-only, or if
+      all extraction and repair attempts fail.
+    - Never returns None: either a valid object is returned or an exception is raised.
+    - Input containing multiple JSON objects (e.g. agent tool calls followed by a
+      final payload) is handled by iterating candidates; the last schema-matching
+      object wins in ``parse_normalize_validate``.
+    """
     source = str(raw or "").strip()
     if not source:
         raise json.JSONDecodeError("empty json payload", source, 0)

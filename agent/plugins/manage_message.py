@@ -6,6 +6,8 @@ from typing import Any, Dict
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class ManageMessageTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -49,7 +51,7 @@ class ManageMessageTool(ToolPlugin):
                     return {"success": True, "output": "Deleted last message"}
                 return {"success": False, "error": "Failed to delete (maybe already deleted or too old)"}
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                logger.exception("manage_message: delete_last failed chat_id=%s msg_id=%s", chat_id, msg_id)
                 return {"success": False, "error": f"Delete failed: {e}"}
         if action == "delete_by_index":
             idx = args.get("index", -1)
@@ -66,7 +68,7 @@ class ManageMessageTool(ToolPlugin):
                     return {"success": True, "output": f"Deleted message at index {idx}"}
                 return {"success": False, "error": "Failed to delete"}
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                logger.exception("manage_message: delete_by_index failed chat_id=%s msg_id=%s idx=%s", chat_id, msg_id, idx)
                 return {"success": False, "error": f"Delete failed: {e}"}
         if action == "edit_last":
             new_text = args.get("new_text")
@@ -79,6 +81,6 @@ class ManageMessageTool(ToolPlugin):
                     return {"success": True, "output": "Edited last message"}
                 return {"success": False, "error": "Failed to edit (maybe too old or contains media)"}
             except Exception as e:
-                logging.exception(f"tool failed {str(e)}")
+                logger.exception("manage_message: edit_last failed chat_id=%s msg_id=%s", chat_id, msg_id)
                 return {"success": False, "error": f"Edit failed: {e}"}
         return {"success": False, "error": f"Unknown action: {action}"}

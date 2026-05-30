@@ -613,15 +613,19 @@ class ClaudeJsonlMonitor:
             self._known_file_sizes[path_key] = int(jsonl_file.stat().st_size)
             self._log.info("Attached Claude subagent transcript: %s", jsonl_file)
 
+    def _poll_sync(self) -> None:
+        """Synchronous poll step: discover sessions and read new events."""
+        project_dir = self._find_project_dir()
+        if project_dir is not None:
+            self._discover_active_session(project_dir)
+            self._ensure_session_monitors(project_dir)
+            for monitor in list(self.monitors.values()):
+                monitor.read_new_events()
+
     async def _poll_loop(self) -> None:
         while self._running:
             try:
-                project_dir = self._find_project_dir()
-                if project_dir is not None:
-                    self._discover_active_session(project_dir)
-                    self._ensure_session_monitors(project_dir)
-                    for monitor in list(self.monitors.values()):
-                        monitor.read_new_events()
+                await asyncio.to_thread(self._poll_sync)
                 await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
                 break

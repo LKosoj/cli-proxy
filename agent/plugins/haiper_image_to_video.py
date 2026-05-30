@@ -19,6 +19,8 @@ from telegram.ext import (
     filters,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class HaiperImageToVideoTool(DialogMixin, ToolPlugin):
     API_URL = "https://api.vsegpt.ru/v1/video"
@@ -130,7 +132,7 @@ class HaiperImageToVideoTool(DialogMixin, ToolPlugin):
                 else:
                     suffix = ".jpg"
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("haiper_image_to_video: failed to download image for chat_id=%s", chat_id)
             await msg.reply_text(f"Не удалось скачать изображение: {e}")
             return
 
@@ -193,7 +195,7 @@ class HaiperImageToVideoTool(DialogMixin, ToolPlugin):
             with open(out_path, "rb") as f:
                 await msg.reply_document(document=f, filename=os.path.basename(out_path))
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("haiper_image_to_video: failed to send video document for chat_id=%s", chat_id)
             await msg.reply_text(f"Не удалось отправить видео: {e}")
         self.end_dialog(chat_id)
 
@@ -220,7 +222,7 @@ class HaiperImageToVideoTool(DialogMixin, ToolPlugin):
         try:
             out = await asyncio.to_thread(self._run_sync, token, full_path, prompt, model_id)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("haiper_image_to_video: video generation failed for image_path=%r model=%r", image_path, model_id)
             return {"success": False, "error": f"Video generation failed: {e}"}
 
         return {"success": True, "output": out}

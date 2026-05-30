@@ -139,5 +139,5 @@ class ListDirectoryTool(ToolPlugin):
             output = _list_directory(target_path) if target_path.is_dir() else _list_file(target_path)
             return {"success": True, "output": output}
         except Exception as e:
-            logger.exception("tool failed %s", e)
+            logger.exception("list_directory: failed to list path=%r", dir_path)
             return {"success": False, "error": str(e)}

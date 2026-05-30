@@ -40,8 +40,13 @@ _ANSI_FG_COLORS = {
 }
 
 
-def render_html(text: str, theme_colors: Optional[Dict[str, str]] = None, fragment: bool = False) -> str:
-    return ansi_to_html(str(text or ""), theme_colors=theme_colors, fragment=fragment)
+def render_html(
+    text: str,
+    theme_colors: Optional[Dict[str, str]] = None,
+    fragment: bool = False,
+    allow_network_fetch: bool = False,
+) -> str:
+    return ansi_to_html(str(text or ""), theme_colors=theme_colors, fragment=fragment, allow_network_fetch=allow_network_fetch)
 
 
 def render_markdown(text: str) -> str:
@@ -55,9 +60,14 @@ def make_html_file(html_text: str, prefix: str) -> str:
     return path
 
 
-def ansi_to_html(text: str, theme_colors: Optional[Dict[str, str]] = None, fragment: bool = False) -> str:
+def ansi_to_html(
+    text: str,
+    theme_colors: Optional[Dict[str, str]] = None,
+    fragment: bool = False,
+    allow_network_fetch: bool = False,
+) -> str:
     cleaned = normalize_text(text, strip_ansi=False)
-    rendered = _render_mermaid_blocks(cleaned)
+    rendered = _render_mermaid_blocks(cleaned, allow_network_fetch=allow_network_fetch)
     html_body = _markdown_to_html(rendered)
     html_body = _apply_ansi_to_html(html_body)
     if fragment:
@@ -208,7 +218,12 @@ def _markdown_to_html(text: str) -> str:
     return md.render(text)
 
 
-def _render_mermaid_blocks(text: str) -> str:
+def _render_mermaid_blocks(text: str, allow_network_fetch: bool = False) -> str:
+    # Сетевой запрос к mermaid.ink разрешён только при явном allow_network_fetch=True.
+    # В UI-потоке Qt (desktop) этот флаг не выставляется — фриза нет.
+    if not allow_network_fetch:
+        return text
+
     def replacer(match: re.Match) -> str:
         source = match.group(1).strip()
         svg = _render_mermaid_svg(source)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict
 
@@ -75,7 +76,7 @@ def register_config_routes(
 
     async def config_view(request: web.Request) -> web.Response:
         await services.require_admin(request)
-        payload = config_view_with_revision(ctx.bot_app.config)
+        payload = await asyncio.to_thread(config_view_with_revision, ctx.bot_app.config)
         payload["execution_target"] = "local"
         return web.json_response(payload)
 
@@ -109,7 +110,8 @@ def register_config_routes(
         draft = body.get("draft")
         if not isinstance(draft, dict):
             return await services.json_error(400, "draft must be an object")
-        current = config_view_with_revision(ctx.bot_app.config).get("config", {})
+        view = await asyncio.to_thread(config_view_with_revision, ctx.bot_app.config)
+        current = view.get("config", {})
         return web.json_response(draft_diff(current, draft))
 
     async def config_save(request: web.Request) -> web.Response:
@@ -124,7 +126,7 @@ def register_config_routes(
             return await services.json_error(400, "draft must be an object")
 
         current_plain = app_config_to_dict(ctx.bot_app.config)
-        current_redacted = config_view_with_revision(ctx.bot_app.config).get("config", {})
+        current_redacted = (await asyncio.to_thread(config_view_with_revision, ctx.bot_app.config)).get("config", {})
         field_diff = draft_diff(current_redacted, draft)
         draft_for_save = restore_redacted_secret_values(current_plain, draft)
         try:

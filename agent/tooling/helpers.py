@@ -656,6 +656,16 @@ def _clean_html_with_bs4(html_content: str) -> str:
         return ""
 
 
+extract_html_title = _extract_html_title
+clean_html_with_bs4 = _clean_html_with_bs4
+
+
+def clean_extra_spaces(text: str) -> str:
+    """Удаляет лишние пробелы и переносы строк в тексте."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return "\n".join(lines)
+
+
 async def fetch_page_impl(url: str, config: Any) -> Dict[str, Any]:
     if not url:
         return {"success": False, "error": "URL required"}

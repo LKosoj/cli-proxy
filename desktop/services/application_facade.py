@@ -40,7 +40,8 @@ from app.services.menu_visibility_policy import (
     build_session_overview_visibility,
     call_mode_build_menu,
 )
-from app.services.run_artifact_store import RunArtifactStore, is_terminal_status
+from app.services.run_artifact_store import is_terminal_status
+from app.services.run_utils import clean_text as clean_run_listing_text, summarize_run_skill_log
 from app.services.run_operations_policy import RunOperationsPolicy
 from app.services.run_operations_service import RunOperationsService
 from app.services.run_recovery_executor import build_recovery_dest, build_recovery_prompt
@@ -82,6 +83,7 @@ from agent import (
 )
 from desktop.services.theme_service import ThemeService
 from desktop.services.desktop_identity_provider import DesktopIdentityProvider
+from desktop.services.desktop_admin_facade import DesktopAdminFacade
 from session import (
     consume_session_cli_switch_notice_text,
     session_scoped_key,
@@ -746,6 +748,7 @@ class ApplicationFacade:
             },
         }
 
+    # External API: вызывается desktop-редактором (parity-контракт, покрыт tests/test_desktop_files_editor_parity.py)
     def force_save_file(
         self, session_uid: str, user_id: int, path: str, content: str,
     ) -> Dict[str, Any]:
@@ -1114,17 +1117,7 @@ class ApplicationFacade:
         *,
         yaml_text: str,
     ) -> Dict[str, Any]:
-        try:
-            ApplicationFacade._admin_config_service(self).save_yaml(session_uid, yaml_text)
-        except AdminConfigServiceError as exc:
-            return {"ok": False, "error": ApplicationFacade._desktop_admin_config_error(exc)}
-        except Exception:
-            self.logger.exception(
-                "desktop save_admin_config_yaml failed session_uid=%s",
-                session_uid,
-            )
-            return {"ok": False, "error": "config_write_failed"}
-        return {"ok": True}
+        return DesktopAdminFacade.save_admin_config_yaml(self, session_uid, yaml_text=yaml_text)
 
     def get_admin_hosts(self, session_uid: str) -> List[Dict[str, Any]]:
         session = self.session_service.get_session_by_uid(session_uid)
@@ -1172,22 +1165,9 @@ class ApplicationFacade:
         enabled: Optional[bool] = None,
         interval_sec: Optional[float] = None,
     ) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {"servers": list(servers or [])}
-        if enabled is not None:
-            payload["enabled"] = bool(enabled)
-        if interval_sec is not None:
-            payload["interval_sec"] = interval_sec
-        try:
-            ApplicationFacade._admin_config_service(self).save_monitor_servers(session_uid, payload)
-        except AdminConfigServiceError as exc:
-            return {"ok": False, "error": ApplicationFacade._desktop_admin_config_error(exc)}
-        except Exception:
-            self.logger.exception(
-                "desktop save_admin_monitor_servers failed session_uid=%s",
-                session_uid,
-            )
-            return {"ok": False, "error": "monitor_servers_write_failed"}
-        return {"ok": True}
+        return DesktopAdminFacade.save_admin_monitor_servers(
+            self, session_uid, servers=servers, enabled=enabled, interval_sec=interval_sec
+        )
 
     def get_admin_actions_ssh(self, session_uid: str) -> Dict[str, Any]:
         try:
@@ -1202,17 +1182,7 @@ class ApplicationFacade:
         *,
         actions: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        try:
-            ApplicationFacade._admin_config_service(self).save_ssh_actions(session_uid, list(actions or []))
-        except AdminConfigServiceError as exc:
-            return {"ok": False, "error": ApplicationFacade._desktop_admin_config_error(exc)}
-        except Exception:
-            self.logger.exception(
-                "desktop save_admin_actions_ssh failed session_uid=%s",
-                session_uid,
-            )
-            return {"ok": False, "error": "actions_ssh_write_failed"}
-        return {"ok": True}
+        return DesktopAdminFacade.save_admin_actions_ssh(self, session_uid, actions=actions)
 
     # ---------- admin chat ----------
 
@@ -1288,71 +1258,22 @@ class ApplicationFacade:
     def save_admin_chat_memory_md(
         self, session_uid: str, *, text: str
     ) -> Dict[str, Any]:
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return {"ok": False, "error": "chat_service_unavailable"}
-        _, workdir = self._require_session_workdir(session_uid)
-        if not workdir:
-            return {"ok": False, "error": "session_workdir_empty"}
-        try:
-            service.save_memory_md(workdir, text=str(text or ""))
-        except Exception as exc:
-            self.logger.exception(
-                "desktop save_admin_chat_memory_md failed session_uid=%s", session_uid
-            )
-            return {"ok": False, "error": f"write_failed:{exc}"}
-        return {"ok": True}
+        return DesktopAdminFacade.save_admin_chat_memory_md(self, session_uid, text=text)
 
     def reject_admin_chat_pending(
         self, session_uid: str, *, approval_id: str
     ) -> Dict[str, Any]:
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return {"ok": False, "error": "chat_service_unavailable"}
-        _, workdir = self._require_session_workdir(session_uid)
-        if not workdir:
-            return {"ok": False, "error": "session_workdir_empty"}
-        return service.reject_pending(workdir, approval_id=str(approval_id or ""))
+        return DesktopAdminFacade.reject_admin_chat_pending(self, session_uid, approval_id=approval_id)
 
     async def post_admin_chat_message(
         self, session_uid: str, *, text: str
     ) -> Dict[str, Any]:
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return {"ok": False, "error": "chat_service_unavailable"}
-        session, workdir = self._require_session_workdir(session_uid)
-        if session is None or not workdir:
-            return {"ok": False, "error": "session_not_found_or_no_workdir"}
-        try:
-            return await service.send(
-                session=session,
-                bot_app=self._desktop_bot_app(),
-                text=str(text or ""),
-            )
-        except Exception as exc:
-            self.logger.exception(
-                "desktop post_admin_chat_message failed session_uid=%s", session_uid
-            )
-            return {"ok": False, "error": f"send_failed:{exc}"}
+        return await DesktopAdminFacade.post_admin_chat_message(self, session_uid, text=text)
 
     async def approve_admin_chat_pending(
         self, session_uid: str, *, approval_id: str
     ) -> Dict[str, Any]:
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return {"ok": False, "error": "chat_service_unavailable"}
-        session, workdir = self._require_session_workdir(session_uid)
-        if session is None or not workdir:
-            return {"ok": False, "error": "session_not_found_or_no_workdir"}
-        try:
-            return await service.execute_pending(
-                session=session, approval_id=str(approval_id or ""),
-            )
-        except Exception as exc:
-            self.logger.exception(
-                "desktop approve_admin_chat_pending failed session_uid=%s", session_uid
-            )
-            return {"ok": False, "error": f"execute_failed:{exc}"}
+        return await DesktopAdminFacade.approve_admin_chat_pending(self, session_uid, approval_id=approval_id)
 
     def list_admin_runs(
         self,
@@ -1360,40 +1281,7 @@ class ApplicationFacade:
         *,
         limit: int = 20,
     ) -> List[Dict[str, Any]]:
-        session = self.session_service.get_session_by_uid(session_uid)
-        if not session:
-            return []
-        bot_app = self._desktop_bot_app()
-        artifact_store = getattr(bot_app, "mode_run_artifact_store", None)
-        if artifact_store is None:
-            return []
-        try:
-            handles = artifact_store.list_runs(
-                session=session,
-                mode_id="admin",
-                limit=int(max(1, limit)),
-            )
-        except Exception:
-            self.logger.exception(
-                "desktop list_admin_runs failed session_uid=%s", session_uid
-            )
-            return []
-        rows: List[Dict[str, Any]] = []
-        for handle in handles or []:
-            try:
-                state = artifact_store.load_state(handle) or {}
-            except Exception:
-                state = {}
-            rows.append(
-                {
-                    "run_id": str(handle.run_id),
-                    "status": str(state.get("status") or "-"),
-                    "phase": str(state.get("phase") or "-"),
-                    "started_at": state.get("started_at") or state.get("created_at") or "-",
-                    "finished_at": state.get("finished_at") or "-",
-                }
-            )
-        return rows
+        return DesktopAdminFacade.list_admin_runs(self, session_uid, limit=limit)
 
     def get_admin_run_detail(
         self,
@@ -1402,47 +1290,7 @@ class ApplicationFacade:
         run_id: str,
         events_limit: int = 50,
     ) -> Optional[Dict[str, Any]]:
-        session = self.session_service.get_session_by_uid(session_uid)
-        if not session:
-            return None
-        bot_app = self._desktop_bot_app()
-        artifact_store = getattr(bot_app, "mode_run_artifact_store", None)
-        if artifact_store is None:
-            return None
-        try:
-            handle = artifact_store.get_run(
-                session=session, mode_id="admin", run_id=str(run_id or "").strip()
-            )
-        except Exception:
-            self.logger.exception(
-                "desktop get_admin_run_detail get_run failed session_uid=%s run_id=%s",
-                session_uid,
-                run_id,
-            )
-            return None
-        if handle is None:
-            return None
-        try:
-            state = artifact_store.load_state(handle) or {}
-            plan = artifact_store.load_plan(handle) or {}
-            checkpoints = artifact_store.load_checkpoints(handle) or {}
-            events = artifact_store.load_events_tail(handle, limit=int(max(1, events_limit))) or []
-        except Exception:
-            self.logger.exception(
-                "desktop get_admin_run_detail load failed session_uid=%s run_id=%s",
-                session_uid,
-                run_id,
-            )
-            return None
-        return {
-            "run_id": str(handle.run_id),
-            "session_uid": str(handle.session_uid),
-            "mode_id": str(handle.mode_id),
-            "state": dict(state),
-            "plan": dict(plan),
-            "checkpoints": dict(checkpoints),
-            "events": list(events),
-        }
+        return DesktopAdminFacade.get_admin_run_detail(self, session_uid, run_id=run_id, events_limit=events_limit)
 
     def list_scheduler_projects(self) -> List[Dict[str, Any]]:
         provider = self._desktop_identity_provider_service()
@@ -2378,7 +2226,7 @@ class ApplicationFacade:
                 "message": "Не удалось восстановить входные данные для recovery action.",
                 "executed_operation": operation_name,
             }
-        artifact_store = RunArtifactStore(self.config)
+        artifact_store = self._desktop_run_operations().artifact_store
         latest_before = artifact_store.latest_run(session=session, mode_id=resolved_mode)
         output = await mode.run_pipeline(
             session=session,
@@ -2401,13 +2249,6 @@ class ApplicationFacade:
                 payload["spawned_run_id"] = after_run_id
         return payload
 
-    @staticmethod
-    def _clean_run_listing_text(value: Any, *, max_len: int = 256) -> str:
-        text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
-        if len(text) <= max_len:
-            return text
-        return text[: max_len - 3] + "..."
-
     def _serialize_run_listing(
         self,
         *,
@@ -2420,16 +2261,16 @@ class ApplicationFacade:
         state = store.load_state(run)
         recovery = store.load_recovery(run)
         events = store.load_events_tail(run, limit=24)
-        status = self._clean_run_listing_text(state.get("status"), max_len=32) or "running"
-        phase = self._clean_run_listing_text(state.get("phase"), max_len=64) or "unknown"
+        status = clean_run_listing_text(state.get("status"), max_len=32) or "running"
+        phase = clean_run_listing_text(state.get("phase"), max_len=64) or "unknown"
         mode_context = state.get("mode_context") if isinstance(state.get("mode_context"), dict) else {}
         issues = recovery.get("issues") if isinstance(recovery.get("issues"), list) else []
         issue_codes = [
-            self._clean_run_listing_text(item.get("code"), max_len=64)
+            clean_run_listing_text(item.get("code"), max_len=64)
             for item in issues
-            if isinstance(item, dict) and self._clean_run_listing_text(item.get("code"), max_len=64)
+            if isinstance(item, dict) and clean_run_listing_text(item.get("code"), max_len=64)
         ]
-        recommended_action = self._clean_run_listing_text(recovery.get("recommended_action"), max_len=64) or None
+        recommended_action = clean_run_listing_text(recovery.get("recommended_action"), max_len=64) or None
         if recommended_action == "no_action":
             recommended_action = None
         can_resume = bool(recovery.get("can_resume")) if recovery else False
@@ -2449,11 +2290,11 @@ class ApplicationFacade:
             if isinstance(recovery.get("last_requested_operation"), dict)
             else None
         )
-        skill_log = self._summarize_run_skill_log(events, state)
+        skill_log = summarize_run_skill_log(events, state)
         selected_skill_ids = [
-            self._clean_run_listing_text(item, max_len=64)
+            clean_run_listing_text(item, max_len=64)
             for item in list(state.get("selected_skill_ids") or [])
-            if self._clean_run_listing_text(item, max_len=64)
+            if clean_run_listing_text(item, max_len=64)
         ]
         project_local_skill_ids = self._project_local_selected_skill_ids(session=session, skill_ids=selected_skill_ids)
         started_at = float(state.get("started_at") or 0.0)
@@ -2494,7 +2335,7 @@ class ApplicationFacade:
             "active": not finished_at and not terminal_status,
             "terminal_status": terminal_status,
             "terminal_actions_blocked": terminal_actions_blocked,
-            "current_unit_id": self._clean_run_listing_text(
+            "current_unit_id": clean_run_listing_text(
                 state.get("current_unit_id") or state.get("current_step_id"),
                 max_len=128,
             )
@@ -2509,75 +2350,23 @@ class ApplicationFacade:
             "skill_log": skill_log,
             "selected_skill_ids": selected_skill_ids,
             "project_local_skill_ids": project_local_skill_ids,
-            "cli_work_type": self._clean_run_listing_text(
+            "cli_work_type": clean_run_listing_text(
                 mode_context.get("cli_work_type"),
                 max_len=64,
             )
             or None,
-            "executor_profile": self._clean_run_listing_text(
+            "executor_profile": clean_run_listing_text(
                 mode_context.get("executor_profile"),
                 max_len=64,
             )
             or None,
         }
 
-    def _summarize_run_skill_log(self, events: List[Dict[str, Any]], state: Dict[str, Any]) -> List[str]:
-        summary: list[str] = []
-        seen: set[str] = set()
-        for event in reversed(list(events or [])):
-            if not isinstance(event, dict):
-                continue
-            event_type = self._clean_run_listing_text(event.get("event_type"), max_len=64)
-            entry = ""
-            if event_type in {"cli_skill_context_applied", "skill_selection"}:
-                skill_ids = event.get("selected_skill_ids")
-                if not isinstance(skill_ids, list):
-                    skill_ids = event.get("selected_skills")
-                skills = [
-                    self._clean_run_listing_text(item, max_len=64)
-                    for item in list(skill_ids or [])
-                    if self._clean_run_listing_text(item, max_len=64)
-                ]
-                if skills:
-                    prefix = "Injected" if event_type == "cli_skill_context_applied" else "Selected"
-                    entry = f"{prefix}: {', '.join(skills)}"
-            elif event_type == "skill_install":
-                skill_id = self._clean_run_listing_text(event.get("skill_id"), max_len=64)
-                if skill_id:
-                    entry = f"Installed: {skill_id}"
-            elif event_type == "skill_discovery":
-                skills = [
-                    self._clean_run_listing_text(item, max_len=64)
-                    for item in list(event.get("discovered_skills") or [])
-                    if self._clean_run_listing_text(item, max_len=64)
-                ]
-                if skills:
-                    entry = f"Discovered: {', '.join(skills)}"
-            elif event_type == "skill_promote_global":
-                skill_id = self._clean_run_listing_text(event.get("skill_id"), max_len=64)
-                if skill_id:
-                    entry = f"Promoted: {skill_id}"
-            if entry and entry not in seen:
-                summary.append(entry)
-                seen.add(entry)
-            if len(summary) >= 3:
-                break
-        if summary:
-            return summary
-        fallback_skills = [
-            self._clean_run_listing_text(item, max_len=64)
-            for item in list(state.get("selected_skill_ids") or [])
-            if self._clean_run_listing_text(item, max_len=64)
-        ]
-        if fallback_skills:
-            return [f"Injected: {', '.join(fallback_skills[:4])}"]
-        return []
-
     def _project_local_selected_skill_ids(self, *, session: Any, skill_ids: List[str]) -> List[str]:
         cleaned = [
-            self._clean_run_listing_text(item, max_len=64)
+            clean_run_listing_text(item, max_len=64)
             for item in list(skill_ids or [])
-            if self._clean_run_listing_text(item, max_len=64)
+            if clean_run_listing_text(item, max_len=64)
         ]
         if not cleaned:
             return []

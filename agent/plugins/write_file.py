@@ -8,6 +8,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class WriteFileTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -56,5 +58,5 @@ class WriteFileTool(ToolPlugin):
                 f.write(content)
             return {"success": True, "output": f"Written {len(content)} bytes to {path}"}
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("write_file: failed to write file path=%r", full_path)
             return {"success": False, "error": str(e)}

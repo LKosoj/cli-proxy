@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import difflib
 import hashlib
@@ -169,7 +170,7 @@ class ConfigService:
 
     async def current_revision(self, config: Optional[AppConfig] = None) -> str:
         cfg = config or self._config or await self.load()
-        return _file_revision(str(cfg.path))
+        return await asyncio.to_thread(_file_revision, str(cfg.path))
 
     async def is_feature_enabled(self, flag_name: str) -> bool:
         """Централизованная проверка feature flags из defaults.*."""
@@ -217,9 +218,38 @@ class ConfigService:
         )
         return "\n".join(lines)
 
+    @staticmethod
+    def _write_config_atomic(path: str, content: str, *, create_backup: bool) -> Optional[str]:
+        """Write *content* to *path* atomically (temp + fsync + rename).
+
+        Returns the backup path if a backup was created, otherwise None.
+        Runs synchronously — intended to be called via ``asyncio.to_thread``.
+        """
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        backup_path: Optional[str] = None
+        if create_backup and os.path.exists(path):
+            backup_path = f"{path}.bak"
+            shutil.copy2(path, backup_path)
+
+        fd, tmp_path = tempfile.mkstemp(prefix="cfg-", suffix=".tmp", dir=os.path.dirname(path) or ".")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    logging.getLogger(__name__).exception(
+                        "failed to remove temp config file path=%s", tmp_path
+                    )
+        return backup_path
+
     async def save_atomic(self, config: AppConfig, *, create_backup: bool = True) -> ConfigSaveResult:
         path = str(config.path)
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         after = await self.serialize_config(config)
         diff = await self.diff_against_disk(config)
         changed = bool(diff.strip())
@@ -232,24 +262,9 @@ class ConfigService:
             )
             return ConfigSaveResult(path=path, backup_path=None, diff=diff, changed=False)
 
-        backup_path: Optional[str] = None
-        if create_backup and os.path.exists(path):
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
-
-        fd, tmp_path = tempfile.mkstemp(prefix="cfg-", suffix=".tmp", dir=os.path.dirname(path) or ".")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(after)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, path)
-        finally:
-            if os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    self.logger.exception("failed to remove temp config file path=%s", tmp_path)
+        backup_path = await asyncio.to_thread(
+            self._write_config_atomic, path, after, create_backup=create_backup
+        )
 
         self._config = config
         self.logger.info(
@@ -266,7 +281,7 @@ class ConfigService:
     ) -> ConfigDraftSaveResult:
         current_config = self._config or await self.load()
         path = str(current_config.path)
-        current_revision = _file_revision(path)
+        current_revision = await asyncio.to_thread(_file_revision, path)
 
         if expected_revision and expected_revision != current_revision:
             return ConfigDraftSaveResult(
@@ -314,7 +329,7 @@ class ConfigService:
 
         return ConfigDraftSaveResult(
             ok=True,
-            revision=_file_revision(path),
+            revision=await asyncio.to_thread(_file_revision, path),
             diff=diff,
             changed=changed,
             restart_required=restart_required,

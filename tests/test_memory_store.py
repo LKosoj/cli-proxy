@@ -1,12 +1,16 @@
 import re
+import threading
 
 from modes.sdk.runtime.memory_store import (
     append_memory_structured,
     compact_memory_by_priority,
+    forget_memory_entry,
     parse_entries,
     read_memory,
     remove_expired_entries,
     trim_for_context,
+    update_memory_entry,
+    write_memory,
 )
 
 
@@ -70,3 +74,127 @@ def test_trim_for_context_keeps_degraded_marker_even_for_tiny_budget():
     trimmed = trim_for_context(content, max_chars=24)
     assert trimmed
     assert "degraded" in trimmed.lower()
+
+
+def test_write_memory_creates_file_and_directory(tmp_path):
+    cwd = str(tmp_path / "nested" / "dir")
+    write_memory(cwd, "hello world")
+    mem = read_memory(cwd)
+    assert mem == "hello world"
+
+
+def test_concurrent_append_same_fact_exactly_one_write(tmp_path):
+    """8 потоков пишут один и тот же факт — ровно 1 True, 1 запись в файле."""
+    cwd = str(tmp_path)
+    results = []
+    lock = threading.Lock()
+
+    def worker():
+        ok = append_memory_structured(
+            cwd,
+            tag="AGREEMENT",
+            content="уникальный конкурентный факт",
+            layer="semantic",
+            source="agent",
+            confidence=0.9,
+        )
+        with lock:
+            results.append(ok)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results.count(True) == 1
+    entries = parse_entries(read_memory(cwd))
+    matching = [e for e in entries if "уникальный конкурентный факт" in e.get("text", "")]
+    assert len(matching) == 1
+
+
+def test_concurrent_update_different_entries_no_data_loss(tmp_path):
+    """Конкурентные update разных записей не теряют данные."""
+    cwd = str(tmp_path)
+
+    # Добавляем 4 разные записи последовательно
+    for i in range(4):
+        append_memory_structured(
+            cwd,
+            tag="PREF",
+            content=f"факт номер {i}",
+            layer="semantic",
+            source="agent",
+            confidence=0.8,
+        )
+
+    # Получаем id всех записей
+    entries = parse_entries(read_memory(cwd))
+    assert len(entries) == 4
+    ids = [e["id"] for e in entries]
+
+    errors = []
+
+    def updater(idx, entry_id):
+        try:
+            ok = update_memory_entry(
+                cwd,
+                entry_id=entry_id,
+                content=f"обновлённый факт {idx}",
+                source="agent",
+                confidence=0.9,
+            )
+            if not ok:
+                errors.append(f"update returned False for idx={idx}")
+        except Exception as exc:
+            errors.append(str(exc))
+
+    threads = [threading.Thread(target=updater, args=(i, ids[i])) for i in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"Ошибки в потоках: {errors}"
+    final_entries = parse_entries(read_memory(cwd))
+    # Все 4 записи должны остаться
+    assert len(final_entries) == 4
+
+
+def test_concurrent_forget_no_file_corruption(tmp_path):
+    """Конкурентный forget не повреждает файл."""
+    cwd = str(tmp_path)
+
+    # Добавляем 6 записей
+    for i in range(6):
+        append_memory_structured(
+            cwd,
+            tag="AGREEMENT",
+            content=f"запись для удаления {i}",
+            layer="semantic",
+            source="agent",
+            confidence=0.7,
+        )
+
+    entries = parse_entries(read_memory(cwd))
+    assert len(entries) == 6
+    ids = [e["id"] for e in entries]
+
+    errors = []
+
+    def forgetter(entry_id):
+        try:
+            forget_memory_entry(cwd, entry_id=entry_id)
+        except Exception as exc:
+            errors.append(str(exc))
+
+    threads = [threading.Thread(target=forgetter, args=(eid,)) for eid in ids]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"Ошибки в потоках: {errors}"
+    # Файл должен парситься без ошибок — все записи удалены
+    final_entries = parse_entries(read_memory(cwd))
+    assert len(final_entries) == 0

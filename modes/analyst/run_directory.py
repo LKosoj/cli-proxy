@@ -17,6 +17,23 @@ logger = logging.getLogger(__name__)
 _SUBDIRS = ("input", "steps", "draft", "output")
 
 
+def _analyst_run_created_at(run_dir: str) -> float:
+    """Читает created_at из meta.json прогона; при ошибке — mtime каталога; при OSError — 0.0."""
+    meta_path = os.path.join(run_dir, "meta.json")
+    try:
+        with open(meta_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        value = str(data.get("created_at") or "").strip()
+        if value:
+            return datetime.fromisoformat(value).timestamp()
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    try:
+        return float(os.path.getmtime(run_dir))
+    except OSError:
+        return 0.0
+
+
 def resolve_analyst_runs_root(session: Any) -> str:
     """Return the base path for analyst run directories inside session workdir."""
     workdir = str(getattr(session, "workdir", "") or "").strip()
@@ -725,7 +742,7 @@ class AnalystRunDirectory:
             entries.append(name)
         if not entries:
             return None
-        entries.sort()
+        entries.sort(key=lambda name: (_analyst_run_created_at(os.path.join(base, name)), name))
         return cls(base, run_id=entries[-1])
 
     @classmethod

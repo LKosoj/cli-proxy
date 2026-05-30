@@ -7,7 +7,7 @@ Context node for `modes/**`: pluggable modes, shared mode SDK, mode-owned runtim
 
 ## Scope
 - Source glob: `modes/**`
-- Current files: 167 under `modes/**` as of last review.
+- Current files: 174 under `modes/**` as of last review.
 - Includes mode packages: `modes/agent/`, `modes/analyst/`, `modes/manager/`, `modes/webmaster/`, `modes/admin/`, `modes/codebase_mapper/`
 - Includes shared mode infrastructure: `modes/sdk/**`, `modes/registry.py`, `modes/DEVELOPMENT.md`, `modes/codebase_mapper_constants.py`
 
@@ -53,4 +53,4 @@ Context node for `modes/**`: pluggable modes, shared mode SDK, mode-owned runtim
 - `nodes/tests.md`
 
 ## Last reviewed
-- 2026-05-04
+- 2026-05-30

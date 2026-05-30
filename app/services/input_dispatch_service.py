@@ -1076,6 +1076,7 @@ class InputDispatchService:
             )
             return True
 
+        import io
         import os
         filename = os.path.basename(result.resolved_path)
         try:
@@ -1086,15 +1087,20 @@ class InputDispatchService:
                 resolved_path=result.resolved_path,
                 filename=filename,
             )
-            with open(result.resolved_path, "rb") as f:
-                success = await self._send_document(
-                    context,
-                    document=f,
-                    filename=filename,
-                    caption=filename,
-                    dest=dest,
-                    chat_id=chat_id,
-                )
+
+            def _read_file_bytes(path: str) -> bytes:
+                with open(path, "rb") as fh:
+                    return fh.read()
+
+            file_bytes = await asyncio.to_thread(_read_file_bytes, result.resolved_path)
+            success = await self._send_document(
+                context,
+                document=io.BytesIO(file_bytes),
+                filename=filename,
+                caption=filename,
+                dest=dest,
+                chat_id=chat_id,
+            )
             if not success:
                 self._log_artifact_intent(session, "send_failed", text=text, filename=filename)
                 await self._send_text(

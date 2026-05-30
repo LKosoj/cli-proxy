@@ -9,6 +9,8 @@ from agent.plugins.base import ToolPlugin
 from agent.tooling import helpers
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class SearchFilesTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -51,5 +53,5 @@ class SearchFilesTool(ToolPlugin):
                     break
             return {"success": True, "output": "\n".join(files) or "(no matches)"}
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("search_files: glob failed pattern=%r cwd=%r", pattern, cwd)
             return {"success": False, "error": str(e)}

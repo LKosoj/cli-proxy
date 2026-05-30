@@ -4,6 +4,7 @@ Module containing session management functionality for the Telegram bot.
 
 import asyncio
 import concurrent.futures
+import functools
 import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -63,8 +64,8 @@ class SessionManagement:
             summary_timeout_s=self._summary_timeout_s,
             summarize_fn=summarize_text_with_reason,
             summarize_fn_getter=lambda: summarize_text_with_reason,
-            ansi_to_html_fn=ansi_to_html,
-            ansi_to_html_fn_getter=lambda: ansi_to_html,
+            ansi_to_html_fn=functools.partial(ansi_to_html, allow_network_fetch=True),
+            ansi_to_html_fn_getter=lambda: functools.partial(ansi_to_html, allow_network_fetch=True),
             make_html_file_fn=make_html_file,
             make_html_file_fn_getter=lambda: make_html_file,
         )

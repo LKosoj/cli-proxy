@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hmac
-from typing import Any, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from miniapp.auth import TelegramMiniAppUser
 
 from .errors import DenyReasonCode
 from .interfaces import AuthenticationResult, AuthenticationStrategy, AuthDecision
@@ -136,7 +139,7 @@ class OAuthStrategy:
 class TelegramMiniAppInitDataStrategy:
     strategy_name = "telegram_init_data"
 
-    def __init__(self, *, init_data_verifier: Callable[[str], Any]) -> None:
+    def __init__(self, *, init_data_verifier: Callable[[str], TelegramMiniAppUser]) -> None:
         self._init_data_verifier = init_data_verifier
 
     def authenticate(self, credentials: Mapping[str, Any]) -> AuthenticationResult:
@@ -272,7 +275,7 @@ def build_auth_service(
     is_admin_fn: Callable[[int], bool] | None = None,
     is_user_fn: Callable[[int], bool] | None = None,
     oauth_token_verifier: Callable[[str], Mapping[str, Any] | None] | None = None,
-    telegram_init_data_verifier: Callable[[str], Any] | None = None,
+    telegram_init_data_verifier: Callable[[str], TelegramMiniAppUser] | None = None,
 ) -> ConfigAuthService:
     config = dict(auth_config or {})
     strategies: dict[str, AuthenticationStrategy] = {}

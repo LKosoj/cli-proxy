@@ -13,6 +13,7 @@ from modes.sdk.services.callback_data import (
 )
 from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled, set_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
+from tg.handlers import format_session_state
 
 
 class SessionActionsMixin:
@@ -296,7 +297,7 @@ class SessionActionsMixin:
             previous_cli = str(getattr(getattr(session, "cli", None), "active_cli", "") or "").strip()
             previous_token = (getattr(getattr(session, "cli", None), "resume_tokens", None) or {}).get(previous_cli)
             session.set_active_cli(cli)
-            self._persist_session(owner_chat_id, session.id)
+            await self._persist_session_async(owner_chat_id, session.id)
         except Exception:
             await self._edit_msg(context, query, "Не удалось переключить CLI.")
             return True
@@ -375,7 +376,7 @@ class SessionActionsMixin:
 
             session.resume_token = new_token
             owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
-            self._persist_session(owner_chat_id, session.id)
+            await self._persist_session_async(owner_chat_id, session.id)
             await self._edit_msg(
                 context, query,
                 (
@@ -582,15 +583,7 @@ class SessionActionsMixin:
         if not st:
             await self._edit_msg(context, query, "Состояние не найдено.")
             return True
-        text = (
-            f"Session: {st.session_id or 'нет'}\\n"
-            f"Tool: {st.tool}\\n"
-            f"Workdir: {st.workdir}\\n"
-            f"Resume: {st.resume_token or 'нет'}\\n"
-            f"Name: {st.name or 'нет'}\\n"
-            f"Summary: {st.summary or 'нет'}\\n"
-            f"Updated: {self.bot_app._format_ts(st.updated_at)}"
-        )
+        text = format_session_state(st, self.bot_app._format_ts(st.updated_at))
         await self._edit_msg(context, query, text)
         return True
 
@@ -643,7 +636,7 @@ class SessionActionsMixin:
         set_ssh_remote_enabled(session, not current)
 
         owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
-        self._persist_session(owner_chat_id, session.id)
+        await self._persist_session_async(owner_chat_id, session.id)
 
         status = "включено" if not current else "выключено"
         await query.answer(f"Удалённое управление {status}")

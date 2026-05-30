@@ -157,9 +157,12 @@ def test_search_text_shell_injection_payloads_are_treated_as_literals(tmp_path) 
     assert marker_pattern.exists() is False
     assert marker_path.exists() is False
     assert pattern_result["success"] is True
-    assert path_result["success"] is True
     assert pattern_result["output"] == "(no matches)"
-    assert path_result["output"] == "(no matches)"
+    # H9: поиск по несуществующему пути больше не маскируется под "(no matches)" —
+    # возвращается ошибка (success=False). Ключевое: shell-инъекция не сработала
+    # (маркер выше не создан), путь обработан как литерал, а не выполнен в shell.
+    assert path_result["success"] is False
+    assert "error" in path_result
 
 
 def test_search_text_keeps_normal_search_behavior_and_output_limit(tmp_path) -> None:

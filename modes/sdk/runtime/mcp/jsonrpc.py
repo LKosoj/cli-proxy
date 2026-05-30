@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional
 
 from ..json_normalizer import loads_safe
 
+logger = logging.getLogger(__name__)
+
 
 def _json_dumps(obj: Any) -> bytes:
     return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
@@ -29,6 +31,15 @@ class JsonRpcStream:
         self._reader = reader
         self._writer = writer
 
+    def at_eof(self) -> bool:
+        """True только при реальном EOF потока (feed_eof + пустой буфер).
+
+        read() возвращает None и при EOF, и при не-JSON строках (сервер пишет логи
+        в stdout) — reader_loop различает их через этот флаг, чтобы не убивать
+        соединение из-за одной мусорной строки.
+        """
+        return self._reader.at_eof()
+
     async def write(self, obj: Any, *, prefer_content_length: bool = True) -> None:
         data = encode_content_length_message(obj) if prefer_content_length else _json_dumps(obj)
         self._writer.write(data)
@@ -44,7 +55,7 @@ class JsonRpcStream:
             try:
                 length = int(line.split(b":", 1)[1].strip())
             except Exception:
-                logging.exception("tool failed bad Content-Length header")
+                logger.exception("jsonrpc: некорректный заголовок Content-Length")
                 return None
 
             # Consume headers until blank line.
@@ -59,7 +70,7 @@ class JsonRpcStream:
             try:
                 obj = loads_safe(payload.decode("utf-8"), strict_first=True)
             except Exception:
-                logging.exception("tool failed bad JSON payload")
+                logger.exception("jsonrpc: некорректный JSON payload")
                 return None
             return obj if isinstance(obj, dict) else None
 

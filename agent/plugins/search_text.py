@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -123,7 +124,11 @@ class SearchTextTool(ToolPlugin):
         search_path = resolved_path
         try:
             cmd = _build_search_command(pattern, search_path, args)
-            completed = subprocess.run(
+        except FileNotFoundError as e:
+            return {"success": False, "error": f"Search tool not found: {e}"}
+        try:
+            completed = await asyncio.to_thread(
+                subprocess.run,
                 cmd,
                 shell=False,
                 cwd=cwd,
@@ -132,8 +137,14 @@ class SearchTextTool(ToolPlugin):
                 encoding="utf-8",
                 timeout=GREP_TIMEOUT_MS / 1000,
             )
-            output = _truncate_search_output(completed.stdout or "")
-            return {"success": True, "output": output or "(no matches)"}
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": f"Search timed out after {GREP_TIMEOUT_MS / 1000:.0f}s"}
         except Exception as e:
-            logger.exception("tool failed %s", e)
-            return {"success": True, "output": "(no matches)"}
+            logger.exception("search_text: subprocess failed: %s", e)
+            return {"success": False, "error": str(e)}
+        rc = completed.returncode
+        if rc >= 2:
+            stderr = (completed.stderr or "").strip()
+            return {"success": False, "error": f"exit {rc}: {stderr}"}
+        output = _truncate_search_output(completed.stdout or "")
+        return {"success": True, "output": output or "(no matches)"}

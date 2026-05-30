@@ -1,13 +1,12 @@
 import asyncio
 import logging
-import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusError
 
-from modes.sdk.runtime.openai_client import create_async_openai_client
+from modes.sdk.runtime.openai_client import create_async_openai_client, resolve_openai_config
 from modes.sdk.runtime.json_normalizer import parse_normalize_validate
 from config import AppConfig
 from utils.text import normalize_text
@@ -55,24 +54,8 @@ def _get_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
     return client
 
 
-def _get_openai_config(config: Optional[AppConfig] = None):
-    api_key = None
-    model = None
-    base_url = None
-    if config:
-        # Config должна быть источником правды, env — только как запасной источник.
-        api_key = config.defaults.openai_api_key
-        model = config.defaults.openai_big_model
-        base_url = config.defaults.openai_base_url
-    api_key = api_key or os.getenv("OPENAI_API_KEY")
-    # Summaries are intentionally generated with the "big" model.
-    model = model or os.getenv("OPENAI_BIG_MODEL")
-    base_url = base_url or os.getenv("OPENAI_BASE_URL")
-    if not base_url:
-        base_url = "https://api.openai.com"
-    if not api_key or not model:
-        return None
-    return api_key, model, base_url.rstrip("/")
+def _get_openai_config(config: Optional[AppConfig] = None) -> Optional[Tuple[str, str, str]]:
+    return resolve_openai_config(config, model_key="openai_big_model", env_priority=False)
 
 
 def _strip_cli_preamble(text: str) -> str:

@@ -428,6 +428,24 @@ class TestReaderCodex:
         with patch.object(reader_codex, "CODEX_SESSIONS_BASE", tmp_path / "empty"):
             assert reader_codex.read_session("019d0000-0000-0000-0000-000000000000", "/tmp") is None
 
+    def test_find_session_file_continues_after_scan_warning_threshold(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_codex
+
+        session_id = "019d9fbe-e199-7c90-b614-eaffe8f1f63c"
+        base = tmp_path / "sessions"
+        base.mkdir()
+        filler = base / "rollout-2026-04-18T11-39-39-019d0000-0000-0000-0000-000000000000.jsonl"
+        target = base / f"rollout-2026-04-18T11-39-40-{session_id}.jsonl"
+        filler.write_text("", encoding="utf-8")
+        target.write_text("", encoding="utf-8")
+        monkeypatch.setattr(reader_codex, "_RGLOB_ROLLOUT_WARNING_THRESHOLD", 1)
+
+        with (
+            patch.object(reader_codex, "CODEX_SESSIONS_BASE", base),
+            patch.object(reader_codex.Path, "rglob", return_value=iter([filler, target])),
+        ):
+            assert reader_codex._find_session_file(session_id, "/tmp") == target
+
 
 # ---------------------------------------------------------------------------
 # Writers

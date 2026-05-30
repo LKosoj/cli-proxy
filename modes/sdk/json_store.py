@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Callable, Dict, Optional
 
 from modes.sdk.file_lock import lock_file, unlock_file
 from modes.sdk.runtime.json_normalizer import loads_safe
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_parent(path: str) -> None:
@@ -15,24 +18,35 @@ def _ensure_parent(path: str) -> None:
 
 
 def read_json_locked(path: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    default = default or {}
-    _ensure_parent(path)
+    if not os.path.exists(path):
+        return dict(default or {})
+    f = None
     try:
-        with open(path, "a+", encoding="utf-8") as f:
-            lock_file(f, shared=True)
-            try:
-                f.seek(0)
-                raw = f.read()
-                if not raw.strip():
-                    return dict(default)
-                data = loads_safe(raw, strict_first=True)
-                if isinstance(data, dict):
-                    return data
-                return dict(default)
-            finally:
-                unlock_file(f)
+        f = open(path, "r", encoding="utf-8")
+        lock_file(f, shared=True)
+        try:
+            raw = f.read()
+            if not raw.strip():
+                return dict(default or {})
+            data = loads_safe(raw, strict_first=True)
+            if isinstance(data, dict):
+                return data
+            logger.debug("read_json_locked: non-dict JSON in %s, returning default", path)
+            return dict(default or {})
+        finally:
+            unlock_file(f)
+    except OSError as exc:
+        logger.debug("read_json_locked: cannot read %s: %s", path, exc)
+        return dict(default or {})
     except Exception:
-        return dict(default)
+        logger.exception("read_json_locked: unexpected error reading %s", path)
+        return dict(default or {})
+    finally:
+        if f is not None:
+            try:
+                f.close()
+            except Exception:
+                logger.debug("read_json_locked: failed to close %s", path)
 
 
 def read_json_locked_if_exists(path: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

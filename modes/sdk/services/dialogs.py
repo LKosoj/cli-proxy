@@ -13,7 +13,7 @@ DialogCallbackHandler = Callable[[CallbackModel, Dict[str, Any]], Awaitable[Tool
 PendingQuestionsProviderFn = Callable[[], Optional[Mapping[str, Mapping[str, Any]]]]
 
 
-def _dlg_key(chat_id: int, session_id: str, mode_id: str) -> Tuple[int, str, str]:
+def _dlg_key(chat_id: int, session_id: str, mode_id: str) -> Tuple[str, str, str]:
     return (str(chat_id), str(session_id), str(mode_id))
 
 
@@ -49,7 +49,7 @@ class DialogService:
         pending_questions_provider: Optional[PendingQuestionsProviderFn] = None,
         log: Optional[logging.Logger] = None,
     ) -> None:
-        self._dialogs: Dict[Tuple[int, str, str], DialogState] = {}
+        self._dialogs: Dict[Tuple[str, str, str], DialogState] = {}
         self._pending_questions_provider = pending_questions_provider
         self._log = log or logging.getLogger(__name__)
 

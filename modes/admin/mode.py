@@ -12,9 +12,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from app.mode_dependencies import ModeDependencies
 from app.services.admin_config_service import AdminConfigService
 from app.services.path_normalization import normalize_optional_state_path
-from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore, is_terminal_status
+from app.services.run_artifact_store import RunArtifactHandle
 from app.services.telegram_ui_scope import TelegramUiKey
 from modes.sdk import BaseMode, CallbackModel, MessageModel, ToolResult
+from modes.sdk.run_artifacts_mixin import RunArtifactsMixin
 from modes.sdk.services.callback_data import build_mode_action_callback_data
 from modes.sdk.session_busy import is_session_busy
 from session import session_runtime_uid
@@ -26,6 +27,7 @@ from .action_specs import (
 )
 from .allowlist import is_action_allowlisted, is_valid_action_id
 from .chat_service import AdminChatService
+from .runbook_facade import RunbookFacade
 from .config_store import AdminConfigStore
 from .executor import AdminExecutionContext, AdminExecutor, AdminExecutorError
 from .facade import AdminAutonomyService
@@ -52,10 +54,6 @@ from .ui import (
     build_admin_memory_screen,
     build_admin_menu_text,
     build_admin_rescan_report_screen,
-    build_admin_runbook_catalog_screen,
-    build_admin_runbook_detail_screen,
-    build_admin_runbook_promote_screen,
-    build_admin_runbook_validation_screen,
     build_admin_runs_screen,
     build_admin_server_detail_screen,
     build_admin_servers_screen,
@@ -65,7 +63,6 @@ from .ui import (
 )
 
 _UNSET = object()
-_ADMIN_RUN_HANDLE_SESSION_ATTR = "_admin_run_handle"
 _ADMIN_RUN_RESUME_GUARD_SESSION_ATTR = "_admin_run_resume_guard"
 
 
@@ -178,10 +175,11 @@ def _format_chat_result_for_telegram(result: Dict[str, Any]) -> str:
     return "\n\n".join(chunks) or "(no output)"
 
 
-class AdminMode(BaseMode):
+class AdminMode(BaseMode, RunArtifactsMixin):
     mode_id = "admin"
     display_name = "🛡 Admin"
     description = "Базовый режим администрирования для текущей сессии."
+    _RUN_HANDLE_SESSION_ATTR = "_admin_run_handle"
     _EXEC_TARGETS = {"local", "ssh"}
     _EXEC_CONTROL_COMMANDS = {"check", "run"}
     _STATE_CONTROL_COMMANDS = {"incidents", "actions", "dry-run", "ack", "mute", "unmute", "approvals", "skills", "rescan"}
@@ -206,6 +204,7 @@ class AdminMode(BaseMode):
             ssh_transport=self._ssh_transport,
             logger=self._log,
         )
+        self._runbook = RunbookFacade(self)
 
     def build_runtime(self, config: Any) -> Any:
         return AdminModeRunnerService(config)
@@ -963,50 +962,6 @@ class AdminMode(BaseMode):
             return runtime
         return None
 
-    def _is_run_artifacts_enabled(self) -> bool:
-        service = self._optional_run_artifacts()
-        if service is None:
-            return False
-        try:
-            return bool(service.is_enabled())
-        except Exception:
-            self._log.exception("admin run artifacts: failed to resolve enabled flag")
-            return False
-
-    def _artifact_store(self) -> Optional[RunArtifactStore]:
-        config = getattr(self, "config", None)
-        if config is None:
-            return None
-        return RunArtifactStore(config)
-
-    @staticmethod
-    def _prompt_hash(prompt: str) -> str:
-        digest = hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest()
-        return f"sha256:{digest}"
-
-    @staticmethod
-    def _is_terminal_run_status(status: Any) -> bool:
-        return is_terminal_status(status)
-
-    def _latest_mode_run(self, session: Any) -> Optional[RunArtifactHandle]:
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return None
-        return artifact_store.latest_run(session=session, mode_id=self.mode_id)
-
-    def _diagnose_resume_boundary(self, run: RunArtifactHandle) -> Any:
-        doctor = self._optional_run_doctor()
-        if doctor is None or not doctor.is_enabled():
-            return None
-        artifact_store = self._artifact_store()
-        try:
-            state = artifact_store.load_state(run) if artifact_store is not None else {}
-            phase = str((state or {}).get("phase") or "complete")
-            return doctor.diagnose(run, mode_id=self.mode_id, phase=phase)
-        except Exception:
-            self._log.exception("admin run artifacts: doctor resume diagnosis failed run_id=%s", run.run_id)
-            return None
-
     def _prepare_run_artifacts(
         self,
         *,
@@ -1061,112 +1016,11 @@ class AdminMode(BaseMode):
             self._log.exception("admin run artifacts: failed to set resume guard session attr")
         return run, resume_guard
 
-    @staticmethod
-    def _set_active_run_handle(session: Any, run: RunArtifactHandle) -> None:
-        setattr(session, _ADMIN_RUN_HANDLE_SESSION_ATTR, run)
-
-    @staticmethod
-    def _active_run_handle(session: Any) -> Optional[RunArtifactHandle]:
-        handle = getattr(session, _ADMIN_RUN_HANDLE_SESSION_ATTR, None)
-        return handle if isinstance(handle, RunArtifactHandle) else None
-
-    @staticmethod
-    def _clear_active_run_handle(session: Any) -> None:
-        if hasattr(session, _ADMIN_RUN_HANDLE_SESSION_ATTR):
-            setattr(session, _ADMIN_RUN_HANDLE_SESSION_ATTR, None)
+    def _clear_active_run_handle(self, session: Any) -> None:
+        # Override: дополнительно очищает _ADMIN_RUN_RESUME_GUARD_SESSION_ATTR
+        super()._clear_active_run_handle(session)
         if hasattr(session, _ADMIN_RUN_RESUME_GUARD_SESSION_ATTR):
             setattr(session, _ADMIN_RUN_RESUME_GUARD_SESSION_ATTR, {})
-
-    def _save_run_state(
-        self,
-        run: Optional[RunArtifactHandle],
-        *,
-        phase: str,
-        status: str,
-        mode_context: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        if run is None:
-            return
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return
-        try:
-            current = artifact_store.load_state(run)
-            merged_mode_context = dict(current.get("mode_context") or {})
-            incoming_mode_context = dict(mode_context or {})
-            existing_execution_context = merged_mode_context.get("execution_context")
-            incoming_execution_context = incoming_mode_context.get("execution_context")
-            if isinstance(existing_execution_context, dict) and isinstance(incoming_execution_context, dict):
-                merged_execution_context = dict(existing_execution_context)
-                merged_execution_context.update(incoming_execution_context)
-                incoming_mode_context["execution_context"] = merged_execution_context
-            merged_mode_context.update(incoming_mode_context)
-            artifact_store.save_state(
-                run,
-                {
-                    "phase": str(phase or current.get("phase") or "complete"),
-                    "status": str(status or current.get("status") or "running"),
-                    "mode_context": merged_mode_context,
-                },
-            )
-        except Exception:
-            self._log.exception("admin run artifacts: save_state failed phase=%s run_id=%s", phase, run.run_id)
-
-    def _save_run_plan(self, run: Optional[RunArtifactHandle], plan: Dict[str, Any]) -> None:
-        if run is None:
-            return
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return
-        try:
-            artifact_store.save_plan(run, dict(plan or {}))
-        except Exception:
-            self._log.exception("admin run artifacts: save_plan failed run_id=%s", run.run_id)
-
-    def _append_checkpoint(self, run: Optional[RunArtifactHandle], checkpoint: Dict[str, Any]) -> None:
-        if run is None:
-            return
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return
-        try:
-            artifact_store.append_checkpoint(run, dict(checkpoint or {}))
-        except Exception:
-            self._log.exception("admin run artifacts: append_checkpoint failed run_id=%s", run.run_id)
-
-    def _append_run_event(self, run: Optional[RunArtifactHandle], event: Dict[str, Any]) -> None:
-        if run is None:
-            return
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return
-        try:
-            artifact_store.append_event(run, dict(event or {}))
-        except Exception:
-            self._log.exception("admin run artifacts: append_event failed run_id=%s", run.run_id)
-
-    def _validate_run_boundary(self, run: Optional[RunArtifactHandle], *, phase: str) -> None:
-        if run is None:
-            return
-        validator = self._optional_run_boundary_validation()
-        if validator is None or not validator.is_enabled():
-            return
-        report = validator.validate(run, mode_id=self.mode_id, phase=phase)
-        if str(report.status or "") == "ok":
-            return
-        issues = ", ".join(issue.code for issue in report.issues)
-        raise RuntimeError(f"Admin run boundary validation failed phase={phase}: {issues}")
-
-    def _mark_run_finished(self, run: Optional[RunArtifactHandle], *, status: str, phase: str) -> None:
-        if run is None:
-            return
-        artifact_store = self._artifact_store()
-        if artifact_store is None:
-            return
-        try:
-            artifact_store.mark_finished(run, status=status, phase=phase)
-        except Exception:
-            self._log.exception("admin run artifacts: mark_finished failed run_id=%s", run.run_id)
 
     @staticmethod
     def _operation_plan_payload(
@@ -5421,51 +5275,10 @@ class AdminMode(BaseMode):
         query: Any,
         server_token: str,
     ) -> ToolResult:
-        ms = self._messaging(bot_app=bot_app, context=context)
-        svc = self._autonomy_service(session=session)
-        sid = self._resolve_server_id_from_token(session, token=server_token) if server_token else None
-        if svc is None:
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Workdir не задан.",
-            )
-        try:
-            summaries = svc.list_runbook_summary(server_id=sid, limit=15)
-        except Exception:
-            self._log.exception("admin autonomy: list_runbook_summary failed sid=%s", sid)
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id,
-                message="Не удалось получить список runbook-ов.",
-            )
-        text = build_admin_runbook_catalog_screen(server_id=sid, runbooks=summaries)
-        kb_rows: list[list[InlineKeyboardButton]] = []
-        for rb in summaries[:8]:
-            rb_id = str(rb.get("id") or "").strip()
-            if not rb_id:
-                continue
-            rb_token = self._short_token(rb_id, max_len=16)
-            self._register_entity_token(session, "_admin_runbook_tokens", token=rb_token, value=rb_id)
-            title = str(rb.get("title") or rb_id)[:28]
-            kb_rows.append([
-                InlineKeyboardButton(
-                    f"📖 {title}",
-                    callback_data=build_mode_action_callback_data(
-                        self.mode_id, "rb_view", session=session,
-                        payload={"id": server_token, "rb": rb_token},
-                    ),
-                )
-            ])
-        if sid:
-            kb_rows.append([self._back_to_server_detail_button(session, server_token=server_token)])
-        else:
-            kb_rows.append([InlineKeyboardButton(
-                "⬅️ Назад",
-                callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
-            )])
-        await ms.send_or_edit(
-            query=query, chat_id=chat_id, text=text, md2=True,
-            reply_markup=InlineKeyboardMarkup(kb_rows),
+        return await self._runbook.cb_runbooks_list(
+            bot_app=bot_app, session=session, chat_id=chat_id,
+            context=context, query=query, server_token=server_token,
         )
-        return ToolResult.ok()
 
     async def _cb_runbook_view(
         self,
@@ -5478,58 +5291,11 @@ class AdminMode(BaseMode):
         server_token: str,
         runbook_token: str,
     ) -> ToolResult:
-        ms = self._messaging(bot_app=bot_app, context=context)
-        svc = self._autonomy_service(session=session)
-        rb_id = self._resolve_entity_by_token(session, "_admin_runbook_tokens", token=runbook_token)
-        if svc is None or not rb_id:
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Runbook не найден.",
-            )
-        try:
-            rb = svc.get_runbook(rb_id)
-        except Exception:
-            self._log.exception("admin autonomy: get_runbook failed rb=%s", rb_id)
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id,
-                message="Не удалось загрузить runbook.",
-            )
-        if rb is None:
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Runbook не найден.",
-            )
-        text = build_admin_runbook_detail_screen(runbook=rb.as_dict())
-        is_script_rb = bool(isinstance(rb.metadata, Mapping) and rb.metadata.get("steps"))
-        kb_rows: list[list[InlineKeyboardButton]] = []
-        if is_script_rb:
-            kb_rows.append([
-                InlineKeyboardButton(
-                    "✅ Validate",
-                    callback_data=build_mode_action_callback_data(
-                        self.mode_id, "rb_validate", session=session,
-                        payload={"id": server_token, "rb": runbook_token},
-                    ),
-                ),
-                InlineKeyboardButton(
-                    "🚀 Promote",
-                    callback_data=build_mode_action_callback_data(
-                        self.mode_id, "rb_promote", session=session,
-                        payload={"id": server_token, "rb": runbook_token},
-                    ),
-                ),
-            ])
-        kb_rows.append([
-            InlineKeyboardButton(
-                "⬅️ К списку",
-                callback_data=build_mode_action_callback_data(
-                    self.mode_id, "rb_list", session=session, payload={"id": server_token},
-                ),
-            ),
-        ])
-        await ms.send_or_edit(
-            query=query, chat_id=chat_id, text=text, md2=True,
-            reply_markup=InlineKeyboardMarkup(kb_rows),
+        return await self._runbook.cb_runbook_view(
+            bot_app=bot_app, session=session, chat_id=chat_id,
+            context=context, query=query, server_token=server_token,
+            runbook_token=runbook_token,
         )
-        return ToolResult.ok()
 
     async def _cb_runbook_validate(
         self,
@@ -5542,36 +5308,11 @@ class AdminMode(BaseMode):
         server_token: str,
         runbook_token: str,
     ) -> ToolResult:
-        ms = self._messaging(bot_app=bot_app, context=context)
-        svc = self._autonomy_service(session=session)
-        rb_id = self._resolve_entity_by_token(session, "_admin_runbook_tokens", token=runbook_token)
-        if svc is None or not rb_id:
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Runbook не найден.",
-            )
-        try:
-            report = await svc.validate_runbook(rb_id)
-        except Exception as exc:
-            self._log.exception("admin autonomy: validate_runbook failed rb=%s", rb_id)
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id,
-                message=f"Validate failed: {exc}",
-            )
-        text = build_admin_runbook_validation_screen(rb_id=rb_id, report=report.to_dict())
-        kb_rows = [[
-            InlineKeyboardButton(
-                "⬅️ Назад",
-                callback_data=build_mode_action_callback_data(
-                    self.mode_id, "rb_view", session=session,
-                    payload={"id": server_token, "rb": runbook_token},
-                ),
-            ),
-        ]]
-        await ms.send_or_edit(
-            query=query, chat_id=chat_id, text=text, md2=True,
-            reply_markup=InlineKeyboardMarkup(kb_rows),
+        return await self._runbook.cb_runbook_validate(
+            bot_app=bot_app, session=session, chat_id=chat_id,
+            context=context, query=query, server_token=server_token,
+            runbook_token=runbook_token,
         )
-        return ToolResult.ok()
 
     async def _cb_runbook_promote(
         self,
@@ -5584,57 +5325,11 @@ class AdminMode(BaseMode):
         server_token: str,
         runbook_token: str,
     ) -> ToolResult:
-        ms = self._messaging(bot_app=bot_app, context=context)
-        svc = self._autonomy_service(session=session)
-        rb_id = self._resolve_entity_by_token(session, "_admin_runbook_tokens", token=runbook_token)
-        if svc is None or not rb_id:
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Runbook не найден.",
-            )
-        # Продакшен-цели определяем по тегу "prod" в admin.servers.
-        try:
-            specs = svc.list_server_specs()
-        except Exception:
-            self._log.exception("admin autonomy: list_server_specs failed")
-            specs = []
-        prod_targets = sorted({
-            spec.server_id for spec in specs
-            if any(str(t).lower() == "prod" for t in (spec.tags or []))
-        })
-        if not prod_targets:
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id,
-                message="Не нашёл серверов с тегом `prod` в admin.servers. "
-                        "Используйте MiniApp для ручного promote.",
-            )
-        try:
-            result = await svc.promote_runbook(
-                rb_id,
-                add_servers=prod_targets,
-                confidence=0.8,
-                run_validation=True,
-            )
-        except Exception as exc:
-            self._log.exception("admin autonomy: promote_runbook failed rb=%s", rb_id)
-            return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id,
-                message=f"Promote failed: {exc}",
-            )
-        text = build_admin_runbook_promote_screen(rb_id=rb_id, result=result.to_dict())
-        kb_rows = [[
-            InlineKeyboardButton(
-                "⬅️ Назад",
-                callback_data=build_mode_action_callback_data(
-                    self.mode_id, "rb_view", session=session,
-                    payload={"id": server_token, "rb": runbook_token},
-                ),
-            ),
-        ]]
-        await ms.send_or_edit(
-            query=query, chat_id=chat_id, text=text, md2=True,
-            reply_markup=InlineKeyboardMarkup(kb_rows),
+        return await self._runbook.cb_runbook_promote(
+            bot_app=bot_app, session=session, chat_id=chat_id,
+            context=context, query=query, server_token=server_token,
+            runbook_token=runbook_token,
         )
-        return ToolResult.ok()
 
     async def _rerender_menu(
         self,

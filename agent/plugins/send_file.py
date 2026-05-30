@@ -8,6 +8,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class SendFileTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -64,7 +66,7 @@ class SendFileTool(ToolPlugin):
                 await bot._send_document(context, chat_id=chat_id, document=f, caption=caption)
             return {"success": True, "output": f"Sent file: {os.path.basename(resolved)}"}
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("send_file: failed to send document chat_id=%s path=%r", chat_id, resolved)
             msg = str(e)
             if "not enough rights" in msg or "CHAT_SEND_MEDIA_FORBIDDEN" in msg:
                 return {"success": False, "error": (

@@ -8,6 +8,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class EditFileTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -65,5 +67,5 @@ class EditFileTool(ToolPlugin):
                 f.write(new_content)
             return {"success": True, "output": f"Edited {path}"}
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("edit_file: failed to edit file path=%r", full_path)
             return {"success": False, "error": str(e)}

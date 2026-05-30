@@ -246,6 +246,7 @@ def retrieve_relevant_context(cwd: str, query: str, limit: int = 6) -> List[Dict
             return []
         prepared = _prepare_query(query)
         if not prepared:
+            _log.warning("memory_retrieval: query %r produced no FTS terms after preparation; returning empty", query)
             return []
         rows = conn.execute(
             """

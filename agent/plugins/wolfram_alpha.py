@@ -10,6 +10,8 @@ import requests
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class WolframAlphaTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -41,7 +43,7 @@ class WolframAlphaTool(ToolPlugin):
         try:
             text = await asyncio.to_thread(self._call_sync, app_id, query)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("wolfram_alpha: API call failed for query=%r", query)
             return {"success": False, "error": f"WolframAlpha failed: {e}"}
         return {"success": True, "output": text or "Нет результата."}
 

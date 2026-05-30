@@ -11,6 +11,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class MovieInfoTool(ToolPlugin):
     TMDB_BASE_URL = "https://api.themoviedb.org/3"
@@ -56,7 +58,7 @@ class MovieInfoTool(ToolPlugin):
         try:
             movies = await asyncio.to_thread(self._fetch_sync, key, action, language, region, genre_id)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("movie_info: TMDb fetch failed action=%r", action)
             return {"success": False, "error": f"TMDb failed: {e}"}
 
         if not movies:

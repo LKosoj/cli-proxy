@@ -15,10 +15,9 @@ _RETRYABLE_TEXT_PATTERNS = (
     "connection reset",
     "connection refused",
     "timed out",
-    "timeout",
+    "request timed out",
     "overloaded",
-    "service unavailable",
-    "internal server error",
+    "503 service unavailable",
 )
 
 

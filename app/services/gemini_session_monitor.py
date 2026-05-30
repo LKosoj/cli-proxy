@@ -493,16 +493,20 @@ class GeminiJsonMonitor:
             except Exception:
                 self._log.exception("Gemini monitor callback failed")
 
+    def _poll_sync(self) -> None:
+        """Synchronous poll step: discover or poll the tracked file."""
+        if self._tracked_json_path is None:
+            discovered = self._discover_tracked_file()
+            if discovered is not None:
+                path, payload, prime_existing = discovered
+                self._attach_tracked_file(path, payload, prime_existing=prime_existing)
+        else:
+            self._poll_tracked_file()
+
     async def _poll_loop(self) -> None:
         while self._running:
             try:
-                if self._tracked_json_path is None:
-                    discovered = self._discover_tracked_file()
-                    if discovered is not None:
-                        path, payload, prime_existing = discovered
-                        self._attach_tracked_file(path, payload, prime_existing=prime_existing)
-                else:
-                    self._poll_tracked_file()
+                await asyncio.to_thread(self._poll_sync)
                 await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
                 break

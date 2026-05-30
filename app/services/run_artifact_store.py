@@ -27,6 +27,23 @@ def _now_ts() -> float:
     return float(time.time())
 
 
+def _run_started_at(run_dir: str) -> float:
+    """Читает started_at из STATE.json прогона; при ошибке — mtime каталога; при OSError — 0.0."""
+    state_path = os.path.join(run_dir, "STATE.json")
+    try:
+        with open(state_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        value = data.get("started_at")
+        if value is not None:
+            return float(value)
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    try:
+        return float(os.path.getmtime(run_dir))
+    except OSError:
+        return 0.0
+
+
 def _sortable_run_id() -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"run_{stamp}_{secrets.token_hex(4)}"
@@ -95,22 +112,8 @@ class RunArtifactStore:
         return handle
 
     def latest_run(self, *, session: Any, mode_id: str) -> Optional[RunArtifactHandle]:
-        root_dir = self._resolve_root_dir(session)
-        session_uid = self._resolve_session_uid(session)
-        mode_token = _safe_path_token(mode_id, fallback="unknown-mode")
-        mode_root = cli_proxy_artifact_path(root_dir, f"runs/{session_uid}/{mode_token}")
-        if not os.path.isdir(mode_root):
-            return None
-        candidates = [
-            name
-            for name in os.listdir(mode_root)
-            if os.path.isdir(os.path.join(mode_root, name))
-            and os.path.exists(os.path.join(mode_root, name, "STATE.json"))
-        ]
-        if not candidates:
-            return None
-        latest_run_id = sorted(candidates)[-1]
-        return self._build_handle(session=session, mode_id=mode_id, run_id=latest_run_id)
+        runs = self.list_mode_runs(session=session, mode_id=mode_id)
+        return runs[0] if runs else None
 
     def get_run(self, *, session: Any, mode_id: str, run_id: str) -> Optional[RunArtifactHandle]:
         handle = self._build_handle(session=session, mode_id=mode_id, run_id=run_id)
@@ -144,24 +147,14 @@ class RunArtifactStore:
             )
         handles: list[RunArtifactHandle] = []
         for mode_token in mode_tokens:
-            mode_root = os.path.join(session_root, mode_token)
-            if not os.path.isdir(mode_root):
-                continue
-            for run_name in sorted(os.listdir(mode_root), reverse=True):
-                run_dir = os.path.join(mode_root, run_name)
-                if not os.path.isdir(run_dir):
-                    continue
-                if not os.path.exists(os.path.join(run_dir, "STATE.json")):
-                    continue
-                handles.append(
-                    self._build_handle(
-                        session=session,
-                        mode_id=mode_token,
-                        run_id=run_name,
-                    )
-                )
-        handles.sort(key=lambda item: item.run_id, reverse=True)
+            handles.extend(self._list_mode_run_handles(session=session, mode_token=mode_token))
+        handles.sort(key=lambda item: (_run_started_at(item.run_dir), item.run_id), reverse=True)
         return handles[:resolved_limit]
+
+    def list_mode_runs(self, *, session: Any, mode_id: str) -> List[RunArtifactHandle]:
+        """Возвращает все прогоны mode от новых к старым по STATE.json.started_at."""
+        mode_token = _safe_path_token(mode_id, fallback="unknown-mode")
+        return self._list_mode_run_handles(session=session, mode_token=mode_token)
 
     def load_state(self, run: RunArtifactHandle) -> Dict[str, Any]:
         payload = read_json_locked(run.state_path, default=self._state_default(run))
@@ -381,6 +374,30 @@ class RunArtifactStore:
             mode_id=mode_id,
             run_id=run_id,
         )
+
+    def _list_mode_run_handles(self, *, session: Any, mode_token: str) -> List[RunArtifactHandle]:
+        root_dir = self._resolve_root_dir(session)
+        session_uid = self._resolve_session_uid(session)
+        mode_root = cli_proxy_artifact_path(root_dir, f"runs/{session_uid}/{mode_token}")
+        if not os.path.isdir(mode_root):
+            return []
+        handles: list[RunArtifactHandle] = []
+        for run_id in os.listdir(mode_root):
+            run_dir = os.path.join(mode_root, run_id)
+            if not os.path.isdir(run_dir):
+                continue
+            if not os.path.exists(os.path.join(run_dir, "STATE.json")):
+                continue
+            handles.append(
+                self._build_handle_from_tokens(
+                    root_dir=root_dir,
+                    session_uid=session_uid,
+                    mode_id=mode_token,
+                    run_id=run_id,
+                )
+            )
+        handles.sort(key=lambda item: (_run_started_at(item.run_dir), item.run_id), reverse=True)
+        return handles
 
     def _build_handle_from_tokens(
         self,

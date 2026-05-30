@@ -55,12 +55,9 @@ class WebhookDeliveryRepository:
             raise WebhookDeliveryRepositoryError("webhook delivery storage path is not configured")
         return str(get_state_repository(normalized_state_path).db_path)
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=5000")
-        return conn
+    def _connect(self):
+        from app.services.sqlite_connection import sqlite_session
+        return sqlite_session(self.db_path)
 
     @staticmethod
     def _dumps(value: dict[str, Any] | None) -> str:

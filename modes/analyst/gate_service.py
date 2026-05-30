@@ -69,7 +69,8 @@ class AnalystGateService:
         for question in questions:
             answer = str(await ask_fn(question) or "").strip()
             if not answer:
-                raise RuntimeError("Gate 1: пустой ответ на уточняющий вопрос")
+                logger.warning("Gate 1: пустой ответ на уточняющий вопрос — шаг пропущен")
+                continue
             answers.append(answer)
 
         if answers:
@@ -165,7 +166,8 @@ class AnalystGateService:
         for question in questions:
             answer = str(await ask_fn(question) or "").strip()
             if not answer:
-                raise RuntimeError("Gate 2: пустой ответ на уточняющий вопрос")
+                logger.warning("Gate 2: пустой ответ на уточняющий вопрос — шаг пропущен")
+                continue
             answers.append(answer)
 
         if answers:

@@ -21,6 +21,8 @@ from modes.sdk.runtime.cli_retry import run_cli_with_retry
 from utils.text import strip_ansi
 from agent.cli_routing import run_prompt_routed
 
+logger = logging.getLogger(__name__)
+
 
 class UseCliTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
@@ -291,5 +293,5 @@ class UseCliTool(ToolPlugin):
                 "open_gaps": list((bundle or {}).get("open_gaps") or []),
             }
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("use_cli: CLI execution failed unexpectedly")
             return {"success": False, "error": str(e)}

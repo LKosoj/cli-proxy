@@ -3952,7 +3952,7 @@ class OrchestratorRunner:
 
                 # 1) Short ready message
                 try:
-                    await bot._send_message(context, chat_id=chat_id, text="Готово. Результат ниже.")
+                    await bot.send_message(context, chat_id=chat_id, text="Готово. Результат ниже.")
                 except Exception as e:
                     self._log.exception("compose_final_answer: failed to send ready message: %s", e)
 
@@ -3983,6 +3983,7 @@ class OrchestratorRunner:
                     )
                     try:
                         if analyst_telegram_delivery:
+                            # TODO(M3): route large output via a transport-agnostic MessagingService.send_large_output when available.
                             await bot.send_output(
                                 session,
                                 dest,
@@ -3993,6 +3994,7 @@ class OrchestratorRunner:
                             )
                         else:
                             # 2) One HTML+summary via send_output (no header)
+                            # TODO(M3): route large output via a transport-agnostic MessagingService.send_large_output when available.
                             await bot.send_output(
                                 session,
                                 dest,

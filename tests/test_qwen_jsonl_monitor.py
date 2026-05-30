@@ -1,5 +1,6 @@
 """Tests for Qwen JSONL monitor service."""
 
+import asyncio
 import json
 
 from app.services.qwen_jsonl_monitor import (
@@ -307,3 +308,55 @@ def test_extract_progress_text_tool_result_prefers_detailed_error():
     assert progress is not None
     assert progress.startswith("❌ read_file: ")
     assert "missing.py" in progress
+
+
+# --- тесты метода stop() ---
+
+def test_stop_before_start_is_safe():
+    """stop() до start() не бросает исключений и не меняет состояние."""
+    monitor = QwenJsonlMonitor(workdir="/tmp")
+    monitor.stop()  # не должен бросать
+    assert monitor._task is None
+    assert not monitor._running
+
+
+def test_double_stop_is_safe():
+    """Двойной stop() безопасен."""
+    monitor = QwenJsonlMonitor(workdir="/tmp")
+    monitor.stop()
+    monitor.stop()
+    assert monitor._task is None
+
+
+async def _run_stop_from_loop(workdir: str) -> bool:
+    """Запускаем monitor, вызываем stop() из работающего event loop — должно пройти без RuntimeError."""
+    monitor = QwenJsonlMonitor(workdir=workdir)
+    monitor.start()
+    try:
+        monitor.stop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def test_stop_from_running_loop_no_runtime_error():
+    """stop() из работающего event loop не бросает RuntimeError и обнуляет _task."""
+    result = asyncio.run(_run_stop_from_loop("/tmp"))
+    assert result, "stop() бросил RuntimeError в работающем loop"
+
+
+async def _run_task_cancelled_after_stop() -> bool:
+    """После stop() + await sleep(0) задача должна быть отменена."""
+    monitor = QwenJsonlMonitor(workdir="/tmp")
+    monitor.start()
+    task = monitor._task
+    monitor.stop()
+    # monitor._task уже None, но сама корутина ещё pending — даём ей обработать cancel
+    await asyncio.sleep(0)
+    return task is not None and task.cancelled()
+
+
+def test_task_cancelled_after_stop():
+    """После stop() + await asyncio.sleep(0) задача .cancelled()."""
+    result = asyncio.run(_run_task_cancelled_after_stop())
+    assert result, "Задача не перешла в состояние cancelled после stop()"

@@ -17,7 +17,7 @@ _CL100K_MODELS = frozenset({
     "gpt-3.5-turbo", "gpt-3.5-turbo-16k",
 })
 
-CHARS_PER_TOKEN_FALLBACK = 2.5
+CHARS_PER_TOKEN_FALLBACK = 3.5
 MESSAGE_OVERHEAD_TOKENS = 4  # per-message overhead in chat format
 
 

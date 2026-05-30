@@ -82,10 +82,26 @@ async def test_cb_sess_ssh_toggle():
 
     session = MagicMock(spec=Session)
     session.id = "sid123"
+    session.chat_id = 123
     session.workdir = "/tmp/proj"
     session.modes = ModeState(ssh_remote_enabled=False)
 
-    bot_app.manager.get_by_uid.return_value = session
+    class _Manager:
+        def __init__(self):
+            self.writes = []
+
+        def get_by_uid(self, uid):
+            return session if uid == "uid123" else None
+
+        def serialize_chat_entry_for_persist(self, chat_id, session_id):
+            return {"session_id": session_id, "chat_id": chat_id}
+
+        def write_chat_entry(self, chat_id, entry):
+            self.writes.append((chat_id, entry))
+            return True
+
+    manager = _Manager()
+    bot_app.manager = manager
     bot_app.handlers.build_sessions_active_overview.return_value = ("text", MagicMock())
 
     query = AsyncMock()
@@ -106,7 +122,7 @@ async def test_cb_sess_ssh_toggle():
         assert res is True
         assert session.modes.ssh_remote_enabled is True
         query.answer.assert_called_with("Удалённое управление включено")
-        bot_app.manager.persist_session.assert_called()
+        assert manager.writes == [(123, {"session_id": "sid123", "chat_id": 123})]
 
     # 3. Toggle back to OFF
     query.answer.reset_mock()
@@ -115,3 +131,24 @@ async def test_cb_sess_ssh_toggle():
         assert res is True
         assert session.modes.ssh_remote_enabled is False
         query.answer.assert_called_with("Удалённое управление выключено")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handler_cls", [CallbackHandler, BotHandlers])
+async def test_persist_session_async_falls_back_on_write_failure(handler_cls):
+    bot_app = MagicMock()
+    bot_app.mode_session_control.persist = MagicMock()
+
+    class _Manager:
+        def serialize_chat_entry_for_persist(self, chat_id, session_id):
+            return {"session_id": session_id, "chat_id": chat_id}
+
+        def write_chat_entry(self, chat_id, entry):
+            return False
+
+    bot_app.manager = _Manager()
+    handler = handler_cls(bot_app)
+
+    await handler._persist_session_async(123, "sid123")
+
+    bot_app.mode_session_control.persist.assert_called_once_with()

@@ -55,37 +55,53 @@ _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DO
 
 
 def _extract_balanced_json_objects(text: str) -> List[str]:
+    """Extract top-level balanced JSON objects from *text* in O(n) time.
+
+    Scans left-to-right, tracking brace depth and string context. When a
+    top-level object closes, it is recorded and scanning resumes *after* it,
+    so each character is visited at most once.
+    """
     raw = str(text or "")
     if "{" not in raw:
         return []
-    objects: List[str] = []
-    for start, char in enumerate(raw):
-        if char != "{":
+    objects: List[tuple[int, int]] = []
+    nested_candidates: List[tuple[int, int, int]] = []
+    stack: List[int] = []
+    in_string = False
+    escape = False
+    for idx, current in enumerate(raw):
+        if in_string:
+            if escape:
+                escape = False
+            elif current == "\\":
+                escape = True
+            elif current == '"':
+                in_string = False
             continue
-        depth = 0
-        in_string = False
-        escape = False
-        for idx in range(start, len(raw)):
-            current = raw[idx]
-            if in_string:
-                if escape:
-                    escape = False
-                elif current == "\\":
-                    escape = True
-                elif current == '"':
-                    in_string = False
-                continue
-            if current == '"':
-                in_string = True
-                continue
-            if current == "{":
-                depth += 1
-            elif current == "}":
-                depth -= 1
-                if depth == 0:
-                    objects.append(raw[start: idx + 1].strip())
-                    break
-    return objects
+        if current == '"':
+            in_string = True
+            continue
+        if current == "{":
+            stack.append(idx)
+            continue
+        if current != "}" or not stack:
+            continue
+
+        start = stack.pop()
+        if stack:
+            nested_candidates.append((start, idx + 1, stack[-1]))
+        else:
+            objects.append((start, idx + 1))
+
+    if stack:
+        # Treat unmatched outer braces as noise and keep their direct balanced children.
+        unmatched_starts = set(stack)
+        objects.extend(
+            (start, end)
+            for start, end, parent in nested_candidates
+            if parent in unmatched_starts
+        )
+    return [raw[start:end].strip() for start, end in sorted(objects)]
 
 
 def _truncate_text(value: Any, *, limit: int) -> str:

@@ -36,7 +36,7 @@ def test_send_output_html_truncates_tail(tmp_path, monkeypatch):
 
         import sessions.session_management as sm_mod
 
-        def _ansi_to_html(s: str):
+        def _ansi_to_html(s: str, **_kw):
             seen["arg"] = s
             return "<html/>"
 

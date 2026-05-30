@@ -9,6 +9,8 @@ from modes.sdk.runtime.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class AutoTTSTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -69,7 +71,7 @@ class AutoTTSTool(ToolPlugin):
             )
             audio.write_to_file(out_path)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("auto_tts: OpenAI TTS request failed voice=%r model=%r", voice, model)
             return {"success": False, "error": f"OpenAI TTS failed: {e}"}
 
         return {"success": True, "output": out_path}

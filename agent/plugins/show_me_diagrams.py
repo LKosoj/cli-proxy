@@ -12,6 +12,8 @@ from modes.sdk.runtime.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class ShowMeDiagramsTool(ToolPlugin):
     def __init__(self) -> None:
@@ -67,7 +69,7 @@ class ShowMeDiagramsTool(ToolPlugin):
         try:
             png_path = await asyncio.to_thread(self._render_png_sync, code)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("show_me_diagrams: PlantUML render failed for diagram_type=%r", args.get("diagram_type"))
             return {"success": False, "error": f"PlantUML render failed: {e}"}
 
         out = f"file: {png_path}\n\n```plantuml\n{code.strip()}\n```"

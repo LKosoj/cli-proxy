@@ -874,6 +874,44 @@ def test_miniapp_files_download_happy_path_via_ticket(tmp_path) -> None:
     asyncio.run(_run())
 
 
+def test_miniapp_files_download_binary_non_utf8_returns_raw_bytes(tmp_path) -> None:
+    async def _run() -> None:
+        cfg = _build_config(tmp_path, token="t")
+        app = BotApp(cfg)
+        session = app.manager.create(1, "dummy", str(tmp_path))
+        session_uid = session_runtime_uid(session)
+        # Записываем файл с байтами, не декодируемыми как UTF-8
+        bin_content = b"caf\xe9"
+        (tmp_path / "data.bin").write_bytes(bin_content)
+
+        web_app = web.Application()
+        _register_routes(web_app, app)
+
+        server = TestServer(web_app)
+        await server.start_server()
+        client = TestClient(server)
+        await client.start_server()
+        try:
+            headers = {"X-Telegram-Init-Data": _build_init_data("t", 1)}
+
+            ticket_resp = await client.get("/api/files/ws_ticket", headers=headers)
+            assert ticket_resp.status == 200
+            ticket = str((await ticket_resp.json()).get("ticket") or "")
+            assert ticket
+
+            resp = await client.get(
+                f"/api/files/download?ticket={quote(ticket)}&session_uid={quote(session_uid)}&path=data.bin"
+            )
+            assert resp.status == 200
+            assert resp.headers.get("Content-Disposition", "").startswith("attachment;")
+            assert await resp.read() == bin_content
+        finally:
+            await client.close()
+            await server.close()
+
+    asyncio.run(_run())
+
+
 def test_miniapp_files_search_uses_remote_execution_target_when_remote_control_on(tmp_path) -> None:
     async def _run() -> None:
         cfg = _build_config(tmp_path, token="t")

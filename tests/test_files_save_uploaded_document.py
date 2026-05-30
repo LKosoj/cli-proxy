@@ -108,7 +108,7 @@ def test_file_wait_timeout_resets_mode_and_notifies(tmp_path, monkeypatch):
         async def _fast_sleep(_delay):
             return None
 
-        monkeypatch.setattr("bot.asyncio.sleep", _fast_sleep)
+        monkeypatch.setattr("tg.file_upload_handler.asyncio.sleep", _fast_sleep)
 
         app._start_files_upload_wait(
             chat_id=1,

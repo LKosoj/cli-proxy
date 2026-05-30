@@ -185,22 +185,3 @@ def adapt_runtime_event(runtime_event: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         _LOG.exception("adapt_runtime_event failed, returning minimal event")
         return normalize_trace_event({})
-
-
-def trace_event_to_dataclass(raw: Dict[str, Any]) -> TraceEvent:
-    """Convert a normalized dict into a TraceEvent dataclass instance."""
-    normalized = normalize_trace_event(raw)
-    return TraceEvent(
-        event_type=normalized.get("event_type", ""),
-        mode_id=normalized.get("mode_id", ""),
-        session_id=normalized.get("session_id", ""),
-        timestamp=normalized.get("timestamp", 0.0),
-        step_id=normalized.get("step_id", ""),
-        task_id=normalized.get("task_id", ""),
-        corr_id=normalized.get("corr_id", ""),
-        status=normalized.get("status", ""),
-        message=normalized.get("message", ""),
-        error=normalized.get("error", ""),
-        iteration=normalized.get("iteration", 0),
-        metadata=normalized.get("metadata", {}),
-    )

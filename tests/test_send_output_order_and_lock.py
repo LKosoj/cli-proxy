@@ -59,7 +59,7 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
 
         monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)
 
-        def _ansi_to_html(_s):
+        def _ansi_to_html(_s, **_kw):
             # This runs inside asyncio.to_thread in prod. In test we override to_thread to be awaitable,
             # so we can block it until summary has started.
             return "<html>ok</html>"
@@ -75,7 +75,9 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
 
         async def _to_thread(fn, *args, **kwargs):
             # Force the HTML path to wait until summary started to prove we run them in parallel.
-            if fn is _ansi_to_html:
+            # H8: session path wraps the renderer in functools.partial(..., allow_network_fetch=True),
+            # so unwrap .func before the identity check.
+            if getattr(fn, "func", fn) is _ansi_to_html:
                 # Wait until summary coroutine starts, otherwise we'd be sequential.
                 await asyncio.wait_for(summary_started.wait(), timeout=1.0)
                 # Additionally wait for explicit release so ordering is deterministic.
@@ -154,7 +156,7 @@ def test_send_output_can_skip_summary(tmp_path, monkeypatch):
             return "SUMMARY", None
 
         monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)
-        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s: "<html>ok</html>")
+        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s, **_kw: "<html>ok</html>")
 
         def _make_html_file(html, prefix):
             p = tmp_path / "out.html"
@@ -247,7 +249,7 @@ def test_send_output_uses_notification_queue_as_atomic_report_delivery(tmp_path,
             return "SUMMARY", None
 
         monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)
-        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s: "<html>ok</html>")
+        monkeypatch.setattr(sm_mod, "ansi_to_html", lambda _s, **_kw: "<html>ok</html>")
 
         def _make_html_file(html, prefix):
             p = tmp_path / "out.html"

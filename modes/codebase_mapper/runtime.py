@@ -7,7 +7,6 @@ import datetime as dt
 import hashlib
 import json
 import logging
-import math
 import os
 import re
 import subprocess
@@ -16,6 +15,7 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Seq
 
 from modes.codebase_mapper_constants import CODEBASE_MAPPER_GRAPH_STATE, CODEBASE_MAPPER_RESULT_STATUS
 from utils.paths import cli_proxy_artifact_path
+from modes.codebase_mapper import graph_analysis, node_renderer
 
 _DOC_NAMES = (
     "STACK.md",
@@ -39,16 +39,6 @@ _MAP_REL_ROOT_SLASH = f"{_MAP_REL_ROOT}/"
 _LEGACY_MAP_REL_ROOT_SLASH = ".codebase_map/"
 _CLI_PARALLELISM_LIMIT = 2
 _SCAN_EXCLUDED_DIRS = {".git", "node_modules", ".venv", "__pycache__"}
-_PROMPT_CHANGED_CAP_FAST = 8
-_PROMPT_INDEX_CAP_FAST = 24
-_PROMPT_CHANGED_CAP_DEEP = 40
-_PROMPT_INDEX_CAP_DEEP = 80
-_PROMPT_CHANGED_CAP_DEFAULT = 20
-_PROMPT_INDEX_CAP_DEFAULT = 40
-_SOURCE_SAMPLES_MIN = 12
-_SOURCE_SAMPLES_MAX = 24
-_SOURCE_SAMPLES_MIN_DEEP = 16
-_SOURCE_SAMPLES_MAX_DEEP = 40
 _UNFINISHED_MARKER_REGEX = "|".join(("TO" "DO", "FIX" "ME", "HACK", "XXX"))
 _UNFINISHED_MARKER_LABEL = "unfinished/HACK/XXX markers"
 
@@ -107,6 +97,7 @@ class CodebaseMapperRuntime:
     """Mode-owned runtime for `.cli-proxy/.codebase_map/` generation and read-only context usage."""
 
     capabilities = frozenset({"codebase_mapper_run", "codebase_mapper_status", "codebase_mapper_context"})
+    _CMD_TIMEOUT_SEC: int = 30
 
     def __init__(self, mode: Any = None) -> None:
         self._log = logging.getLogger(__name__)
@@ -282,8 +273,8 @@ class CodebaseMapperRuntime:
                 return payload
             run_force = bool(force or operation_norm in {"init_full"})
             if cli_runner is None:
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: self.run(workdir=str(workdir or ""), usage=mode, force=run_force)
+                result = await asyncio.to_thread(
+                    self.run, workdir=str(workdir or ""), usage=mode, force=run_force
                 )
             else:
                 result = await self._run_parallel_cli(
@@ -810,7 +801,7 @@ class CodebaseMapperRuntime:
         meta_path = os.path.join(map_dir, "meta.json")
         os.makedirs(map_dir, exist_ok=True)
 
-        plan = self._build_plan(root=root, map_dir=map_dir, meta_path=meta_path, force=force)
+        plan = await asyncio.to_thread(self._build_plan, root=root, map_dir=map_dir, meta_path=meta_path, force=force)
         if plan.skip_reason:
             graph_info = self._read_graph_info(map_dir=map_dir)
             if self._graph_keys_missing(map_dir=map_dir):
@@ -837,7 +828,7 @@ class CodebaseMapperRuntime:
             )
 
         focuses = self._focuses_for_docs(plan.docs_to_update)
-        file_index = self._list_files(root) if plan.full_scan else []
+        file_index = await asyncio.to_thread(self._list_files, root) if plan.full_scan else []
         tasks: List[Dict[str, Any]] = []
         for focus in focuses:
             docs = list(_FOCUS_TO_DOCS.get(focus, ()))
@@ -1351,87 +1342,17 @@ class CodebaseMapperRuntime:
         templates: Dict[str, str],
         operation: str,
     ) -> str:
-        changed_cap, index_cap = self._prompt_caps(operation=operation)
-        docs_list = "\n".join(f"- {d}" for d in target_docs)
-        mode_label = "полный скан" if full_scan else "инкрементальный апдейт"
-        changed_block = "\n".join(f"- `{p}`" for p in changed_files[:changed_cap])
-        if not changed_block:
-            changed_block = "- (нет списка изменений)"
-        index_block = "\n".join(f"- `{p}`" for p in file_index[:index_cap]) if full_scan else ""
-
-        guidance = str(
-            templates.get("guidance")
-            or (
-                "Ты под-агент Codebase Mapper."
-                " Обнови только целевые файлы в `.cli-proxy/.codebase_map/`."
-                " Пиши на диск; в ответе только короткий отчет."
-            )
+        return node_renderer._build_focus_prompt(
+            root=root,
+            map_dir=map_dir,
+            focus=focus,
+            target_docs=target_docs,
+            full_scan=full_scan,
+            changed_files=changed_files,
+            file_index=file_index,
+            templates=templates,
+            operation=operation,
         )
-
-        if full_scan:
-            scan_policy = str(
-                templates.get("scan_policy_full")
-                or (
-                    "Режим: полный скан. Используй `rg --files` и выборочное чтение ключевых файлов по фокусу, "
-                    "чтобы сформировать полную и актуальную картину."
-                )
-            )
-        else:
-            scan_policy = str(
-                templates.get("scan_policy_incremental")
-                or (
-                    "Режим: инкрементальный апдейт."
-                    " Сначала changed files."
-                    " Доп. чтение только при прямой связи."
-                    " Полный обход запрещен."
-                )
-            )
-
-        write_rules_tpl = str(
-            templates.get("write_rules")
-            or (
-                "Правила записи:\n"
-                "1. Обнови только документы:\n{docs_list}\n"
-                "2. Путь для записи: `{map_dir}`\n"
-                "3. Формат: короткий markdown с конкретными file-path.\n"
-                "4. Если данных мало, явно укажи ограничения."
-            )
-        )
-        write_rules = write_rules_tpl.format(docs_list=docs_list, map_dir=map_dir)
-
-        sections = [
-            guidance,
-            f"Фокус: `{focus}`",
-            f"Проект: `{root}`",
-            scan_policy,
-            f"Контекст запуска: {mode_label}",
-            "Измененные файлы (git diff):",
-            changed_block,
-            write_rules,
-        ]
-
-        if full_scan:
-            sections.extend([
-                "Индекс файлов (результат rg --files):",
-                index_block or "- (пусто)",
-            ])
-
-        sections.append(
-            str(
-                templates.get("report_format")
-                or "Верни итог: фокус, обновленные файлы, что дополнительно проверено."
-            )
-        )
-        return "\n\n".join(sections).strip()
-
-    @staticmethod
-    def _prompt_caps(*, operation: str) -> Tuple[int, int]:
-        op = str(operation or "").strip().lower()
-        if op == "run":
-            return _PROMPT_CHANGED_CAP_FAST, _PROMPT_INDEX_CAP_FAST
-        if op in {"verify", "init_full"}:
-            return _PROMPT_CHANGED_CAP_DEEP, _PROMPT_INDEX_CAP_DEEP
-        return _PROMPT_CHANGED_CAP_DEFAULT, _PROMPT_INDEX_CAP_DEFAULT
 
     def _scan_workspace(self, workdir: str) -> Dict[str, Any]:
         files = self._list_files(workdir)
@@ -1837,8 +1758,18 @@ class CodebaseMapperRuntime:
         return len([x for x in (proc.stdout or "").splitlines() if x.strip()])
 
     @staticmethod
-    def _run_cmd(args: List[str], cwd: Optional[str] = None) -> subprocess.CompletedProcess:
-        return subprocess.run(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    def _run_cmd(args: List[str], cwd: Optional[str] = None, timeout: Optional[int] = None) -> subprocess.CompletedProcess:
+        effective_timeout = timeout if timeout is not None else CodebaseMapperRuntime._CMD_TIMEOUT_SEC
+        try:
+            return subprocess.run(
+                args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
+                timeout=effective_timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(
+                args=args, returncode=124, stdout="",
+                stderr=f"timeout: command did not complete within {effective_timeout}s",
+            )
 
     @staticmethod
     def _normalize_operation(operation: str) -> str:
@@ -1984,8 +1915,8 @@ class CodebaseMapperRuntime:
         hints = []
         if "config.yaml" in files:
             hints.append("- `config.yaml`: central runtime configuration (tools/openai/mcp/miniapp)")
-        if any(p.startswith("agent/mcp/") for p in files):
-            hints.append("- `agent/mcp/*`: MCP client/manager integration")
+        if any(p.startswith("modes/sdk/runtime/mcp/") for p in files):
+            hints.append("- `modes/sdk/runtime/mcp/*`: MCP client/manager integration")
         if any(p.startswith("miniapp/") for p in files):
             hints.append("- `miniapp/*`: embedded HTTP MiniApp")
         if not hints:
@@ -2725,28 +2656,12 @@ class CodebaseMapperRuntime:
         operation: str,
         is_first_init: bool = False,
     ) -> List[str]:
-        if operation in {"init", "init_full"}:
-            if is_first_init:
-                return []
-            return list(review_items)
-        changed = [str(p).replace("\\", "/").strip("/") for p in list(changed_files or []) if str(p).strip()]
-        if not changed:
-            return []
-        touched_domains = {p.split("/", 1)[0] for p in changed}
-        touched: List[str] = []
-        for item in review_items:
-            name = str(item).replace("\\", "/").split("/")[-1]
-            if not name.endswith(".md"):
-                continue
-            slug = name[:-3]
-            if slug in {"workspace"}:
-                if changed:
-                    touched.append(item)
-                continue
-            domain = slug.replace("-", "_")
-            if slug in touched_domains or domain in touched_domains:
-                touched.append(item)
-        return touched
+        return node_renderer._review_touched_items(
+            review_items=review_items,
+            changed_files=changed_files,
+            operation=operation,
+            is_first_init=is_first_init,
+        )
 
     def _render_graph_index(
         self,
@@ -2755,85 +2670,11 @@ class CodebaseMapperRuntime:
         map_dir: str,
         changed_files: Sequence[str],
     ) -> str:
-        doc_descriptions = {
-            "STACK.md": "Технологический стек, зависимости, рантаймы и инфраструктурные маркеры.",
-            "INTEGRATIONS.md": "Внешние/внутренние интеграции, точки входа и контракты взаимодействий.",
-            "ARCHITECTURE.md": "Архитектурная структура модулей, слои и их ответственность.",
-            "STRUCTURE.md": "Физическая структура репозитория и индексация значимых путей.",
-            "CONVENTIONS.md": "Кодовые конвенции, практики и стандарты реализации.",
-            "TESTING.md": "Подход к тестированию, расположение тестов и проверочные правила.",
-            "CONCERNS.md": "Риски, технический долг и зоны повышенного внимания.",
-        }
-        lines = [
-            "# Codebase Mapper Instruction Graph",
-            "",
-            f"Generated: {self._utc_now_iso()}",
-            "",
-            "This index is the entrypoint for agent instructions.",
-            "",
-            "## Mandatory Workflow",
-            "1. Before any edits, read this `INDEX.md` completely.",
-            "2. Determine relevant area(s) and open matching files under `.cli-proxy/.codebase_map/nodes/*.md`.",
-            "3. Only then inspect source files and implement changes.",
-            "4. After changes, update affected node metadata (`When to update`, `Last reviewed`).",
-            "5. If node update fails, run targeted repair for that node.",
-            "",
-            "## Runtime Verification and Fallback Policy (Hardcoded)",
-            (
-                "- Перед любым утверждением о runtime-поведении ОБЯЗАТЕЛЬНО "
-                "проверить конкретный метод/функцию в коде и сослаться на файл:строка."
-            ),
-            (
-                "- Запрещено делать выводы по аналогии между этапами пайплайна без "
-                "прямой проверки каждого этапа (decompose/dev/review/final audit)."
-            ),
-            "- Если вопрос про «кто/когда вызывается», отвечать в формате пошаговой цепочки: шаг -> метод -> исполнитель -> зачем.",
-            "- При обнаружении своей неточности сначала коротко исправить факт, затем дать проверенные ссылки на код, без догадок.",
-            "- Policy matrix по fallback:",
-            (
-                "- Legacy-потоки (уже существующее поведение в проде): fallback "
-                "разрешён для обратной совместимости, но должен логироваться и быть "
-                "явно отражён в отчёте."
-            ),
-            (
-                "- Новый функционал и новые mode-сценарии: fallback запрещён по "
-                "умолчанию; при ошибке — явный fail с причиной."
-            ),
-            (
-                "- Opt-in fallback: разрешён только после явного согласования с "
-                "пользователем в текущей задаче или если он явно приходит как "
-                "требование от пользователя."
-            ),
-            "",
-            "## Runtime Files",
-            "- `graph.json`: topology and edges.",
-            "- `rules.yaml`: update routing rules.",
-            "- `state.json`: statuses/queues (`ok|needs_repair|degraded|invalid`).",
-            "- `api/`: optional technical interface mirror.",
-            "",
-            "## Core Docs",
-            "These files are mandatory context and must be considered before major edits.",
-        ]
-        for name in _DOC_NAMES:
-            lines.append(f"- `{name}`: {doc_descriptions.get(name, 'Core project context.')}")  # deterministic catalog
-        lines.extend([
-            "",
-            "## Nodes",
-        ])
-        for item in node_entries:
-            title = str(item.get("title") or "")
-            path = str(item.get("path") or "")
-            count = int(item.get("file_count") or 0)
-            source_glob = str(item.get("source_glob") or "**")
-            lines.append(f"- [{title}]({path}) - files: {count}, source_glob: `{source_glob}`")
-        lines.extend([
-            "",
-            "## Runtime Inputs",
-            f"- map_dir: `{map_dir}`",
-            f"- changed_files: {len(list(changed_files or []))}",
-            "",
-        ])
-        return "\n".join(lines)
+        return node_renderer._render_graph_index(
+            node_entries=node_entries,
+            map_dir=map_dir,
+            changed_files=changed_files,
+        )
 
     async def _enrich_graph_nodes_with_cli(
         self,
@@ -2898,60 +2739,18 @@ class CodebaseMapperRuntime:
         changed_hits: Sequence[str],
         api_links: Sequence[tuple[str, str]] = (),
     ) -> str:
-        hits = list(changed_hits or [])
-        samples = [str(x) for x in list(source_samples or []) if str(x).strip()]
-        related_nodes = [str(x) for x in list(related_node_paths or []) if str(x).strip() and str(x) != rel_node_path]
-        related_globs = [str(x) for x in list(related_source_globs or []) if str(x).strip()]
-        relation_notes = [str(x) for x in list(related_relation_notes or []) if str(x).strip()]
-        lines = [
-            f"# Node: {domain}",
-            "",
-            f"Generated: {self._utc_now_iso()}",
-            "",
-            "## Purpose",
-            f"Instruction node for `{domain}` area.",
-            "",
-            "## Scope",
-            f"- Source glob: `{source_glob}`",
-            f"- Estimated files: {int(file_count)}",
-            "",
-            "## Instructions for agent",
-            "- Read only files relevant to the active task.",
-            "- Prefer deterministic checks before edits.",
-            "- Keep changes minimal and validate with tests/linters where applicable.",
-            "",
-            "## Source of truth",
-            f"- `{source_glob}`",
-            *[f"- `{p}`" for p in samples[:10]],
-            "",
-        ]
-
-        if api_links:
-            lines.extend(["## Module API", "Детальные интерфейсы модулей этой области:", ""])
-            for orig, link in api_links:
-                lines.append(f"- [{orig}]({link})")
-            lines.append("")
-
-        lines.extend([
-            "## When to update",
-            f"- Any commit touching `{source_glob}`.",
-            *[f"- Any commit touching `{g}` because this node has import/call dependency on it." for g in related_globs[:5]],
-            "- Any architecture or behavior change affecting this area.",
-            "",
-            "## Related nodes",
-            *([f"- `{p}`" for p in related_nodes[:8]] if related_nodes else ["- (none)"]),
-            *([f"- {note}" for note in relation_notes[:8]] if relation_notes else []),
-            "",
-            "## Owner",
-            "- project-maintainers",
-            "",
-            "## Last reviewed",
-            f"- {self._utc_now_iso()}",
-            "",
-        ])
-        if hits:
-            lines.extend(["## Recent changed files", *[f"- `{p}`" for p in hits[:30]], ""])
-        return "\n".join(lines)
+        return node_renderer._render_graph_node(
+            domain=domain,
+            rel_node_path=rel_node_path,
+            source_glob=source_glob,
+            file_count=file_count,
+            source_samples=source_samples,
+            related_node_paths=related_node_paths,
+            related_source_globs=related_source_globs,
+            related_relation_notes=related_relation_notes,
+            changed_hits=changed_hits,
+            api_links=api_links,
+        )
 
     def _build_graph_edges(
         self,
@@ -2959,31 +2758,10 @@ class CodebaseMapperRuntime:
         node_entries: Sequence[Dict[str, Any]],
         domain_relations: Dict[str, Dict[str, Dict[str, Any]]],
     ) -> List[Dict[str, str]]:
-        edges: List[Dict[str, str]] = []
-        by_title = {str(item.get("title") or ""): str(item.get("id") or "") for item in node_entries}
-        for item in node_entries:
-            node_id = str(item.get("id") or "")
-            if not node_id:
-                continue
-            edges.append({"from": "index", "to": node_id, "type": "references"})
-        for domain, related in domain_relations.items():
-            src = str(by_title.get(domain) or "")
-            if not src:
-                continue
-            for rel in sorted(dict(related or {}).keys()):
-                dst = str(by_title.get(rel) or "")
-                if not dst or dst == src:
-                    continue
-                relation = dict((related or {}).get(rel) or {})
-                edge = {
-                    "from": src,
-                    "to": dst,
-                    "type": "related",
-                    "confidence": f"{float(relation.get('score') or 0.0):.2f}",
-                    "levels": ",".join(sorted([str(x) for x in list(relation.get("levels") or []) if str(x).strip()])),
-                }
-                edges.append(edge)
-        return edges
+        return graph_analysis._build_graph_edges(
+            node_entries=node_entries,
+            domain_relations=domain_relations,
+        )
 
     def _build_domain_file_index(
         self,
@@ -2991,17 +2769,7 @@ class CodebaseMapperRuntime:
         files: Sequence[str],
         domains: Sequence[str],
     ) -> Dict[str, List[str]]:
-        known = {str(x): [] for x in list(domains or [])}
-        for raw in list(files or []):
-            p = str(raw).replace("\\", "/").strip("/")
-            if not p:
-                continue
-            area = self._path_to_area(p)
-            if area in known:
-                known[area].append(p)
-            if "workspace" in known:
-                known["workspace"].append(p)
-        return {k: sorted(v) for k, v in known.items()}
+        return graph_analysis._build_domain_file_index(files=files, domains=domains)
 
     def _select_domain_source_samples(
         self,
@@ -3011,76 +2779,16 @@ class CodebaseMapperRuntime:
         changed_files: Sequence[str],
         operation: str,
     ) -> List[str]:
-        files = [str(p).replace("\\", "/").strip("/") for p in list(domain_files or []) if str(p).strip()]
-        if not files:
-            return []
-        # Preserve deterministic order and uniqueness.
-        unique_files = list(dict.fromkeys(files))
-        cap = self._domain_source_samples_cap(total=len(unique_files), operation=operation)
-        if len(unique_files) <= cap:
-            return unique_files
-
-        out: List[str] = []
-        selected: Set[str] = set()
-
-        def _pick(path: str) -> None:
-            if path in selected:
-                return
-            selected.add(path)
-            out.append(path)
-
-        def _pick_many(paths: Sequence[str]) -> None:
-            for p in paths:
-                if len(out) >= cap:
-                    return
-                _pick(str(p))
-
-        normalized_changed = [
-            str(p).replace("\\", "/").strip("/")
-            for p in list(changed_files or [])
-            if str(p).strip()
-        ]
-        changed_in_domain = [
-            p for p in normalized_changed
-            if p == domain or p.startswith(f"{domain}/")
-        ]
-        existing = set(unique_files)
-        _pick_many([p for p in changed_in_domain if p in existing])
-
-        first_by_subdir: Dict[str, str] = {}
-        first_by_ext: Dict[str, str] = {}
-        for path in unique_files:
-            rel = path
-            if path == domain:
-                rel = ""
-            elif path.startswith(f"{domain}/"):
-                rel = path[len(domain) + 1:]
-            parent = str(rel).split("/", 1)[0] if rel and "/" in rel else "(root)"
-            if parent not in first_by_subdir:
-                first_by_subdir[parent] = path
-            ext = os.path.splitext(path)[1].lower() or "(none)"
-            if ext not in first_by_ext:
-                first_by_ext[ext] = path
-
-        _pick_many(list(first_by_subdir.values()))
-        _pick_many(list(first_by_ext.values()))
-        _pick_many(unique_files)
-        return out[:cap]
+        return graph_analysis._select_domain_source_samples(
+            domain=domain,
+            domain_files=domain_files,
+            changed_files=changed_files,
+            operation=operation,
+        )
 
     @staticmethod
     def _domain_source_samples_cap(*, total: int, operation: str) -> int:
-        n = max(0, int(total or 0))
-        op = str(operation or "").strip().lower()
-        if op in {"verify", "init_full"}:
-            minimum = _SOURCE_SAMPLES_MIN_DEEP
-            maximum = _SOURCE_SAMPLES_MAX_DEEP
-        else:
-            minimum = _SOURCE_SAMPLES_MIN
-            maximum = _SOURCE_SAMPLES_MAX
-        if n <= 0:
-            return minimum
-        adaptive = int(math.sqrt(n) * 3)
-        return max(minimum, min(maximum, adaptive))
+        return graph_analysis._domain_source_samples_cap(total=total, operation=operation)
 
     def _infer_domain_relations(
         self,
@@ -3088,69 +2796,7 @@ class CodebaseMapperRuntime:
         root: str,
         domain_files: Dict[str, List[str]],
     ) -> Dict[str, Dict[str, Dict[str, Any]]]:
-        domains = [str(d) for d in domain_files.keys() if str(d) and str(d) != "workspace"]
-        out: Dict[str, Dict[str, Dict[str, Any]]] = {d: {} for d in domains}
-
-        # L0: observed co-change from git history (works for any language).
-        for a, b, conf, evidence in self._extract_observed_pairs_from_git(root=root):
-            if a in out and b in out:
-                self._merge_relation(
-                    out=out,
-                    source=a,
-                    target=b,
-                    level="L0",
-                    score=float(conf),
-                    evidence=list(evidence or []),
-                )
-                self._merge_relation(
-                    out=out,
-                    source=b,
-                    target=a,
-                    level="L0",
-                    score=float(conf),
-                    evidence=list(evidence or []),
-                )
-
-        # L1: regex-based import/include/use patterns for many languages.
-        self._collect_regex_relations(root=root, domain_files=domain_files, out=out)
-
-        # L2: precise Python AST layer.
-        aliases: Dict[str, str] = {}
-        for domain in domains:
-            aliases[domain] = domain
-            if domain.endswith(".py"):
-                aliases[domain[:-3]] = domain
-            aliases[domain.replace("-", "_")] = domain
-            aliases[domain.replace("_", "-")] = domain
-        for domain in domains:
-            for rel in list(domain_files.get(domain) or [])[:400]:
-                abs_path = os.path.join(root, rel)
-                low = str(rel).lower()
-                parsed: Set[str] = set()
-                if low.endswith(".py"):
-                    parsed = self._extract_python_dependency_aliases(abs_path=abs_path, known_aliases=aliases)
-                elif low.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
-                    parsed = self._extract_ts_js_dependency_aliases(abs_path=abs_path, known_aliases=aliases)
-                elif low.endswith(".php"):
-                    parsed = self._extract_php_dependency_aliases(abs_path=abs_path, known_aliases=aliases)
-                elif low.endswith(".go"):
-                    parsed = self._extract_go_dependency_aliases(abs_path=abs_path, known_aliases=aliases)
-                elif low.endswith(".rs"):
-                    parsed = self._extract_rust_dependency_aliases(abs_path=abs_path, known_aliases=aliases)
-                if not parsed:
-                    continue
-                for target in parsed:
-                    if target == domain or target not in out:
-                        continue
-                    self._merge_relation(
-                        out=out,
-                        source=domain,
-                        target=target,
-                        level="L2",
-                        score=0.9,
-                        evidence=[f"lang_specific:{rel}"],
-                    )
-        return out
+        return graph_analysis._infer_domain_relations(root=root, domain_files=domain_files)
 
     def _collect_regex_relations(
         self,
@@ -3159,35 +2805,7 @@ class CodebaseMapperRuntime:
         domain_files: Dict[str, List[str]],
         out: Dict[str, Dict[str, Dict[str, Any]]],
     ) -> None:
-        known = set(out.keys())
-        patterns = [
-            re.compile(r"(?:import|from|require|require_once|include|include_once|use|mod)\s+['\"]([^'\"]+)['\"]"),
-            re.compile(r"(?:import|from|require|require_once|include|include_once|use|mod)\s+([A-Za-z0-9_./\\\\:-]+)"),
-        ]
-        for domain in sorted(known):
-            for rel in list(domain_files.get(domain) or [])[:500]:
-                low = str(rel).lower()
-                if not low.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".php", ".go", ".rs", ".java", ".kt")):
-                    continue
-                abs_path = os.path.join(root, rel)
-                try:
-                    with open(abs_path, "r", encoding="utf-8") as f:
-                        content = f.read()
-                except Exception:
-                    self._log.exception("codebase map: regex relation read failed %s", abs_path)
-                    continue
-                refs = self._extract_domain_refs_by_regex(content=content, known_domains=known, patterns=patterns)
-                for target in refs:
-                    if target == domain:
-                        continue
-                    self._merge_relation(
-                        out=out,
-                        source=domain,
-                        target=target,
-                        level="L1",
-                        score=0.62,
-                        evidence=[f"regex_ref:{rel}"],
-                    )
+        graph_analysis._collect_regex_relations(root=root, domain_files=domain_files, out=out)
 
     @staticmethod
     def _extract_domain_refs_by_regex(
@@ -3196,17 +2814,9 @@ class CodebaseMapperRuntime:
         known_domains: Set[str],
         patterns: Sequence[re.Pattern[str]],
     ) -> Set[str]:
-        out: Set[str] = set()
-        text = str(content or "")
-        for pat in list(patterns or []):
-            for m in pat.findall(text):
-                raw = str(m or "").replace("\\", "/").strip().strip("./")
-                if not raw:
-                    continue
-                token = raw.split("/", 1)[0].split(".", 1)[0].strip().lower()
-                if token in known_domains:
-                    out.add(token)
-        return out
+        return graph_analysis._extract_domain_refs_by_regex(
+            content=content, known_domains=known_domains, patterns=patterns
+        )
 
     @staticmethod
     def _merge_relation(
@@ -3218,25 +2828,9 @@ class CodebaseMapperRuntime:
         score: float,
         evidence: Sequence[str],
     ) -> None:
-        src = str(source or "")
-        dst = str(target or "")
-        if not src or not dst or src == dst:
-            return
-        rels = out.setdefault(src, {})
-        current = dict(rels.get(dst) or {})
-        prev_score = float(current.get("score") or 0.0)
-        cur_levels = set(str(x) for x in list(current.get("levels") or []) if str(x).strip())
-        cur_evidence = [str(x) for x in list(current.get("evidence") or []) if str(x).strip()]
-        cur_levels.add(str(level))
-        for ev in list(evidence or []):
-            s = str(ev).strip()
-            if s and s not in cur_evidence:
-                cur_evidence.append(s)
-        rels[dst] = {
-            "score": round(max(prev_score, float(score or 0.0)), 2),
-            "levels": sorted(cur_levels),
-            "evidence": cur_evidence[:8],
-        }
+        graph_analysis._merge_relation(
+            out=out, source=source, target=target, level=level, score=score, evidence=evidence
+        )
 
     @staticmethod
     def _format_relation_note(*, target: str, relation: Dict[str, Any]) -> str:
@@ -3250,21 +2844,7 @@ class CodebaseMapperRuntime:
         *,
         domain_relations: Dict[str, Dict[str, Dict[str, Any]]],
     ) -> Dict[str, List[Dict[str, Any]]]:
-        out: Dict[str, List[Dict[str, Any]]] = {}
-        for src, targets in domain_relations.items():
-            entries: List[Dict[str, Any]] = []
-            for dst in sorted(dict(targets or {}).keys()):
-                rel = dict((targets or {}).get(dst) or {})
-                entries.append(
-                    {
-                        "target": dst,
-                        "score": float(rel.get("score") or 0.0),
-                        "levels": list(rel.get("levels") or []),
-                        "evidence": list(rel.get("evidence") or []),
-                    }
-                )
-            out[str(src)] = entries[:20]
-        return out
+        return graph_analysis._relation_graph_payload(domain_relations=domain_relations)
 
     def _extract_python_dependency_aliases(
         self,
@@ -3272,48 +2852,9 @@ class CodebaseMapperRuntime:
         abs_path: str,
         known_aliases: Dict[str, str],
     ) -> Set[str]:
-        out: Set[str] = set()
-        try:
-            with open(abs_path, "r", encoding="utf-8") as f:
-                source = f.read()
-            tree = ast.parse(source, filename=abs_path)
-        except Exception:
-            self._log.exception("codebase map: failed to parse python file %s", abs_path)
-            return out
-        imported_aliases: Dict[str, str] = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    top = str(alias.name or "").split(".", 1)[0].strip()
-                    if not top:
-                        continue
-                    target = str(known_aliases.get(top) or "")
-                    if not target:
-                        continue
-                    out.add(target)
-                    local_alias = str(alias.asname or top).strip()
-                    if local_alias:
-                        imported_aliases[local_alias] = target
-            elif isinstance(node, ast.ImportFrom):
-                module = str(getattr(node, "module", "") or "").strip()
-                top = module.split(".", 1)[0] if module else ""
-                target = str(known_aliases.get(top) or "")
-                if target:
-                    out.add(target)
-                for alias in list(getattr(node, "names", []) or []):
-                    local_alias = str(getattr(alias, "asname", None) or getattr(alias, "name", "") or "").strip()
-                    if local_alias and target:
-                        imported_aliases[local_alias] = target
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            head = self._resolve_call_head_name(node.func)
-            if not head:
-                continue
-            target = str(imported_aliases.get(head) or known_aliases.get(head) or "")
-            if target:
-                out.add(target)
-        return out
+        return graph_analysis._extract_python_dependency_aliases(
+            abs_path=abs_path, known_aliases=known_aliases
+        )
 
     def _extract_ts_js_dependency_aliases(
         self,
@@ -3321,25 +2862,9 @@ class CodebaseMapperRuntime:
         abs_path: str,
         known_aliases: Dict[str, str],
     ) -> Set[str]:
-        out: Set[str] = set()
-        try:
-            with open(abs_path, "r", encoding="utf-8") as f:
-                source = f.read()
-        except Exception:
-            self._log.exception("codebase map: failed to read ts/js file %s", abs_path)
-            return out
-        patterns = [
-            re.compile(r"import\s+(?:[^;]*?\s+from\s+)?['\"]([^'\"]+)['\"]"),
-            re.compile(r"export\s+[^;]*?\s+from\s+['\"]([^'\"]+)['\"]"),
-            re.compile(r"require\(\s*['\"]([^'\"]+)['\"]\s*\)"),
-            re.compile(r"import\(\s*['\"]([^'\"]+)['\"]\s*\)"),
-        ]
-        for pat in patterns:
-            for raw in pat.findall(source):
-                token = self._resolve_alias_token(str(raw), known_aliases=known_aliases)
-                if token:
-                    out.add(token)
-        return out
+        return graph_analysis._extract_ts_js_dependency_aliases(
+            abs_path=abs_path, known_aliases=known_aliases
+        )
 
     def _extract_php_dependency_aliases(
         self,
@@ -3347,29 +2872,9 @@ class CodebaseMapperRuntime:
         abs_path: str,
         known_aliases: Dict[str, str],
     ) -> Set[str]:
-        out: Set[str] = set()
-        try:
-            with open(abs_path, "r", encoding="utf-8") as f:
-                source = f.read()
-        except Exception:
-            self._log.exception("codebase map: failed to read php file %s", abs_path)
-            return out
-        use_pat = re.compile(r"\buse\s+([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)\s*;")
-        for raw in use_pat.findall(source):
-            token = str(raw).replace("\\", "/").strip().strip("/")
-            head = token.split("/", 1)[0].lower()
-            mapped = str(known_aliases.get(head) or "")
-            if mapped:
-                out.add(mapped)
-        include_pats = [
-            re.compile(r"\b(?:require|require_once|include|include_once)\s*\(?\s*['\"]([^'\"]+)['\"]\s*\)?"),
-        ]
-        for pat in include_pats:
-            for raw in pat.findall(source):
-                token = self._resolve_alias_token(str(raw), known_aliases=known_aliases)
-                if token:
-                    out.add(token)
-        return out
+        return graph_analysis._extract_php_dependency_aliases(
+            abs_path=abs_path, known_aliases=known_aliases
+        )
 
     def _extract_go_dependency_aliases(
         self,
@@ -3377,27 +2882,9 @@ class CodebaseMapperRuntime:
         abs_path: str,
         known_aliases: Dict[str, str],
     ) -> Set[str]:
-        out: Set[str] = set()
-        try:
-            with open(abs_path, "r", encoding="utf-8") as f:
-                source = f.read()
-        except Exception:
-            self._log.exception("codebase map: failed to read go file %s", abs_path)
-            return out
-        patterns = [
-            re.compile(r'import\s+"([^"]+)"'),
-            re.compile(r'import\s*\((.*?)\)', re.DOTALL),
-        ]
-        for raw in patterns[0].findall(source):
-            token = self._resolve_alias_token(str(raw), known_aliases=known_aliases)
-            if token:
-                out.add(token)
-        for block in patterns[1].findall(source):
-            for raw in re.findall(r'"([^"]+)"', str(block or "")):
-                token = self._resolve_alias_token(str(raw), known_aliases=known_aliases)
-                if token:
-                    out.add(token)
-        return out
+        return graph_analysis._extract_go_dependency_aliases(
+            abs_path=abs_path, known_aliases=known_aliases
+        )
 
     def _extract_rust_dependency_aliases(
         self,
@@ -3405,46 +2892,17 @@ class CodebaseMapperRuntime:
         abs_path: str,
         known_aliases: Dict[str, str],
     ) -> Set[str]:
-        out: Set[str] = set()
-        try:
-            with open(abs_path, "r", encoding="utf-8") as f:
-                source = f.read()
-        except Exception:
-            self._log.exception("codebase map: failed to read rust file %s", abs_path)
-            return out
-        use_pat = re.compile(r'\buse\s+([A-Za-z0-9_:\{\}]+)\s*;')
-        mod_pat = re.compile(r'\bmod\s+([A-Za-z0-9_]+)\s*;')
-        for raw in use_pat.findall(source):
-            token = str(raw or "").replace("::", "/").replace("{", "/").replace("}", "").strip("/")
-            head = token.split("/", 1)[0].strip().lower()
-            mapped = str(known_aliases.get(head) or "")
-            if mapped:
-                out.add(mapped)
-        for raw in mod_pat.findall(source):
-            head = str(raw or "").strip().lower()
-            mapped = str(known_aliases.get(head) or "")
-            if mapped:
-                out.add(mapped)
-        return out
+        return graph_analysis._extract_rust_dependency_aliases(
+            abs_path=abs_path, known_aliases=known_aliases
+        )
 
     @staticmethod
     def _resolve_alias_token(raw: str, *, known_aliases: Dict[str, str]) -> str:
-        ref = str(raw or "").replace("\\", "/").strip().strip("./")
-        if not ref:
-            return ""
-        head = ref.split("/", 1)[0].split(".", 1)[0].strip().lower()
-        if not head:
-            return ""
-        return str(known_aliases.get(head) or "")
+        return graph_analysis._resolve_alias_token(raw, known_aliases=known_aliases)
 
     @staticmethod
     def _resolve_call_head_name(func: ast.AST) -> str:
-        cur = func
-        while isinstance(cur, ast.Attribute):
-            cur = cur.value
-        if isinstance(cur, ast.Name):
-            return str(cur.id or "").strip()
-        return ""
+        return graph_analysis._resolve_call_head_name(func)
 
     def _infer_organizational_rules(
         self,
@@ -3603,58 +3061,11 @@ class CodebaseMapperRuntime:
         return out
 
     def _extract_observed_pairs_from_git(self, *, root: str) -> List[Tuple[str, str, float, List[str]]]:
-        proc = self._run_cmd(["git", "-C", root, "log", "--name-only", "--pretty=format:__COMMIT__", "-n", "120"])
-        if proc.returncode != 0:
-            return []
-        commits: List[Set[str]] = []
-        current: Set[str] = set()
-        for line in (proc.stdout or "").splitlines():
-            s = str(line or "").strip()
-            if not s:
-                continue
-            if s == "__COMMIT__":
-                if current:
-                    commits.append(set(current))
-                    current = set()
-                continue
-            area = self._path_to_area(s)
-            if area:
-                current.add(area)
-        if current:
-            commits.append(set(current))
-        if not commits:
-            return []
-        pair_count: Dict[Tuple[str, str], int] = {}
-        for commit_areas in commits:
-            sorted_areas = sorted(commit_areas)
-            if len(sorted_areas) < 2:
-                continue
-            for i in range(len(sorted_areas)):
-                for j in range(i + 1, len(sorted_areas)):
-                    key = (sorted_areas[i], sorted_areas[j])
-                    pair_count[key] = int(pair_count.get(key) or 0) + 1
-        out: List[Tuple[str, str, float, List[str]]] = []
-        total = max(1, len(commits))
-        for key, count in pair_count.items():
-            if count < 2:
-                continue
-            base = 0.45 + min(0.35, 0.08 * count)
-            support = min(0.2, 0.6 * (count / total))
-            conf = min(0.95, base + support)
-            out.append((key[0], key[1], conf, [f"observed:git_cochange:{count}/{total}"]))
-        return out
+        return graph_analysis._extract_observed_pairs_from_git(root=root)
 
     @staticmethod
     def _path_to_area(path: str) -> str:
-        p = str(path or "").replace("\\", "/").strip("/")
-        if not p or CodebaseMapperRuntime._is_map_relative_path(p):
-            return ""
-        if "/" not in p:
-            return p if not p.endswith(".md") else ""
-        first = p.split("/", 1)[0]
-        if first in {".git", ".venv", "__pycache__", "node_modules"}:
-            return ""
-        return first
+        return graph_analysis._path_to_area(path)
 
     @staticmethod
     def _area_to_source_glob(area: str) -> str:

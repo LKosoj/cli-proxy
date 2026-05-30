@@ -50,12 +50,9 @@ class ProjectRegistry:
         self._lock = threading.RLock()
         self.ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=5000")
-        return conn
+    def _connect(self):
+        from app.services.sqlite_connection import sqlite_session
+        return sqlite_session(self.db_path)
 
     def ensure_schema(self) -> None:
         with self._lock:

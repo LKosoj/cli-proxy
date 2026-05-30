@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable, List, Set
 
 from .base import LanguageStack
+from modes.sdk.runtime.tooling.change_filter import NOISE_DIR_SEGMENTS
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,9 @@ _MARKERS: List[StackMarker] = [
 
 
 def _iter_project_files(root: str) -> Iterable[tuple[str, str]]:
-    for dirpath, _dirnames, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Прунинг шумовых директорий на месте, чтобы os.walk не спускался в них
+        dirnames[:] = [d for d in dirnames if d not in NOISE_DIR_SEGMENTS]
         for filename in filenames:
             _, ext = os.path.splitext(filename)
             yield filename, ext.lower()

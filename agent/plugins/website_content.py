@@ -10,6 +10,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class WebsiteContentTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -41,7 +43,7 @@ class WebsiteContentTool(ToolPlugin):
         try:
             text = await asyncio.to_thread(self._fetch_sync, url)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("website_content: page fetch failed url=%r", url)
             return {"success": False, "error": f"Fetch failed: {e}"}
 
         text = (text or "").strip()

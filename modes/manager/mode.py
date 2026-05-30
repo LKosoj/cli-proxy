@@ -1,21 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import os
 import time
 from dataclasses import asdict
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from app.mode_dependencies import ModeDependencies
-from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore, is_terminal_status
+from app.services.run_artifact_store import RunArtifactHandle
 from app.services.project_prompts_service import (
     InvalidProjectPromptsError,
     ensure_project_prompts,
     load_mode_prompt_texts,
 )
 from agent.manager_core import (
-    _MANAGER_RUN_HANDLE_SESSION_ATTR,
     _MANAGER_RUN_RESUME_GUARD_SESSION_ATTR,
     manager_apply_persisted_plan_metadata,
     manager_legacy_phase_for_run_phase,
@@ -45,14 +42,16 @@ from modes.sdk.runtime.contracts import DevTask, ProjectAnalysis, ProjectPlan
 
 from modes.manager.ui import build_manager_menu_with_back
 from modes.sdk import BaseMode, CallbackModel, MessageModel, ToolResult
+from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.session_busy import is_session_busy
 from session import session_runtime_uid, session_scoped_key
 from sessions.session_state_access import get_active_mode
 from utils.text import strip_ansi
 
 
-class ManagerMode(BaseMode):
+class ManagerMode(BaseMode, RunArtifactsMixin):
     mode_id = "manager"
+    _RUN_HANDLE_SESSION_ATTR = "_manager_mode_active_run_handle"
     display_name = "🏗 Менеджер"
     description = "Декомпозиция плана, управление фазами, тихий режим"
     _RESUME_OPT_CONTINUE = "Продолжить текущий план"
@@ -731,12 +730,6 @@ class ManagerMode(BaseMode):
     def _load_prompts(self, *, session: Any) -> Dict[str, str]:
         return load_mode_prompt_texts(getattr(session, "workdir", ""), self.mode_id)
 
-    def _artifact_store(self) -> Optional[RunArtifactStore]:
-        config = getattr(self, "config", None)
-        if config is None:
-            return None
-        return RunArtifactStore(config)
-
     def _is_run_artifacts_enabled(self) -> bool:
         service = self._optional_run_artifacts()
         if service is None:
@@ -746,15 +739,6 @@ class ManagerMode(BaseMode):
         except Exception:
             self._log.exception("manager run artifacts: failed to resolve enabled flag")
             return False
-
-    @staticmethod
-    def _prompt_hash(prompt: str) -> str:
-        digest = hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest()
-        return f"sha256:{digest}"
-
-    @staticmethod
-    def _is_terminal_run_status(status: Any) -> bool:
-        return is_terminal_status(status)
 
     def _prepare_run_artifacts(
         self,
@@ -1016,7 +1000,10 @@ class ManagerMode(BaseMode):
         phase: str,
         status: str,
         mode_context: Optional[Dict[str, Any]] = None,
+        merge_execution_context: MergeStrategy = "shallow",
     ) -> None:
+        # merge_execution_context присутствует для совместимости сигнатуры с RunArtifactsMixin (LSP);
+        # manager всегда выполняет shallow-merge с phase-fallback "plan", поэтому параметр игнорируется.
         if run is None:
             return
         artifact_store = self._artifact_store()
@@ -1067,19 +1054,11 @@ class ManagerMode(BaseMode):
         except Exception:
             self._log.exception("manager run artifacts: mark_finished failed run_id=%s", run.run_id)
 
-    @staticmethod
-    def _set_active_run_handle(session: Any, run: RunArtifactHandle) -> None:
-        setattr(session, _MANAGER_RUN_HANDLE_SESSION_ATTR, run)
-
-    @staticmethod
-    def _active_run_handle(session: Any) -> Optional[RunArtifactHandle]:
-        handle = getattr(session, _MANAGER_RUN_HANDLE_SESSION_ATTR, None)
-        return handle if isinstance(handle, RunArtifactHandle) else None
-
-    @staticmethod
-    def _clear_active_run_handle(session: Any) -> None:
-        if hasattr(session, _MANAGER_RUN_HANDLE_SESSION_ATTR):
-            setattr(session, _MANAGER_RUN_HANDLE_SESSION_ATTR, None)
+    # _set_active_run_handle / _active_run_handle наследуются из RunArtifactsMixin
+    # (используют _RUN_HANDLE_SESSION_ATTR == _MANAGER_RUN_HANDLE_SESSION_ATTR).
+    def _clear_active_run_handle(self, session: Any) -> None:
+        # Override: дополнительно очищает _MANAGER_RUN_RESUME_GUARD_SESSION_ATTR.
+        super()._clear_active_run_handle(session)
         if hasattr(session, _MANAGER_RUN_RESUME_GUARD_SESSION_ATTR):
             setattr(session, _MANAGER_RUN_RESUME_GUARD_SESSION_ATTR, {})
 
@@ -1100,22 +1079,7 @@ class ManagerMode(BaseMode):
         if latest is not None and self._is_top_level_mode_run(artifact_store.load_state(latest)):
             return latest
         try:
-            root_dir = artifact_store._resolve_root_dir(session)
-            session_uid = artifact_store._resolve_session_uid(session)
-            mode_root = os.path.join(root_dir, ".cli-proxy", "runs", session_uid, self.mode_id)
-            if not os.path.isdir(mode_root):
-                return None
-            candidates = sorted(
-                [
-                    name
-                    for name in os.listdir(mode_root)
-                    if os.path.isdir(os.path.join(mode_root, name))
-                    and os.path.exists(os.path.join(mode_root, name, "STATE.json"))
-                ],
-                reverse=True,
-            )
-            for run_id in candidates:
-                handle = artifact_store._build_handle(session=session, mode_id=self.mode_id, run_id=run_id)
+            for handle in artifact_store.list_mode_runs(session=session, mode_id=self.mode_id):
                 state = artifact_store.load_state(handle)
                 if self._is_top_level_mode_run(state):
                     return handle
@@ -1744,6 +1708,7 @@ class ManagerMode(BaseMode):
             dest = {"kind": "telegram", "chat_id": chat_id}
 
             async def _send_status_full_output() -> None:
+                # TODO(M3): route large output via a transport-agnostic MessagingService.send_large_output when available.
                 await bot_app.send_output(
                     session,
                     dest,

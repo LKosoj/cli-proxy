@@ -11,6 +11,8 @@ from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 from agent.tooling import helpers
 
+logger = logging.getLogger(__name__)
+
 
 class ChiefTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -47,7 +49,7 @@ class ChiefTool(ToolPlugin):
         try:
             out = await asyncio.to_thread(self._search_sync, app_id, app_key, query, count)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("chief: Edamam recipe search failed for query=%r", query)
             return {"success": False, "error": f"Edamam failed: {e}"}
 
         return {"success": True, "output": out}

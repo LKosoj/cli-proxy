@@ -11,6 +11,8 @@ import requests
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class StableDiffusionTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -44,7 +46,7 @@ class StableDiffusionTool(ToolPlugin):
         try:
             path = await asyncio.to_thread(self._generate_sync, token, model, prompt)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("stable_diffusion: image generation failed for model=%r", model)
             return {"success": False, "error": f"Image generation failed: {e}"}
 
         return {"success": True, "output": path}

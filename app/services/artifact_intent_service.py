@@ -8,6 +8,7 @@ the document directly without launching a full CLI agent session.
 
 from __future__ import annotations
 
+import itertools
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import Any, Callable, Optional
 from modes.sdk.runtime.json_normalizer import loads_safe
 
 _LOG = logging.getLogger(__name__)
+
+_GLOB_MATCHES_LIMIT = 5_000
 
 _MIN_CONFIDENCE = 0.7
 
@@ -144,8 +147,15 @@ class ArtifactIntentService:
 
         if not candidate.is_file():
             # Try glob in project root.
-            matches = sorted(root.glob(intent.file_pattern))
-            matches = [m for m in matches if m.is_file()]
+            raw_matches = list(itertools.islice(root.glob(intent.file_pattern), _GLOB_MATCHES_LIMIT))
+            if len(raw_matches) >= _GLOB_MATCHES_LIMIT:
+                _LOG.warning(
+                    "artifact_intent: glob scan truncated at %d matches for pattern %r under %s",
+                    _GLOB_MATCHES_LIMIT,
+                    intent.file_pattern,
+                    root,
+                )
+            matches = sorted(m for m in raw_matches if m.is_file())
             if not matches:
                 return ArtifactResult(
                     resolved_path="",

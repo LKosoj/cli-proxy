@@ -6,6 +6,7 @@ import hmac
 import inspect
 import json
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -26,6 +27,7 @@ from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.session_tick_history_store import load_session_ticks
 from app.services.runtime_progress_service import build_runtime_progress_payload
 from app.services.run_artifact_store import is_terminal_status
+from app.services.run_utils import clean_text as clean_run_listing_text, summarize_run_skill_log
 from app.services.run_operations_policy import RunOperationsPolicy
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.analyst.state_store import AnalystStateStore, build_context_key
@@ -472,70 +474,11 @@ class MiniAppRoutes:
             raise web.HTTPNotFound(reason="session not found")
         return canonical_uid, session
 
-    @staticmethod
-    def _clean_run_listing_text(value: Any, *, max_len: int = 256) -> str:
-        text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
-        if len(text) <= max_len:
-            return text
-        return text[: max_len - 3] + "..."
-
-    def _summarize_run_skill_log(self, events: List[Dict[str, Any]], state: Dict[str, Any]) -> List[str]:
-        summary: list[str] = []
-        seen: set[str] = set()
-        for event in reversed(list(events or [])):
-            if not isinstance(event, dict):
-                continue
-            event_type = self._clean_run_listing_text(event.get("event_type"), max_len=64)
-            entry = ""
-            if event_type in {"cli_skill_context_applied", "skill_selection"}:
-                skill_ids = event.get("selected_skill_ids")
-                if not isinstance(skill_ids, list):
-                    skill_ids = event.get("selected_skills")
-                skills = [
-                    self._clean_run_listing_text(item, max_len=64)
-                    for item in list(skill_ids or [])
-                    if self._clean_run_listing_text(item, max_len=64)
-                ]
-                if skills:
-                    prefix = "Injected" if event_type == "cli_skill_context_applied" else "Selected"
-                    entry = f"{prefix}: {', '.join(skills)}"
-            elif event_type == "skill_install":
-                skill_id = self._clean_run_listing_text(event.get("skill_id"), max_len=64)
-                if skill_id:
-                    entry = f"Installed: {skill_id}"
-            elif event_type == "skill_discovery":
-                skills = [
-                    self._clean_run_listing_text(item, max_len=64)
-                    for item in list(event.get("discovered_skills") or [])
-                    if self._clean_run_listing_text(item, max_len=64)
-                ]
-                if skills:
-                    entry = f"Discovered: {', '.join(skills)}"
-            elif event_type == "skill_promote_global":
-                skill_id = self._clean_run_listing_text(event.get("skill_id"), max_len=64)
-                if skill_id:
-                    entry = f"Promoted: {skill_id}"
-            if entry and entry not in seen:
-                summary.append(entry)
-                seen.add(entry)
-            if len(summary) >= 3:
-                break
-        if summary:
-            return summary
-        fallback_skills = [
-            self._clean_run_listing_text(item, max_len=64)
-            for item in list(state.get("selected_skill_ids") or [])
-            if self._clean_run_listing_text(item, max_len=64)
-        ]
-        if fallback_skills:
-            return [f"Injected: {', '.join(fallback_skills[:4])}"]
-        return []
-
     def _project_local_selected_skill_ids(self, *, session: Any, skill_ids: List[str]) -> List[str]:
         cleaned = [
-            self._clean_run_listing_text(item, max_len=64)
+            clean_run_listing_text(item, max_len=64)
             for item in list(skill_ids or [])
-            if self._clean_run_listing_text(item, max_len=64)
+            if clean_run_listing_text(item, max_len=64)
         ]
         if not cleaned:
             return []
@@ -561,16 +504,16 @@ class MiniAppRoutes:
         state = store.load_state(run)
         recovery = store.load_recovery(run)
         events = store.load_events_tail(run, limit=24)
-        status = self._clean_run_listing_text(state.get("status"), max_len=32) or "running"
-        phase = self._clean_run_listing_text(state.get("phase"), max_len=64) or "unknown"
+        status = clean_run_listing_text(state.get("status"), max_len=32) or "running"
+        phase = clean_run_listing_text(state.get("phase"), max_len=64) or "unknown"
         mode_context = state.get("mode_context") if isinstance(state.get("mode_context"), dict) else {}
         issues = recovery.get("issues") if isinstance(recovery.get("issues"), list) else []
         issue_codes = [
-            self._clean_run_listing_text(item.get("code"), max_len=64)
+            clean_run_listing_text(item.get("code"), max_len=64)
             for item in issues
-            if isinstance(item, dict) and self._clean_run_listing_text(item.get("code"), max_len=64)
+            if isinstance(item, dict) and clean_run_listing_text(item.get("code"), max_len=64)
         ]
-        recommended_action = self._clean_run_listing_text(recovery.get("recommended_action"), max_len=64) or None
+        recommended_action = clean_run_listing_text(recovery.get("recommended_action"), max_len=64) or None
         if recommended_action == "no_action":
             recommended_action = None
         can_resume = bool(recovery.get("can_resume")) if recovery else False
@@ -590,9 +533,9 @@ class MiniAppRoutes:
             else None
         )
         selected_skill_ids = [
-            self._clean_run_listing_text(item, max_len=64)
+            clean_run_listing_text(item, max_len=64)
             for item in list(state.get("selected_skill_ids") or [])
-            if self._clean_run_listing_text(item, max_len=64)
+            if clean_run_listing_text(item, max_len=64)
         ]
         finished_at_raw = state.get("finished_at")
         finished_at = float(finished_at_raw or 0.0) if finished_at_raw not in (None, "") else None
@@ -610,7 +553,7 @@ class MiniAppRoutes:
             "updated_at": float(state.get("updated_at") or 0.0),
             "finished_at": finished_at,
             "active": not finished_at and not is_terminal_status(status),
-            "current_unit_id": self._clean_run_listing_text(
+            "current_unit_id": clean_run_listing_text(
                 state.get("current_unit_id") or state.get("current_step_id"),
                 max_len=128,
             )
@@ -622,15 +565,15 @@ class MiniAppRoutes:
             "can_apply_recommendation": can_apply_recommendation,
             "issue_codes": issue_codes,
             "last_requested_operation": last_requested_operation,
-            "skill_log": self._summarize_run_skill_log(events, state),
+            "skill_log": summarize_run_skill_log(events, state),
             "selected_skill_ids": selected_skill_ids,
             "project_local_skill_ids": self._project_local_selected_skill_ids(
                 session=session,
                 skill_ids=selected_skill_ids,
             ),
-            "cli_work_type": self._clean_run_listing_text(mode_context.get("cli_work_type"), max_len=64) or None,
+            "cli_work_type": clean_run_listing_text(mode_context.get("cli_work_type"), max_len=64) or None,
             "executor_profile": (
-                self._clean_run_listing_text(mode_context.get("executor_profile"), max_len=64) or None
+                clean_run_listing_text(mode_context.get("executor_profile"), max_len=64) or None
             ),
         }
 
@@ -663,7 +606,7 @@ class MiniAppRoutes:
         run_id: str,
         mode_id: str | None = None,
     ) -> tuple[str, Any, Any]:
-        requested_run_id = self._clean_run_listing_text(run_id, max_len=128)
+        requested_run_id = clean_run_listing_text(run_id, max_len=128)
         if not requested_run_id:
             raise web.HTTPBadRequest(reason="run_id is required")
         canonical_uid, session = self._resolve_accessible_run_session(user=user, session_uid=session_uid)
@@ -2264,6 +2207,7 @@ class MiniAppRoutes:
             )
         except web.HTTPException as exc:
             return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
+        # TODO(M3): obtain RunArtifactStore via service injection instead of bot_app attribute introspection.
         artifact_store = getattr(self.bot_app, "mode_run_artifact_store", None)
         if artifact_store is None:
             return web.json_response({"ok": True, "runs": []})
@@ -2311,6 +2255,7 @@ class MiniAppRoutes:
             )
         except web.HTTPException as exc:
             return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
+        # TODO(M3): obtain RunArtifactStore via service injection instead of bot_app attribute introspection.
         artifact_store = getattr(self.bot_app, "mode_run_artifact_store", None)
         if artifact_store is None:
             return await self._json_error(503, "run artifact store unavailable")
@@ -4016,7 +3961,7 @@ class MiniAppRoutes:
                 user=user,
                 session_uid=requested_session_uid,
             )
-            payload = self.files.download(int(user["user_id"]), session_uid, path)
+            payload = self.files.download(int(user["user_id"]), session_uid, path, allow_binary=True)
             if inspect.isawaitable(payload):
                 payload = await payload
         except web.HTTPException as exc:
@@ -4035,12 +3980,16 @@ class MiniAppRoutes:
             )
             return web.Response(status=exc.status, text=str(exc))
 
+        _filename = str(payload.get("filename") or "")
+        _body = bytes(payload.get("content") or b"")
+        _mime, _ = mimetypes.guess_type(_filename)
+        if not _mime:
+            _mime = "application/octet-stream"
         return web.Response(
-            text=bytes(payload.get("content") or b"").decode("utf-8"),
-            content_type="text/plain",
-            charset="utf-8",
+            body=_body,
+            content_type=_mime,
             headers={
-                "Content-Disposition": self._attachment_disposition(str(payload.get("filename") or "")),
+                "Content-Disposition": self._attachment_disposition(_filename),
                 "Cache-Control": "no-store",
                 "X-Content-Type-Options": "nosniff",
             },

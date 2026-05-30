@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
 
+logger = logging.getLogger(__name__)
+
 
 class DDGImageSearchTool(ToolPlugin):
     def get_source_name(self) -> str:
@@ -44,7 +46,7 @@ class DDGImageSearchTool(ToolPlugin):
         try:
             results = await asyncio.to_thread(self._search_sync, query, region, image_type, max_results)
         except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+            logger.exception("ddg_image_search: search failed for query=%r type=%r", query, image_type)
             return {"success": False, "error": f"DDG image search failed: {e}"}
 
         if not results:
