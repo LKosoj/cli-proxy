@@ -1,15 +1,18 @@
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+from app.services.run_artifact_store import RunArtifactStore
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig
 from modes.sdk.runtime.agent_core import AgentRunResult, ReActAgent
 from modes.sdk.runtime.contracts import ExecutorRequest
 from modes.sdk.runtime.events import EventType
 from modes.sdk.runtime.executor import Executor
+from modes.sdk.runtime.lifecycle_hooks import AgentLifecycleEvent
 from modes.sdk.runtime.profiles import ExecutorProfile
 
 
@@ -449,6 +452,424 @@ async def test_agent_core_compacts_large_working_payloads_between_iterations(tmp
 
 
 @pytest.mark.asyncio
+async def test_agent_core_no_tool_guard_retries_obvious_nonfinal_text(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    registry = _CtxCapturingToolRegistry()
+    react = ReActAgent(cfg, registry)
+    captured_messages = []
+    llm_messages = [
+        {"role": "assistant", "content": "Сейчас проверю через команду.", "tool_calls": []},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "function": {"name": "run_command", "arguments": "{\"cmd\":\"echo ok\"}"},
+                }
+            ],
+        },
+        {"role": "assistant", "content": "done", "tool_calls": []},
+    ]
+
+    async def _fake_call_openai(messages, _allowed_tools):
+        captured_messages.append(messages)
+        return llm_messages.pop(0)
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="run task",
+        session_obj=SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state")),
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-no-tool-guard",
+        allowed_tools=["run_command"],
+        request_context=None,
+        constraints=None,
+        corr_id="corr-no-tool-guard",
+    )
+
+    assert result.status == "ok"
+    assert result.output == "done"
+    assert len(captured_messages) == 3
+    second_call_content = "\n".join(str(item.get("content") or "") for item in captured_messages[1])
+    assert "Ответ выглядит как обещание действия без вызова инструмента" in second_call_content
+
+
+@pytest.mark.asyncio
+async def test_agent_core_accepts_normal_no_tool_final_text(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    react = ReActAgent(cfg, _ToolRegistryStub())
+    captured_messages = []
+
+    async def _fake_call_openai(messages, _allowed_tools):
+        captured_messages.append(messages)
+        return {"role": "assistant", "content": "Готово: изменений не требуется.", "tool_calls": []}
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="answer directly",
+        session_obj=SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state")),
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-no-tool-final",
+        allowed_tools=["run_command"],
+        request_context=None,
+        constraints=None,
+        corr_id="corr-no-tool-final",
+    )
+
+    assert result.status == "ok"
+    assert result.output == "Готово: изменений не требуется."
+    assert len(captured_messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_core_persists_runtime_digest_for_long_tool_run(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    registry = _CtxCapturingToolRegistry()
+    react = ReActAgent(cfg, registry)
+    store = RunArtifactStore(cfg)
+    session = SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state"))
+    run = store.start_run(session=session, mode_id="agent", run_id="run_20260410T121000Z_digest")
+    llm_messages = []
+    for idx in range(5):
+        llm_messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": f"call-{idx}",
+                        "function": {"name": "run_command", "arguments": "{\"cmd\":\"echo ok\"}"},
+                    }
+                ],
+            }
+        )
+    llm_messages.append({"role": "assistant", "content": "done", "tool_calls": []})
+
+    async def _fake_call_openai(_messages, _allowed_tools):
+        return llm_messages.pop(0)
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="run long task",
+        session_obj=session,
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-runtime-digest",
+        allowed_tools=["run_command"],
+        request_context=None,
+        constraints=None,
+        corr_id="corr-runtime-digest",
+        run_handle=run,
+    )
+
+    assert result.status == "ok"
+    checkpoints = json.loads(Path(run.checkpoints_path).read_text(encoding="utf-8"))
+    digest = next(item for item in checkpoints["items"] if item.get("kind") == "runtime_digest")
+    assert digest["iteration"] == 5
+    assert digest["tool_calls_count"] == 5
+    artifact_path = Path(digest["artifact_path"])
+    assert artifact_path.exists()
+    assert "Runtime digest" in artifact_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_agent_core_no_tool_guard_retries_post_tool_nonfinal_text(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    registry = _CtxCapturingToolRegistry()
+    react = ReActAgent(cfg, registry)
+    llm_messages = [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "function": {"name": "run_command", "arguments": "{\"cmd\":\"echo ok\"}"},
+                }
+            ],
+        },
+        {"role": "assistant", "content": "Сейчас проверю тесты.", "tool_calls": []},
+        {"role": "assistant", "content": "done", "tool_calls": []},
+    ]
+
+    async def _fake_call_openai(_messages, _allowed_tools):
+        return llm_messages.pop(0)
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="run task",
+        session_obj=SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state")),
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-post-tool-no-tool-guard",
+        allowed_tools=["run_command"],
+        request_context=None,
+        constraints=None,
+        corr_id="corr-post-tool-no-tool-guard",
+    )
+
+    assert result.status == "ok"
+    assert result.output == "done"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "secret_output, leaked_fragment",
+    [
+        ("Authorization: Bearer abc.def.ghi123456", "abc.def.ghi"),
+        ("Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==", "QWxhZGRpbj"),
+        ('Authorization: "Bearer abc.def.ghi123456"', "abc.def.ghi"),
+        ("Authorization: 'Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=='", "QWxhZGRpbj"),
+        ("Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==", "QWxhZGRpbj"),
+        ('{"Authorization": "abcdefghijklmnop"}', "abcdefghijklmnop"),
+        ('{"Authorization": "Bearer abc.def.ghi123456"}', "abc.def.ghi"),
+        ("{'Authorization': 'Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=='}", "QWxhZGRpbj"),
+    ],
+)
+async def test_agent_core_runtime_digest_redacts_secret_like_output(
+    tmp_path,
+    monkeypatch,
+    secret_output,
+    leaked_fragment,
+):
+    class _SecretOutputRegistry(_ToolRegistryStub):
+        async def execute_many(self, _calls, _ctx):
+            return [{"success": True, "output": secret_output}]
+
+    cfg = _cfg(tmp_path)
+    react = ReActAgent(cfg, _SecretOutputRegistry())
+    store = RunArtifactStore(cfg)
+    session = SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state"))
+    run = store.start_run(session=session, mode_id="agent", run_id="run_20260410T121000Z_redact")
+    llm_messages = []
+    for idx in range(5):
+        llm_messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": f"call-{idx}",
+                        "function": {"name": "run_command", "arguments": "{\"cmd\":\"echo secret\"}"},
+                    }
+                ],
+            }
+        )
+    llm_messages.append({"role": "assistant", "content": "done", "tool_calls": []})
+
+    async def _fake_call_openai(_messages, _allowed_tools):
+        return llm_messages.pop(0)
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    await react.run(
+        session_id="s1",
+        user_message="run long task",
+        session_obj=session,
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-runtime-redact",
+        allowed_tools=["run_command"],
+        request_context=None,
+        constraints=None,
+        corr_id="corr-runtime-redact",
+        run_handle=run,
+    )
+
+    checkpoints_raw = Path(run.checkpoints_path).read_text(encoding="utf-8")
+    assert leaked_fragment not in checkpoints_raw
+    assert "[REDACTED]" in checkpoints_raw
+    digest = json.loads(checkpoints_raw)["items"][0]
+    artifact_text = Path(digest["artifact_path"]).read_text(encoding="utf-8")
+    assert leaked_fragment not in artifact_text
+    assert "[REDACTED]" in artifact_text
+
+
+@pytest.mark.asyncio
+async def test_agent_core_forced_terminal_digest_after_running_digest_same_iteration(tmp_path, monkeypatch):
+    class _FailingRegistry(_ToolRegistryStub):
+        async def execute_many(self, _calls, _ctx):
+            return [{"success": False, "error": "failed"}]
+
+    cfg = _cfg(tmp_path)
+    react = ReActAgent(cfg, _FailingRegistry())
+    store = RunArtifactStore(cfg)
+    session = SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state"))
+    run = store.start_run(session=session, mode_id="agent", run_id="run_20260410T121000Z_terminal")
+    tool_call = {
+        "id": "call-1",
+        "function": {"name": "run_command", "arguments": "{\"cmd\":\"false\"}"},
+    }
+    llm_messages = [{"role": "assistant", "content": "", "tool_calls": [tool_call]} for _ in range(5)]
+
+    async def _fake_call_openai(_messages, _allowed_tools):
+        return llm_messages.pop(0)
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr("modes.sdk.runtime.agent_core.AGENT_RUNTIME_CHECKPOINT_START", 3)
+    monkeypatch.setattr("modes.sdk.runtime.agent_core.AGENT_RUNTIME_CHECKPOINT_INTERVAL", 1)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="run long task",
+        session_obj=session,
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-terminal-digest",
+        allowed_tools=["run_command"],
+        request_context=None,
+        constraints=None,
+        corr_id="corr-terminal-digest",
+        run_handle=run,
+    )
+
+    assert result.status == "error"
+    checkpoints = json.loads(Path(run.checkpoints_path).read_text(encoding="utf-8"))
+    statuses = [item.get("status") for item in checkpoints["items"] if item.get("kind") == "runtime_digest"]
+    assert "running" in statuses
+    assert "error" in statuses
+    digest_items = [item for item in checkpoints["items"] if item.get("kind") == "runtime_digest"]
+    artifact_paths = [item.get("artifact_path") for item in digest_items]
+    assert len(artifact_paths) == len(set(artifact_paths))
+    for item in digest_items:
+        artifact_text = Path(item["artifact_path"]).read_text(encoding="utf-8")
+        assert f"- status: {item['status']}" in artifact_text
+
+
+@pytest.mark.asyncio
+async def test_agent_core_max_iterations_partial_redacts_tool_args_and_output(tmp_path, monkeypatch):
+    class _SecretRegistry(_ToolRegistryStub):
+        async def execute_many(self, _calls, _ctx):
+            return [{"success": True, "output": "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="}]
+
+    cfg = _cfg(tmp_path)
+    react = ReActAgent(cfg, _SecretRegistry())
+    tool_call = {
+        "id": "call-1",
+        "function": {
+            "name": "run_command",
+            "arguments": '{"headers":{"Authorization":"Bearer abc.def.ghi123456"}}',
+        },
+    }
+
+    async def _fake_call_openai(_messages, _allowed_tools):
+        return {"role": "assistant", "content": "", "tool_calls": [tool_call]}
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr("modes.sdk.runtime.agent_core.AGENT_MAX_ITERATIONS", 1)
+    monkeypatch.setattr("modes.sdk.runtime.agent_core.AGENT_MAX_ITERATION_EXTENSIONS", 0)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="run long task",
+        session_obj=SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state")),
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-max-iterations-redact",
+        allowed_tools=["run_command"],
+    )
+
+    assert result.status == "partial"
+    assert "[REDACTED]" in result.output
+    assert "abc.def.ghi" not in result.output
+    assert "QWxhZGRpbj" not in result.output
+
+
+@pytest.mark.asyncio
+async def test_agent_core_repeated_failures_redacts_last_error(tmp_path, monkeypatch):
+    class _SecretFailureRegistry(_ToolRegistryStub):
+        async def execute_many(self, _calls, _ctx):
+            return [{"success": False, "error": 'Authorization: "Bearer abc.def.ghi123456"'}]
+
+    cfg = _cfg(tmp_path)
+    react = ReActAgent(cfg, _SecretFailureRegistry())
+    tool_call = {
+        "id": "call-1",
+        "function": {"name": "run_command", "arguments": "{\"cmd\":\"false\"}"},
+    }
+
+    async def _fake_call_openai(_messages, _allowed_tools):
+        return {"role": "assistant", "content": "", "tool_calls": [tool_call]}
+
+    monkeypatch.setattr(react, "_call_openai", _fake_call_openai)
+    monkeypatch.setattr("modes.sdk.runtime.agent_core.AGENT_MAX_ITERATION_EXTENSIONS", 0)
+    monkeypatch.setattr(
+        "modes.sdk.runtime.agent_core.runtime_chat_completion",
+        lambda *_a, **_k: asyncio.sleep(0, result='{"claims": []}'),
+    )
+
+    result = await react.run(
+        session_id="s1",
+        user_message="run repeated failing task",
+        session_obj=SimpleNamespace(id="s1", workdir=str(tmp_path), state_root=str(tmp_path / "state")),
+        bot=None,
+        context=None,
+        chat_id=1,
+        chat_type="private",
+        task_id="t-repeated-fail-redact",
+        allowed_tools=["run_command"],
+    )
+
+    assert result.status == "error"
+    assert "повторяет один и тот же вызов" in result.output
+    assert "[REDACTED]" in result.output
+    assert "abc.def.ghi" not in result.output
+
+
+@pytest.mark.asyncio
 async def test_executor_marks_text_claim_fallback_when_runner_has_no_claims(tmp_path, monkeypatch):
     executor = Executor(_cfg(tmp_path), _ToolRegistryStub())
 
@@ -475,6 +896,19 @@ async def test_executor_marks_text_claim_fallback_when_runner_has_no_claims(tmp_
     assert resp.status == "ok"
     assert resp.claims
     assert resp.claims_source == "text_fallback"
+
+
+@pytest.mark.asyncio
+async def test_executor_lifecycle_event_fills_mode_id_from_real_session(tmp_path):
+    executor = Executor(_cfg(tmp_path), _ToolRegistryStub())
+    session = SimpleNamespace(id="s1", active_mode="agent")
+
+    await executor._emit_agent_lifecycle_event(
+        session,
+        AgentLifecycleEvent(event_type="runtime_progress", phase="iteration", status="running", message="step"),
+    )
+
+    assert session.runtime_progress_last_event["mode_id"] == "agent"
 
 
 @pytest.mark.asyncio

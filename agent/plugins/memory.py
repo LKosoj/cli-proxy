@@ -85,9 +85,19 @@ class MemoryTool(DialogMixin, ToolPlugin):
                         "description": "Optional for append. Memory category tag. Defaults to AGREEMENT.",
                     },
                     "layer": {"type": "string", "enum": ["semantic", "task_state"]},
-                    "source": {"type": "string", "enum": ["agent", "user", "system"]},
+                    "source": {
+                        "type": "string",
+                        "enum": ["agent", "system"],
+                        "description": "Agent API source. User-sourced memory is reserved for trusted UI input.",
+                    },
                     "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
                     "ttl_days": {"type": "integer", "minimum": 1, "maximum": 365},
+                    "verification_status": {"type": "string", "enum": ["verified", "unverified"]},
+                    "evidence_type": {
+                        "type": "string",
+                        "enum": ["tool", "code", "config", "system", "none"],
+                    },
+                    "evidence_ref": {"type": "string", "description": "Short evidence reference for verified memory"},
                     "entry_id": {"type": "string", "description": "For update/forget by ID"},
                     "query": {"type": "string", "description": "For forget by text query"},
                 },
@@ -187,6 +197,8 @@ class MemoryTool(DialogMixin, ToolPlugin):
             source="user",
             confidence=0.7,
             ttl_days=None,
+            verification_status="verified",
+            evidence_type="user",
         )
         if not saved:
             await msg.reply_text("Не удалось добавить запись: нужен короткий атомарный факт (до 280 символов).")
@@ -218,10 +230,28 @@ class MemoryTool(DialogMixin, ToolPlugin):
             if layer not in ("semantic", "task_state"):
                 return {"success": False, "error": "Invalid layer for append"}
             source = str(args.get("source") or "agent").strip().lower()
-            if source not in ("agent", "user", "system"):
+            if source not in ("agent", "system"):
                 return {"success": False, "error": "Invalid source for append"}
             confidence = args.get("confidence")
             ttl_days = args.get("ttl_days")
+            verification_status = str(args.get("verification_status") or "").strip().lower()
+            evidence_type = str(args.get("evidence_type") or "").strip().lower()
+            evidence_ref = str(args.get("evidence_ref") or "").strip()
+            if evidence_type == "user":
+                return {"success": False, "error": "User evidence is reserved for trusted UI input"}
+            if layer == "semantic":
+                if verification_status != "verified" or evidence_type in ("", "none", "user"):
+                    return {
+                        "success": False,
+                        "error": (
+                            "Semantic memory append requires verification_status=verified "
+                            "and non-user evidence_type other than none. "
+                            "Use tag=TASK/layer=task_state for unverified notes."
+                        ),
+                    }
+            else:
+                verification_status = verification_status or "unverified"
+                evidence_type = evidence_type or "none"
             saved = append_memory_structured(
                 state_root,
                 tag=tag,
@@ -230,6 +260,9 @@ class MemoryTool(DialogMixin, ToolPlugin):
                 source=source,
                 confidence=confidence,
                 ttl_days=ttl_days,
+                verification_status=verification_status,
+                evidence_type=evidence_type,
+                evidence_ref=evidence_ref,
             )
             if not saved:
                 return {
@@ -243,15 +276,23 @@ class MemoryTool(DialogMixin, ToolPlugin):
             if not entry_id or not content:
                 return {"success": False, "error": "entry_id and content required for update"}
             source = str(args.get("source") or "agent").strip().lower()
-            if source not in ("agent", "user", "system"):
+            if source not in ("agent", "system"):
                 return {"success": False, "error": "Invalid source for update"}
             confidence = args.get("confidence")
+            verification_status = args.get("verification_status")
+            evidence_type = args.get("evidence_type")
+            evidence_ref = args.get("evidence_ref")
+            if str(evidence_type or "").strip().lower() == "user":
+                return {"success": False, "error": "User evidence is reserved for trusted UI input"}
             ok = update_memory_entry(
                 state_root,
                 entry_id=entry_id,
                 content=content,
                 source=source,
                 confidence=confidence,
+                verification_status=verification_status,
+                evidence_type=evidence_type,
+                evidence_ref=evidence_ref,
             )
             if not ok:
                 return {"success": False, "error": "Update failed: entry not found or invalid content"}

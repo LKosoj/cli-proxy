@@ -4,6 +4,7 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
+from app.services.redaction import redact_text, redact_value
 from modes.sdk.json_store import update_json_locked
 
 from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore
@@ -519,8 +520,8 @@ class RunObservabilityService:
             {
                 "event_type": "llm_response",
                 "model": _clean_optional_text(model, max_len=64),
-                "content_preview": _clean_optional_text(content_preview, max_len=500),
-                "tool_calls_summary": _clean_optional_text(tool_calls_summary, max_len=500),
+                "content_preview": _clean_optional_text(redact_text(str(content_preview or "")), max_len=500),
+                "tool_calls_summary": _clean_optional_text(redact_text(str(tool_calls_summary or "")), max_len=500),
                 "usage_tokens": _optional_int(usage_tokens),
                 "duration_ms": _optional_int(duration_ms),
                 "corr_id": _clean_optional_text(corr_id, max_len=128),
@@ -549,11 +550,11 @@ class RunObservabilityService:
             {
                 "event_type": "tool_execution",
                 "tool_name": _clean_optional_text(tool_name, max_len=128),
-                "args_preview": _clean_optional_text(args_preview, max_len=500),
-                "result_preview": _clean_optional_text(result_preview, max_len=1000),
+                "args_preview": _clean_optional_text(redact_text(str(args_preview or "")), max_len=500),
+                "result_preview": _clean_optional_text(redact_text(str(result_preview or "")), max_len=1000),
                 "success": bool(success),
                 "duration_ms": _optional_int(duration_ms),
-                "error": _clean_optional_text(error, max_len=500),
+                "error": _clean_optional_text(redact_text(str(error or "")), max_len=500),
                 "corr_id": _clean_optional_text(corr_id, max_len=128),
                 "observed_at": recorded_at,
             },
@@ -562,7 +563,7 @@ class RunObservabilityService:
     def record_runtime_progress(self, run: RunArtifactHandle, *, event: Dict[str, Any]) -> Dict[str, Any]:
         if not self.is_enabled():
             return {}
-        payload = dict(event or {})
+        payload = redact_value(dict(event or {}))
         self._update_metrics(
             run,
             lambda doc: self._apply_runtime_progress(doc, payload),

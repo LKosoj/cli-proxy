@@ -13,13 +13,18 @@ class MemorySearchTool(ToolPlugin):
             name="memory_search",
             description=(
                 "Search long-term memory and orchestrator session history. "
-                "Use when task references prior decisions, configs, or past steps."
+                "Use when task references prior decisions, configs, or past steps. "
+                "Legacy/unverified snippets are leads, not authoritative facts."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query for memory/history"},
                     "limit": {"type": "integer", "description": "Max snippets to return", "minimum": 1, "maximum": 20},
+                    "verified_only": {
+                        "type": "boolean",
+                        "description": "When true, return only verified long-term memory snippets.",
+                    },
                 },
                 "required": ["query"],
             },
@@ -38,7 +43,7 @@ class MemorySearchTool(ToolPlugin):
         cwd = str(ctx.get("state_root") or ctx.get("cwd") or "")
         if not cwd:
             return {"success": False, "error": "cwd/state_root is required"}
-        items = retrieve_relevant_context(cwd, query, limit=limit)
+        items = retrieve_relevant_context(cwd, query, limit=limit, verified_only=bool(args.get("verified_only")))
         if not items:
             return {"success": True, "output": "(no relevant memory found)", "items": []}
         rendered = format_retrieved_context(items, max_chars=3000)

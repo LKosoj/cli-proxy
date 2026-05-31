@@ -35,10 +35,16 @@ def _extract_memory_docs(cwd: str) -> List[Dict[str, str]]:
         ts = str(entry.get("ts") or "")
         tag = str(entry.get("tag") or "").strip().upper()
         layer = str(entry.get("layer") or "").strip().lower()
+        verification_status = str(entry.get("verification_status") or "legacy").strip().lower()
+        evidence_type = str(entry.get("evidence_type") or "legacy").strip().lower()
+        evidence_ref = str(entry.get("evidence_ref") or "").strip()
         text = str(entry.get("text") or "").strip()
         if not text:
             continue
-        body = f"[{tag}] [LAYER:{layer}] {text}".strip()
+        tokens = [f"[{tag}]", f"[LAYER:{layer}]", f"[VER:{verification_status}]", f"[EVID:{evidence_type}]"]
+        if evidence_ref:
+            tokens.append(f"[REF:{evidence_ref}]")
+        body = " ".join([*tokens, text]).strip()
         docs.append({"source": "memory", "ts": ts, "text": body})
     return docs
 
@@ -157,6 +163,35 @@ def _tag_weight(text: str) -> float:
     return 0.1
 
 
+def _memory_status_from_text(text: str) -> str:
+    match = re.search(r"\[VER:([^\]]+)\]", str(text or ""), flags=re.IGNORECASE)
+    if not match:
+        return "legacy"
+    status = match.group(1).strip().lower()
+    if status in {"verified", "unverified", "legacy"}:
+        return status
+    return "legacy"
+
+
+def _memory_evidence_from_text(text: str) -> str:
+    match = re.search(r"\[EVID:([^\]]+)\]", str(text or ""), flags=re.IGNORECASE)
+    if not match:
+        return "legacy"
+    evidence_type = match.group(1).strip().lower()
+    if evidence_type in {"user", "tool", "code", "config", "system", "none", "legacy"}:
+        return evidence_type
+    return "legacy"
+
+
+def _verification_weight(status: str) -> float:
+    token = str(status or "").strip().lower()
+    if token == "verified":
+        return 0.35
+    if token == "unverified":
+        return -0.2
+    return 0.0
+
+
 def _connect(cwd: str) -> sqlite3.Connection:
     os.makedirs(cwd, exist_ok=True)
     conn = sqlite3.connect(_db_path(cwd))
@@ -230,7 +265,7 @@ def _sync_index(conn: sqlite3.Connection, cwd: str) -> None:
     conn.commit()
 
 
-def retrieve_relevant_context(cwd: str, query: str, limit: int = 6) -> List[Dict[str, Any]]:
+def retrieve_relevant_context(cwd: str, query: str, limit: int = 6, *, verified_only: bool = False) -> List[Dict[str, Any]]:
     if not (query or "").strip():
         return []
     try:
@@ -248,26 +283,43 @@ def retrieve_relevant_context(cwd: str, query: str, limit: int = 6) -> List[Dict
         if not prepared:
             _log.warning("memory_retrieval: query %r produced no FTS terms after preparation; returning empty", query)
             return []
-        rows = conn.execute(
-            """
-            SELECT source, ts, snippet(memory_fts, 3, '[', ']', ' … ', 20), bm25(memory_fts)
+        query_sql = """
+            SELECT source, ts, text, snippet(memory_fts, 3, '[', ']', ' … ', 20), bm25(memory_fts)
             FROM memory_fts
             WHERE memory_fts MATCH ?
             ORDER BY bm25(memory_fts), ts DESC
-            LIMIT ?
-            """,
-            (prepared, max(3, int(limit) * 3)),
-        ).fetchall()
+            """
+        if verified_only:
+            rows = conn.execute(query_sql, (prepared,)).fetchall()
+        else:
+            candidate_limit = max(3, int(limit) * 3)
+            rows = conn.execute(f"{query_sql} LIMIT ?", (prepared, candidate_limit)).fetchall()
         scored: List[Dict[str, Any]] = []
-        for source, ts, snippet_text, score in rows:
+        for source, ts, full_text, snippet_text, score in rows:
+            source_text = str(source or "")
             raw_bm25 = float(score or 0.0)
+            memory_status = _memory_status_from_text(str(full_text or "")) if source_text == "memory" else ""
+            evidence_type = _memory_evidence_from_text(str(full_text or "")) if source_text == "memory" else ""
+            if verified_only and (
+                source_text != "memory"
+                or memory_status != "verified"
+                or evidence_type in ("", "none", "legacy")
+            ):
+                continue
             # Higher final_score is better.
-            final_score = (-raw_bm25) + _recency_bonus(str(ts or "")) + _tag_weight(str(snippet_text or ""))
+            final_score = (
+                (-raw_bm25)
+                + _recency_bonus(str(ts or ""))
+                + _tag_weight(str(full_text or snippet_text or ""))
+                + _verification_weight(memory_status)
+            )
             scored.append(
                 {
                     "source": str(source or ""),
                     "ts": str(ts or ""),
                     "text": str(snippet_text or ""),
+                    "memory_status": memory_status,
+                    "evidence_type": evidence_type,
                     "score": raw_bm25,
                     "rank_score": final_score,
                 }
@@ -297,6 +349,9 @@ def format_retrieved_context(items: List[Dict[str, Any]], max_chars: int = 1600)
         head = f"- [{source}]"
         if ts:
             head += f" ({ts})"
+        memory_status = str(item.get("memory_status") or "").strip()
+        if memory_status:
+            head += f" memory_status={memory_status}"
         lines.append(f"{head}: {text}")
     if not lines:
         return ""
@@ -317,6 +372,7 @@ def retrieve_relevant_context_for_chat(
     chat_id: Any,
     query: str,
     limit: int = 6,
+    verified_only: bool = False,
 ) -> List[Dict[str, Any]]:
     cwd = chat_workspace_root(workdir, chat_id)
-    return retrieve_relevant_context(cwd, query, limit=limit)
+    return retrieve_relevant_context(cwd, query, limit=limit, verified_only=verified_only)

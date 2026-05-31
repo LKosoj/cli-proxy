@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from modes.sdk.json_store import read_json_locked, write_json_locked
+from app.services.redaction import redact_text
 from modes.sdk.runtime.json_normalizer import loads_safe
+from modes.sdk.runtime.lifecycle_hooks import AgentLifecycleEvent, AgentLifecycleHook
 from modes.sdk.runtime.manage_tasks_progress import ManageTasksProgressBridge
 from modes.sdk.runtime.openai_client import (
     create_async_openai_client,
@@ -20,6 +22,7 @@ from modes.sdk.runtime.tooling.registry import ToolRegistry as PluginToolRegistr
 
 from config import AppConfig
 from sessions.scoped_key import session_scoped_key
+from sessions.session_state_access import get_active_mode
 from utils.paths import sandbox_root
 from utils.text import strip_ansi
 
@@ -29,6 +32,9 @@ _log = logging.getLogger(__name__)
 AGENT_MAX_ITERATIONS = 15
 AGENT_MAX_ITERATION_EXTENSION = 5
 AGENT_MAX_ITERATION_EXTENSIONS = 1
+AGENT_NO_TOOL_GUARD_RETRIES = 1
+AGENT_RUNTIME_CHECKPOINT_START = 5
+AGENT_RUNTIME_CHECKPOINT_INTERVAL = 5
 AGENT_MAX_HISTORY = 20
 AGENT_MAX_BLOCKED = 3
 MAX_CHAT_MESSAGES = 2500
@@ -47,6 +53,7 @@ WORKING_CONTENT_TAIL_LEN = 3_000
 WORKING_TOOL_ARGS_TRIM_LEN = 6_000
 WORKING_TOOL_ARGS_HEAD_LEN = 4_000
 WORKING_TOOL_ARGS_TAIL_LEN = 1_500
+RUNTIME_DIGEST_TOOL_PREVIEW_LEN = 500
 
 RUNTIME_ROOT = os.path.dirname(__file__)
 SYSTEM_PROMPT_PATH = os.path.join(RUNTIME_ROOT, "system.txt")
@@ -242,6 +249,42 @@ def _compact_working_message(message: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(tool_calls, list):
         compact["tool_calls"] = _compact_tool_calls_for_working(tool_calls)
     return compact
+
+
+def _looks_like_nonfinal_no_tool_text(text: Any) -> bool:
+    normalized = " ".join(str(text or "").strip().lower().split())
+    if not normalized:
+        return True
+    if len(normalized) > 700:
+        return False
+    markers = (
+        "сейчас провер",
+        "сейчас изуч",
+        "сейчас запущ",
+        "сначала провер",
+        "сначала изуч",
+        "проверю",
+        "изучу",
+        "запущу",
+        "проанализирую",
+        "let me check",
+        "let me inspect",
+        "let me run",
+        "i'll check",
+        "i will check",
+        "i'll inspect",
+        "i will inspect",
+        "i'll run",
+        "i will run",
+    )
+    return any(marker in normalized for marker in markers)
+
+
+def _redact_runtime_digest_text(text: Any) -> str:
+    raw = str(text or "")
+    if not raw:
+        return ""
+    return redact_text(raw)
 
 
 class ReActAgent:
@@ -594,12 +637,14 @@ class ReActAgent:
         corr_id: Optional[str] = None,
         failure_event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
         progress_event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        lifecycle_hook: Optional[AgentLifecycleHook] = None,
         cancel_event: Optional["asyncio.Event"] = None,
         observability: Optional[Any] = None,
         run_handle: Optional[Any] = None,
     ) -> "AgentRunResult":
         runtime_session_key = session_scoped_key(session_obj) or str(session_id or "").strip()
         raw_session_id = str(getattr(session_obj, "id", "") or "").strip() or runtime_session_key
+        active_mode_id = str(get_active_mode(session_obj, "") or "").strip()
         run_id = str(getattr(run_handle, "run_id", "") or "").strip()
         manage_tasks_run_token = run_id or str(task_id or corr_id or f"local-{int(time.time() * 1000)}")
         manage_tasks_scope_key = f"{runtime_session_key}:manage_tasks:{manage_tasks_run_token}"
@@ -613,22 +658,58 @@ class ReActAgent:
         _log.info("ReAct start session=%s task=%s corr_id=%s msg=%r",
                   runtime_session_key, task_id, corr_id, user_message[:200])
 
+        lifecycle_tasks: set[asyncio.Task[None]] = set()
+
+        async def _emit_lifecycle_event(event: AgentLifecycleEvent) -> None:
+            if lifecycle_hook is None:
+                return
+            try:
+                await lifecycle_hook(event.redacted_copy())
+            except Exception:
+                _log.exception(
+                    "failed to emit agent lifecycle event session=%s task=%s event=%s",
+                    runtime_session_key,
+                    task_id,
+                    event.event_type,
+                )
+
+        def _schedule_lifecycle_event(event: AgentLifecycleEvent) -> None:
+            if lifecycle_hook is None:
+                return
+            try:
+                task = asyncio.create_task(_emit_lifecycle_event(event))
+                lifecycle_tasks.add(task)
+                task.add_done_callback(lifecycle_tasks.discard)
+            except Exception:
+                _log.debug("lifecycle event scheduling failed", exc_info=True)
+
+        async def _drain_lifecycle_events() -> None:
+            if not lifecycle_tasks:
+                return
+            pending = list(lifecycle_tasks)
+            lifecycle_tasks.clear()
+            await asyncio.gather(*pending, return_exceptions=True)
+
         async def _emit_progress(phase: str, status: str, message: str, *, iteration: int = 0, step_id: str = "") -> None:
+            event = AgentLifecycleEvent(
+                event_type="runtime_progress",
+                mode_id=active_mode_id,
+                session_id=raw_session_id,
+                session_uid=runtime_session_key,
+                run_id=run_id,
+                task_id=str(task_id or ""),
+                corr_id=str(corr_id or ""),
+                phase=str(phase or "event"),
+                status=str(status or "running"),
+                iteration=int(iteration or 0),
+                step_id=str(step_id or ""),
+                message=str(message or ""),
+            )
+            await _emit_lifecycle_event(event)
             if progress_event_callback is None:
                 return
             try:
-                await progress_event_callback(
-                    {
-                        "source": "agent_core",
-                        "phase": str(phase or "event"),
-                        "status": str(status or "running"),
-                        "message": str(message or ""),
-                        "corr_id": str(corr_id or ""),
-                        "task_id": str(task_id or ""),
-                        "step_id": str(step_id or ""),
-                        "iteration": int(iteration or 0),
-                    }
-                )
+                await progress_event_callback(event.to_runtime_progress_payload())
             except Exception:
                 _log.exception(
                     "failed to emit agent progress event session=%s task=%s phase=%s",
@@ -639,10 +720,27 @@ class ReActAgent:
 
         _llm_trace = bool(getattr(self.config.defaults, "llm_trace_enabled", False))
 
-        def _resolve_context_summary_artifact_dir() -> str:
-            candidate_handles = [run_handle, getattr(session_obj, "analyst_run_artifact_handle", None)]
+        def _resolve_run_artifact_handle() -> Optional[Any]:
+            candidates = [run_handle, getattr(session_obj, "agent_run_artifact_handle", None)]
+            candidates.append(getattr(session_obj, "analyst_run_artifact_handle", None))
             tool_session = getattr(session_obj, "tool_session", None)
             if tool_session is not None:
+                candidates.append(getattr(tool_session, "agent_run_artifact_handle", None))
+                candidates.append(getattr(tool_session, "analyst_run_artifact_handle", None))
+            for candidate in candidates:
+                artifacts_dir = str(getattr(candidate, "artifacts_dir", "") or "").strip()
+                checkpoints_path = str(getattr(candidate, "checkpoints_path", "") or "").strip()
+                run_token = str(getattr(candidate, "run_id", "") or "").strip()
+                if artifacts_dir and checkpoints_path and run_token:
+                    return candidate
+            return None
+
+        def _resolve_context_summary_artifact_dir() -> str:
+            candidate_handles = [run_handle, getattr(session_obj, "agent_run_artifact_handle", None)]
+            candidate_handles.append(getattr(session_obj, "analyst_run_artifact_handle", None))
+            tool_session = getattr(session_obj, "tool_session", None)
+            if tool_session is not None:
+                candidate_handles.append(getattr(tool_session, "agent_run_artifact_handle", None))
                 candidate_handles.append(getattr(tool_session, "analyst_run_artifact_handle", None))
             for candidate in candidate_handles:
                 artifacts_dir = str(getattr(candidate, "artifacts_dir", "") or "").strip()
@@ -675,6 +773,22 @@ class ReActAgent:
                 return ""
 
         def _trace_llm_request(**kwargs: Any) -> None:
+            try:
+                event = AgentLifecycleEvent(
+                    event_type="llm_request",
+                    mode_id=active_mode_id,
+                    session_id=raw_session_id,
+                    session_uid=runtime_session_key,
+                    run_id=run_id,
+                    task_id=str(task_id or ""),
+                    corr_id=str(corr_id or ""),
+                    phase="llm_request",
+                    status="running",
+                    metadata=dict(kwargs or {}),
+                )
+                _schedule_lifecycle_event(event)
+            except Exception:
+                _log.debug("lifecycle llm request dispatch failed", exc_info=True)
             if _llm_trace and observability and run_handle:
                 try:
                     observability.record_llm_request(run_handle, corr_id=corr_id, **kwargs)
@@ -682,6 +796,22 @@ class ReActAgent:
                     _log.debug("llm trace request failed", exc_info=True)
 
         def _trace_llm_response(**kwargs: Any) -> None:
+            try:
+                event = AgentLifecycleEvent(
+                    event_type="llm_response",
+                    mode_id=active_mode_id,
+                    session_id=raw_session_id,
+                    session_uid=runtime_session_key,
+                    run_id=run_id,
+                    task_id=str(task_id or ""),
+                    corr_id=str(corr_id or ""),
+                    phase="llm_response",
+                    status="ok",
+                    metadata=dict(kwargs or {}),
+                )
+                _schedule_lifecycle_event(event)
+            except Exception:
+                _log.debug("lifecycle llm response dispatch failed", exc_info=True)
             if _llm_trace and observability and run_handle:
                 try:
                     observability.record_llm_response(run_handle, corr_id=corr_id, **kwargs)
@@ -689,6 +819,24 @@ class ReActAgent:
                     _log.debug("llm trace response failed", exc_info=True)
 
         def _trace_tool_execution(**kwargs: Any) -> None:
+            try:
+                event = AgentLifecycleEvent(
+                    event_type="tool_execution",
+                    mode_id=active_mode_id,
+                    session_id=raw_session_id,
+                    session_uid=runtime_session_key,
+                    run_id=run_id,
+                    task_id=str(task_id or ""),
+                    corr_id=str(corr_id or ""),
+                    phase="tool_execution",
+                    status="ok" if bool(kwargs.get("success", True)) else "error",
+                    tool_name=str(kwargs.get("tool_name") or ""),
+                    error=str(kwargs.get("error") or ""),
+                    metadata=dict(kwargs or {}),
+                )
+                _schedule_lifecycle_event(event)
+            except Exception:
+                _log.debug("lifecycle tool execution dispatch failed", exc_info=True)
             if _llm_trace and observability and run_handle:
                 try:
                     observability.record_tool_execution(run_handle, corr_id=corr_id, **kwargs)
@@ -715,6 +863,8 @@ class ReActAgent:
         max_iterations = AGENT_MAX_ITERATIONS
         iteration_extensions_used = 0
         seen_web_research_queries: set[str] = set()
+        no_tool_guard_retries = 0
+        runtime_digest_keys: set[tuple[int, str]] = set()
 
         def _text_preview(v: Any, max_chars: int = 2000) -> str:
             try:
@@ -724,6 +874,107 @@ class ReActAgent:
             if len(s) > max_chars:
                 return s[:max_chars] + "...(truncated)"
             return s
+
+        def _runtime_digest_payload(iteration_no: int, status: str) -> Dict[str, Any]:
+            recent_tools = []
+            for item in tool_facts[-6:]:
+                recent_tools.append(
+                    {
+                        "tool": item.get("tool"),
+                        "success": bool(item.get("success")),
+                        "error": _redact_runtime_digest_text(
+                            _text_preview(item.get("error"), max_chars=RUNTIME_DIGEST_TOOL_PREVIEW_LEN)
+                        ),
+                        "output_preview": _redact_runtime_digest_text(
+                            _text_preview(
+                                item.get("output_preview"),
+                                max_chars=RUNTIME_DIGEST_TOOL_PREVIEW_LEN,
+                            )
+                        ),
+                    }
+                )
+            return {
+                "phase": "execute",
+                "unit_id": str(task_id or "agent:runtime"),
+                "status": str(status or "running"),
+                "source": "agent_core",
+                "kind": "runtime_digest",
+                "iteration": int(iteration_no or 0),
+                "max_iterations": int(max_iterations),
+                "tool_calls_count": len(tool_facts),
+                "working_messages_count": len(working),
+                "recent_tools": recent_tools,
+            }
+
+        def _persist_runtime_digest_artifact(handle: Any, payload: Dict[str, Any]) -> str:
+            try:
+                artifact_dir = str(getattr(handle, "artifacts_dir", "") or "").strip()
+                if not artifact_dir:
+                    return ""
+                os.makedirs(artifact_dir, exist_ok=True)
+                slug = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_session_id or "session").strip("._-") or "session"
+                iteration_no = max(1, int(payload.get("iteration") or 0))
+                status_slug = re.sub(
+                    r"[^A-Za-z0-9._-]+",
+                    "_",
+                    str(payload.get("status") or "running"),
+                ).strip("._-") or "running"
+                path = os.path.join(artifact_dir, f"{slug}_runtime_digest_iter_{iteration_no}_{status_slug}.md")
+                lines = [
+                    "# Runtime digest",
+                    "",
+                    f"- status: {payload.get('status')}",
+                    f"- iteration: {payload.get('iteration')} / {payload.get('max_iterations')}",
+                    f"- tool_calls_count: {payload.get('tool_calls_count')}",
+                    f"- working_messages_count: {payload.get('working_messages_count')}",
+                    "",
+                    "## Recent tools",
+                ]
+                for item in payload.get("recent_tools") or []:
+                    tool = item.get("tool") or "?"
+                    lines.append(f"- {tool}: success={bool(item.get('success'))}")
+                    if item.get("error"):
+                        lines.append(f"  error: {item.get('error')}")
+                    elif item.get("output_preview"):
+                        lines.append(f"  output: {item.get('output_preview')}")
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines).rstrip() + "\n")
+                return path
+            except Exception:
+                _log.exception("failed to persist runtime digest artifact session=%s task=%s", runtime_session_key, task_id)
+                return ""
+
+        def _maybe_persist_runtime_checkpoint(iteration_no: int, status: str = "running", *, force: bool = False) -> None:
+            resolved_iteration = int(iteration_no or 0)
+            if resolved_iteration <= 0:
+                return
+            if not force:
+                if resolved_iteration < AGENT_RUNTIME_CHECKPOINT_START:
+                    return
+                if resolved_iteration % AGENT_RUNTIME_CHECKPOINT_INTERVAL != 0:
+                    return
+            digest_key = (resolved_iteration, str(status or "running"))
+            if digest_key in runtime_digest_keys:
+                return
+            handle = _resolve_run_artifact_handle()
+            if handle is None:
+                return
+            payload = _runtime_digest_payload(resolved_iteration, status)
+            artifact_path = _persist_runtime_digest_artifact(handle, payload)
+            if artifact_path:
+                payload["artifact_path"] = artifact_path
+            try:
+                from app.services.run_artifact_store import RunArtifactStore
+
+                RunArtifactStore(self.config).append_checkpoint(handle, payload)
+                runtime_digest_keys.add(digest_key)
+            except Exception:
+                _log.exception(
+                    "failed to append runtime digest checkpoint session=%s task=%s iteration=%d",
+                    runtime_session_key,
+                    task_id,
+                    resolved_iteration,
+                )
 
         async def _maybe_extend_iteration_budget(*, iteration_no: int) -> bool:
             nonlocal max_iterations, iteration_extensions_used
@@ -880,6 +1131,44 @@ class ReActAgent:
                 duration_ms=_llm_elapsed_ms,
             )
             if not tool_calls:
+                if (
+                    self._allowed_tool_names(allowed_tools)
+                    and _looks_like_nonfinal_no_tool_text(content)
+                ):
+                    no_tool_guard_retries += 1
+                    if no_tool_guard_retries <= AGENT_NO_TOOL_GUARD_RETRIES:
+                        working.append(_compact_working_message({"role": "assistant", "content": content or ""}))
+                        working.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Ответ выглядит как обещание действия без вызова инструмента. "
+                                    "Если нужно проверить, прочитать, запустить или изменить что-то, вызови подходящий tool. "
+                                    "Если инструменты не нужны, дай настоящий финальный ответ без обещаний будущих действий."
+                                ),
+                            }
+                        )
+                        _log.info("ReAct iter=%d no-tool guard retry", iterations_done)
+                        await _emit_progress(
+                            "no_tool_guard_retry",
+                            "running",
+                            f"Итерация {iterations_done}: ответ без tool_calls отправлен на уточнение",
+                            iteration=iterations_done,
+                        )
+                        iteration += 1
+                        continue
+                    final_response = (
+                        "Прогресс остановился: модель ответила обещанием действия без вызова инструментов. "
+                        "Останавливаюсь, чтобы не выдавать невыполненную работу за результат."
+                    )
+                    final_status = "partial"
+                    await _emit_progress(
+                        "stop_no_tool_guard",
+                        "partial",
+                        "Остановка: ответ без tool_calls не содержит проверенного результата",
+                        iteration=iterations_done,
+                    )
+                    break
                 final_response = (content or "").strip() or "(empty response)"
                 _log.info("ReAct iter=%d no tool_calls, final text (%d chars)", iterations_done, len(final_response))
                 await _emit_progress(
@@ -1089,6 +1378,7 @@ class ReActAgent:
                         "output_preview": _text_preview(out, max_chars=2000) if out is not None else "",
                     }
                 )
+            _maybe_persist_runtime_checkpoint(iterations_done, status="running")
             if unknown_tool:
                 _log.warning("ReAct iter=%d unknown tool, stopping", iteration + 1)
                 final_response = "Не могу выполнить без инструментов, уточните."
@@ -1120,7 +1410,7 @@ class ReActAgent:
                         "Прогресс остановился: агент повторяет один и тот же вызов инструментов без успеха. "
                         "Останавливаюсь, чтобы не зацикливаться.\n\n"
                         "Последняя ошибка инструмента: "
-                        + (last_err[:600] if last_err else "(нет деталей)")
+                        + (_redact_runtime_digest_text(last_err)[:600] if last_err else "(нет деталей)")
                     )
                     final_status = "error"
                     await _emit_progress(
@@ -1129,6 +1419,7 @@ class ReActAgent:
                         "Остановка: повтор одинаковых неуспешных вызовов инструментов",
                         iteration=iterations_done,
                     )
+                    _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
                     break
             if blocked_count >= AGENT_MAX_BLOCKED:
                 _log.warning("ReAct iter=%d blocked_count=%d, stopping", iteration + 1, blocked_count)
@@ -1143,6 +1434,7 @@ class ReActAgent:
                     f"Итерация {iterations_done}: остановка из-за policy block",
                     iteration=iterations_done,
                 )
+                _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
                 break
             if all_failed and not (content or "").strip():
                 # Tool errors are generally recoverable: the LLM should see the failure and
@@ -1164,7 +1456,7 @@ class ReActAgent:
                     final_response = (
                         "Инструменты возвращают ошибки и прогресс остановился. "
                         "Последняя ошибка инструмента: "
-                        + (last_err[:600] if last_err else "(нет деталей)")
+                        + (_redact_runtime_digest_text(last_err)[:600] if last_err else "(нет деталей)")
                     )
                     final_status = "error"
                     await _emit_progress(
@@ -1173,6 +1465,7 @@ class ReActAgent:
                         "Остановка: несколько итераций подряд безуспешны",
                         iteration=iterations_done,
                     )
+                    _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
                     break
                 # Let the next iteration attempt recovery.
                 await _maybe_extend_iteration_budget(iteration_no=iterations_done)
@@ -1201,13 +1494,14 @@ class ReActAgent:
                         args_s = json.dumps(args, ensure_ascii=False)
                     except Exception:
                         args_s = repr(args)
+                    args_s = _redact_runtime_digest_text(args_s)
                     lines.append(f"- {tool}: success={ok} args={args_s}")
                     if ok:
-                        prev = (t.get("output_preview") or "").strip()
+                        prev = _redact_runtime_digest_text(t.get("output_preview")).strip()
                         if prev:
                             lines.append(prev)
                     else:
-                        err = str(t.get("error") or "").strip()
+                        err = _redact_runtime_digest_text(t.get("error")).strip()
                         if err:
                             lines.append(f"error: {err[:400]}")
             final_response = "\n".join(lines).strip()
@@ -1218,6 +1512,7 @@ class ReActAgent:
                 f"Достигнут лимит итераций ({max_iterations})",
                 iteration=iterations_done,
             )
+            _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
         if final_status == "ok":
             try:
                 if any((not bool(t.get("success"))) for t in tool_facts):
@@ -1255,6 +1550,7 @@ class ReActAgent:
             f"ReAct завершен: status={final_status}, iterations={iterations_done}, tool_calls={len(tool_facts)}",
             iteration=iterations_done,
         )
+        await _drain_lifecycle_events()
         claims, claims_source = await self._extract_structured_claims(
             text=final_response,
             status=final_status,
@@ -1304,6 +1600,7 @@ class AgentRunner:
         corr_id: Optional[str] = None,
         failure_event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
         progress_event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        lifecycle_hook: Optional[AgentLifecycleHook] = None,
         cancel_event: Optional[Any] = None,
         observability: Optional[Any] = None,
         run_handle: Optional[Any] = None,
@@ -1333,6 +1630,7 @@ class AgentRunner:
             corr_id=corr_id,
             failure_event_callback=failure_event_callback,
             progress_event_callback=progress_event_callback,
+            lifecycle_hook=lifecycle_hook,
             cancel_event=cancel_event,
             observability=observability,
             run_handle=run_handle,

@@ -21,6 +21,7 @@ from config import AppConfig
 from session import Session, session_scoped_key
 from utils.paths import cli_proxy_artifact_path
 from utils.text import strip_ansi
+from app.services.redaction import redact_text, redact_value
 from app.services.project_prompts_service import (
     ensure_project_prompts,
     load_mode_learning,
@@ -638,6 +639,50 @@ class ManagerOrchestrator:
         resolved = manager_apply_persisted_plan_metadata(plan, persisted)
         self._sync_active_run_from_legacy_plan(session, resolved, phase=phase, mode_context=mode_context)
         return resolved
+
+    def _record_verifier_event(
+        self,
+        session: Any,
+        *,
+        task: DevTask,
+        event_type: str,
+        status: str,
+        message: str = "",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        run = self._active_run_handle(session)
+        artifact_store = self._artifact_store()
+        if run is None or artifact_store is None:
+            return
+        redacted_details = redact_value(dict(details or {}))
+        if not isinstance(redacted_details, dict):
+            redacted_details = {}
+        payload = {
+            "event_type": str(event_type or "verifier_event"),
+            "phase": "review",
+            "unit_id": f"verifier:{task.id}",
+            "task_id": str(task.id or ""),
+            "task_title": redact_text(str(task.title or "")),
+            "status": str(status or ""),
+            "message": redact_text(str(message or ""))[:500],
+            "details": redacted_details,
+        }
+        try:
+            artifact_store.append_event(run, payload)
+            artifact_store.append_checkpoint(
+                run,
+                {
+                    "phase": "review",
+                    "unit_id": f"verifier:{task.id}",
+                    "status": str(status or ""),
+                    "kind": "verifier",
+                    "event_type": str(event_type or "verifier_event"),
+                    "task_id": str(task.id or ""),
+                    "message": redact_text(str(message or ""))[:500],
+                },
+            )
+        except Exception:
+            _log.exception("manager verifier event persistence failed task=%s event=%s", task.id, event_type)
 
     def _mark_active_run_legacy_plan_archived(
         self,
@@ -2591,6 +2636,13 @@ class ManagerOrchestrator:
         tool_registry = get_tool_registry(self._config)
         profile = build_reviewer_profile(self._config, tool_registry)
         dev_report = task.dev_report or ""
+        self._record_verifier_event(
+            session,
+            task=task,
+            event_type="verifier_started",
+            status="running",
+            message="Verifier review started",
+        )
 
         # Reviewer-only context: either last git commit (filtered/capped) or no-git filesystem audit.
         if self._git_is_usable(session.workdir):
@@ -2632,6 +2684,13 @@ class ManagerOrchestrator:
             resp = await self._executor.run(session, req, bot, context, dest, profile)
             text = self._execution_service.extract_executor_primary_text(resp)
         except Exception as e:
+            self._record_verifier_event(
+                session,
+                task=task,
+                event_type="verifier_failed",
+                status="error",
+                message=str(e),
+            )
             return ReviewResult(approved=False, summary="Ошибка ревью", comments=str(e))
 
         if archive_enabled:
@@ -2650,6 +2709,14 @@ class ManagerOrchestrator:
             allow_action_payload_fallback=False,
         )
         if review:
+            self._record_verifier_event(
+                session,
+                task=task,
+                event_type="verifier_result",
+                status="approved" if review.approved else "rejected",
+                message=review.summary,
+                details={"tests_passed": review.tests_passed, "files_reviewed": review.files_reviewed},
+            )
             if archive_enabled:
                 _archive_response_write(
                     session.workdir,
@@ -2660,17 +2727,27 @@ class ManagerOrchestrator:
             return review
 
         # 2. Agent normalization
-        normalized = await chat_completion(
-            self._config,
-            self._manager_prompt(session.workdir, "review_normalize_system"),
-            text,
-            response_format={"type": "json_object"},
-            normalize_error_handler=lambda content, exc: self._recover_review_normalize_error(
-                source_text=text,
-                normalized_content=content,
-                exc=exc,
-            ),
-        )
+        try:
+            normalized = await chat_completion(
+                self._config,
+                self._manager_prompt(session.workdir, "review_normalize_system"),
+                text,
+                response_format={"type": "json_object"},
+                normalize_error_handler=lambda content, exc: self._recover_review_normalize_error(
+                    source_text=text,
+                    normalized_content=content,
+                    exc=exc,
+                ),
+            )
+        except Exception as e:
+            self._record_verifier_event(
+                session,
+                task=task,
+                event_type="verifier_failed",
+                status="error",
+                message=str(e),
+            )
+            return ReviewResult(approved=False, summary="Ошибка нормализации ревью", comments=str(e))
         if archive_enabled:
             _archive_response_write(
                 session.workdir,
@@ -2680,6 +2757,14 @@ class ManagerOrchestrator:
             )
         review = self._try_parse_review(normalized or "")
         if review:
+            self._record_verifier_event(
+                session,
+                task=task,
+                event_type="verifier_result",
+                status="approved" if review.approved else "rejected",
+                message=review.summary,
+                details={"tests_passed": review.tests_passed, "files_reviewed": review.files_reviewed},
+            )
             if archive_enabled:
                 _archive_response_write(
                     session.workdir,
@@ -2690,6 +2775,13 @@ class ManagerOrchestrator:
             return review
 
         # 3. Fallback
+        self._record_verifier_event(
+            session,
+            task=task,
+            event_type="verifier_parse_failed",
+            status="rejected",
+            message="Не удалось определить вердикт",
+        )
         return ReviewResult(
             approved=False,
             summary="Не удалось определить вердикт",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Dict, Optional
 from types import SimpleNamespace
 import os
@@ -15,6 +16,7 @@ from .agent_core import AgentRunner
 from .tooling.registry import ToolRegistry
 from .contracts import ExecutorRequest, ExecutorResponse, validate_request, validate_response
 from .events import EventSeverity, EventType, OrchestratorEvent
+from .lifecycle_hooks import AgentLifecycleEvent
 from .profiles import ExecutorProfile
 from .reactions import ReactionAction, ReactionEngine, ReactionRule
 from .memory_store import chat_workspace_root
@@ -110,6 +112,45 @@ class Executor:
             "iteration": int((event_payload or {}).get("iteration") or 0),
         }
         emit_runtime_progress(session, payload)
+
+    async def _emit_agent_lifecycle_event(
+        self,
+        session: Any,
+        event: AgentLifecycleEvent,
+        *,
+        observability: Optional[Any] = None,
+        run_handle: Optional[Any] = None,
+    ) -> None:
+        redacted = event.redacted_copy()
+        mode_id = redacted.mode_id or str(get_active_mode(session, "") or "").strip()
+        if mode_id != redacted.mode_id:
+            redacted = replace(redacted, mode_id=mode_id)
+        if redacted.event_type == "runtime_progress":
+            emit_runtime_progress(session, redacted.to_runtime_progress_payload())
+            if getattr(session, "_run_observability_bridge", None) is not None:
+                return
+            if observability is None or run_handle is None:
+                return
+            try:
+                observability.record_runtime_progress(run_handle, event=redacted.to_runtime_progress_payload())
+            except Exception:
+                self._log.exception(
+                    "executor lifecycle progress persistence failed corr_id=%s task_id=%s",
+                    redacted.corr_id,
+                    redacted.task_id,
+                )
+            return
+        if observability is None or run_handle is None:
+            return
+        try:
+            observability.artifact_store.append_event(run_handle, redacted.to_artifact_event())
+        except Exception:
+            self._log.exception(
+                "executor lifecycle event persistence failed corr_id=%s task_id=%s event=%s",
+                redacted.corr_id,
+                redacted.task_id,
+                redacted.event_type,
+            )
 
     @staticmethod
     def _should_retry_from_reaction_results(results: list[Dict[str, Any]]) -> bool:
@@ -266,6 +307,7 @@ class Executor:
         proxy_session = SimpleNamespace(
             id=session.id,
             scoped_key=scoped_key,
+            active_mode=mode_id,
             workdir=agent_cwd,
             state_root=state_root,
             tool_session=session,
@@ -423,7 +465,12 @@ class Executor:
                         constraints=request.constraints,
                         corr_id=request.corr_id,
                         failure_event_callback=self._emit_agent_tool_failure_event,
-                        progress_event_callback=lambda payload: self._emit_agent_progress_event(session, payload),
+                        lifecycle_hook=lambda event: self._emit_agent_lifecycle_event(
+                            session,
+                            event,
+                            observability=observability,
+                            run_handle=run_handle,
+                        ),
                         cancel_event=cancel_event,
                         observability=observability,
                         run_handle=run_handle,

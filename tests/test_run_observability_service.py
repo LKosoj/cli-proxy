@@ -265,6 +265,55 @@ def test_run_observability_bridge_duplicates_runtime_progress_events(tmp_path) -
     assert events[0]["source"] == "agent_core"
 
 
+def test_run_observability_redacts_llm_tool_and_progress_payloads(tmp_path) -> None:
+    cfg = _build_config(tmp_path, intent="redaction")
+    store = RunArtifactStore(cfg)
+    service = RunObservabilityService(enabled=True, artifact_store=store)
+    session = _artifact_session(
+        tmp_path,
+        name="redaction-session",
+        session_uid="thread:-100:redaction",
+        session_id="redaction-session",
+    )
+    run = store.start_run(session=session, mode_id="agent", run_id="run_20260312T162500Z_redacted")
+
+    service.record_llm_response(
+        run,
+        model="gpt",
+        content_preview="Authorization: Bearer abc.def.ghi123456",
+        tool_calls_summary='{"Authorization": "abcdefghijklmnop"}',
+    )
+    service.record_tool_execution(
+        run,
+        tool_name="run_command",
+        args_preview='{"Authorization": "Bearer abc.def.ghi123456"}',
+        result_preview="Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+        error="OPENAI_API_KEY=sk-proj-abcdefghijklmnop",
+        success=False,
+    )
+    service.record_runtime_progress(
+        run,
+        event={
+            "mode_id": "agent",
+            "phase": "iteration",
+            "status": "running",
+            "message": "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+            "metadata": {"Authorization": "abcdefghijklmnop"},
+        },
+    )
+
+    raw_events = Path(run.events_path).read_text(encoding="utf-8")
+    metrics = _load_json(run.metrics_path)
+
+    assert "abc.def.ghi" not in raw_events
+    assert "abcdefghijklmnop" not in raw_events
+    assert "QWxhZGRpbj" not in raw_events
+    assert "sk-proj-" not in raw_events
+    assert "[REDACTED]" in raw_events
+    assert "QWxhZGRpbj" not in json.dumps(metrics, ensure_ascii=False)
+    assert metrics["runtime_progress"]["last_event"]["message"] == "Basic [REDACTED]"
+
+
 def test_run_observability_isolates_sequential_runs_with_different_intent(tmp_path) -> None:
     cfg = _build_config(tmp_path, intent="isolation")
     store = RunArtifactStore(cfg)

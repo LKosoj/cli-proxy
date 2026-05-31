@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
-from agent.manager import ManagerOrchestrator
+from agent.manager import ManagerOrchestrator, _MANAGER_RUN_HANDLE_SESSION_ATTR
+from app.services.run_artifact_store import RunArtifactStore
 from config import load_config
 from modes.sdk.runtime.contracts import DevTask, ProjectAnalysis, ProjectPlan
 
@@ -44,6 +46,138 @@ def test_delegate_review_rejects_invalid_executor_output_schema(tmp_path) -> Non
     result = asyncio.run(_call())
     assert result.approved is False
     assert "executor_response_output schema validation failed" in (result.comments or "")
+
+
+def test_delegate_review_records_verifier_events_in_active_run(tmp_path) -> None:
+    cfg = load_config(os.path.join(os.path.dirname(__file__), "..", "config_example.yaml"))
+    cfg.defaults.workdir = str(tmp_path)
+    cfg.defaults.state_path = str(tmp_path / "state.json")
+    cfg.defaults.manager_response_archive = False
+
+    orch = ManagerOrchestrator(cfg)
+    plan = ProjectPlan(
+        project_goal="goal",
+        analysis=ProjectAnalysis(current_state="ctx", already_done=[], remaining_work=[]),
+        tasks=[
+            DevTask(
+                id="task_1",
+                title="Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+                description="D1",
+                acceptance_criteria=["ok"],
+            ),
+        ],
+    )
+    task = plan.tasks[0]
+    session = SimpleNamespace(id="s1", workdir=str(tmp_path))
+    run = RunArtifactStore(cfg).start_run(session=session, mode_id="manager", run_id="run_20260410T121000Z_review")
+    setattr(session, _MANAGER_RUN_HANDLE_SESSION_ATTR, run)
+
+    class _Executor:
+        async def run(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                summary="",
+                outputs=[
+                    {
+                        "type": "text",
+                        "content": json.dumps(
+                            {
+                                "approved": True,
+                                "summary": "ok",
+                                "comments": "",
+                                "tests_passed": True,
+                                "files_reviewed": ["a.py"],
+                                "not_done_assessment": [],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                ],
+            )
+
+    orch._executor = _Executor()  # type: ignore[assignment]
+    orch._manager_prompt = (
+        lambda *_a, **_kw: "{task_title} {task_description} {task_acceptance} {dev_report} {last_commit_info}"
+    )  # type: ignore[method-assign]
+    orch._with_invariant_policy = lambda _workdir, text: text  # type: ignore[method-assign]
+
+    async def _call():
+        return await orch._delegate_review(session, plan, task, bot=None, context=None, dest={})
+
+    result = asyncio.run(_call())
+
+    assert result.approved is True
+    events = [
+        json.loads(line)
+        for line in Path(run.events_path).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    event_types = [event.get("event_type") for event in events]
+    assert "verifier_started" in event_types
+    assert "verifier_result" in event_types
+    checkpoints = json.loads(Path(run.checkpoints_path).read_text(encoding="utf-8"))
+    verifier_items = [item for item in checkpoints["items"] if item.get("kind") == "verifier"]
+    assert {item.get("event_type") for item in verifier_items} >= {"verifier_started", "verifier_result"}
+
+
+def test_delegate_review_records_verifier_failed_when_normalizer_raises(tmp_path, monkeypatch) -> None:
+    cfg = load_config(os.path.join(os.path.dirname(__file__), "..", "config_example.yaml"))
+    cfg.defaults.workdir = str(tmp_path)
+    cfg.defaults.state_path = str(tmp_path / "state.json")
+    cfg.defaults.manager_response_archive = False
+
+    orch = ManagerOrchestrator(cfg)
+    plan = ProjectPlan(
+        project_goal="goal",
+        analysis=ProjectAnalysis(current_state="ctx", already_done=[], remaining_work=[]),
+        tasks=[
+            DevTask(
+                id="task_1",
+                title="Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+                description="D1",
+                acceptance_criteria=["ok"],
+            ),
+        ],
+    )
+    task = plan.tasks[0]
+    session = SimpleNamespace(id="s1", workdir=str(tmp_path))
+    run = RunArtifactStore(cfg).start_run(session=session, mode_id="manager", run_id="run_20260410T121100Z_review")
+    setattr(session, _MANAGER_RUN_HANDLE_SESSION_ATTR, run)
+
+    class _Executor:
+        async def run(self, *_args, **_kwargs):
+            return SimpleNamespace(summary="", outputs=[{"type": "text", "content": "plain reviewer output"}])
+
+    async def fake_chat_completion(*_args, **_kwargs):
+        raise RuntimeError("Authorization: Bearer abc.def.ghi123456")
+
+    orch._executor = _Executor()  # type: ignore[assignment]
+    orch._manager_prompt = (
+        lambda *_a, **_kw: "{task_title} {task_description} {task_acceptance} {dev_report} {last_commit_info}"
+    )  # type: ignore[method-assign]
+    orch._with_invariant_policy = lambda _workdir, text: text  # type: ignore[method-assign]
+    monkeypatch.setattr("agent.manager_core.chat_completion", fake_chat_completion)
+
+    async def _call():
+        return await orch._delegate_review(session, plan, task, bot=None, context=None, dest={})
+
+    result = asyncio.run(_call())
+
+    assert result.approved is False
+    assert result.summary == "Ошибка нормализации ревью"
+    events = [
+        json.loads(line)
+        for line in Path(run.events_path).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [event.get("event_type") for event in events] == ["verifier_started", "verifier_failed"]
+    raw_artifacts = (
+        Path(run.events_path).read_text(encoding="utf-8")
+        + "\n"
+        + Path(run.checkpoints_path).read_text(encoding="utf-8")
+    )
+    assert "QWxhZGRpbj" not in raw_artifacts
+    assert "abc.def.ghi" not in raw_artifacts
+    assert "[REDACTED]" in raw_artifacts
 
 
 def test_delegate_review_degrades_when_review_normalizer_returns_non_json(tmp_path, monkeypatch) -> None:

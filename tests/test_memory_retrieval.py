@@ -44,6 +44,31 @@ def test_memory_retrieval_finds_relevant_entries(tmp_path):
     assert "fts5" in rendered.lower()
 
 
+def test_memory_retrieval_exposes_memory_status_and_keeps_legacy(tmp_path):
+    cwd = str(tmp_path)
+    (tmp_path / "MEMORY.md").write_text(
+        "\n".join(
+            [
+                "- 2026-02-01 10:00: [CONFIG] [LAYER:semantic] [ID:v1] "
+                "[VER:verified] [EVID:config] sqlite fts5 включен",
+                "- 2026-02-02 10:00: [CONFIG] legacy sqlite entry",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "SESSION.json").write_text(json.dumps({"orchestrator_by_task": {}}, ensure_ascii=False), encoding="utf-8")
+
+    items = retrieve_relevant_context(cwd, "sqlite", limit=5)
+
+    assert items
+    statuses = {str(item.get("memory_status") or "") for item in items if item.get("source") == "memory"}
+    assert "verified" in statuses
+    assert "legacy" in statuses
+    rendered = format_retrieved_context(items, max_chars=1000)
+    assert "memory_status=verified" in rendered
+
+
 def test_memory_retrieval_sync_is_incremental(tmp_path):
     cwd = str(tmp_path)
     mem = tmp_path / "MEMORY.md"

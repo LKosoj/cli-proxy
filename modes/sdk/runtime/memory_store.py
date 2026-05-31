@@ -18,6 +18,8 @@ _LINE_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\s*(.*)$")
 _TOKEN_RE = re.compile(r"^\[([^\]]+)\]\s*")
 _SEMANTIC_TAGS = {"PREF", "DECISION", "CONFIG", "AGREEMENT"}
 _ALLOWED_LAYERS = {"semantic", "task_state"}
+_ALLOWED_VERIFICATION_STATUSES = {"verified", "unverified", "legacy"}
+_ALLOWED_EVIDENCE_TYPES = {"user", "tool", "code", "config", "system", "none", "legacy"}
 
 
 def _normalize_chat_id(chat_id: Any) -> int:
@@ -117,6 +119,26 @@ def _derive_layer(tag: str, layer: str) -> str:
     return "task_state"
 
 
+def _normalize_verification_status(value: Any, *, default: str = "unverified") -> str:
+    status = str(value or "").strip().lower()
+    if status in _ALLOWED_VERIFICATION_STATUSES:
+        return status
+    return default
+
+
+def _normalize_evidence_type(value: Any, *, default: str = "none") -> str:
+    evidence_type = str(value or "").strip().lower()
+    if evidence_type in _ALLOWED_EVIDENCE_TYPES:
+        return evidence_type
+    return default
+
+
+def _sanitize_evidence_ref(value: Any, *, max_len: int = 120) -> str:
+    text = str(value or "").replace("[", " ").replace("]", " ")
+    text = " ".join(text.replace("\n", " ").split())
+    return text[:max_len]
+
+
 def _now_ts() -> str:
     return time.strftime("%Y-%m-%d %H:%M")
 
@@ -127,7 +149,8 @@ def _mk_id(ts: str, tag: str, text: str) -> str:
 
 
 def _sanitize_atomic(content: str, *, max_len: int = 280) -> str:
-    text = " ".join((content or "").replace("\n", " ").split())
+    text = str(content or "").replace("[", " ").replace("]", " ")
+    text = " ".join(text.replace("\n", " ").split())
     if not text:
         return ""
     if len(text) > max_len:
@@ -167,6 +190,12 @@ def _parse_line(line: str) -> Optional[Dict[str, Any]]:
     confidence = None
     entry_id = ""
     expires_at = ""
+    verification_status = "legacy"
+    evidence_type = "legacy"
+    evidence_ref = ""
+    seen_verification = False
+    seen_evidence = False
+    seen_ref = False
     for token in tokens:
         if ":" in token:
             key, value = token.split(":", 1)
@@ -185,6 +214,15 @@ def _parse_line(line: str) -> Optional[Dict[str, Any]]:
                 entry_id = value
             elif key == "EXP":
                 expires_at = value
+            elif key == "VER" and entry_id and not seen_verification:
+                verification_status = _normalize_verification_status(value)
+                seen_verification = True
+            elif key == "EVID" and entry_id and not seen_evidence:
+                evidence_type = _normalize_evidence_type(value)
+                seen_evidence = True
+            elif key == "REF" and entry_id and not seen_ref:
+                evidence_ref = _sanitize_evidence_ref(value)
+                seen_ref = True
         else:
             tok_u = token.strip().upper()
             if not tag:
@@ -203,6 +241,9 @@ def _parse_line(line: str) -> Optional[Dict[str, Any]]:
         "confidence": confidence,
         "id": entry_id,
         "expires_at": expires_at,
+        "verification_status": verification_status,
+        "evidence_type": evidence_type,
+        "evidence_ref": evidence_ref,
         "text": text,
         "raw": raw,
     }
@@ -226,6 +267,9 @@ def _render_entry(entry: Dict[str, Any]) -> str:
     text = str(entry.get("text") or "").strip()
     conf = entry.get("confidence")
     exp = str(entry.get("expires_at") or "").strip()
+    verification_status = _normalize_verification_status(entry.get("verification_status"), default="")
+    evidence_type = _normalize_evidence_type(entry.get("evidence_type"), default="")
+    evidence_ref = _sanitize_evidence_ref(entry.get("evidence_ref"))
     parts = [
         f"[{tag}]",
         f"[LAYER:{layer}]",
@@ -237,6 +281,12 @@ def _render_entry(entry: Dict[str, Any]) -> str:
         parts.append(f"[CONF:{val:.2f}]")
     if exp:
         parts.append(f"[EXP:{exp}]")
+    if verification_status and verification_status != "legacy":
+        parts.append(f"[VER:{verification_status}]")
+    if evidence_type and evidence_type != "legacy":
+        parts.append(f"[EVID:{evidence_type}]")
+    if evidence_ref:
+        parts.append(f"[REF:{evidence_ref}]")
     meta = " ".join(parts)
     return f"- {ts}: {meta} {text}".rstrip()
 
@@ -269,6 +319,8 @@ def append_memory(cwd: str, content: str) -> None:
         source="agent",
         confidence=0.6,
         ttl_days=None,
+        verification_status="unverified",
+        evidence_type="none",
     )
 
 
@@ -281,6 +333,9 @@ def append_memory_structured(
     source: str = "agent",
     confidence: Optional[float] = 0.8,
     ttl_days: Optional[int] = None,
+    verification_status: Optional[str] = None,
+    evidence_type: Optional[str] = None,
+    evidence_ref: Optional[str] = None,
 ) -> bool:
     clean_tag = str(tag or "").strip().upper()
     if not clean_tag:
@@ -289,6 +344,18 @@ def append_memory_structured(
     if not clean_text:
         return False
     entry_layer = _derive_layer(clean_tag, str(layer or ""))
+    clean_source = source or "agent"
+    if verification_status is None:
+        clean_verification = "verified" if clean_source == "user" else "unverified"
+    else:
+        clean_verification = _normalize_verification_status(verification_status)
+    if evidence_type is None:
+        clean_evidence_type = "user" if clean_source == "user" else "none"
+    else:
+        clean_evidence_type = _normalize_evidence_type(evidence_type)
+    if clean_verification == "verified" and clean_evidence_type in ("", "none", "legacy"):
+        return False
+    clean_evidence_ref = _sanitize_evidence_ref(evidence_ref)
     now_ts = _now_ts()
     exp = ""
     if entry_layer == "task_state" and isinstance(ttl_days, int) and ttl_days > 0:
@@ -305,19 +372,42 @@ def append_memory_structured(
             existing_raw = f.read()
             existing = parse_entries(existing_raw)
             norm_new = _normalize_text(clean_text)
-            for entry in existing:
+            for index, entry in enumerate(existing):
                 if _is_expired(entry):
                     continue
                 if entry.get("tag", "").upper() == clean_tag and _normalize_text(entry.get("text", "")) == norm_new:
+                    if (
+                        clean_verification == "verified"
+                        and str(entry.get("verification_status") or "") != "verified"
+                    ):
+                        existing[index] = {
+                            **entry,
+                            "ts": now_ts,
+                            "source": clean_source,
+                            "confidence": confidence,
+                            "verification_status": clean_verification,
+                            "evidence_type": clean_evidence_type,
+                            "evidence_ref": clean_evidence_ref,
+                        }
+                        new_content = "\n".join(_render_entry(e) for e in existing) + ("\n" if existing else "")
+                        f.seek(0)
+                        f.truncate(0)
+                        f.write(new_content)
+                        f.flush()
+                        os.fsync(f.fileno())
+                        return True
                     return False
             new_entry = {
                 "ts": now_ts,
                 "tag": clean_tag,
                 "layer": entry_layer,
-                "source": source or "agent",
+                "source": clean_source,
                 "confidence": confidence,
                 "id": _mk_id(now_ts, clean_tag, clean_text),
                 "expires_at": exp,
+                "verification_status": clean_verification,
+                "evidence_type": clean_evidence_type,
+                "evidence_ref": clean_evidence_ref,
                 "text": clean_text,
             }
             # Дописываем в конец файла (EOF)
@@ -339,6 +429,8 @@ def append_memory_tagged(cwd: str, tag: str, content: str) -> bool:
         source="agent",
         confidence=0.8,
         ttl_days=None,
+        verification_status="unverified",
+        evidence_type="none",
     )
 
 
@@ -349,6 +441,9 @@ def update_memory_entry(
     content: str,
     source: str = "agent",
     confidence: Optional[float] = 0.8,
+    verification_status: Optional[str] = None,
+    evidence_type: Optional[str] = None,
+    evidence_ref: Optional[str] = None,
 ) -> bool:
     target = str(entry_id or "").strip()
     if not target:
@@ -370,10 +465,36 @@ def update_memory_entry(
             for entry in entries:
                 if str(entry.get("id") or "").strip() != target:
                     continue
+                clean_source = source or entry.get("source") or "agent"
+                current_verification = str(entry.get("verification_status") or "legacy").strip().lower()
+                has_new_verification = verification_status is not None
+                has_new_evidence = evidence_type is not None
+                if verification_status is not None:
+                    next_verification = _normalize_verification_status(verification_status)
+                elif current_verification == "verified":
+                    next_verification = "unverified"
+                else:
+                    next_verification = current_verification
+                if evidence_type is not None:
+                    next_evidence = _normalize_evidence_type(evidence_type)
+                else:
+                    next_evidence = "none"
+                next_ref = _sanitize_evidence_ref(
+                    evidence_ref if evidence_ref is not None else entry.get("evidence_ref")
+                )
+                if next_verification == "verified" and (
+                    not has_new_verification
+                    or not has_new_evidence
+                    or next_evidence in ("", "none", "legacy")
+                ):
+                    return False
                 entry["text"] = clean_text
-                entry["source"] = source or entry.get("source") or "agent"
+                entry["source"] = clean_source
                 entry["confidence"] = confidence
                 entry["ts"] = _now_ts()
+                entry["verification_status"] = next_verification
+                entry["evidence_type"] = next_evidence
+                entry["evidence_ref"] = next_ref
                 changed = True
                 break
             if not changed:

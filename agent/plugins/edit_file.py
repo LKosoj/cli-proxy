@@ -15,7 +15,7 @@ class EditFileTool(ToolPlugin):
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="edit_file",
-            description="Edit a file by replacing text. The old_text must match exactly.",
+            description="Edit a file by replacing text. The old_text must match exactly and uniquely.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -59,10 +59,19 @@ class EditFileTool(ToolPlugin):
         try:
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
-            if old_text not in content:
+            if old_text == "":
+                return {"success": False, "error": "old_text must not be empty"}
+            first_match = content.find(old_text)
+            if first_match == -1:
                 preview = content[:2000]
                 return {"success": False, "error": f"old_text not found.\n\nFile preview:\n{preview}"}
-            new_content = content.replace(old_text, new_text, 1)
+            second_match = content.find(old_text, first_match + 1)
+            if second_match != -1:
+                return {
+                    "success": False,
+                    "error": "old_text matched multiple locations. Provide a larger unique old_text context.",
+                }
+            new_content = content[:first_match] + new_text + content[first_match + len(old_text):]
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
             return {"success": True, "output": f"Edited {path}"}

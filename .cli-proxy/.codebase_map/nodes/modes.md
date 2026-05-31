@@ -53,4 +53,4 @@ Context node for `modes/**`: pluggable modes, shared mode SDK, mode-owned runtim
 - `nodes/tests.md`
 
 ## Last reviewed
-- 2026-05-30
+- 2026-05-31

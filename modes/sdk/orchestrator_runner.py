@@ -7511,6 +7511,9 @@ class OrchestratorRunner:
         source = str(decision.get("source") or "").strip().lower() or "agent"
         confidence = decision.get("confidence")
         ttl_days = decision.get("ttl_days")
+        verification_status = decision.get("verification_status")
+        evidence_type = decision.get("evidence_type")
+        evidence_ref = decision.get("evidence_ref")
         self._log.info(
             "memory: saving tag=%s layer=%s source=%s ttl=%s content_len=%d",
             tag, layer, source, ttl_days, len(content),
@@ -7523,6 +7526,9 @@ class OrchestratorRunner:
             source=source,
             confidence=confidence,
             ttl_days=ttl_days,
+            verification_status=verification_status,
+            evidence_type=evidence_type,
+            evidence_ref=evidence_ref,
         )
         if not saved:
             return

@@ -4,37 +4,19 @@ import hashlib
 import json
 import logging
 import os
-import re
 import sqlite3
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from app.services.redaction import redact_text, redact_value
 from app.services.path_normalization import normalize_optional_state_path
 from app.services.state_repository import get_state_repository
 from modes.sdk.runtime.json_normalizer import loads_safe
 
 
 logger = logging.getLogger(__name__)
-
-_SENSITIVE_KEY_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.IGNORECASE)
-_SENSITIVE_ASSIGNMENT_RE = re.compile(
-    r"(?i)\b([A-Za-z0-9_.-]*(?:api[_-]?key|token|secret|password|authorization)"
-    r"[A-Za-z0-9_.-]*)(\s*[:=]\s*)([^\s,;]+)"
-)
-_AUTH_HEADER_RE = re.compile(r"(?i)\bauthorization(\s*[:=]\s*)(bearer\s+)?[^\s,;]+")
-_BEARER_VALUE_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}")
-_BARE_SECRET_RE = re.compile(
-    r"\b("
-    r"sk-proj-[A-Za-z0-9_-]{12,}|"
-    r"sk-[A-Za-z0-9_-]{12,}|"
-    r"ghp_[A-Za-z0-9_]{12,}|"
-    r"tvly-[A-Za-z0-9_-]{8,}|"
-    r"jina_[A-Za-z0-9_-]{8,}"
-    r")\b"
-)
-_REDACTED = "[REDACTED]"
 
 
 class MemoryEventStoreError(RuntimeError):
@@ -313,27 +295,11 @@ class MemoryEventStore:
 
     @classmethod
     def _redact_value(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            cleaned: dict[str, Any] = {}
-            for key, item in value.items():
-                key_text = str(key)
-                if _SENSITIVE_KEY_RE.search(key_text):
-                    cleaned[key_text] = _REDACTED
-                else:
-                    cleaned[key_text] = cls._redact_value(item)
-            return cleaned
-        if isinstance(value, list):
-            return [cls._redact_value(item) for item in value]
-        if isinstance(value, str):
-            return cls._redact_text(value)
-        return value
+        return redact_value(value)
 
     @staticmethod
     def _redact_text(value: str) -> str:
-        text = _AUTH_HEADER_RE.sub(lambda m: f"authorization{m.group(1)}{_REDACTED}", value)
-        text = _SENSITIVE_ASSIGNMENT_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{_REDACTED}", text)
-        text = _BEARER_VALUE_RE.sub(f"Bearer {_REDACTED}", text)
-        return _BARE_SECRET_RE.sub(_REDACTED, text)
+        return redact_text(value)
 
     @staticmethod
     def _event_id(
