@@ -2,7 +2,7 @@
 
 [English version](README_EN.MD) | [Русская версия](README.md)
 
-Telegram-бот для управления CLI-агентами (Codex / Gemini / Qwen / Claude) с поддержкой нескольких сессий, очереди запросов и HTML-вывода.
+Telegram-бот для управления CLI-агентами (Codex / Gemini / Qwen / Claude / Grok) с поддержкой нескольких сессий, очереди запросов и HTML-вывода.
 
 ## Возможности
 - Несколько сессий CLI в разных каталогах.
@@ -123,7 +123,7 @@ scheduler:
 
 Скрипт:
 - установит системные зависимости и Python venv;
-- установит CLI-инструменты (`codex`, `claude`, `gemini`, `qwen`);
+- установит CLI-инструменты (`codex`, `claude`, `gemini`, `qwen`, `grok`);
 - создаст `config.yaml` и `.env`;
 - поднимет `systemd`-сервис.
 
@@ -477,6 +477,13 @@ tools:
 
 Поддерживаются подстановки переменных окружения вида `${VAR}`.
 Значения `null` игнорируются и не добавляются в окружение.
+
+Grok Build CLI добавляется как `tools.grok`; headless-режим использует официальный
+`grok --output-format streaming-json -p "{prompt}"`, а ключ xAI можно передать через
+`XAI_API_KEY` в `.env` или системном окружении. Для `/limits` Grok показывает
+локальный usage последней сессии проекта из `~/.grok/sessions`; персональные RPM/TPM
+квоты xAI доступны в Console и не выдаются стабильным CLI/API. Перенос сессий
+Grok использует тот же локальный session store и компактный transfer capsule.
 
 Для обновления Gemini OAuth credentials при сборе CLI-лимитов задайте в `config.yaml`:
 ```yaml

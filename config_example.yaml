@@ -71,6 +71,16 @@ tools:
     help_cmd: "/help"
     env:
       ENV6: null
+  grok:
+    mode: headless
+    cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "-p", "{prompt}", "--resume", "{resume}"]
+    enabled: true
+    interactive_cmd: ["grok", "--no-auto-update"]
+    resume_cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "--resume", "{resume}", "-p", "{prompt}"]
+    help_cmd: "/help"
+    separate_stderr: true
+    env:
+      XAI_API_KEY: null
 
 defaults:
   workdir: "/Users/you/projects"
@@ -174,41 +184,49 @@ defaults:
     - qwen
     - codex
     - claude
+    - grok
     planning:
     - gemini
     - qwen
     - codex
     - claude
+    - grok
     development:
     - codex
     - claude
     - gemini
     - qwen
+    - grok
     backend_dev:
     - codex
     - gemini
     - claude
     - qwen
+    - grok
     frontend_dev:
     - gemini
     - claude
     - qwen
     - codex
+    - grok
     administration:
     - claude
     - gemini
     - codex
     - claude
+    - grok
     website_administration:
     - codex
     - gemini
     - claude
     - qwen
+    - grok
     default:
     - codex
     - gemini
     - claude
     - qwen
+    - grok
 mcp:
   enabled: false
   host: "127.0.0.1"

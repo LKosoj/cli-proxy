@@ -580,7 +580,7 @@ async def test_cmd_limits_uses_owner_scope_and_service_result() -> None:
         )
 
     service = types.SimpleNamespace(
-        SUPPORTED_CLI_NAMES=("claude", "codex", "gemini", "qwen"),
+        SUPPORTED_CLI_NAMES=("claude", "codex", "gemini", "grok", "qwen"),
         describe_for_sessions=AsyncMock(return_value="LIMITS REPORT"),
     )
     bot_app = types.SimpleNamespace(
@@ -591,6 +591,7 @@ async def test_cmd_limits_uses_owner_scope_and_service_result() -> None:
                 "claude": types.SimpleNamespace(enabled=True),
                 "codex": types.SimpleNamespace(enabled=True),
                 "gemini": types.SimpleNamespace(enabled=True),
+                "grok": types.SimpleNamespace(enabled=True),
                 "qwen": types.SimpleNamespace(enabled=False),
                 "backup": types.SimpleNamespace(enabled=True),
             }
@@ -607,7 +608,7 @@ async def test_cmd_limits_uses_owner_scope_and_service_result() -> None:
     service.describe_for_sessions.assert_awaited_once()
     described_sessions = service.describe_for_sessions.await_args.args[0]
     assert list(described_sessions) == [sessions["s1"], sessions["s2"]]
-    assert service.describe_for_sessions.await_args.kwargs["available_clis"] == ["claude", "codex", "gemini"]
+    assert service.describe_for_sessions.await_args.kwargs["available_clis"] == ["claude", "codex", "gemini", "grok"]
     assert service.describe_for_sessions.await_args.kwargs["preferred_workdir"] == "/current/project"
     assert sent == [
         {

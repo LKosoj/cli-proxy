@@ -59,4 +59,4 @@ Generated: 2026-04-27T22:43:22Z
 - `nodes/tests.md` - targeted coverage for agent plugins, CLI routing, manager orchestration, and Telegram/plugin UI flows.
 
 ## Last reviewed
-- 2026-05-04
+- 2026-05-31

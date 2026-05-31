@@ -2,6 +2,7 @@
 
 import json
 import time
+import urllib.parse
 from unittest.mock import patch
 
 from app.services.session_transfer import service as transfer_service
@@ -173,6 +174,13 @@ class TestService:
         assert result == "target-token"
         assert captured["canonical"] is canonical
         assert not (tmp_path / ".cli-proxy" / "session-transfer").exists()
+
+    def test_service_registers_grok_reader_and_writer(self):
+        transfer_service._READERS.clear()
+        transfer_service._WRITERS.clear()
+
+        assert "grok" in transfer_service._ensure_readers()
+        assert "grok" in transfer_service._ensure_writers()
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +455,84 @@ class TestReaderCodex:
             assert reader_codex._find_session_file(session_id, "/tmp") == target
 
 
+class TestReaderGrok:
+    def test_reads_grok_chat_history(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_grok
+
+        workspace = "/tmp/work"
+        session_id = "grok-session-1"
+        encoded = urllib.parse.quote(workspace, safe="")
+        session_dir = tmp_path / "sessions" / encoded / session_id
+        session_dir.mkdir(parents=True)
+        (session_dir / "summary.json").write_text(
+            json.dumps({"session_summary": "Grok summary", "current_model_id": "grok-build"}),
+            encoding="utf-8",
+        )
+        records = [
+            {"type": "system", "content": "system prompt"},
+            {"type": "user", "synthetic_reason": "project_context", "content": [{"type": "text", "text": "skip"}]},
+            {"type": "user", "content": [{"type": "text", "text": "What is Grok?"}]},
+            {"type": "reasoning", "summary": ["skip reasoning"]},
+            {"type": "assistant", "content": "Grok is a coding agent.", "model_id": "grok-build"},
+            {"type": "tool_result", "content": "tool output", "tool_call_id": "call-1"},
+        ]
+        (session_dir / "chat_history.jsonl").write_text(
+            "\n".join(json.dumps(item) for item in records) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(reader_grok, "GROK_SESSIONS_BASE", tmp_path / "sessions")
+
+        result = reader_grok.read_session(session_id, workspace)
+
+        assert result is not None
+        assert result.source_cli == "grok"
+        assert result.summary == "Grok summary"
+        assert [msg.role for msg in result.messages] == ["user", "assistant", "tool"]
+        assert result.messages[0].content == "What is Grok?"
+        assert result.messages[1].content == "Grok is a coding agent."
+
+    def test_reads_grok_updates_when_chat_history_missing(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_grok
+
+        workspace = "/tmp/work"
+        session_id = "grok-session-2"
+        encoded = urllib.parse.quote(workspace, safe="")
+        session_dir = tmp_path / "sessions" / encoded / session_id
+        session_dir.mkdir(parents=True)
+        updates = [
+            {
+                "method": "session/update",
+                "params": {
+                    "sessionId": session_id,
+                    "update": {
+                        "sessionUpdate": "user_message_chunk",
+                        "content": {"type": "text", "text": "Hello"},
+                    },
+                },
+            },
+            {
+                "method": "session/update",
+                "params": {
+                    "sessionId": session_id,
+                    "update": {
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": {"type": "text", "text": "Hi"},
+                    },
+                },
+            },
+        ]
+        (session_dir / "updates.jsonl").write_text(
+            "\n".join(json.dumps(item) for item in updates) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(reader_grok, "GROK_SESSIONS_BASE", tmp_path / "sessions")
+
+        result = reader_grok.read_session(session_id, workspace)
+
+        assert result is not None
+        assert [msg.content for msg in result.messages] == ["Hello", "Hi"]
+
+
 # ---------------------------------------------------------------------------
 # Writers
 # ---------------------------------------------------------------------------
@@ -592,3 +678,42 @@ class TestWriterGemini:
             rt = reader_gemini.read_session(new_id, workspace)
         assert rt is not None
         assert len(rt.messages) == 2
+
+
+class TestWriterGrok:
+    def test_writes_grok_session_and_round_trips(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_grok, writer_grok
+
+        sessions_base = tmp_path / "grok" / "sessions"
+        monkeypatch.setattr(writer_grok, "GROK_SESSIONS_BASE", sessions_base)
+        monkeypatch.setattr(reader_grok, "GROK_SESSIONS_BASE", sessions_base)
+        canonical = _make_canonical(3, "codex")
+        workspace = "/tmp/work"
+
+        new_id = writer_grok.write_session(canonical, workspace)
+
+        assert new_id is not None
+        targets = list(sessions_base.rglob("summary.json"))
+        assert len(targets) == 1
+        session_dir = targets[0].parent
+        assert session_dir.name == new_id
+        summary = json.loads((session_dir / "summary.json").read_text(encoding="utf-8"))
+        assert summary["current_model_id"] == "grok-build"
+        assert summary["info"]["transferred_from_cli"] == "codex"
+        updates = [
+            json.loads(line)
+            for line in (session_dir / "updates.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert [item["params"]["update"]["sessionUpdate"] for item in updates] == [
+            "user_message_chunk",
+            "agent_message_chunk",
+            "user_message_chunk",
+        ]
+
+        rt = reader_grok.read_session(new_id, workspace)
+
+        assert rt is not None
+        assert rt.source_cli == "grok"
+        assert len(rt.messages) == 3
+        assert rt.messages[0].content == "Message 0"

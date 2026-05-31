@@ -47,4 +47,5 @@ def test_setup_bot_help_smoke_avoids_install_commands(tmp_path) -> None:
     assert completed.returncode == 0, completed.stderr
     assert "Usage:" in completed.stdout
     assert "--non-interactive" in completed.stdout
+    assert "XAI_API_KEY" in completed.stdout
     assert not any(markers_dir.iterdir())

@@ -18,16 +18,16 @@ _log = logging.getLogger(__name__)
 
 # Hardcoded defaults (used when config.defaults.cli_routing is missing/invalid).
 DEFAULT_CLI_ROUTING: Dict[str, List[str]] = {
-    "analytics": ["gemini", "claude", "qwen", "codex"],
-    "planning": ["gemini", "claude", "qwen", "codex"],
+    "analytics": ["gemini", "claude", "qwen", "codex", "grok"],
+    "planning": ["gemini", "claude", "qwen", "codex", "grok"],
     # Aggregate development (preferred when backend/frontend split is ambiguous).
-    "development": ["claude", "codex", "qwen", "gemini"],
+    "development": ["claude", "codex", "qwen", "gemini", "grok"],
     # Optional split types for higher routing precision.
-    "backend_dev": ["claude", "codex", "qwen", "gemini"],
-    "frontend_dev": ["gemini", "claude", "qwen", "codex"],
-    "administration": ["qwen", "gemini", "codex", "claude"],
-    "website_administration": ["codex", "gemini", "claude", "qwen"],
-    "default": ["claude", "codex", "gemini", "qwen"],
+    "backend_dev": ["claude", "codex", "qwen", "gemini", "grok"],
+    "frontend_dev": ["gemini", "claude", "qwen", "codex", "grok"],
+    "administration": ["qwen", "gemini", "codex", "claude", "grok"],
+    "website_administration": ["codex", "gemini", "claude", "qwen", "grok"],
+    "default": ["claude", "codex", "gemini", "qwen", "grok"],
 }
 
 _WORK_TYPE_CLASSIFIER_SCHEMA: Dict[str, Any] = {

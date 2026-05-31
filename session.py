@@ -687,6 +687,7 @@ class Session:
         is_gemini = (self.tool.name or "").strip().lower() == "gemini"
         is_qwen = (self.tool.name or "").strip().lower() == "qwen"
         is_claude = (self.tool.name or "").strip().lower() == "claude"
+        is_grok = (self.tool.name or "").strip().lower() == "grok"
         self.headless_forced_stop = None
         resume = None if force_fresh else self.resume_token
         claude_session_id: Optional[str] = None
@@ -726,6 +727,8 @@ class Session:
                         cmd = cmd[:idx] + cmd[idx + 1:]
                         use_stdin = True
                         break
+        if is_grok:
+            cmd = self._ensure_grok_streaming_json_command(cmd)
         stream_adapter = build_cli_json_stream_adapter(self.tool.name)
         expected_cli_response_format = _extract_cli_response_format(prompt)
         stream_recorder = CliJsonStreamRecorder(
@@ -1718,6 +1721,20 @@ class Session:
             out.append("stream-json")
             return out
         out[insert_at:insert_at] = ["--output-format", "stream-json"]
+        return out
+
+    def _ensure_grok_streaming_json_command(self, cmd: List[str]) -> List[str]:
+        out = [str(part) for part in (cmd or [])]
+        if not out or out[0] != "grok":
+            return out
+        if "--output-format" in out:
+            idx = out.index("--output-format")
+            if idx + 1 < len(out):
+                out[idx + 1] = "streaming-json"
+                return out
+            out.append("streaming-json")
+            return out
+        out[1:1] = ["--output-format", "streaming-json"]
         return out
 
     def _ensure_stream_json_output_command(self, cmd: List[str], *, binary: str) -> List[str]:

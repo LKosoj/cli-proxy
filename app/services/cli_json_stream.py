@@ -856,6 +856,113 @@ class ClaudeJsonStreamAdapter(BaseCliJsonStreamAdapter):
         ]
 
 
+class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
+    cli_name = "grok"
+
+    def __init__(self) -> None:
+        self._session_id: Optional[str] = None
+        self._final_output_text = ""
+        self._completed = False
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._session_id
+
+    @property
+    def completed(self) -> bool:
+        return self._completed
+
+    def final_output_text(self) -> str:
+        return self._final_output_text
+
+    def feed_line(self, line: str) -> list[CliJsonStreamEvent]:
+        payload = loads_safe(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"CLI JSON stream line must decode to object, got {type(payload)!r}")
+
+        event_type = str(payload.get("type") or "").strip().lower()
+        if not event_type:
+            raise ValueError("CLI JSON stream event is missing type")
+
+        if event_type == "text":
+            text = _coerce_message_text(
+                payload.get("data")
+                or payload.get("text")
+                or payload.get("content")
+                or payload.get("message")
+            )
+            if not text:
+                return []
+            self._final_output_text += text
+            event_payload = dict(payload)
+            event_payload["delta"] = True
+            return [
+                CliJsonStreamEvent(
+                    kind="assistant_text",
+                    cli_name=self.cli_name,
+                    session_id=self._session_id,
+                    text=text,
+                    payload=event_payload,
+                )
+            ]
+
+        if event_type == "end":
+            session_id = str(
+                payload.get("sessionId")
+                or payload.get("session_id")
+                or payload.get("session")
+                or ""
+            ).strip() or None
+            events: list[CliJsonStreamEvent] = []
+            if session_id:
+                self._session_id = session_id
+                events.append(
+                    CliJsonStreamEvent(
+                        kind="session_started",
+                        cli_name=self.cli_name,
+                        session_id=session_id,
+                        payload=payload,
+                    )
+                )
+            self._completed = True
+            events.append(
+                CliJsonStreamEvent(
+                    kind="completed",
+                    cli_name=self.cli_name,
+                    session_id=self._session_id,
+                    is_terminal=True,
+                    payload=payload,
+                )
+            )
+            return events
+
+        if event_type in {"error", "failed"}:
+            return [
+                CliJsonStreamEvent(
+                    kind="failed",
+                    cli_name=self.cli_name,
+                    session_id=self._session_id,
+                    is_terminal=True,
+                    text=str(payload.get("message") or payload.get("data") or "") or None,
+                    payload=payload,
+                )
+            ]
+
+        # Grok emits tokenized `thought` events in streaming-json mode. Do not
+        # expose chain-of-thought-like data to user-visible activity ticks.
+        if event_type in {"thought", "thinking"}:
+            return []
+
+        return [
+            CliJsonStreamEvent(
+                kind="raw_event",
+                cli_name=self.cli_name,
+                session_id=self._session_id,
+                payload=payload,
+            )
+        ]
+
+
 def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAdapter]:
     name = str(cli_name or "").strip().lower()
     if name == "codex":
@@ -866,6 +973,8 @@ def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAd
         return QwenJsonStreamAdapter()
     if name == "claude":
         return ClaudeJsonStreamAdapter()
+    if name == "grok":
+        return GrokJsonStreamAdapter()
     return None
 
 

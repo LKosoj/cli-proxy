@@ -51,4 +51,4 @@ Generated: 2026-04-27T22:43:22Z
 - `nodes/tests.md` - contains targeted coverage for app services, config runtime, events, security, MiniApp/Desktop integration, and mode launch paths.
 
 ## Last reviewed
-- 2026-05-30
+- 2026-05-31

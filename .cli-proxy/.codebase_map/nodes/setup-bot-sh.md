@@ -37,4 +37,4 @@ The script installs OS/Python/npm dependencies, collects required bot/OpenAI set
 - `bot-py.md`
 
 ## Last reviewed
-- 2026-04-27T23:38:42Z
+- 2026-05-31

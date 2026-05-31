@@ -44,4 +44,4 @@ Generated: 2026-04-27T22:43:23Z
 - `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tests.md` - targeted config, MiniApp, Desktop, and bot coverage.
 
 ## Last reviewed
-- 2026-05-15
+- 2026-05-31

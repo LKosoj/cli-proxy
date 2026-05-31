@@ -114,6 +114,7 @@ def test_setup_bot_script_non_interactive_smoke_uses_stubbed_commands(tmp_path) 
     env["OPENAI_API_KEY"] = "test-key"
     env["OPENAI_MODEL"] = "gpt-4.1-mini"
     env["OPENAI_BIG_MODEL"] = "gpt-4.1"
+    env["XAI_API_KEY"] = "xai-test-key"
 
     completed = subprocess.run(
         [
@@ -145,7 +146,10 @@ def test_setup_bot_script_non_interactive_smoke_uses_stubbed_commands(tmp_path) 
     assert completed.returncode == 0, completed.stderr
     assert (repo_root / "config.yaml").exists()
     assert (repo_root / ".env").exists()
-    assert "GEMINI_OAUTH_CLIENT_SECRET" not in (repo_root / ".env").read_text(encoding="utf-8")
+    env_text = (repo_root / ".env").read_text(encoding="utf-8")
+    assert "GEMINI_OAUTH_CLIENT_SECRET" not in env_text
+    assert "XAI_API_KEY=xai-test-key" in env_text
+    assert "xai-test-key" not in (repo_root / "config.yaml").read_text(encoding="utf-8")
     assert service_path.exists()
     assert "Setup completed" in completed.stdout
 

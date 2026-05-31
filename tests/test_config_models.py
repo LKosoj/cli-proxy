@@ -241,6 +241,45 @@ def test_config_models_parse_valid_payload_with_normalization() -> None:
     ]
 
 
+def test_config_model_accepts_grok_tool_contract() -> None:
+    payload = _build_payload()
+    payload["tools"]["grok"] = {
+        "mode": "headless",
+        "cmd": [
+            "grok",
+            "--output-format",
+            "streaming-json",
+            "-p",
+            "{prompt}",
+            "--resume",
+            "{resume}",
+        ],
+        "resume_cmd": [
+            "grok",
+            "--output-format",
+            "streaming-json",
+            "--resume",
+            "{resume}",
+            "-p",
+            "{prompt}",
+        ],
+        "interactive_cmd": ["grok", "--no-auto-update"],
+        "help_cmd": "/help",
+        "env": {"XAI_API_KEY": None},
+        "separate_stderr": True,
+    }
+    payload["defaults"]["default_cli"] = "grok"
+    payload["defaults"]["cli_routing"] = {"default": ["grok", "codex"]}
+
+    model = AppConfigModel.model_validate(payload)
+
+    assert model.tools["grok"].cmd[0] == "grok"
+    assert model.tools["grok"].resume_cmd[-3:] == ["{resume}", "-p", "{prompt}"]
+    assert model.tools["grok"].env == {"XAI_API_KEY": None}
+    assert model.tools["grok"].separate_stderr is True
+    assert model.defaults.default_cli == "grok"
+
+
 def test_config_models_parse_repository_template() -> None:
     payload = yaml.safe_load(Path("config_example.yaml").read_text(encoding="utf-8"))
 

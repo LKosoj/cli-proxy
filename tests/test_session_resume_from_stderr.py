@@ -254,6 +254,18 @@ def test_recover_cli_text_from_raw_stream_for_qwen_result_payload() -> None:
     assert recover_cli_text_from_raw_stream("qwen", raw) == "Recovered final answer"
 
 
+def test_recover_cli_text_from_raw_stream_for_grok_streaming_json() -> None:
+    raw = "\n".join(
+        [
+            '{"type":"thought","data":"reasoning"}',
+            '{"type":"text","data":"Recovered "}',
+            '{"type":"text","data":"final answer"}',
+            '{"type":"end","stopReason":"EndTurn","sessionId":"s-grok"}',
+        ]
+    )
+    assert recover_cli_text_from_raw_stream("grok", raw) == "Recovered final answer"
+
+
 def test_headless_qwen_json_stream_sets_last_normalized_stream_path(monkeypatch, tmp_path):
     async def _run() -> None:
         tool = ToolConfig(
@@ -1605,6 +1617,179 @@ def test_headless_gemini_json_stream_uses_semantic_completion(monkeypatch, tmp_p
         assert any("read_file: README.md" in item for item in ticks)
         assert any("read_file: README.md result: Read lines 1-10" in item for item in ticks)
         assert ticks[-1] == "OK"
+
+    asyncio.run(_run())
+
+
+def test_headless_grok_json_stream_uses_semantic_completion(monkeypatch, tmp_path):
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="grok",
+            mode="headless",
+            cmd=["grok", "--always-approve", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["grok", "--always-approve", "-p", "{prompt}", "--resume", "{resume}"],
+            resume_cmd=["grok", "--always-approve", "--resume", "{resume}", "-p", "{prompt}"],
+            separate_stderr=False,
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"grok": tool},
+            defaults=DefaultsConfig(
+                workdir=str(tmp_path),
+                state_path=str(tmp_path / "state.json"),
+            ),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+
+        proc = _FakeSemanticGeminiProc(
+            stdout_chunks=[
+                b'{"type":"thought","data":"The"}\n',
+                b'{"type":"text","data":"O"}\n',
+                b'{"type":"text","data":"K"}\n',
+                b'{"type":"end","stopReason":"EndTurn","sessionId":"grok-session-1"}\n',
+            ],
+            stderr_chunks=[
+                b"debug line\n",
+            ],
+        )
+        killpg_calls = []
+        captured_calls = []
+
+        async def _fake_create_subprocess_exec(*args, **_kwargs):
+            cmd = list(args)
+            captured_calls.append(cmd)
+            assert "--output-format" in cmd
+            assert cmd[cmd.index("--output-format") + 1] == "streaming-json"
+            assert "--resume" not in cmd
+            return proc
+
+        def _fake_killpg(pid: int, sig: int) -> None:
+            killpg_calls.append((pid, sig))
+            proc.returncode = -15
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+        monkeypatch.setattr(os, "killpg", _fake_killpg)
+
+        out = await session._run_headless("hello")
+
+        assert out == "OK"
+        assert session.resume_token == "grok-session-1"
+        assert captured_calls[0][-2:] == ["-p", "hello"]
+        assert killpg_calls == [(proc.pid, 15)]
+        ticks = [str(item.get("value")) for item in load_session_ticks(session)]
+        assert ticks[-1] == "OK"
+        assert "debug line" not in "\n".join(ticks)
+
+    asyncio.run(_run())
+
+
+def test_headless_grok_uses_saved_resume_token(monkeypatch, tmp_path):
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="grok",
+            mode="headless",
+            cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            resume_cmd=["grok", "--resume", "{resume}", "-p", "{prompt}"],
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"grok": tool},
+            defaults=DefaultsConfig(workdir=str(tmp_path)),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+        session.resume_token = "saved-grok-session"
+        captured_calls = []
+
+        async def _fake_create_subprocess_exec(*args, **_kwargs):
+            captured_calls.append(list(args))
+            return _FakeProc(
+                stdout_chunks=[
+                    b'{"type":"text","data":"OK"}\n',
+                    b'{"type":"end","stopReason":"EndTurn","sessionId":"saved-grok-session"}\n',
+                ],
+                stderr_chunks=[],
+            )
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+
+        out = await session._run_headless("hello")
+
+        assert out == "OK"
+        args = captured_calls[0]
+        assert "--output-format" in args
+        assert args[args.index("--output-format") + 1] == "streaming-json"
+        assert "--resume" in args
+        assert args[args.index("--resume") + 1] == "saved-grok-session"
+
+    asyncio.run(_run())
+
+
+def test_headless_grok_force_fresh_skips_resume_and_token_update(monkeypatch, tmp_path):
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="grok",
+            mode="headless",
+            cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            resume_cmd=["grok", "--resume", "{resume}", "-p", "{prompt}"],
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"grok": tool},
+            defaults=DefaultsConfig(workdir=str(tmp_path)),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+        session.resume_token = "old-grok-session"
+        captured_calls = []
+
+        async def _fake_create_subprocess_exec(*args, **_kwargs):
+            captured_calls.append(list(args))
+            return _FakeProc(
+                stdout_chunks=[
+                    b'{"type":"text","data":"OK"}\n',
+                    b'{"type":"end","stopReason":"EndTurn","sessionId":"new-grok-session"}\n',
+                ],
+                stderr_chunks=[],
+            )
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+
+        out = await session._run_headless("hello", force_fresh=True)
+
+        assert out == "OK"
+        assert "--resume" not in captured_calls[0]
+        assert session.resume_token == "old-grok-session"
 
     asyncio.run(_run())
 

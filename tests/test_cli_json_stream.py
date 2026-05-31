@@ -3,13 +3,16 @@ from __future__ import annotations
 import json
 
 from app.services.cli_json_stream import (
+    build_cli_json_stream_adapter,
     ClaudeJsonStreamAdapter,
     CliJsonStreamEvent,
     CliJsonStreamRecorder,
     CodexJsonStreamAdapter,
     extract_cli_evidence_from_normalized_stream,
     GeminiJsonStreamAdapter,
+    GrokJsonStreamAdapter,
     QwenJsonStreamAdapter,
+    recover_cli_text_from_raw_stream,
 )
 
 
@@ -275,3 +278,35 @@ def test_claude_json_stream_adapter_normalizes_semantic_events() -> None:
     assert adapter.session_id == "0193a9e6-92fd-4814-a900-709b98f20eea"
     assert adapter.completed is True
     assert adapter.final_output_text() == "OK"
+
+
+def test_grok_json_stream_adapter_normalizes_semantic_events() -> None:
+    adapter = GrokJsonStreamAdapter()
+    events = []
+    lines = (
+        '{"type":"thought","data":"The"}',
+        '{"type":"text","data":"O"}',
+        '{"type":"text","data":"K"}',
+        (
+            '{"type":"end","stopReason":"EndTurn",'
+            '"sessionId":"019e7c90-afa6-7071-985a-9817f69f8ca8",'
+            '"requestId":"e8d933ca-b9d5-4766-bab3-87e6fb3fbbf2"}'
+        ),
+    )
+
+    for line in lines:
+        events.extend(adapter.feed_line(line))
+
+    assert [event.kind for event in events] == [
+        "assistant_text",
+        "assistant_text",
+        "session_started",
+        "completed",
+    ]
+    assert adapter.session_id == "019e7c90-afa6-7071-985a-9817f69f8ca8"
+    assert adapter.completed is True
+    assert adapter.final_output_text() == "OK"
+
+    assert build_cli_json_stream_adapter("grok").cli_name == "grok"
+    raw_text = "\n".join(lines)
+    assert recover_cli_text_from_raw_stream("grok", raw_text) == "OK"

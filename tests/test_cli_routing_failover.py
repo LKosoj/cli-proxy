@@ -25,6 +25,7 @@ def _cfg(tmp_path):
         "claude": ToolConfig(name="claude", mode="headless", cmd=["bash", "-lc", "cat"]),
         "qwen": ToolConfig(name="qwen", mode="headless", cmd=["bash", "-lc", "cat"]),
         "codex": ToolConfig(name="codex", mode="headless", cmd=["bash", "-lc", "cat"]),
+        "grok": ToolConfig(name="grok", mode="headless", cmd=["bash", "-lc", "cat"]),
     }
     return AppConfig(
         telegram=TelegramConfig(token="", whitelist_chat_ids=[1]),
@@ -70,6 +71,31 @@ def test_run_prompt_routed_meta_fails_over_and_restores_active_cli(tmp_path):
         # Must not persistently change user's active CLI.
         assert s.active_cli == before_cli
         assert s.tool.name == before_tool
+
+    asyncio.run(_run())
+
+
+def test_run_prompt_routed_meta_honors_configured_grok_priority(tmp_path):
+    async def _run():
+        cfg = _cfg(tmp_path)
+        cfg.defaults.cli_routing = {"default": ["grok", "codex"]}
+        mgr = SessionManager(cfg)
+        s = mgr.create(1, "codex", str(tmp_path))
+        calls = []
+
+        async def _fake_run_prompt(self, prompt: str, *args, **kwargs):
+            calls.append(self.tool.name)
+            return f"ok:{self.tool.name}:{prompt}"
+
+        s.run_prompt = types.MethodType(_fake_run_prompt, s)
+
+        cli_used, out = await run_prompt_routed_meta(s, cfg, "unknown", "x", timeout_sec=5)
+
+        assert cli_used == "grok"
+        assert out == "ok:grok:x"
+        assert calls == ["grok"]
+        assert s.active_cli == "codex"
+        assert s.tool.name == "codex"
 
     asyncio.run(_run())
 

@@ -1071,12 +1071,13 @@ async def test_application_facade_limits_passes_enabled_supported_cli_names(mock
             "claude": types.SimpleNamespace(enabled=True),
             "codex": types.SimpleNamespace(enabled=True),
             "gemini": types.SimpleNamespace(enabled=True),
+            "grok": types.SimpleNamespace(enabled=True),
             "qwen": types.SimpleNamespace(enabled=False),
             "backup": types.SimpleNamespace(enabled=True),
         }
     )
     mock_facade.cli_limits_service = types.SimpleNamespace(
-        SUPPORTED_CLI_NAMES=("claude", "codex", "gemini", "qwen"),
+        SUPPORTED_CLI_NAMES=("claude", "codex", "gemini", "grok", "qwen"),
         describe_for_sessions=AsyncMock(return_value="LIMITS REPORT"),
     )
 
@@ -1085,5 +1086,5 @@ async def test_application_facade_limits_passes_enabled_supported_cli_names(mock
     assert text == "LIMITS REPORT"
     mock_facade.cli_limits_service.describe_for_sessions.assert_awaited_once_with(
         sessions,
-        available_clis=["claude", "codex", "gemini"],
+        available_clis=["claude", "codex", "gemini", "grok"],
     )

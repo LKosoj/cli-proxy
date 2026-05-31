@@ -260,6 +260,54 @@ async def test_describe_for_sessions_reads_gemini_direct_usage(tmp_path: Path, m
 
 
 @pytest.mark.asyncio
+async def test_describe_for_sessions_reads_grok_local_usage(tmp_path: Path) -> None:
+    project_dir = tmp_path / "repo-grok"
+    project_dir.mkdir()
+    encoded = urllib.parse.quote(str(project_dir.resolve()), safe="")
+    session_dir = tmp_path / "grok" / "sessions" / encoded / "grok-session-1"
+    session_dir.mkdir(parents=True)
+    (session_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "current_model_id": "grok-build",
+                "generated_title": "Grok local usage",
+                "updated_at": "2026-03-27T18:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (session_dir / "signals.json").write_text(
+        json.dumps(
+            {
+                "contextTokensUsed": 50_000,
+                "contextWindowTokens": 500_000,
+                "turnCount": 4,
+                "toolCallCount": 7,
+                "userMessageCount": 4,
+                "assistantMessageCount": 4,
+                "primaryModelId": "grok-build",
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = CliLimitsService(
+        codex_sessions_roots=[tmp_path / "codex" / "sessions"],
+        claude_projects_roots=[tmp_path / "claude" / "projects"],
+        grok_sessions_roots=[tmp_path / "grok" / "sessions"],
+    )
+
+    text = await service.describe_for_sessions([_session("grok", project_dir)])
+
+    assert "🟢 grok" in text
+    assert "✕ grok — repo-grok · grok-build" in text
+    assert "context" in text
+    assert "90%" in text
+    assert "📊 context 50K / 500K" in text
+    assert "turns 4 · tools 7 · messages 4/4" in text
+    assert "quota: недоступно через Grok CLI/API" in text
+
+
+@pytest.mark.asyncio
 async def test_describe_for_sessions_reports_no_active_cli_for_empty_input(tmp_path: Path) -> None:
     service = CliLimitsService(
         codex_sessions_roots=[tmp_path / "codex" / "sessions"],
@@ -277,11 +325,11 @@ def test_format_snapshots_shows_cli_without_active_sessions() -> None:
     text = service.format_snapshots(
         [],
         active_clis=("claude", "codex"),
-        available_clis=("claude", "codex", "gemini", "qwen"),
+        available_clis=("claude", "codex", "gemini", "grok", "qwen"),
     )
 
     assert "🟢 claude · codex" in text
-    assert "⚫️ gemini · qwen" in text
+    assert "⚫️ gemini · grok · qwen" in text
 
 
 def test_refresh_gemini_credentials_uses_client_secret_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -382,11 +430,11 @@ async def test_describe_for_sessions_collects_all_available_clis(tmp_path: Path,
 
     text = await service.describe_for_sessions(
         [_session("codex", project_dir)],
-        available_clis=("claude", "codex", "gemini", "qwen"),
+        available_clis=("claude", "codex", "gemini", "grok", "qwen"),
     )
 
     assert "🟢 codex" in text
-    assert "⚫️ claude · gemini · qwen" in text
+    assert "⚫️ claude · gemini · grok · qwen" in text
     assert "🤖 claude" in text
     assert "5ч" in text
     assert "96%" in text
@@ -395,6 +443,8 @@ async def test_describe_for_sessions_collects_all_available_clis(tmp_path: Path,
     assert "♊ gemini" in text
     assert "gemini-2.5-pro" in text
     assert "67%" in text
+    assert "✕ grok" in text
+    assert "session file не найден" in text
     assert "🔮 qwen" in text
     assert "квоты недоступны (non-interactive)" in text
 

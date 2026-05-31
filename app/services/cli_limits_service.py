@@ -44,7 +44,7 @@ class CliLimitsSnapshot:
 class CliLimitsService:
     """Собирает доступные лимиты и usage по активным CLI-сессиям."""
 
-    SUPPORTED_CLI_NAMES = ("claude", "codex", "gemini", "qwen")
+    SUPPORTED_CLI_NAMES = ("claude", "codex", "gemini", "grok", "qwen")
     _CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
     _CLAUDE_OAUTH_BETA = "oauth-2025-04-20"
     _CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
@@ -59,12 +59,14 @@ class CliLimitsService:
         *,
         codex_sessions_roots: Optional[Sequence[str | Path]] = None,
         claude_projects_roots: Optional[Sequence[str | Path]] = None,
+        grok_sessions_roots: Optional[Sequence[str | Path]] = None,
         claude_username: str = "claude-bot",
         network_timeout_sec: float = 5.0,
         gemini_oauth_client_secret: Optional[str] = None,
     ) -> None:
         self._codex_sessions_roots = [Path(item) for item in (codex_sessions_roots or self._default_codex_roots())]
         self._claude_projects_roots = [Path(item) for item in (claude_projects_roots or self._default_claude_roots(claude_username))]
+        self._grok_sessions_roots = [Path(item) for item in (grok_sessions_roots or self._default_grok_roots())]
         self._claude_home = self._home_for_user(claude_username) or Path.home()
         self._gemini_oauth_client_secret = str(gemini_oauth_client_secret or "").strip()
         try:
@@ -161,6 +163,8 @@ class CliLimitsService:
             return await asyncio.to_thread(self._collect_claude_snapshot, refs)
         if cli_name == "gemini":
             return await asyncio.to_thread(self._collect_gemini_snapshot, refs)
+        if cli_name == "grok":
+            return await asyncio.to_thread(self._collect_grok_snapshot, refs)
         if cli_name == "qwen":
             return CliLimitsSnapshot(
                 cli_name="qwen",
@@ -413,6 +417,36 @@ class CliLimitsService:
             subtitle=subtitle,
         )
 
+    def _collect_grok_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
+        target_workdirs = {os.path.realpath(ref.workdir) for ref in refs}
+        session_candidates = self._iter_matching_grok_session_dirs(target_workdirs)
+        if not session_candidates:
+            return CliLimitsSnapshot(
+                cli_name="grok",
+                status="no_data",
+                lines=("⚠️ session file не найден для текущих проектов",),
+            )
+        session_dir, matched_workdir = session_candidates[0]
+        summary = self._read_json_file(session_dir / "summary.json") or {}
+        signals = self._read_json_file(session_dir / "signals.json") or {}
+        model = str(
+            summary.get("current_model_id")
+            or signals.get("primaryModelId")
+            or ""
+        ).strip()
+        project_label = os.path.basename(matched_workdir.rstrip(os.sep)) or matched_workdir
+        subtitle = " · ".join(part for part in (project_label, model) if part)
+        lines = self._format_grok_usage_lines(summary, signals)
+        if not lines:
+            lines = ["⚠️ session найден, но usage в signals.json отсутствует"]
+        lines.append("quota: недоступно через Grok CLI/API; см. xAI Console")
+        return CliLimitsSnapshot(
+            cli_name="grok",
+            status="partial",
+            lines=tuple(lines),
+            subtitle=subtitle,
+        )
+
     @staticmethod
     def _read_gemini_active_model() -> Optional[str]:
         settings_path = Path.home() / ".gemini" / "settings.json"
@@ -475,6 +509,44 @@ class CliLimitsService:
                         matched.append((0.0, jsonl_path, cwd))
         matched.sort(key=lambda item: item[0], reverse=True)
         return [(path, cwd) for _mtime, path, cwd in matched]
+
+    def _iter_matching_grok_session_dirs(self, target_workdirs: set[str]) -> list[tuple[Path, str]]:
+        matched: list[tuple[float, Path, str]] = []
+        if not target_workdirs:
+            return []
+        encoded_by_workdir = {
+            os.path.realpath(workdir): urllib.parse.quote(os.path.realpath(workdir).rstrip(os.sep), safe="")
+            for workdir in target_workdirs
+            if workdir
+        }
+        for root in self._grok_sessions_roots:
+            if not root.is_dir():
+                continue
+            for workdir, encoded in encoded_by_workdir.items():
+                project_dir = root / encoded
+                if not project_dir.is_dir():
+                    continue
+                try:
+                    children = [item for item in project_dir.iterdir() if item.is_dir()]
+                except Exception:
+                    logger.exception("failed to iterate grok sessions dir=%s", project_dir)
+                    continue
+                for session_dir in children:
+                    marker = session_dir / "summary.json"
+                    if not marker.is_file():
+                        continue
+                    try:
+                        mtime = max(
+                            marker.stat().st_mtime,
+                            (session_dir / "signals.json").stat().st_mtime
+                            if (session_dir / "signals.json").is_file()
+                            else 0.0,
+                        )
+                    except Exception:
+                        mtime = 0.0
+                    matched.append((mtime, session_dir, workdir))
+        matched.sort(key=lambda item: item[0], reverse=True)
+        return [(path, workdir) for _mtime, path, workdir in matched]
 
     @staticmethod
     def _read_codex_session_cwd(jsonl_path: Path) -> str:
@@ -1061,6 +1133,49 @@ class CliLimitsService:
             reset_text = f" ↻{CliLimitsService._format_datetime(reset_time)}"
         return f"{indicator} {model_id} {bar} {pct}{reset_text}"
 
+    def _format_grok_usage_lines(self, summary: dict[str, Any], signals: dict[str, Any]) -> list[str]:
+        lines: list[str] = []
+        context_tokens = self._safe_int(signals.get("contextTokensUsed"))
+        context_window = self._safe_int(signals.get("contextWindowTokens"))
+        remaining_percent: Optional[float] = None
+        if context_tokens > 0 and context_window > 0:
+            used_percent = min(100.0, max(0.0, context_tokens / context_window * 100.0))
+            remaining_percent = max(0.0, 100.0 - used_percent)
+        else:
+            raw_usage = signals.get("contextWindowUsage")
+            if raw_usage is not None:
+                try:
+                    remaining_percent = max(0.0, 100.0 - float(raw_usage))
+                except Exception:
+                    remaining_percent = None
+        if remaining_percent is not None:
+            indicator = self._status_indicator(remaining_percent)
+            bar = self._progress_bar(remaining_percent)
+            pct = self._format_percent(remaining_percent)
+            lines.append(f"{indicator} context {bar} {pct}")
+        if context_tokens > 0:
+            token_line = f"📊 context {self._format_compact_number(context_tokens)}"
+            if context_window > 0:
+                token_line += f" / {self._format_compact_number(context_window)}"
+            lines.append(token_line)
+        turn_count = self._safe_int(signals.get("turnCount"))
+        tool_count = self._safe_int(signals.get("toolCallCount"))
+        user_count = self._safe_int(signals.get("userMessageCount"))
+        assistant_count = self._safe_int(signals.get("assistantMessageCount"))
+        detail_parts: list[str] = []
+        if turn_count:
+            detail_parts.append(f"turns {turn_count}")
+        if tool_count:
+            detail_parts.append(f"tools {tool_count}")
+        if user_count or assistant_count:
+            detail_parts.append(f"messages {user_count}/{assistant_count}")
+        if detail_parts:
+            lines.append(" · ".join(detail_parts))
+        updated_at = str(summary.get("updated_at") or summary.get("last_active_at") or "").strip()
+        if updated_at:
+            lines.append(f"updated: {self._format_datetime(updated_at)}")
+        return lines
+
     @staticmethod
     def _normalize_cli_names(items: Optional[Sequence[str]]) -> list[str]:
         ordered: list[str] = []
@@ -1124,6 +1239,10 @@ class CliLimitsService:
         return roots
 
     @staticmethod
+    def _default_grok_roots() -> list[Path]:
+        return [Path.home() / ".grok" / "sessions"]
+
+    @staticmethod
     def _home_for_user(username: str) -> Optional[Path]:
         name = str(username or "").strip()
         if not name:
@@ -1151,6 +1270,7 @@ class CliLimitsService:
         "codex": "📦",
         "claude": "🤖",
         "gemini": "♊",
+        "grok": "✕",
         "qwen": "🔮",
     }
 

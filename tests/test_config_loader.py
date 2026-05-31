@@ -101,6 +101,20 @@ def test_loader_preserves_tool_env_override_key_case(tmp_path, monkeypatch) -> N
     assert settings.tools["codex"].env == {"OPENAI_API_KEY": "process-openai"}
 
 
+def test_loader_preserves_grok_xai_env_override_key_case(tmp_path, monkeypatch) -> None:
+    payload = _base_payload(tmp_path)
+    payload["tools"]["grok"] = {
+        "mode": "headless",
+        "cmd": ["grok", "-p", "{prompt}"],
+    }
+    config_path = _write_config(tmp_path, payload)
+    monkeypatch.setenv(f"{ENV_OVERRIDE_PREFIX}TOOLS__GROK__ENV__XAI_API_KEY", "process-xai")
+
+    settings = load_validated_settings(str(config_path))
+
+    assert settings.tools["grok"].env == {"XAI_API_KEY": "process-xai"}
+
+
 def test_loader_does_not_treat_tool_named_env_as_env_mapping(tmp_path, monkeypatch) -> None:
     payload = _base_payload(tmp_path)
     payload["tools"]["env"] = {
