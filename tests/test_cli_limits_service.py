@@ -304,7 +304,7 @@ async def test_describe_for_sessions_reads_grok_local_usage(tmp_path: Path) -> N
     assert "90%" in text
     assert "📊 context 50K / 500K" in text
     assert "turns 4 · tools 7 · messages 4/4" in text
-    assert "quota: недоступно через Grok CLI/API" in text
+    assert "quota: недоступно через Grok CLI/API; см. https://console.x.ai/team/default/usage" in text
 
 
 @pytest.mark.asyncio

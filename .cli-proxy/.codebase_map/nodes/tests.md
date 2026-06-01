@@ -65,4 +65,4 @@ Guide agents that maintain the repository test suite: pytest unit/integration te
 - `nodes/tg.md`
 
 ## Last reviewed
-- 2026-05-31
+- 2026-06-01

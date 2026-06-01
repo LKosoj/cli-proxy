@@ -439,7 +439,7 @@ class CliLimitsService:
         lines = self._format_grok_usage_lines(summary, signals)
         if not lines:
             lines = ["⚠️ session найден, но usage в signals.json отсутствует"]
-        lines.append("quota: недоступно через Grok CLI/API; см. xAI Console")
+        lines.append("quota: недоступно через Grok CLI/API; см. https://console.x.ai/team/default/usage")
         return CliLimitsSnapshot(
             cli_name="grok",
             status="partial",
