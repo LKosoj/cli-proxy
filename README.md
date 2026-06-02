@@ -21,6 +21,7 @@ Telegram-бот для управления CLI-агентами (Codex / Gemini
 - Шаблоны задач (скрытая команда `/preset`).
 - **Режим Agent** (через `/sessions` -> `Агент`) - ИИ-агент (ReAct) с набором инструментов (чтение/запись файлов, поиск, выполнение команд, web-поиск и др.), планирует и выполняет задачи поэтапно.
 - **Режим Manager** (через `/sessions` -> `Менеджер`) - мульти-агентная оркестрация: автоматическая декомпозиция задачи на подзадачи, разработка через CLI, ревью через Agent, арбитраж по критериям приёмки и финальный отчёт.
+- **Режим SDD** (через `/sessions` -> `SDD`) - Spec-Driven Development поток `specify -> plan -> tasks` с гейтами подтверждения, EARS-критериями, интеллектуальной инициализацией проекта, артефактами `specs/<NNN>-<slug>/` и handoff готового `tasks.md` в Manager.
 - **Режим Webmaster** (через `/sessions` -> `Вебмастер`) - цикл `intent -> confirm -> dev_cli -> validation_cli -> feedback` для задач веб-разработки. Успешный gate принимается только когда все пункты чеклиста имеют статус `PASS`.
 - **Режим Admin** (через `/sessions` -> `Admin`) - фоновый конвейер `Monitor -> Analyzer -> Executor -> Notifier` для мониторинга инцидентов и remediation-действий, с политиками безопасности, интерактивным `ask_user` и переиспользованием подтверждений по hash override.
 - **Режим Mapper** (через `/sessions` -> `Mapper`) - строит карту кодовой базы в `.cli-proxy/.codebase_map/` через 4 параллельных фокуса (tech/arch/quality/concerns), поддерживает md-граф инструкций (`INDEX.md`, `nodes/*.md`), умеет инициализацию/переинициализацию/детальную проверку графа и обновляет карту инкрементально по `git diff`.
@@ -240,18 +241,26 @@ python desktop/main.py
      для Manager и не выносятся в `config.yaml`.
    - Требуется настроенный OpenAI API и сессия текущего контекста.
 
-8. **Режим Аналитик**
+8. **Режим SDD**
+   - Включите через `/sessions` -> `SDD` - режим ведет фичу через `specify`, `plan`, `tasks` с гейтами подтверждения и правками на каждом этапе.
+   - Спецификация и план пишутся в `specs/<NNN>-<slug>/spec.md` и `plan.md`, задачи - в `tasks.md`; после принятия задач режим передает план Manager через `MANAGER_CONTINUE_TOKEN`.
+   - В меню SDD доступна кнопка `Инициализировать проект`: для существующей кодовой базы режим сначала актуализирует Codebase Mapper, затем пишет `specs/_project/project-profile.generated.md`, `pack_manifest.json` и связанные SDD-артефакты; для пустой директории создаёт шаблоны в `specs/_templates/`.
+   - Инициализация выбирает расширяемые artifact packs по evidence из проекта (`Cargo.toml`, `sdkconfig`, `platformio.ini`, `.csproj`, `pyproject.toml`, `package.json`, OpenAPI/AsyncAPI и другие маркеры). Если встроенные packs не покрывают проект, создаётся proposed pack в `.cli-proxy/sdd/packs/proposed/`; он не выбирается автоматически повторно и должен быть вручную перенесён/продвинут в project pack перед использованием как подтверждённое правило.
+   - Можно стартовать сразу из исходного описания или сначала отправить его в Аналитик, после чего SDD продолжит по уточненному ТЗ.
+   - Требуется настроенный OpenAI API и рабочая директория.
+
+9. **Режим Аналитик**
    - Включите через `/sessions` -> `Analyst Аналитик` - система формирует полноценное ТЗ из исходного запроса.
    - В процессе может использовать инструменты агентной платформы (brainstorming, sequential thinking, web research, CLI-анализ через команды).
    - При нехватке данных задаёт уточняющие вопросы и поддерживает ответ кнопкой или через `Custom Свой вариант`.
    - Agent, Manager и Аналитик взаимоисключающие режимы.
 
-9. **Режим Вебмастер**
+10. **Режим Вебмастер**
    - Включите через `/sessions` -> `Webmaster Вебмастер` - режим ведет задачу через цикл intent/confirm/dev/validation и собирает структурированный отчёт по дефектам и чеклисту.
    - При невалидном JSON от `intent_plugin` применяется graceful fallback без падения процесса.
    - В destructive-callback действиях (`reset`, `clean`, `disconnect`) действует busy-guard: во время активного выполнения действия отклоняются.
 
-10. **Режим Admin**
+11. **Режим Admin**
    - Управление режимом только через `/admin ...` для сессии текущего контекста: `/admin`, `help`, `enable`, `disable`, `status`, `incidents`, `actions`, `check`, `run`, `dry-run on|off`, `ack`, `mute`, `unmute`, `approvals list|revoke|clear`.
    - Включение/выключение Admin хранится отдельно в `admin_session_state` для пары `(chat_id, session_id)` и не меняет `session.modes.active_mode`.
    - При `enable` запускается фоновый цикл `Monitor -> Analyzer -> Executor -> Notifier` через `TaskService`, при `disable` и закрытии сессии задачи Admin отменяются.
@@ -260,7 +269,7 @@ python desktop/main.py
    - Рискованные действия и low-confidence решения требуют подтверждения через `ask_user`; подтверждённые решения кешируются в `admin_approved_overrides` по hash (`action_id + params`) и переиспользуются без повторного запроса.
    - Команды управления подтверждениями: `/admin approvals list|revoke|clear`.
 
-11. **Дополнительно**
+12. **Дополнительно**
    - Git-операции доступны через `/git` (status, pull, diff, commit, summary и т.д.).
    - Для администраторов доступна `/selfupdate` (обновление кода + перезапуск сервиса).
 
@@ -321,7 +330,7 @@ python desktop/main.py
 ## Конфигурация
 `config.yaml` поддерживает:
 - `telegram.whitelist_chat_ids`: список разрешённых Telegram chat id (обязательный контроль доступа)
-- `telegram.user_modes`: per-user allowlist режимов; поддерживает виртуальные `direct_cli` и `orchestrator` для управления прямым CLI-доступом и доступом к session-оркестратору, а значение `"all"` включает и зарегистрированные mode, и эти виртуальные токены
+- `telegram.user_modes`: per-user allowlist режимов; поддерживает зарегистрированные режимы (`agent`, `analyst`, `manager`, `sdd`, `webmaster`, `codebase_mapper`), виртуальные `direct_cli` и `orchestrator`, а значение `"all"` включает и зарегистрированные mode, и эти виртуальные токены
 - `tools.*`: команды запуска, режим, prompt/resume/help (включая `resume_cmd` для отдельных команд возобновления) и `image_cmd` (добавляется к базовой команде/resume_cmd для обработки изображений)
 - `defaults.*`: базовый каталог, таймауты, пути к state, OpenAI настройки, `zai_api_key`/`tavily_api_key`/`jina_api_key` для web-поиска/reader, `github_token` для git по HTTPS, `gemini_oauth_client_secret` для обновления Gemini quota credentials
 - `defaults.log_path`: путь к файлу логов бота (основной лог). Ошибки пишутся отдельно в файл `*_error.log` с теми же правилами ротации.
@@ -395,6 +404,7 @@ export CLI_PROXY__SCHEDULER__MAX_CONCURRENT_JOBS=2
   - `modes/webmaster/schemas.py`
   - `modes/agent/schemas.py`
   - `modes/analyst/schemas.py`
+  - `modes/sdd/schemas.py`
 - Feature-gating для схем удалён: валидация работает через единый pipeline.
 - Legacy parsing fallback удалён: structured parsing работает только через V2 normalizer (`parse_normalize_validate`/`loads_safe`).
 
@@ -532,7 +542,7 @@ GitHub токен (PAT) для git по HTTPS:
 
 ## Команды бота
 ### Видимые в меню Telegram
-- `/sessions` - меню управления сессиями (новая/список/status/rename/close/resume/state/queue/clearqueue/reset + агент/менеджер/аналитик/вебмастер/mapper)
+- `/sessions` - меню управления сессиями (новая/список/status/rename/close/resume/state/queue/clearqueue/reset + агент/менеджер/SDD/аналитик/вебмастер/mapper)
 - `/interrupt` - прервать генерацию
 - `/git` - Git-операции по сессии текущего контекста (inline-меню: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/files` - управление файлами рабочей директории (отправка/сохранение/переименование/удаление)
@@ -572,7 +582,7 @@ GitHub токен (PAT) для git по HTTPS:
 - Эти run-операции отличаются от команды `/resume [token]`: slash-команда управляет CLI resume-токеном, а кнопки `doctor/recover/resume` работают с runtime recovery текущего run.
 
 ## Состояния
-- `state.json` - хранит состояние по сессиям: `resume_token`, `summary/updated_at`, очередь, активный режим (`agent`/`manager`/`analyst`/`webmaster`/`codebase_mapper`), память агента, `project_root`.
+- `state.json` - хранит состояние по сессиям: `resume_token`, `summary/updated_at`, очередь, активный режим (`agent`/`manager`/`sdd`/`analyst`/`webmaster`/`codebase_mapper`), память агента, `project_root`.
 - `state.json` - хранит поля межрежимного handoff и оркестрации: `advanced_orchestrator_enabled`, `orchestrator_pending_input`, `orchestrator_last_mode_output`, `orchestrator_last_mode_id`.
 - `state.json` - хранит список сессий и scope-bound привязки для восстановления после перезапуска.
 

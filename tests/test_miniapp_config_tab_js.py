@@ -596,6 +596,7 @@ def test_config_schema_exposes_runtime_sections_and_missing_fields() -> None:
     sections = schema["sections"]
 
     assert "user_modes" in sections["telegram"]["fields"]
+    assert "sdd" in sections["telegram"]["fields"]["user_modes"]["description"]
     assert "direct_cli" in sections["telegram"]["fields"]["user_modes"]["description"]
     assert "orchestrator" in sections["telegram"]["fields"]["user_modes"]["description"]
     assert "desktop_state_path" in sections["defaults"]["fields"]
@@ -636,7 +637,7 @@ def test_config_tab_source_covers_extended_config_surface() -> None:
         "tg-user-modes",
         (
             'fieldHtml({ id: "tg-user-modes", label: "user_modes", '
-            'hint: "chat_id=all или chat_id=agent,analyst,direct_cli,orchestrator", kind: "textarea" })'
+            'hint: "chat_id=all или chat_id=agent,analyst,sdd,direct_cli,orchestrator", kind: "textarea" })'
         ),
         "def-desktop-state-path",
         "def-webmaster-use-cli-timeout",

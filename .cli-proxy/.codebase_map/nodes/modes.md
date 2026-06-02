@@ -7,8 +7,8 @@ Context node for `modes/**`: pluggable modes, shared mode SDK, mode-owned runtim
 
 ## Scope
 - Source glob: `modes/**`
-- Current files: 174 under `modes/**` as of last review.
-- Includes mode packages: `modes/agent/`, `modes/analyst/`, `modes/manager/`, `modes/webmaster/`, `modes/admin/`, `modes/codebase_mapper/`
+- Current files: 207 under `modes/**` as of last review.
+- Includes mode packages: `modes/agent/`, `modes/analyst/`, `modes/manager/`, `modes/webmaster/`, `modes/admin/`, `modes/codebase_mapper/`, `modes/sdd/`
 - Includes shared mode infrastructure: `modes/sdk/**`, `modes/registry.py`, `modes/DEVELOPMENT.md`, `modes/codebase_mapper_constants.py`
 
 ## Instructions for agent
@@ -31,13 +31,14 @@ Context node for `modes/**`: pluggable modes, shared mode SDK, mode-owned runtim
 - `modes/webmaster/**`
 - `modes/admin/**`
 - `modes/codebase_mapper/**`
+- `modes/sdd/**`
 - `modes/codebase_mapper_constants.py`
 
 ## When to update
 - Any commit touching `modes/**`.
 - Any change to mode registration/loading semantics in `modes/registry.py`.
 - Any change to `BaseMode`, mode SDK services, mode runtime contracts, JSON normalization, tooling, orchestration, or validation under `modes/sdk/**`.
-- Any change to mode prompts, schemas, runner services, UI/callbacks, state stores, or mode-owned runtimes under `modes/{agent,analyst,manager,webmaster,admin,codebase_mapper}/**`.
+- Any change to mode prompts, schemas, runner services, UI/callbacks, state stores, or mode-owned runtimes under `modes/{agent,analyst,manager,webmaster,admin,codebase_mapper,sdd}/**`.
 - Any change in `app/**`, `agent/**`, `bot.py`, `desktop/**`, `miniapp/**`, `config.py`, or `config_example.yaml` that changes how modes are initialized, invoked, configured, displayed, or tested.
 
 ## Related nodes
@@ -53,4 +54,4 @@ Context node for `modes/**`: pluggable modes, shared mode SDK, mode-owned runtim
 - `nodes/tests.md`
 
 ## Last reviewed
-- 2026-05-31
+- 2026-06-02

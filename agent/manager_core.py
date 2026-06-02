@@ -65,8 +65,10 @@ from modes.sdk.runtime.profiles import build_reviewer_profile
 from modes.sdk.runtime.tooling.registry import get_tool_registry
 from agent.cli_routing import RoutedCallError, run_prompt_routed_meta
 from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore
+from modes.sdd.constitution import load_constitution
 
 _log = logging.getLogger(__name__)
+
 MANAGER_ARTIFACT_ROOT_DIR = ".manager"
 MANAGER_RESPONSE_ARCHIVE_SUBDIR = "response"
 
@@ -1012,7 +1014,9 @@ class ManagerOrchestrator:
 
     def _with_invariant_policy(self, workdir: str, prompt_text: str) -> str:
         base = str(prompt_text or "").strip()
-        policy = str(self._manager_prompt(workdir, "invariant_policy") or "").strip()
+        policy_template = str(self._manager_prompt(workdir, "invariant_policy") or "").strip()
+        policy = policy_template.replace("{constitution}", load_constitution(workdir))
+        policy = policy.strip()
         if not policy:
             return base
         return f"{policy}\n\n{base}".strip()

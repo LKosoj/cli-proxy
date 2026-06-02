@@ -43,9 +43,15 @@ def _build_init_data(bot_token: str, user_id: int) -> str:
     )
 
 
-def _build_config(tmp_path: Path, *, token: str = "t") -> AppConfig:
+def _build_config(tmp_path: Path, *, token: str = "t", user_modes=None) -> AppConfig:
     cfg = AppConfig(
-        telegram=TelegramConfig(token=token, whitelist_chat_ids=[1, 2], admlist_chat_ids=[1]),
+        telegram=TelegramConfig(
+            token=token,
+            whitelist_chat_ids=[1, 2],
+            admlist_chat_ids=[1],
+            user_workdirs={2: [str(tmp_path)]},
+            user_modes=user_modes or {},
+        ),
         tools={"dummy": ToolConfig(name="dummy", mode="headless", cmd=["bash", "-lc", "cat"])},
         defaults=DefaultsConfig(
             workdir=str(tmp_path),
@@ -238,6 +244,72 @@ def test_miniapp_scheduler_routes_crud_and_run_now_for_owned_project(tmp_path) -
             final_body = await final_resp.json()
             assert final_body["jobs"] == []
             assert final_body["selected_project_slug"] == str(project.slug)
+        finally:
+            await client.close()
+            await server.close()
+
+    asyncio.run(_run())
+
+
+def test_miniapp_scheduler_routes_reject_forbidden_target_mode(tmp_path) -> None:
+    async def _run() -> None:
+        cfg = _build_config(tmp_path, token="t", user_modes={2: ["agent"]})
+        app = BotApp(cfg)
+        _project, session = _register_project_session(app, tmp_path, owner_id=2, project_slug="alpha")
+        telegram_session_uid = session_runtime_uid(session)
+
+        web_app = web.Application()
+        MiniAppRoutes(app).register(web_app)
+
+        server = TestServer(web_app)
+        await server.start_server()
+        client = TestClient(server)
+        await client.start_server()
+        try:
+            headers = {"X-Telegram-Init-Data": _build_init_data("t", 2)}
+
+            create_resp = await client.post(
+                "/api/v1/scheduler/jobs",
+                headers=headers,
+                json={
+                    "project_slug": "alpha",
+                    "job_name": "Forbidden manager",
+                    "cron": "*/15 * * * *",
+                    "target_mode": "manager",
+                    "enabled": True,
+                    "notification_target": {"telegram_session_uid": telegram_session_uid},
+                    "payload": {"project_slug": "alpha"},
+                },
+            )
+            assert create_resp.status == 403
+
+            allowed_resp = await client.post(
+                "/api/v1/scheduler/jobs",
+                headers=headers,
+                json={
+                    "project_slug": "alpha",
+                    "job_name": "Allowed agent",
+                    "cron": "*/15 * * * *",
+                    "target_mode": "agent",
+                    "enabled": True,
+                    "notification_target": {"telegram_session_uid": telegram_session_uid},
+                    "payload": {"project_slug": "alpha"},
+                },
+            )
+            assert allowed_resp.status == 200
+            job_id = (await allowed_resp.json())["job"]["job_id"]
+
+            update_resp = await client.post(
+                "/api/v1/scheduler/jobs/update",
+                headers=headers,
+                json={
+                    "project_slug": "alpha",
+                    "job_id": job_id,
+                    "target_mode": "manager",
+                    "notification_target": {"telegram_session_uid": telegram_session_uid},
+                },
+            )
+            assert update_resp.status == 403
         finally:
             await client.close()
             await server.close()

@@ -176,8 +176,9 @@ def config_schema() -> Dict[str, Any]:
                         "type": "map[int,all|array[string]]",
                         "required": False,
                         "description": (
-                            "Per-user allowed modes; include direct_cli for direct CLI access "
-                            "and orchestrator for session orchestrator access."
+                            "Per-user allowed modes, including registered modes such as "
+                            "agent, analyst, manager, sdd, and webmaster; include direct_cli "
+                            "for direct CLI access and orchestrator for session orchestrator access."
                         ),
                     },
                     "connection_pool_size": {

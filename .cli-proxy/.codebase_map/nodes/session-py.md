@@ -36,4 +36,4 @@ Runtime session orchestration for CLI-backed conversations. `session.py` defines
 - `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tests.md`
 
 ## Last reviewed
-- 2026-05-31
+- 2026-06-02

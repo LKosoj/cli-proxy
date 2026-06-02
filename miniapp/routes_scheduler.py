@@ -92,6 +92,23 @@ def _require_project_job(
     )
 
 
+def _require_allowed_target_mode(ctx: MiniAppRouteContext, user: Dict[str, Any], target_mode: Any) -> str:
+    mode_id = str(target_mode or "").strip()
+    if not mode_id:
+        raise web.HTTPBadRequest(reason="target_mode is required")
+    policy = getattr(ctx.bot_app, "access_policy_service", None)
+    checker = getattr(policy, "is_mode_allowed_for_chat", None) if policy is not None else None
+    if callable(checker):
+        try:
+            allowed = bool(checker(int(user["user_id"]), mode_id))
+        except Exception as exc:
+            ctx.logger.exception("miniapp scheduler target mode access check failed")
+            raise web.HTTPInternalServerError(reason="target_mode access check failed") from exc
+        if not allowed:
+            raise web.HTTPForbidden(reason="target_mode is not allowed for this user")
+    return mode_id
+
+
 def register_scheduler_routes(
     app: web.Application,
     ctx: MiniAppRouteContext,
@@ -173,7 +190,7 @@ def register_scheduler_routes(
             job = _scheduler_service(services).create_job(
                 owner_id=str(user["actor_id"]),
                 cron=str(body.get("cron") or ""),
-                target_mode=str(body.get("target_mode") or ""),
+                target_mode=_require_allowed_target_mode(ctx, user, body.get("target_mode")),
                 notification_target_telegram_session_uid=notification_target,
                 payload=payload,
                 enabled=bool(body.get("enabled", True)),
@@ -237,7 +254,10 @@ def register_scheduler_routes(
                 owner_id=str(user["actor_id"]),
                 job_id=job_id,
                 cron=str(body.get("cron")) if body.get("cron") is not None else None,
-                target_mode=str(body.get("target_mode")) if body.get("target_mode") is not None else None,
+                target_mode=(
+                    _require_allowed_target_mode(ctx, user, body.get("target_mode"))
+                    if body.get("target_mode") is not None else None
+                ),
                 notification_target_telegram_session_uid=notification_target,
                 payload=payload,
                 enabled=body.get("enabled") if body.get("enabled") is not None else None,

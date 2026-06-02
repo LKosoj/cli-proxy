@@ -45,10 +45,11 @@ def test_non_admin_without_user_modes_has_no_modes(tmp_path) -> None:
 
 
 def test_non_admin_with_explicit_user_modes_gets_only_listed(tmp_path) -> None:
-    app = _build_app(tmp_path, user_modes={1: ["agent", "webmaster", "direct_cli", "orchestrator"]})
+    app = _build_app(tmp_path, user_modes={1: ["agent", "sdd", "webmaster", "direct_cli", "orchestrator"]})
 
     allowed = set(app.access_policy_service.allowed_mode_ids_for_chat(1))
     assert "agent" in allowed
+    assert "sdd" in allowed
     assert "webmaster" in allowed
     assert "direct_cli" in allowed
     assert "orchestrator" in allowed

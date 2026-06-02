@@ -332,6 +332,11 @@
             <div class="status-card-body">
               <div id="settingsExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center;">Execution Target: Local</div>
               <div class="field">
+                <label for="settingsActiveMode">Active Mode</label>
+                <select id="settingsActiveMode"></select>
+                <small>Выберите режим сессии или Прямой CLI, чтобы выключить активный режим.</small>
+              </div>
+              <div class="field">
                 <label for="settingsSshEnabled">SSH Remote</label>
                 <input type="checkbox" id="settingsSshEnabled" />
                 <small id="settingsSshNote">Включает/выключает удаленное выполнение команд через SSH.</small>

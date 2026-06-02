@@ -58,4 +58,4 @@ Generated: 2026-04-27T22:43:23Z
 - `nodes/tests.md` - targeted MiniApp route, service, JS, UI, and smoke coverage.
 
 ## Last reviewed
-- 2026-05-31
+- 2026-06-02

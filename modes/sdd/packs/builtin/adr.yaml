@@ -1,0 +1,39 @@
+schema_version: "1"
+pack_id: adr
+title: Architecture Decision Records
+lifecycle: builtin
+version: "1.0"
+applies_to:
+  primary_ecosystem: decision-log
+  can_combine_with: [any]
+detectors:
+  min_confidence: 0.55
+  evidence_groups_required: [adr]
+  rules:
+    - id: adr_dir
+      kind: any_file_matches
+      pattern: "**/adr/*.md"
+      group: adr
+      weight: 0.7
+      reason: ADR markdown files found.
+    - id: decisions_dir
+      kind: any_file_matches
+      pattern: "**/decisions/*.md"
+      group: adr
+      weight: 0.6
+      reason: Decision records found.
+sdd:
+  spec_guidance: Capture when a change requires an explicit decision record.
+  plan_guidance: Propose ADRs for significant technology, boundary, data or deployment decisions.
+  task_guidance: Include ADR update tasks when architecture changes.
+  artifact_templates:
+    - id: adr-template
+      output_path: decisions/ADR-template.md
+      title: ADR Template
+  validation_commands: []
+  risk_prompts:
+    - Do not invent historical decisions; record new decisions as proposed.
+merge:
+  priority: 12
+  override_policy: additive
+  conflict_keys: []

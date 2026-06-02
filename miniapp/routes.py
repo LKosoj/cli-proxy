@@ -30,6 +30,7 @@ from app.services.run_artifact_store import is_terminal_status
 from app.services.run_utils import clean_text as clean_run_listing_text, summarize_run_skill_log
 from app.services.run_operations_policy import RunOperationsPolicy
 from modes.sdk.runtime.json_normalizer import loads_safe
+from modes.sdk.session_busy import is_session_busy
 from modes.analyst.state_store import AnalystStateStore, build_context_key
 from modes.agent.mode import agent_project_scope_key, agent_project_session_key, normalize_agent_project_pending_entry
 from modes.analyst.ui import build_analyst_status_payload, build_analyst_status_text
@@ -354,6 +355,353 @@ class MiniAppRoutes:
             return int(getattr(scope, "chat_id"))
         except Exception:
             return None
+
+    def _mode_registry(self) -> Any:
+        return getattr(self.bot_app, "mode_registry_service", None) or getattr(self.bot_app, "mode_registry", None)
+
+    def _mode_plugin(self, mode_id: str) -> Any:
+        registry = self._mode_registry()
+        getter = getattr(registry, "get", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter(str(mode_id or "").strip())
+        except Exception:
+            logger.exception("miniapp settings failed to resolve mode plugin")
+            return None
+
+    def _list_mode_items(self) -> List[Dict[str, str]]:
+        registry = self._mode_registry()
+        if registry is None or not hasattr(registry, "list_modes"):
+            return []
+        try:
+            return [
+                {"id": str(mode_id or ""), "label": str(label or "")}
+                for mode_id, label in list(registry.list_modes() or [])
+            ]
+        except Exception:
+            logger.exception("miniapp settings failed to list modes")
+            return []
+
+    def _available_mode_items_for_user(
+        self,
+        mode_items: List[Dict[str, str]],
+        *,
+        chat_id: int,
+        is_admin: bool,
+    ) -> List[Dict[str, str]]:
+        if bool(is_admin):
+            return mode_items
+        policy = getattr(self.bot_app, "access_policy_service", None)
+        checker = getattr(policy, "is_mode_allowed_for_chat", None) if policy is not None else None
+        if not callable(checker):
+            return mode_items
+        out: List[Dict[str, str]] = []
+        for item in mode_items:
+            mode_id = str(item.get("id") or "").strip()
+            if not mode_id:
+                continue
+            try:
+                if bool(checker(int(chat_id), mode_id)):
+                    out.append(item)
+            except Exception:
+                logger.exception("miniapp settings failed to check mode access")
+        return out
+
+    def _is_direct_cli_allowed_for_user(self, *, chat_id: int, is_admin: bool) -> bool:
+        if bool(is_admin):
+            return True
+        policy = getattr(self.bot_app, "access_policy_service", None)
+        direct_checker = getattr(policy, "is_direct_cli_allowed_for_chat", None) if policy is not None else None
+        if callable(direct_checker):
+            try:
+                return bool(direct_checker(int(chat_id)))
+            except Exception:
+                logger.exception("miniapp failed to check direct cli access")
+                return False
+        mode_checker = getattr(policy, "is_mode_allowed_for_chat", None) if policy is not None else None
+        if callable(mode_checker):
+            try:
+                return bool(mode_checker(int(chat_id), "direct_cli"))
+            except Exception:
+                logger.exception("miniapp failed to check direct cli mode access")
+                return False
+        return True
+
+    @staticmethod
+    def _session_busy_for_mode_change(session: Any) -> bool:
+        if session is None:
+            return False
+        run_lock = getattr(session, "run_lock", None)
+        queue_len = len(getattr(session, "queue", []) or [])
+        return bool(is_session_busy(session, run_lock) or queue_len > 0)
+
+    def _mode_enable_preflight_error(self, mode: Any, session: Any) -> str:
+        checker = getattr(mode, "_enable_requirements_error", None)
+        if not callable(checker):
+            mode_id = str(getattr(mode, "mode_id", "") or "").strip()
+            if mode_id not in {"agent", "analyst", "manager", "webmaster"}:
+                return ""
+            defaults = getattr(getattr(self.bot_app, "config", None), "defaults", None)
+            if not getattr(defaults, "openai_api_key", None) or not getattr(defaults, "openai_model", None):
+                return "Для этого режима нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml."
+            workdir = str(getattr(session, "workdir", "") or "")
+            if not workdir or not os.path.isdir(workdir):
+                return "Сначала создайте сессию через /sessions."
+            return ""
+        try:
+            return str(checker(self.bot_app, session) or "").strip()
+        except Exception:
+            logger.exception("miniapp settings mode enable preflight failed")
+            return "active_mode enable failed"
+
+    @staticmethod
+    def _snapshot_mode_runtime_state(session: Any, active_mode: str) -> Dict[str, Any]:
+        cli = getattr(session, "cli", None)
+        return {
+            "active_mode": str(active_mode or "").strip(),
+            "cli_work_type": getattr(session, "cli_work_type", None),
+            "executor_profile": getattr(session, "executor_profile", None),
+            "nested_cli": cli,
+            "nested_cli_work_type": getattr(cli, "cli_work_type", None) if cli is not None else None,
+        }
+
+    @staticmethod
+    def _restore_mode_runtime_state(session: Any, snapshot: Dict[str, Any]) -> None:
+        from sessions.session_state_access import set_active_mode
+
+        active_mode = str((snapshot or {}).get("active_mode") or "").strip()
+        set_active_mode(session, active_mode or None)
+        setattr(session, "cli_work_type", (snapshot or {}).get("cli_work_type"))
+        setattr(session, "executor_profile", (snapshot or {}).get("executor_profile"))
+        cli = (snapshot or {}).get("nested_cli")
+        if cli is not None:
+            try:
+                cli.cli_work_type = (snapshot or {}).get("nested_cli_work_type")
+            except Exception:
+                setattr(session, "cli_work_type", (snapshot or {}).get("nested_cli_work_type"))
+
+    def _persist_session_if_possible(self, session: Any) -> None:
+        owner_chat_id = self._session_owner_chat_id(session)
+        manager = getattr(self.bot_app, "manager", None)
+        session_id = str(getattr(session, "id", "") or "")
+        if manager is None or owner_chat_id is None or not session_id:
+            return
+        try:
+            manager.persist_session(int(owner_chat_id), session_id)
+        except Exception:
+            logger.exception("miniapp settings failed to persist restored mode state")
+
+    @classmethod
+    def _snapshot_session_settings_state(cls, session: Any) -> Dict[str, Any]:
+        from sessions.session_state_access import (
+            get_active_mode,
+            get_remote_control_host_alias,
+            is_remote_control_enabled,
+            is_ssh_remote_enabled,
+        )
+
+        active_mode = str(get_active_mode(session, "") or "").strip()
+        return {
+            "mode_runtime": cls._snapshot_mode_runtime_state(session, active_mode),
+            "ssh_remote_enabled": is_ssh_remote_enabled(session),
+            "remote_control_enabled": is_remote_control_enabled(session),
+            "remote_control_host_alias": get_remote_control_host_alias(session),
+        }
+
+    @classmethod
+    def _restore_session_settings_state(cls, session: Any, snapshot: Dict[str, Any]) -> None:
+        from sessions.session_state_access import (
+            set_remote_control_enabled,
+            set_remote_control_host_alias,
+            set_ssh_remote_enabled,
+        )
+
+        cls._restore_mode_runtime_state(session, dict((snapshot or {}).get("mode_runtime") or {}))
+        set_ssh_remote_enabled(session, bool((snapshot or {}).get("ssh_remote_enabled")))
+        set_remote_control_host_alias(session, (snapshot or {}).get("remote_control_host_alias"))
+        set_remote_control_enabled(session, bool((snapshot or {}).get("remote_control_enabled")))
+
+    def _rollback_session_settings_state(self, session: Any, snapshot: Dict[str, Any]) -> None:
+        self._restore_session_settings_state(session, snapshot)
+        self._persist_session_if_possible(session)
+
+    @staticmethod
+    def _remote_control_validation_session(session: Any, *, ssh_remote_enabled: bool) -> Any:
+        proxy = SimpleNamespace(
+            busy=getattr(session, "busy", False),
+            run_lock=getattr(session, "run_lock", None),
+            modes=SimpleNamespace(ssh_remote_enabled=bool(ssh_remote_enabled)),
+        )
+        is_active_by_tick = getattr(session, "is_active_by_tick", None)
+        if callable(is_active_by_tick):
+            proxy.is_active_by_tick = is_active_by_tick
+        return proxy
+
+    def _remote_control_preflight_failure_response(
+        self,
+        *,
+        session: Any,
+        actor: str,
+        admin_override: bool,
+        host_alias: str,
+        host_cfg: Any,
+        preflight: Any,
+        changed: List[str],
+    ) -> web.Response:
+        reason = str(getattr(preflight, "error", "") or "")
+        response_payload: Dict[str, Any] = {
+            "ok": False,
+            "changed": list(changed),
+            "preflight": {
+                "ok": False,
+                "host_alias": getattr(preflight, "host_alias", host_alias),
+                "remote_project_root": getattr(preflight, "remote_project_root", ""),
+                "checked_at": getattr(preflight, "checked_at", None),
+                "error": reason,
+            },
+        }
+        self._log_remote_control_audit(
+            session=session,
+            actor=actor,
+            surface="miniapp",
+            action="remote_control_preflight_failed",
+            host_alias=host_alias,
+            host_cfg=host_cfg,
+            result="error",
+            reason=reason,
+        )
+        if admin_override:
+            self._log_remote_control_audit(
+                session=session,
+                actor=actor,
+                surface="miniapp",
+                action="admin_remote_override",
+                host_alias=host_alias,
+                host_cfg=host_cfg,
+                result="error",
+                reason=reason,
+            )
+        return web.json_response(response_payload, status=409)
+
+    async def _apply_active_mode_setting(
+        self,
+        *,
+        session: Any,
+        mode_id: str,
+        actor_chat_id: int,
+        is_admin: bool,
+        allow_empty_noop: bool = False,
+    ) -> web.Response | None:
+        from sessions.session_state_access import get_active_mode, set_active_mode
+
+        requested = str(mode_id or "").strip()
+        current = str(get_active_mode(session, "") or "").strip()
+        if allow_empty_noop and not requested and not current:
+            return None
+        auth_mode_id = requested or "direct_cli"
+        all_mode_items = self._list_mode_items()
+        known_modes = {str(item.get("id") or "").strip() for item in all_mode_items if str(item.get("id") or "").strip()}
+        if requested and requested not in known_modes:
+            return await self._json_error(400, "active_mode is not registered")
+
+        if requested:
+            allowed_items = self._available_mode_items_for_user(
+                all_mode_items,
+                chat_id=int(actor_chat_id),
+                is_admin=bool(is_admin),
+            )
+            allowed_modes = {
+                str(item.get("id") or "").strip()
+                for item in allowed_items
+                if str(item.get("id") or "").strip()
+            }
+            is_mode_allowed = requested in allowed_modes
+        else:
+            is_mode_allowed = self._is_direct_cli_allowed_for_user(
+                chat_id=int(actor_chat_id),
+                is_admin=bool(is_admin),
+            )
+
+        security = getattr(self.bot_app, "security", None)
+        if security is not None and hasattr(security, "authorize_mode_launch"):
+            try:
+                decision = await security.authorize_mode_launch(
+                    int(actor_chat_id),
+                    mode_id=auth_mode_id,
+                    is_mode_allowed=bool(is_mode_allowed),
+                    action="enable" if requested else "direct_cli",
+                    session_id=str(getattr(session, "id", "") or ""),
+                    context={
+                        "actor_id": miniapp_actor_id(actor_chat_id),
+                        "surface": "miniapp_settings",
+                    },
+                )
+            except Exception:
+                logger.exception("miniapp settings mode launch authorization failed")
+                return await self._json_error(500, "active_mode authorization failed")
+            if not bool(getattr(decision, "allowed", False)):
+                return await self._json_error(403, "active_mode is not allowed for this user")
+        elif not is_mode_allowed:
+            return await self._json_error(403, "active_mode is not allowed for this user")
+
+        if requested != current and self._session_busy_for_mode_change(session):
+            return await self._json_error(409, "session is busy")
+
+        ctx = {
+            "bot_app": self.bot_app,
+            "session": session,
+            "chat_id": int(actor_chat_id),
+            "context": None,
+            "query": None,
+            "dest": {"kind": "miniapp", "chat_id": int(actor_chat_id)},
+        }
+        new_mode = None
+        if requested:
+            new_mode = self._mode_plugin(requested)
+            if new_mode is None:
+                return await self._json_error(400, "active_mode is not registered")
+            if current != requested:
+                preflight_error = self._mode_enable_preflight_error(new_mode, session)
+                if preflight_error:
+                    return await self._json_error(409, preflight_error)
+
+        mode_runtime_snapshot = self._snapshot_mode_runtime_state(session, current)
+        if current and current != requested:
+            old_mode = self._mode_plugin(current)
+            if old_mode is not None and hasattr(old_mode, "on_disable"):
+                try:
+                    result = await old_mode.on_disable(ctx)
+                except Exception:
+                    logger.exception("miniapp settings active_mode disable failed")
+                    self._restore_mode_runtime_state(session, mode_runtime_snapshot)
+                    self._persist_session_if_possible(session)
+                    return await self._json_error(500, "active_mode disable failed")
+                if result is not None and not bool(getattr(result, "success", False)):
+                    self._restore_mode_runtime_state(session, mode_runtime_snapshot)
+                    self._persist_session_if_possible(session)
+                    return await self._json_error(409, getattr(result, "error", None) or "active_mode disable failed")
+            if str(get_active_mode(session, "") or "").strip() == current:
+                set_active_mode(session, None)
+
+        if requested:
+            if current != requested and hasattr(new_mode, "on_enable"):
+                try:
+                    result = await new_mode.on_enable(ctx)
+                except Exception:
+                    logger.exception("miniapp settings active_mode enable failed")
+                    self._restore_mode_runtime_state(session, mode_runtime_snapshot)
+                    self._persist_session_if_possible(session)
+                    return await self._json_error(500, "active_mode enable failed")
+                if result is not None and not bool(getattr(result, "success", False)):
+                    self._restore_mode_runtime_state(session, mode_runtime_snapshot)
+                    self._persist_session_if_possible(session)
+                    return await self._json_error(409, getattr(result, "error", None) or "active_mode enable failed")
+            if str(get_active_mode(session, "") or "").strip() != requested:
+                set_active_mode(session, requested)
+        else:
+            set_active_mode(session, None)
+        return None
 
     @staticmethod
     def _log_remote_control_audit(
@@ -1537,17 +1885,15 @@ class MiniAppRoutes:
             selected_session_uid = ""
             selected_session = None
 
-        mode_registry = getattr(self.bot_app, "mode_registry_service", None) or getattr(self.bot_app, "mode_registry", None)
-        mode_items: List[Dict[str, str]] = []
-        if mode_registry is not None and hasattr(mode_registry, "list_modes"):
-            try:
-                mode_items = [
-                    {"id": str(mode_id or ""), "label": str(label or "")}
-                    for mode_id, label in list(mode_registry.list_modes() or [])
-                ]
-            except Exception:
-                logger.exception("miniapp status failed to list modes")
-                mode_items = []
+        mode_items = self._available_mode_items_for_user(
+            self._list_mode_items(),
+            chat_id=int(user_id),
+            is_admin=is_admin,
+        )
+        direct_cli_allowed = self._is_direct_cli_allowed_for_user(
+            chat_id=int(user_id),
+            is_admin=is_admin,
+        )
 
         available_sessions = [
             self._build_session_option(session_uid=suid, session=session, is_admin=is_admin)
@@ -1577,6 +1923,7 @@ class MiniAppRoutes:
             "selected_session_uid": selected_session_uid,
             "session_count": int(len(available_sessions)),
             "modes": mode_items,
+            "direct_cli_allowed": direct_cli_allowed,
             "available_sessions": available_sessions,
             "active_session": selected_payload,
             "sessions": [selected_payload] if selected_payload is not None else [],
@@ -3186,13 +3533,18 @@ class MiniAppRoutes:
         workdir = str(getattr(session, "workdir", "") or "").strip()
         ssh_config_present = ssh_config_exists(workdir) if workdir else False
         ssh_available = ssh_remote_available(workdir) if workdir else False
+        is_admin = bool(user.get("is_admin", False))
+        chat_id = int(user["user_id"])
+        mode_items = self._available_mode_items_for_user(
+            self._list_mode_items(),
+            chat_id=chat_id,
+            is_admin=is_admin,
+        )
+        direct_cli_allowed = self._is_direct_cli_allowed_for_user(chat_id=chat_id, is_admin=is_admin)
 
         # Remote control fields
         rc_enabled = is_remote_control_enabled(session)
         rc_alias = get_remote_control_host_alias(session)
-        is_admin = bool(user.get("is_admin", False))
-        chat_id = int(user["user_id"])
-
         # Filter hosts by ACL
         all_hosts = load_ssh_config(workdir) if workdir else {}
         rc_hosts = {}
@@ -3239,6 +3591,8 @@ class MiniAppRoutes:
                 "ssh_available": ssh_available,
                 "project_workdir": workdir,
                 "remote_control_hosts": rc_hosts,
+                "modes": mode_items,
+                "direct_cli_allowed": direct_cli_allowed,
             },
             # Backward-compatible duplicate during contract migration.
             "remote_control_hosts": rc_hosts,
@@ -3287,9 +3641,11 @@ class MiniAppRoutes:
         hosts = {}
         if rc_svc is not None:
             from app.services.ssh_config_loader import load_ssh_config
+            from app.services.remote_control_service import TransitionRequest
             from sessions.session_state_access import (
                 get_remote_control_host_alias,
                 is_remote_control_enabled,
+                is_ssh_remote_enabled,
             )
 
             hosts = load_ssh_config(workdir) if workdir else {}
@@ -3304,96 +3660,155 @@ class MiniAppRoutes:
                 if not idle_check.ok:
                     return await self._json_error(409, idle_check.error or "session is busy")
 
+        rc_transition_prevalidated = False
+        if rc_svc is not None and "remote_control_enabled" in body:
+            final_ssh_remote_enabled = (
+                bool(body["ssh_remote_enabled"])
+                if "ssh_remote_enabled" in body
+                else bool(is_ssh_remote_enabled(session))
+            )
+            if "remote_control_host_alias" in body:
+                final_alias = str(body.get("remote_control_host_alias") or "").strip() or None
+            else:
+                final_alias = get_remote_control_host_alias(session)
+            want_enabled = bool(body["remote_control_enabled"])
+            transition = TransitionRequest(enable=want_enabled, host_alias=final_alias)
+            validation_session = self._remote_control_validation_session(
+                session,
+                ssh_remote_enabled=final_ssh_remote_enabled,
+            )
+            ssh_svc = getattr(self.bot_app, "ssh_service", None)
+            if want_enabled and ssh_svc is not None:
+                vr, pf = await rc_svc.validate_and_preflight(
+                    validation_session,
+                    transition,
+                    hosts,
+                    ssh_svc,
+                    workdir,
+                    chat_id=actor_chat_id,
+                    is_admin=is_admin,
+                )
+            else:
+                vr = rc_svc.validate_transition(
+                    validation_session,
+                    transition,
+                    hosts,
+                    chat_id=actor_chat_id,
+                    is_admin=is_admin,
+                )
+                pf = None
+            if not vr.ok:
+                return await self._json_error(409, vr.error or "transition validation failed")
+            if pf is not None and not pf.ok:
+                return self._remote_control_preflight_failure_response(
+                    session=session,
+                    actor=actor,
+                    admin_override=admin_override,
+                    host_alias=str(final_alias or ""),
+                    host_cfg=hosts.get(final_alias),
+                    preflight=pf,
+                    changed=[],
+                )
+            rc_transition_prevalidated = True
+
+        settings_snapshot = self._snapshot_session_settings_state(session)
+        if "active_mode" in body:
+            from sessions.session_state_access import get_active_mode
+
+            mode_id = str(body.get("active_mode") or "").strip()
+            before_active_mode = str(get_active_mode(session, "") or "").strip()
+            error_response = await self._apply_active_mode_setting(
+                session=session,
+                mode_id=mode_id,
+                actor_chat_id=actor_chat_id,
+                is_admin=is_admin,
+                allow_empty_noop=any(
+                    key in body
+                    for key in ("ssh_remote_enabled", "remote_control_enabled", "remote_control_host_alias")
+                ),
+            )
+            if error_response is not None:
+                return error_response
+            after_active_mode = str(get_active_mode(session, "") or "").strip()
+            if before_active_mode != after_active_mode:
+                changed.append("active_mode")
+
         if "ssh_remote_enabled" in body:
             from app.services.ssh_config_loader import ensure_ssh_config_template, load_ssh_config
             from sessions.session_state_access import set_ssh_remote_enabled
 
-            value = bool(body["ssh_remote_enabled"])
-            if value:
-                if workdir:
-                    ensure_ssh_config_template(workdir)
-                    hosts = load_ssh_config(workdir)
-            set_ssh_remote_enabled(session, value)
-            changed.append("ssh_remote_enabled")
+            try:
+                value = bool(body["ssh_remote_enabled"])
+                if value:
+                    if workdir:
+                        ensure_ssh_config_template(workdir)
+                        hosts = load_ssh_config(workdir)
+                set_ssh_remote_enabled(session, value)
+                changed.append("ssh_remote_enabled")
 
-            # Normalize dependent toggles via RemoteControlService
-            if rc_svc is not None:
-                rc_svc.normalize_setting_change(session, "ssh_remote_enabled", value, hosts, workdir)
+                # Normalize dependent toggles via RemoteControlService
+                if rc_svc is not None:
+                    rc_svc.normalize_setting_change(session, "ssh_remote_enabled", value, hosts, workdir)
+            except Exception:
+                self._rollback_session_settings_state(session, settings_snapshot)
+                raise
 
         has_rc_fields = "remote_control_enabled" in body or "remote_control_host_alias" in body
         if has_rc_fields:
-            if rc_svc is not None:
-                from app.services.remote_control_service import TransitionRequest
-                from app.services.ssh_config_loader import load_ssh_config
-                from sessions.session_state_access import get_remote_control_host_alias
+            try:
+                if rc_svc is not None:
+                    from app.services.remote_control_service import TransitionRequest
+                    from app.services.ssh_config_loader import load_ssh_config
+                    from sessions.session_state_access import get_remote_control_host_alias
 
-                hosts = load_ssh_config(workdir) if workdir else hosts
+                    hosts = load_ssh_config(workdir) if workdir else hosts
 
-                # Apply host_alias change first (if present)
-                if "remote_control_host_alias" in body:
-                    rc_svc.normalize_setting_change(
-                        session, "remote_control_host_alias",
-                        body["remote_control_host_alias"], hosts, workdir,
-                    )
-                    changed.append("remote_control_host_alias")
+                    # Apply host_alias change first (if present)
+                    if "remote_control_host_alias" in body:
+                        rc_svc.normalize_setting_change(
+                            session, "remote_control_host_alias",
+                            body["remote_control_host_alias"], hosts, workdir,
+                        )
+                        changed.append("remote_control_host_alias")
 
-                # Then apply enabled change with full validation + preflight
-                if "remote_control_enabled" in body:
-                    want_enabled = bool(body["remote_control_enabled"])
-                    alias = get_remote_control_host_alias(session)
-                    tr = TransitionRequest(enable=want_enabled, host_alias=alias)
+                    # Then apply enabled change with full validation + preflight
+                    if "remote_control_enabled" in body:
+                        want_enabled = bool(body["remote_control_enabled"])
+                        alias = get_remote_control_host_alias(session)
+                        tr = TransitionRequest(enable=want_enabled, host_alias=alias)
 
-                    vr = rc_svc.validate_transition(
-                        session, tr, hosts, chat_id=actor_chat_id, is_admin=is_admin,
-                    )
-                    if not vr.ok:
-                        return await self._json_error(409, vr.error or "transition validation failed")
+                        if not rc_transition_prevalidated:
+                            vr = rc_svc.validate_transition(
+                                session, tr, hosts, chat_id=actor_chat_id, is_admin=is_admin,
+                            )
+                            if not vr.ok:
+                                self._rollback_session_settings_state(session, settings_snapshot)
+                                return await self._json_error(409, vr.error or "transition validation failed")
 
-                    # Run preflight when enabling
-                    if want_enabled and alias and alias in hosts:
-                        ssh_svc = getattr(self.bot_app, "ssh_service", None)
-                        if ssh_svc is not None:
-                            pf = await rc_svc.run_preflight(ssh_svc, workdir, alias, hosts[alias])
-                            if not pf.ok:
-                                preflight_failure_reason = str(pf.error or "")
-                                response_payload: Dict[str, Any] = {
-                                    "ok": False,
-                                    "changed": changed,
-                                    "preflight": {
-                                        "ok": False,
-                                        "host_alias": pf.host_alias,
-                                        "remote_project_root": pf.remote_project_root,
-                                        "checked_at": pf.checked_at,
-                                        "error": preflight_failure_reason,
-                                    },
-                                }
-                                self._log_remote_control_audit(
-                                    session=session,
-                                    actor=actor,
-                                    surface="miniapp",
-                                    action="remote_control_preflight_failed",
-                                    host_alias=alias,
-                                    host_cfg=hosts.get(alias),
-                                    result="error",
-                                    reason=preflight_failure_reason,
-                                )
-                                if admin_override:
-                                    self._log_remote_control_audit(
-                                        session=session,
-                                        actor=actor,
-                                        surface="miniapp",
-                                        action="admin_remote_override",
-                                        host_alias=alias,
-                                        host_cfg=hosts.get(alias),
-                                        result="error",
-                                        reason=preflight_failure_reason,
-                                    )
-                                return web.json_response(response_payload, status=409)
+                            # Run preflight when enabling
+                            if want_enabled and alias and alias in hosts:
+                                ssh_svc = getattr(self.bot_app, "ssh_service", None)
+                                if ssh_svc is not None:
+                                    pf = await rc_svc.run_preflight(ssh_svc, workdir, alias, hosts[alias])
+                                    if not pf.ok:
+                                        self._rollback_session_settings_state(session, settings_snapshot)
+                                        return self._remote_control_preflight_failure_response(
+                                            session=session,
+                                            actor=actor,
+                                            admin_override=admin_override,
+                                            host_alias=alias,
+                                            host_cfg=hosts.get(alias),
+                                            preflight=pf,
+                                            changed=[],
+                                        )
 
-                    rc_svc.normalize_setting_change(
-                        session, "remote_control_enabled", want_enabled, hosts, workdir,
-                    )
-                    changed.append("remote_control_enabled")
+                        rc_svc.normalize_setting_change(
+                            session, "remote_control_enabled", want_enabled, hosts, workdir,
+                        )
+                        changed.append("remote_control_enabled")
+            except Exception:
+                self._rollback_session_settings_state(session, settings_snapshot)
+                raise
 
         from sessions.session_state_access import (
             get_remote_control_host_alias,

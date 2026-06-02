@@ -14,7 +14,7 @@ telegram:
   # Use "all" to allow all registered modes plus virtual `direct_cli` and `orchestrator`,
   # or list explicit mode IDs including those virtual entries.
   user_modes:
-    111111111: ["agent", "analyst", "direct_cli", "orchestrator"]
+    111111111: ["agent", "analyst", "direct_cli", "orchestrator", "sdd"]
     # 222222222: "all"
   # Telegram API request timeouts (python-telegram-bot / httpx)
   connection_pool_size: 8

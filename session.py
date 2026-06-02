@@ -324,6 +324,25 @@ class OrchestratorState:
     last_mode_id: Optional[str] = field(default=None, repr=False)
 
 
+@dataclass
+class SddState:
+    feature_slug: Optional[str] = None
+    spec_dir: Optional[str] = None          # specs/<NNN>-<slug>
+    phase: str = "idle"                     # idle|specify|plan|tasks|handoff|done
+    pending_gate: Optional[str] = None
+    constitution_path: Optional[str] = None
+    source_intent: Optional[str] = None
+    last_action: str = ""                   # transient UX state: "gate_revise" survives restart
+    project_init_status: str = "idle"       # idle|confirming|running|done|failed|cancelled
+    project_init_step: str = ""
+    project_init_kind: str = ""             # existing_codebase|empty_repo
+    project_init_started_at: Optional[float] = None
+    project_init_finished_at: Optional[float] = None
+    project_init_error: str = ""
+    project_profile_path: str = ""
+    project_init_snapshot_path: str = ""
+
+
 # Backward-compatible aliases for existing imports/tests.
 SessionModesState = ModeState
 SessionOrchestratorState = OrchestratorState
@@ -349,6 +368,7 @@ class Session:
     git: GitState = field(default_factory=GitState)
     modes: ModeState = field(default_factory=ModeState)
     orchestrator: OrchestratorState = field(default_factory=OrchestratorState)
+    sdd: SddState = field(default_factory=SddState)
     # Legacy init arguments are accepted for backward compatibility and folded into nested state.
     active_cli: InitVar[Optional[str]] = None
     resume_tokens: InitVar[Optional[Dict[str, Optional[str]]]] = None
@@ -414,6 +434,8 @@ class Session:
             self.modes = ModeState()
         if not isinstance(self.orchestrator, OrchestratorState):
             self.orchestrator = OrchestratorState()
+        if not isinstance(self.sdd, SddState):
+            self.sdd = SddState()
 
         if active_cli is not None:
             self.cli.active_cli = str(active_cli or "").strip() or None
@@ -2407,6 +2429,26 @@ class SessionManager:
             "last_mode_output": session.orchestrator.last_mode_output,
             "last_mode_id": session.orchestrator.last_mode_id,
         }
+        _sdd = getattr(session, "sdd", None)
+        if not isinstance(_sdd, SddState):
+            _sdd = SddState()
+        sdd_payload = {
+            "feature_slug": _sdd.feature_slug,
+            "spec_dir": _sdd.spec_dir,
+            "phase": _sdd.phase,
+            "pending_gate": _sdd.pending_gate,
+            "constitution_path": _sdd.constitution_path,
+            "source_intent": _sdd.source_intent,
+            "last_action": _sdd.last_action,
+            "project_init_status": _sdd.project_init_status,
+            "project_init_step": _sdd.project_init_step,
+            "project_init_kind": _sdd.project_init_kind,
+            "project_init_started_at": _sdd.project_init_started_at,
+            "project_init_finished_at": _sdd.project_init_finished_at,
+            "project_init_error": _sdd.project_init_error,
+            "project_profile_path": _sdd.project_profile_path,
+            "project_init_snapshot_path": _sdd.project_init_snapshot_path,
+        }
         modes_payload = {
             "active_mode": session.modes.active_mode,
             "analyst_mode": str(session.modes.analyst_mode or "spec"),
@@ -2424,6 +2466,7 @@ class SessionManager:
             "cli": cli_payload,
             "git": git_payload,
             "orchestrator": orchestrator_payload,
+            "sdd": sdd_payload,
             "modes": modes_payload,
             "executor_profile": getattr(session, "executor_profile", None),
             "summary": getattr(session, "state_summary", None),
@@ -2539,6 +2582,7 @@ class SessionManager:
                     modes_payload = val.get("modes") if isinstance(val.get("modes"), dict) else {}
                     orchestrator_payload = val.get("orchestrator") if isinstance(val.get("orchestrator"), dict) else {}
                     git_payload = val.get("git") if isinstance(val.get("git"), dict) else {}
+                    sdd_payload = val.get("sdd") if isinstance(val.get("sdd"), dict) else {}
 
                     requested_cli = str(cli_payload.get("active_cli") or val.get("active_cli") or "").strip()
                     active_cli = requested_cli
@@ -2645,6 +2689,36 @@ class SessionManager:
                     session.orchestrator.last_mode_output = str(last_mode_output) if last_mode_output is not None else None
                     last_mode_id = orchestrator_payload.get("last_mode_id", val.get("orchestrator_last_mode_id"))
                     session.orchestrator.last_mode_id = str(last_mode_id).strip() if last_mode_id is not None else None
+                    raw_phase = sdd_payload.get("phase")
+                    session.sdd.phase = str(raw_phase).strip() or "idle" if raw_phase is not None else "idle"
+                    session.sdd.feature_slug = sdd_payload.get("feature_slug") or None
+                    session.sdd.spec_dir = sdd_payload.get("spec_dir") or None
+                    session.sdd.pending_gate = sdd_payload.get("pending_gate") or None
+                    session.sdd.constitution_path = sdd_payload.get("constitution_path") or None
+                    session.sdd.source_intent = sdd_payload.get("source_intent") or None
+                    session.sdd.last_action = str(sdd_payload.get("last_action") or "")
+                    session.sdd.project_init_status = str(sdd_payload.get("project_init_status") or "idle")
+                    session.sdd.project_init_step = str(sdd_payload.get("project_init_step") or "")
+                    session.sdd.project_init_kind = str(sdd_payload.get("project_init_kind") or "")
+                    try:
+                        session.sdd.project_init_started_at = (
+                            float(sdd_payload.get("project_init_started_at"))
+                            if sdd_payload.get("project_init_started_at") is not None
+                            else None
+                        )
+                    except Exception:
+                        session.sdd.project_init_started_at = None
+                    try:
+                        session.sdd.project_init_finished_at = (
+                            float(sdd_payload.get("project_init_finished_at"))
+                            if sdd_payload.get("project_init_finished_at") is not None
+                            else None
+                        )
+                    except Exception:
+                        session.sdd.project_init_finished_at = None
+                    session.sdd.project_init_error = str(sdd_payload.get("project_init_error") or "")
+                    session.sdd.project_profile_path = str(sdd_payload.get("project_profile_path") or "")
+                    session.sdd.project_init_snapshot_path = str(sdd_payload.get("project_init_snapshot_path") or "")
                     session.project_root = val.get("project_root")
                     if requested_cli and requested_cli != active_cli:
                         remember_session_cli_switch_notice(session, requested_cli, active_cli)

@@ -1,0 +1,39 @@
+schema_version: "1"
+pack_id: asyncapi
+title: Event-Driven API / AsyncAPI
+lifecycle: builtin
+version: "1.0"
+applies_to:
+  primary_ecosystem: messaging
+  can_combine_with: [any]
+detectors:
+  min_confidence: 0.55
+  evidence_groups_required: [contract]
+  rules:
+    - id: asyncapi_file
+      kind: any_file_matches
+      pattern: "*asyncapi*.y*ml"
+      group: contract
+      weight: 0.8
+      reason: AsyncAPI YAML contract found.
+    - id: asyncapi_json
+      kind: any_file_matches
+      pattern: "*asyncapi*.json"
+      group: contract
+      weight: 0.8
+      reason: AsyncAPI JSON contract found.
+sdd:
+  spec_guidance: Capture channels, producers, consumers, message schemas and broker/protocol constraints.
+  plan_guidance: Separate send/receive operations and infrastructure assumptions.
+  task_guidance: Include message contract validation and integration tasks.
+  artifact_templates:
+    - id: messaging-contract-plan
+      output_path: messaging-contract-plan.md
+      title: Messaging Contract Plan
+  validation_commands: []
+  risk_prompts:
+    - Do not infer sender and receiver symmetry without evidence.
+merge:
+  priority: 20
+  override_policy: additive
+  conflict_keys: []

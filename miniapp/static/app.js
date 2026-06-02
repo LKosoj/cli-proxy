@@ -1224,6 +1224,7 @@
   function renderSettings() {
     const data = state.settingsData;
     if (!data || !data.settings) return;
+    const activeMode = document.getElementById("settingsActiveMode");
     const sshEnabled = document.getElementById("settingsSshEnabled");
     const sshNote = document.getElementById("settingsSshNote");
     const sshHostsCard = document.getElementById("settingsSshHostsCard");
@@ -1238,6 +1239,22 @@
     const sshRemoteEnabled = !!data.settings.ssh_remote_enabled;
     const sshConfigExists = !!data.available?.ssh_config_exists;
     const sshAvailable = !!data.available?.ssh_available;
+    const modeItems = Array.isArray(data.available?.modes)
+      ? data.available.modes
+      : (Array.isArray(state.statusLastPayload?.modes) ? state.statusLastPayload.modes : []);
+    const directCliAllowed = data.available?.direct_cli_allowed !== false;
+    const activeModeOptions = [
+      ...(directCliAllowed ? ['<option value="">Прямой CLI</option>'] : []),
+      ...modeItems
+        .map((item) => {
+          const modeId = String(item?.id || "");
+          const label = String(item?.label || modeId);
+          return modeId ? `<option value="${escapeHtml(modeId)}">${escapeHtml(label)}</option>` : "";
+        })
+        .filter(Boolean),
+    ];
+    activeMode.innerHTML = activeModeOptions.join("");
+    activeMode.value = String(data.settings.active_mode || "");
 
     sshEnabled.checked = sshRemoteEnabled;
     sshEnabled.disabled = false;
@@ -1305,6 +1322,7 @@
     
     // Busy session lock
     const isBusy = !!state.statusLastPayload?.active_session?.busy;
+    activeMode.disabled = isBusy;
     sshEnabled.disabled = isBusy;
     rcEnabled.disabled = isBusy;
     rcHostSelect.disabled = isBusy || validHosts.length === 0;
@@ -1315,6 +1333,7 @@
   async function saveSessionSettings() {
     const uid = state.settingsSessionUid;
     if (!uid) return;
+    const activeMode = document.getElementById("settingsActiveMode").value;
     const sshEnabled = document.getElementById("settingsSshEnabled").checked;
     const rcEnabled = document.getElementById("settingsRemoteControlEnabled").checked;
     const rcHost = document.getElementById("settingsRemoteControlHost").value;
@@ -1327,6 +1346,7 @@
       await api(`/session/${uid}/settings`, {
         method: "PUT",
         body: JSON.stringify({
+          active_mode: activeMode,
           ssh_remote_enabled: sshEnabled,
           remote_control_enabled: rcEnabled,
           remote_control_host_alias: rcHost
@@ -2919,13 +2939,7 @@
         label: String(item?.label || item?.id || ""),
       })).filter((item) => item.id);
     }
-    return [
-      { id: "manager", label: "Manager" },
-      { id: "agent", label: "Agent" },
-      { id: "analyst", label: "Analyst" },
-      { id: "webmaster", label: "Webmaster" },
-      { id: "admin", label: "Admin" },
-    ];
+    return [];
   }
 
   function renderSchedulerModeOptions(selectedMode = "") {
@@ -4794,7 +4808,7 @@
           fieldHtml({ id: "tg-whitelist", label: "whitelist_chat_ids", hint: "По одному chat_id в строке", kind: "textarea" }),
           fieldHtml({ id: "tg-admins", label: "admlist_chat_ids", hint: "По одному chat_id в строке", kind: "textarea" }),
           fieldHtml({ id: "tg-user-workdirs", label: "user_workdirs", hint: "chat_id=/path1,/path2", kind: "textarea" }),
-          fieldHtml({ id: "tg-user-modes", label: "user_modes", hint: "chat_id=all или chat_id=agent,analyst,direct_cli,orchestrator", kind: "textarea" }),
+          fieldHtml({ id: "tg-user-modes", label: "user_modes", hint: "chat_id=all или chat_id=agent,analyst,sdd,direct_cli,orchestrator", kind: "textarea" }),
           fieldHtml({ id: "tg-conn-pool", label: "connection_pool_size", kind: "number", hint: "restart required" }),
           fieldHtml({ id: "tg-connect-timeout", label: "connect_timeout_sec", kind: "number", hint: "restart required" }),
           fieldHtml({ id: "tg-read-timeout", label: "read_timeout_sec", kind: "number", hint: "restart required" }),

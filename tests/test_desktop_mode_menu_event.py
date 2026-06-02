@@ -1,4 +1,5 @@
 import pytest
+import types
 
 from desktop.services.application_facade import ApplicationFacade
 from app.services.config_service import ConfigProvider, ConfigService
@@ -8,6 +9,8 @@ from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, Telegram
 from modes.registry import ModeRegistry
 from modes.sdk import BaseMode, ToolResult
 from modes.sdk.services.mode_registry import ModeRegistryService
+from modes.sdd.mode import SddMode
+from session import SddState
 from session import SessionManager, session_runtime_uid
 
 
@@ -113,3 +116,21 @@ async def test_mode_menu_delivered_as_ui_mode_menu_event(tmp_path) -> None:
     ok = await facade.handle_mode_callback(session_uid, data="ma:menu:any:{}")
     assert ok is True
     assert got["menu"] is True
+
+
+def test_desktop_extracts_sdd_project_init_button_from_mode_menu() -> None:
+    session = types.SimpleNamespace(
+        id="s1",
+        modes=types.SimpleNamespace(active_mode="sdd"),
+        sdd=SddState(),
+    )
+
+    _text, keyboard = SddMode().build_menu(session)
+    rows = ApplicationFacade._extract_inline_keyboard(keyboard)
+
+    flat = [button for row in rows for button in row]
+    assert any(
+        button["text"] == "🧭 Инициализировать проект"
+        and button["data"].startswith("ma:sdd:init_project")
+        for button in flat
+    )

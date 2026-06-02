@@ -6,7 +6,7 @@ import os
 import time
 from contextlib import contextmanager
 from dataclasses import asdict
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from modes.sdk.file_lock import lock_file, unlock_file
 from modes.sdk.runtime.json_normalizer import loads_safe
@@ -17,6 +17,49 @@ from utils.paths import cli_proxy_artifact_path
 _log = logging.getLogger(__name__)
 
 MANAGER_CONTINUE_TOKEN = "__MANAGER_CONTINUE__"
+
+# ---------------------------------------------------------------------------
+# Plan write-back observers
+# ---------------------------------------------------------------------------
+# A consumer (e.g. the SDD mode) can register a callback keyed by
+# (workdir, scoped_key) that fires after every successful save_plan() for that
+# plan. This is the single chokepoint through which BOTH the manager engine
+# (ManagerOrchestrator) and the manager transport (ManagerMode) persist plans,
+# so every decompose / reconcile / final-audit / resume mutation is covered.
+# The mechanism is consumer-agnostic: planning knows nothing about specs/ or SDD.
+PlanObserver = Callable[[ProjectPlan], None]
+
+_plan_observers: Dict[Tuple[str, str], PlanObserver] = {}
+
+
+def _observer_key(workdir: str, scoped_key: Optional[str]) -> Tuple[str, str]:
+    return (str(workdir or ""), str(scoped_key or "").strip())
+
+
+def register_plan_observer(workdir: str, scoped_key: Optional[str], observer: PlanObserver) -> None:
+    """Register a write-back observer fired after every save_plan for this plan.
+
+    The key must match the (workdir, scoped_key) the manager uses to persist the
+    plan — i.e. the same scoped_key returned by session_scoped_key(session).
+    """
+    _plan_observers[_observer_key(workdir, scoped_key)] = observer
+
+
+def unregister_plan_observer(workdir: str, scoped_key: Optional[str]) -> None:
+    """Remove a previously registered write-back observer (no-op if absent)."""
+    _plan_observers.pop(_observer_key(workdir, scoped_key), None)
+
+
+def _notify_plan_observer(workdir: str, scoped_key: Optional[str], plan: ProjectPlan) -> None:
+    observer = _plan_observers.get(_observer_key(workdir, scoped_key))
+    if observer is None:
+        return
+    try:
+        observer(plan)
+    except Exception:
+        # The plan is already persisted; a sink failure must be loud but must not
+        # break the autonomous manager pipeline.
+        _log.exception("plan observer failed (workdir=%s scoped_key=%s)", workdir, scoped_key)
 
 
 class ManagerDecomposeNormalizationError(RuntimeError):
@@ -302,6 +345,7 @@ def save_plan(workdir: str, plan: ProjectPlan, scoped_key: Optional[str] = None)
     except Exception as exc:
         _log.exception("planning save_plan failed: %s", exc)
         raise
+    _notify_plan_observer(workdir, scoped_key, plan)
 
 
 def delete_plan(workdir: str, scoped_key: Optional[str] = None) -> None:
@@ -433,6 +477,7 @@ __all__ = [
     "ProjectPlan",
     "MANAGER_CONTINUE_TOKEN",
     "ManagerDecomposeNormalizationError",
+    "PlanObserver",
     "archive_plan",
     "can_resume_failed",
     "delete_plan",
@@ -441,6 +486,8 @@ __all__ = [
     "needs_failed_resume_choice",
     "needs_resume_choice",
     "read_json_locked",
+    "register_plan_observer",
     "save_plan",
+    "unregister_plan_observer",
     "write_json_locked",
 ]

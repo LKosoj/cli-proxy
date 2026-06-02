@@ -746,6 +746,28 @@ class ModeLaunchAdapterService:
                         str(request.actor.get("actor_id") or ""),
                     )
                     return "security_error"
+        if self._is_scheduler_request(request):
+            if actor_chat_id <= 0:
+                actor_chat_id = self._maybe_int(request.scope.chat_id) or 0
+            if actor_chat_id <= 0:
+                await self._emit_external_launch_audit(
+                    request,
+                    reason="actor_unresolved",
+                    actor_chat_id=0,
+                )
+                return "actor_unresolved"
+            policy = getattr(self.bot_app, "access_policy_service", None)
+            if policy is not None and hasattr(policy, "is_mode_allowed_for_chat"):
+                try:
+                    is_mode_allowed = bool(policy.is_mode_allowed_for_chat(actor_chat_id, str(request.mode_id or "")))
+                except Exception:
+                    self._logger.exception(
+                        "event mode launch scheduler policy check failed mode_id=%s session_uid=%s actor=%s",
+                        request.mode_id,
+                        request.scope.session_uid,
+                        dict(request.actor or {}),
+                    )
+                    return "security_error"
         if self._is_webhook_request(request):
             if actor_chat_id <= 0:
                 actor_chat_id = self._actor_chat_id_from_actor_id(str(request.actor.get("actor_id") or "").strip()) or 0
@@ -799,7 +821,7 @@ class ModeLaunchAdapterService:
             return None
         decision_reason = str(getattr(decision, "reason", "") or "security_denied")
         if (
-            self._is_miniapp_request(request) or self._is_webhook_request(request)
+            self._is_miniapp_request(request) or self._is_scheduler_request(request) or self._is_webhook_request(request)
         ) and decision_reason == DenyReasonCode.MODE_NOT_ALLOWED:
             return "mode_not_allowlisted"
         return decision_reason
@@ -859,6 +881,10 @@ class ModeLaunchAdapterService:
     @staticmethod
     def _is_miniapp_request(request: ModeLaunchRequest) -> bool:
         return str(request.origin.get("kind", "") or request.origin.get("key", "") or "").strip() == "miniapp"
+
+    @staticmethod
+    def _is_scheduler_request(request: ModeLaunchRequest) -> bool:
+        return str(request.origin.get("kind", "") or request.origin.get("key", "") or "").strip() == "scheduler"
 
     @staticmethod
     def _is_webhook_request(request: ModeLaunchRequest) -> bool:

@@ -1,0 +1,58 @@
+prompts:
+  specify: |
+    You are a senior software analyst. Your task is to produce a precise feature specification
+    in JSON format based on the user's intent.
+
+    Project constitution (context, constraints, conventions):
+    {constitution}
+
+    Requirements:
+    - feature_slug: short kebab-case identifier for the feature
+    - stories: 2-5 user stories (who, what, why)
+    - requirements: list of {id, text} with IDs like REQ-1, REQ-2, ...
+    - acceptance_criteria: list of {req_id, ears} where:
+      * ears field follows EARS notation (WHEN/WHILE/WHERE/IF-THEN/THE SYSTEM SHALL)
+      * each AC references a requirement via req_id
+      * add [NEEDS CLARIFICATION] marker if the intent is ambiguous
+
+    Respond ONLY with valid JSON matching this schema exactly.
+
+  plan: |
+    You are a senior software architect. Based on the feature specification below,
+    produce a technical implementation plan in JSON format.
+
+    Project constitution (context, constraints, conventions):
+    {constitution}
+
+    Requirements:
+    - architecture: text description of the chosen architectural approach
+    - stack: list of technologies, libraries, frameworks to use
+    - constraints: list of technical constraints or limitations
+    - risks: list of identified technical risks
+
+    Respond ONLY with valid JSON matching this schema exactly.
+
+  tasks: |
+    You are a senior technical lead. Based on the feature specification and technical plan below,
+    produce an implementation task breakdown in JSON format.
+
+    Project constitution (context, constraints, conventions):
+    {constitution}
+
+    Requirements:
+    - project_goal: one-sentence summary of what will be built
+    - tasks: list of {id, title, description, acceptance_criteria, covers_requirements, depends_on}
+      * id: TASK-N format
+      * acceptance_criteria: list of strings (EARS format)
+      * covers_requirements: list of REQ-N ids this task covers
+      * depends_on: list of TASK-N ids this task depends on
+
+    Respond ONLY with valid JSON matching this schema exactly.
+
+  gate_spec_header: "📋 *Спецификация готова*\n\nФича: `{slug}`\n\nПроверьте spec.md и подтвердите или запросите правки."
+  gate_plan_header: "🏗 *Архитектурный план готов*\n\nПроверьте plan.md и подтвердите или запросите правки."
+  gate_tasks_header: "✅ *Декомпозиция задач готова*\n\nПроверьте tasks.md и подтвердите или запросите правки."
+
+  btn_accept: "✅ Принять"
+  btn_revise: "✍️ Правки"
+  btn_stop: "⏹ Остановить"

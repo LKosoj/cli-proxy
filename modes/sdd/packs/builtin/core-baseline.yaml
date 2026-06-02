@@ -1,0 +1,30 @@
+schema_version: "1"
+pack_id: core-baseline
+title: Core SDD Baseline
+lifecycle: builtin
+version: "1.0"
+applies_to:
+  primary_ecosystem: core
+  can_combine_with: [any]
+detectors:
+  min_confidence: 0.0
+  evidence_groups_required: []
+  rules: []
+sdd:
+  spec_guidance: Keep requirements explicit and mark assumptions as open questions.
+  plan_guidance: Separate confirmed project facts from inferred implementation choices.
+  task_guidance: Ensure each task has validation evidence.
+  artifact_templates:
+    - id: artifact-pack-manifest
+      output_path: artifact-pack-manifest.md
+      title: Artifact Pack Manifest
+    - id: validation
+      output_path: validation.md
+      title: Validation Plan
+  validation_commands: []
+  risk_prompts:
+    - Do not treat missing evidence as confirmation.
+merge:
+  priority: 0
+  override_policy: additive
+  conflict_keys: []

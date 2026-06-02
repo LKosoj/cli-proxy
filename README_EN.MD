@@ -21,6 +21,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok) wit
 - Task templates (hidden `/preset` command).
 - **Agent mode** (via `/sessions` -> `Agent`) - AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.), plans and executes tasks step by step.
 - **Manager mode** (via `/sessions` -> `Manager`) - multi-agent orchestration: automatic task decomposition into subtasks, development via CLI, review via Agent, acceptance-criteria-based arbitration, and a final report.
+- **SDD mode** (via `/sessions` -> `SDD`) - Spec-Driven Development flow `specify -> plan -> tasks` with approval gates, EARS criteria, intelligent project initialization, `specs/<NNN>-<slug>/` artifacts, and handoff of accepted `tasks.md` into Manager.
 - **Webmaster mode** (via `/sessions` -> `Webmaster`) - `intent -> confirm -> dev_cli -> validation_cli -> feedback` cycle for web-development tasks. Successful gate is accepted only when all checklist items are `PASS`.
 - **Admin mode** (via `/sessions` -> `Admin`) - background `Monitor -> Analyzer -> Executor -> Notifier` pipeline for incident monitoring and remediation, with security policies, interactive `ask_user`, and hash-based approval override reuse.
 - **Mapper mode** (via `/sessions` -> `Mapper`) - builds a codebase map in `.cli-proxy/.codebase_map/` via 4 parallel focus passes (tech/arch/quality/concerns), maintains an instruction md-graph (`INDEX.md`, `nodes/*.md`), supports init/re-init/deep-verify workflows, and updates incrementally using `git diff`.
@@ -241,18 +242,26 @@ For layering and placement rules, see `ARCHITECTURE.md`.
      to Manager and are not exposed in `config.yaml`.
    - Requires configured OpenAI API and an active CLI session.
 
-8. **Analyst mode**
+8. **SDD mode**
+   - Enable via `/sessions` -> `SDD` - the mode drives a feature through `specify`, `plan`, and `tasks` with approval and revision gates at each stage.
+   - Specification and plan artifacts are written to `specs/<NNN>-<slug>/spec.md` and `plan.md`; tasks are written to `tasks.md`, and accepted tasks are handed off to Manager via `MANAGER_CONTINUE_TOKEN`.
+   - The SDD menu includes `Initialize project`: for an existing codebase the mode first refreshes Codebase Mapper, then writes `specs/_project/project-profile.generated.md`, `pack_manifest.json`, and related SDD artifacts; for an empty directory it creates templates under `specs/_templates/`.
+   - Initialization selects extensible artifact packs from project evidence (`Cargo.toml`, `sdkconfig`, `platformio.ini`, `.csproj`, `pyproject.toml`, `package.json`, OpenAPI/AsyncAPI, and other markers). If built-in packs do not cover the project, it creates a proposed pack under `.cli-proxy/sdd/packs/proposed/`; proposed packs are not auto-selected on later runs and must be manually promoted to project packs before they are treated as confirmed rules.
+   - You can start directly from the original intent or route the intent through Analyst first, then continue SDD from the refined specification.
+   - Requires configured OpenAI API and a working directory.
+
+9. **Analyst mode**
    - Enable via `/sessions` -> `Analyst Analyst` - the system converts the initial request into a complete technical specification.
    - During analysis it may use agent tools (brainstorming, sequential thinking, web research, and CLI analysis via commands).
    - If data is missing, it asks clarifying questions and supports answers via buttons or `Custom Custom answer`.
    - Agent, Manager, and Analyst are mutually exclusive modes.
 
-9. **Webmaster mode**
+10. **Webmaster mode**
    - Enable via `/sessions` -> `Webmaster Webmaster` - the mode executes intent/confirm/dev/validation cycle and returns a structured defects/checklist report.
    - On invalid JSON from `intent_plugin`, graceful fallback is used and the process does not crash.
    - Destructive callbacks (`reset`, `clean`, `disconnect`) are protected by busy-guard and are rejected while the session is running.
 
-10. **Admin mode**
+11. **Admin mode**
    - Mode control is only through `/admin ...` for the current context session: `/admin`, `help`, `enable`, `disable`, `status`, `incidents`, `actions`, `check`, `run`, `dry-run on|off`, `ack`, `mute`, `unmute`, `approvals list|revoke|clear`.
    - Admin enable/disable is stored separately in `admin_session_state` by `(chat_id, session_id)` and does not change `session.modes.active_mode`.
    - On `enable`, background `Monitor -> Analyzer -> Executor -> Notifier` loop starts via `TaskService`; on `disable` and session close, Admin tasks are cancelled.
@@ -261,7 +270,7 @@ For layering and placement rules, see `ARCHITECTURE.md`.
    - Risky and low-confidence decisions require `ask_user` confirmation; approved decisions are cached in `admin_approved_overrides` by hash (`action_id + params`) and reused without repeated prompt.
    - Approval-management commands: `/admin approvals list|revoke|clear`.
 
-11. **Extras**
+12. **Extras**
    - Git operations are available via `/git` (status, pull, diff, commit, summary, etc.).
    - Admins can use `/selfupdate` (code update + service restart).
 
@@ -322,7 +331,7 @@ Example:
 ## Configuration
 `config.yaml` supports:
 - `telegram.whitelist_chat_ids`: allowed Telegram chat id list (mandatory access control)
-- `telegram.user_modes`: per-user mode allowlist; supports virtual `direct_cli` and `orchestrator` tokens for controlling direct CLI access and session orchestrator access, and `"all"` includes both registered modes and these virtual tokens
+- `telegram.user_modes`: per-user mode allowlist; supports registered modes (`agent`, `analyst`, `manager`, `sdd`, `webmaster`, `codebase_mapper`), virtual `direct_cli` and `orchestrator`, and `"all"` includes both registered modes and these virtual tokens
 - `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands) and `image_cmd` (appended to base command/resume_cmd for image handling)
 - `defaults.*`: base dir, timeouts, state path, OpenAI settings, `zai_api_key`/`tavily_api_key`/`jina_api_key` for web search/reader, `github_token` for HTTPS git, `gemini_oauth_client_secret` for refreshing Gemini quota credentials
 - `defaults.log_path`: bot log file path (main log). Errors are written to a separate `*_error.log` file with the same rotation rules.
@@ -396,6 +405,7 @@ export CLI_PROXY__SCHEDULER__MAX_CONCURRENT_JOBS=2
   - `modes/webmaster/schemas.py`
   - `modes/agent/schemas.py`
   - `modes/analyst/schemas.py`
+  - `modes/sdd/schemas.py`
 - Schema feature-gating is removed: validation uses a single unified pipeline.
 - Legacy parsing fallback is removed: structured parsing is V2-only via `parse_normalize_validate`/`loads_safe`.
 
@@ -534,7 +544,7 @@ GitHub PAT for HTTPS git:
 
 ## Bot commands
 ### Visible in Telegram menu
-- `/sessions` - session management menu (new/list/status/rename/close/resume/state/queue/clearqueue/reset + agent/manager/analyst/webmaster/mapper)
+- `/sessions` - session management menu (new/list/status/rename/close/resume/state/queue/clearqueue/reset + agent/manager/SDD/analyst/webmaster/mapper)
 - `/interrupt` - interrupt generation
 - `/git` - Git actions for the current context session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/files` - file management in the working directory (send/save/rename/delete)
@@ -574,7 +584,7 @@ GitHub PAT for HTTPS git:
 - These run operations are different from `/resume [token]`: the slash command manages the CLI resume token, while `doctor/recover/resume` buttons operate on runtime recovery for the current run.
 
 ## State
-- `state.json` - stores per-session state: `resume_token`, `summary/updated_at`, queue, active mode (`agent`/`manager`/`analyst`/`webmaster`/`codebase_mapper`), agent memory, `project_root`.
+- `state.json` - stores per-session state: `resume_token`, `summary/updated_at`, queue, active mode (`agent`/`manager`/`sdd`/`analyst`/`webmaster`/`codebase_mapper`), agent memory, `project_root`.
 - `state.json` - stores inter-mode handoff/orchestrator fields: `advanced_orchestrator_enabled`, `orchestrator_pending_input`, `orchestrator_last_mode_output`, `orchestrator_last_mode_id`.
 - `state.json` - stores sessions list and scope-bound mappings for restart restore.
 

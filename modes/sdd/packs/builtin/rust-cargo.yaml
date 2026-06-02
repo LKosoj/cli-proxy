@@ -1,0 +1,57 @@
+schema_version: "1"
+pack_id: rust-cargo
+title: Rust / Cargo
+lifecycle: builtin
+version: "1.0"
+applies_to:
+  primary_ecosystem: rust
+  languages: [rust]
+  frameworks: [cargo]
+  targets: []
+  can_combine_with: [any]
+detectors:
+  min_confidence: 0.62
+  evidence_groups_required: [manifest, source]
+  rules:
+    - id: cargo_manifest
+      kind: file_exists
+      path: Cargo.toml
+      group: manifest
+      weight: 0.7
+      reason: Cargo manifest found.
+    - id: cargo_lock
+      kind: file_exists
+      path: Cargo.lock
+      group: lockfile
+      weight: 0.2
+      reason: Cargo lockfile found.
+    - id: rust_source
+      kind: any_file_matches
+      pattern: "**/src/*.rs"
+      group: source
+      weight: 0.5
+      reason: Rust source found under a Cargo src directory.
+    - id: rust_workspace
+      kind: toml_field
+      path: Cargo.toml
+      field: workspace
+      group: workspace
+      weight: 0.2
+      reason: Cargo workspace metadata found.
+sdd:
+  spec_guidance: Capture crate boundaries, library vs binary target, and safety-sensitive requirements.
+  plan_guidance: Identify Cargo workspace layout, feature flags, async runtime, FFI/native links, and build script constraints.
+  task_guidance: Include cargo check/test/clippy validation tasks where applicable.
+  artifact_templates:
+    - id: cargo-plan
+      output_path: cargo-plan.md
+      title: Cargo Plan
+  validation_commands:
+    - cargo check
+    - cargo test
+  risk_prompts:
+    - Cargo features and target-specific cfg flags may change behavior.
+merge:
+  priority: 30
+  override_policy: additive
+  conflict_keys: [primary_ecosystem]

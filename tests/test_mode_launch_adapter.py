@@ -305,6 +305,62 @@ def test_scheduler_events_launch_allowed_mode_and_keep_requests_isolated(tmp_pat
     asyncio.run(_run())
 
 
+def test_scheduler_event_launch_rechecks_user_mode_allowlist(tmp_path) -> None:
+    runtime = _build_runtime(
+        tmp_path,
+        intent="scheduler_allowlist_security",
+        allowlist={"scheduler": {"capture"}},
+    )
+
+    async def _run() -> None:
+        bot_app = runtime["bot_app"]
+        bus = runtime["bus"]
+        session = runtime["session"]
+        project = runtime["project"]
+        completed: list[ModeLaunchCompletedEvent] = []
+        audits: list[dict] = []
+
+        bot_app.is_admin = lambda _chat_id: False
+        bot_app.is_user = lambda _chat_id: True
+        bot_app.access_policy_service = SimpleNamespace(
+            is_mode_allowed_for_chat=lambda _chat_id, mode_id: str(mode_id or "") == "agent"
+        )
+        bot_app.security = _security_from_bot_app(bot_app)
+        bus.subscribe(ModeLaunchCompletedEvent, completed.append)
+
+        async def _capture_audit(_event_name: str, payload: dict) -> None:
+            audits.append(dict(payload))
+
+        bus.subscribe(EventBusAuditService.EVENT_NAME, _capture_audit)
+
+        await bot_app.mode_launch_adapter.start(application=SimpleNamespace(bot=SimpleNamespace()))
+        await bus.publish(
+            ScheduledJobEvent(
+                job_id="job-denied",
+                job_name="Scheduler Denied",
+                status="manual",
+                scheduled_for=1.0,
+                cron="*/5 * * * *",
+                target_mode="capture",
+                owner_id=101,
+                notification_target={"telegram_session_uid": session_runtime_uid(session)},
+                payload={"prompt": "must not run", "project_slug": project.slug},
+            )
+        )
+        await bot_app.mode_launch_adapter.stop()
+
+        assert runtime["calls"] == []
+        assert len(completed) == 1
+        assert completed[0].status == "denied"
+        assert completed[0].result == {"error": "mode_not_allowlisted"}
+        mode_launch_audit = next(payload for payload in audits if payload.get("category") == "mode_launch")
+        assert mode_launch_audit["status"] == "denied"
+        assert mode_launch_audit["reason"] == "mode_not_allowed"
+        assert mode_launch_audit["subject"] == "capture"
+
+    asyncio.run(_run())
+
+
 def test_scheduler_events_launch_keep_payloads_isolated_and_preserve_project_metadata(tmp_path) -> None:
     runtime = _build_runtime(
         tmp_path,

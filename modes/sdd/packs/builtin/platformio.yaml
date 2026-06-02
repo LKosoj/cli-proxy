@@ -1,0 +1,35 @@
+schema_version: "1"
+pack_id: platformio
+title: PlatformIO
+lifecycle: builtin
+version: "1.0"
+applies_to:
+  primary_ecosystem: embedded
+  frameworks: [platformio]
+  can_combine_with: [core-baseline, esp32-embedded, architecture, adr, ops]
+detectors:
+  min_confidence: 0.55
+  evidence_groups_required: [manifest]
+  rules:
+    - id: platformio_ini
+      kind: file_exists
+      path: platformio.ini
+      group: manifest
+      weight: 1.0
+      reason: PlatformIO project configuration found.
+sdd:
+  spec_guidance: Capture PlatformIO environments, boards, frameworks and upload/debug requirements.
+  plan_guidance: Build a board/environment matrix from platformio.ini.
+  task_guidance: Include PlatformIO build/test/upload validation tasks.
+  artifact_templates:
+    - id: board-env-matrix
+      output_path: board-env-matrix.md
+      title: Board Environment Matrix
+  validation_commands:
+    - pio run
+  risk_prompts:
+    - Multiple PlatformIO environments can target different boards and frameworks.
+merge:
+  priority: 34
+  override_policy: additive
+  conflict_keys: []

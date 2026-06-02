@@ -901,6 +901,7 @@ def test_miniapp_settings_ui_smoke_playwright(tmp_path) -> None:
                 "  return {"
                 "    hasSettingsTab: html.includes('data-tab=\"settings\"'),"
                 "    hasSettingsSession: html.includes('id=\"settingsSession\"'),"
+                "    hasSettingsActiveMode: html.includes('id=\"settingsActiveMode\"'),"
                 "    hasRemoteControlEnabled: html.includes('id=\"settingsRemoteControlEnabled\"'),"
                 "    hasRemoteControlHostField: html.includes('id=\"settingsRemoteControlHostField\"'),"
                 "    hasRemoteControlHost: html.includes('id=\"settingsRemoteControlHost\"'),"
@@ -913,11 +914,87 @@ def test_miniapp_settings_ui_smoke_playwright(tmp_path) -> None:
             ui_check = await _playwright_run_code_json(session_name, check_script)
             assert ui_check["hasSettingsTab"] is True
             assert ui_check["hasSettingsSession"] is True
+            assert ui_check["hasSettingsActiveMode"] is True
             assert ui_check["hasRemoteControlEnabled"] is True
             assert ui_check["hasRemoteControlHostField"] is True
             assert ui_check["hasRemoteControlHost"] is True
             assert ui_check["hasRemoteControlRecheck"] is True
             assert ui_check["hasRemoteControlError"] is True
+
+        finally:
+            try:
+                await _run_playwright(session_name, "close")
+            except AssertionError:
+                pass
+            await server.close()
+
+    asyncio.run(_run())
+
+
+def test_miniapp_settings_active_mode_toggle_playwright(tmp_path) -> None:
+    """Playwright test: Active Mode select can enable SDD and clear it back to direct CLI."""
+    async def _run() -> None:
+        cfg = _build_config(tmp_path, token="t")
+        app = BotApp(cfg)
+        workdir = tmp_path / "settings-active-mode"
+        workdir.mkdir()
+        session = app.manager.create(1, "dummy", str(workdir))
+
+        web_app = web.Application()
+        MiniAppRoutes(app).register(web_app)
+
+        server = TestServer(web_app)
+        await server.start_server()
+        session_name = f"miniapp-settings-mode-{uuid.uuid4().hex[:8]}"
+        try:
+            base_url = str(server.make_url("/"))
+            init_data = _build_init_data("t", 1)
+
+            await _run_playwright(session_name, "open", "about:blank", "--browser=chrome")
+            boot = await _playwright_run_code_json(
+                session_name,
+                _miniapp_boot_script(base_url, init_data),
+            )
+            assert boot == {"title": "cli-proxy MiniApp", "hasBody": True}
+
+            toggle_script = (
+                "async page => {"
+                "  await page.waitForSelector('.tabs button[data-tab=\"settings\"]', { state: 'attached', timeout: 20000 });"
+                "  await page.evaluate(() => document.querySelector('.tabs button[data-tab=\"settings\"]')?.click());"
+                "  await page.waitForSelector('#settingsActiveMode', { state: 'attached', timeout: 20000 });"
+                "  await page.waitForFunction(() => {"
+                "    const select = document.getElementById('settingsSession');"
+                "    return select && Array.from(select.options).some((option) => option.value);"
+                "  }, null, { timeout: 10000 });"
+                "  await page.evaluate(() => {"
+                "    const select = document.getElementById('settingsSession');"
+                "    if (!select.value) {"
+                "      const option = Array.from(select.options).find((item) => item.value);"
+                "      if (option) select.value = option.value;"
+                "    }"
+                "    select.dispatchEvent(new Event('change', { bubbles: true }));"
+                "  });"
+                "  await page.waitForFunction(() => {"
+                "    const select = document.getElementById('settingsActiveMode');"
+                "    return select && Array.from(select.options).some((option) => option.value === 'sdd');"
+                "  }, null, { timeout: 10000 });"
+                "  await page.selectOption('#settingsActiveMode', 'sdd');"
+                "  await page.click('#settingsSave');"
+                "  await page.waitForFunction(() => document.getElementById('settingsActiveMode')?.value === 'sdd',"
+                "    null, { timeout: 10000 });"
+                "  const afterOn = await page.$eval('#settingsActiveMode', (el) => el.value);"
+                "  await page.selectOption('#settingsActiveMode', '');"
+                "  await page.click('#settingsSave');"
+                "  await page.waitForFunction(() => document.getElementById('settingsActiveMode')?.value === '',"
+                "    null, { timeout: 10000 });"
+                "  const afterOff = await page.$eval('#settingsActiveMode', (el) => el.value);"
+                "  return { afterOn, afterOff };"
+                "}"
+            )
+            result = await _playwright_run_code_json(session_name, toggle_script)
+
+            assert result == {"afterOn": "sdd", "afterOff": ""}
+            assert session.modes.active_mode is None
 
         finally:
             try:
