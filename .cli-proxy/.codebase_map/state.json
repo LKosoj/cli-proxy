@@ -1,6 +1,6 @@
 {
   "state": "needs_review",
-  "updated_at": "2026-04-27T23:45:04Z",
+  "updated_at": "2026-06-03T02:24:01Z",
   "operation": "init_full",
   "nodes_count": 30,
   "tree": [
@@ -1537,188 +1537,188 @@
       "    start-miniapp-py.md",
       "    summary-py.md"
     ],
-    "validated_at": "2026-04-27T23:45:04Z"
+    "validated_at": "2026-06-03T02:24:01Z"
   },
   "nodes_status": {
     "nodes/tests.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/modes.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/app.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/agent.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/desktop.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/tg.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/miniapp.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/sessions.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/utils.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/session-json.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/bot-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/code-stats-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/config-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/config-example-yaml.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/conftest-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/fix-permissions-sh.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/full-ui-yaml.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/gen-init-data-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/miniapp-pid.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/mkdocs-yml.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/parse-status-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/playwright-config-json.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/pytest-ini.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/requirements-txt.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/scripts.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/session-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/setup-bot-sh.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/skills-lock-json.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/start-miniapp-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/summary-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-04-27T23:45:04Z"
+      "updated_at": "2026-06-03T02:24:01Z"
     },
     "nodes/auth-success-yaml.md": {
       "status": "ok",
