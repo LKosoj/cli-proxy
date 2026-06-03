@@ -9,6 +9,7 @@ from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, APIStatusEr
 from modes.sdk.runtime.openai_client import create_async_openai_client, resolve_openai_config
 from modes.sdk.runtime.json_normalizer import parse_normalize_validate
 from config import AppConfig
+from i18n.language_names import LANGUAGE_NAMES
 from utils.text import normalize_text
 
 # ---------------------------------------------------------------------------
@@ -356,7 +357,6 @@ async def suggest_commit_message_async(
 ) -> Optional[str]:
     if not config:
         return None
-    from i18n.language_names import LANGUAGE_NAMES
     lang_name = LANGUAGE_NAMES.get(language, "Russian")
     content = await _chat_completion_async(
         config,
@@ -377,7 +377,6 @@ async def suggest_commit_message_detailed_async(
 ) -> Optional[Tuple[str, str]]:
     if not config:
         return None
-    from i18n.language_names import LANGUAGE_NAMES
     lang_name = LANGUAGE_NAMES.get(language, "Russian")
     base_system_prompt = (
         "Generate a git commit message and return strictly a JSON object.\n"

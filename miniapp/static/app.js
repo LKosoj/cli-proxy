@@ -79,6 +79,65 @@
     lastRenderedSessionId: null,
     redaction: null
   };
+
+  const i18n = { catalog: {}, lang: "ru" };
+
+  function t(key, fallback) {
+    const parts = key.split(".");
+    let node = i18n.catalog;
+    for (const p of parts) {
+      if (node == null || typeof node !== "object") return fallback !== undefined ? fallback : key;
+      node = node[p];
+    }
+    if (node == null || typeof node === "object") return fallback !== undefined ? fallback : key;
+    return String(node);
+  }
+
+  async function loadI18n(lang) {
+    try {
+      const data = await api(`/i18n/${encodeURIComponent(lang)}`);
+      i18n.catalog = data || {};
+      i18n.lang = lang;
+    } catch {
+      // fallback: каталог остаётся текущим
+    }
+  }
+
+  function applyI18nToDOM() {
+    document.querySelectorAll("[data-i18n-key]").forEach(el => {
+      const key = el.getAttribute("data-i18n-key");
+      const translated = t(key);
+      if (translated !== key) el.textContent = translated;
+    });
+    // Parameterized keys: substitute {n} with the element's `value` (e.g. log history options).
+    document.querySelectorAll("[data-i18n-key-n]").forEach(el => {
+      const key = el.getAttribute("data-i18n-key-n");
+      const n = el.getAttribute("value") || "";
+      const translated = t(key);
+      if (translated !== key) el.textContent = translated.replace("{n}", n);
+    });
+  }
+
+  async function initLanguage() {
+    const tgLang = tg && tg.initDataUnsafe && tg.initDataUnsafe.user
+      ? (tg.initDataUnsafe.user.language_code || "ru")
+      : "ru";
+    await loadI18n(tgLang);
+    applyI18nToDOM();
+  }
+
+  async function syncServerLanguage() {
+    try {
+      const res = await api("/i18n/user-lang");
+      if (res.lang && res.lang !== i18n.lang) {
+        await loadI18n(res.lang);
+        applyI18nToDOM();
+      }
+      const sel = document.getElementById("langSelect");
+      if (sel) sel.value = i18n.lang;
+    } catch { /* ignore */ }
+  }
+
   const SECRET_UNCHANGED_SENTINEL = "__CLI_PROXY_SECRET_UNCHANGED__";
   const SECRET_INPUT_PATHS = Object.freeze({
     "tg-token": "telegram.token",
@@ -197,7 +256,7 @@
       body = {};
     }
     if (!res.ok) {
-      const message = body && body.error ? body.error : (res.status === 401 || res.status === 403 ? "Ошибка авторизации" : `HTTP ${res.status}`);
+      const message = body && body.error ? body.error : (res.status === 401 || res.status === 403 ? t("miniapp.error.auth", "Ошибка авторизации") : `HTTP ${res.status}`);
       const err = new Error(message);
       err.status = res.status;
       err.body = body;
@@ -216,7 +275,7 @@
     wrapper.style.fontFamily = '"IBM Plex Sans", "Segoe UI", sans-serif';
     wrapper.style.background = "var(--tg-theme-bg-color, #f3f4f6)";
     wrapper.style.color = "var(--tg-theme-text-color, #111827)";
-    wrapper.textContent = "Доступ запрещен";
+    wrapper.textContent = t("miniapp.error.access_denied", "Доступ запрещен");
     document.body.appendChild(wrapper);
   }
 
@@ -365,7 +424,7 @@
         <button id="adminApply">Применить</button>
       </div>
       <div id="adminStatusBanner" class="admin-status-banner hidden"></div>
-      <div id="adminStatusMessage" class="status-empty">Выберите сессию для Admin-панели.</div>
+      <div id="adminStatusMessage" class="status-empty">${escapeHtml(t("miniapp.admin.choose_session", "Выберите сессию для Admin-панели."))}</div>
       <div id="adminStatusDashboard" class="admin-dashboard hidden">
         <div id="adminDisabledState" class="admin-state-card admin-state-card-disabled hidden">
           <div class="admin-state-title">Admin disabled</div>
@@ -513,7 +572,7 @@
                 </div>
                 <div class="admin-state-actions admin-approval-actions">
                   <select id="adminSkillApprovalSelect">
-                    <option value="">Выберите pending skill install</option>
+                    <option value="">${escapeHtml(t("miniapp.admin.choose_skill", "Выберите pending skill install"))}</option>
                   </select>
                   <button id="adminSkillApprovalApprove" type="button">Approve skill</button>
                   <button id="adminSkillApprovalReject" type="button">Reject skill</button>
@@ -704,7 +763,7 @@
       setAdminStatusBanner("");
       setAdminStateVisibility({});
       setAdminStructuredVisibility(false);
-      setAdminStatusMessage("Сессия не выбрана", false);
+      setAdminStatusMessage(t("miniapp.status.no_session", "Сессия не выбрана"), false);
       return null;
     }
     state.adminRequestInFlight = true;
@@ -758,7 +817,7 @@
     if (!tbody) return;
     tbody.innerHTML = "";
     if (!sessionUid) {
-      setAdminStatusBanner("Сессия не выбрана.", false);
+      setAdminStatusBanner(t("miniapp.status.no_session", "Сессия не выбрана."), false);
       return;
     }
     try {
@@ -799,10 +858,10 @@
     const statusEl = document.getElementById("adminConfigStatus");
     if (!editor) return;
     if (!sessionUid) {
-      if (statusEl) statusEl.textContent = "Сессия не выбрана.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.no_session", "Сессия не выбрана.");
       return;
     }
-    if (statusEl) statusEl.textContent = "Загрузка…";
+    if (statusEl) statusEl.textContent = t("miniapp.status.loading", "Загрузка…");
     try {
       const response = await api(`/v1/admin/config?session_uid=${encodeURIComponent(sessionUid)}`);
       editor.value = String(response?.yaml || "");
@@ -917,10 +976,10 @@
     const sessionUid = String(state.adminSessionUid || "").trim();
     const statusEl = document.getElementById("adminMonitorServersStatus");
     if (!sessionUid) {
-      if (statusEl) statusEl.textContent = "Сессия не выбрана.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.no_session", "Сессия не выбрана.");
       return;
     }
-    if (statusEl) statusEl.textContent = "Загрузка…";
+    if (statusEl) statusEl.textContent = t("miniapp.status.loading", "Загрузка…");
     try {
       await loadAdminHostsOptions(sessionUid);
       const response = await api(
@@ -962,7 +1021,7 @@
     const sessionUid = String(state.adminSessionUid || "").trim();
     const statusEl = document.getElementById("adminMonitorServersStatus");
     if (!sessionUid) {
-      if (statusEl) statusEl.textContent = "Сессия не выбрана.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.no_session", "Сессия не выбрана.");
       return;
     }
     const servers = collectAdminMonitorServersFromUi();
@@ -1083,10 +1142,10 @@
     const sessionUid = String(state.adminSessionUid || "").trim();
     const statusEl = document.getElementById("adminSshActionsStatus");
     if (!sessionUid) {
-      if (statusEl) statusEl.textContent = "Сессия не выбрана.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.no_session", "Сессия не выбрана.");
       return;
     }
-    if (statusEl) statusEl.textContent = "Загрузка…";
+    if (statusEl) statusEl.textContent = t("miniapp.status.loading", "Загрузка…");
     try {
       const response = await api(
         `/v1/admin/actions/ssh?session_uid=${encodeURIComponent(sessionUid)}`,
@@ -1124,7 +1183,7 @@
     const sessionUid = String(state.adminSessionUid || "").trim();
     const statusEl = document.getElementById("adminSshActionsStatus");
     if (!sessionUid) {
-      if (statusEl) statusEl.textContent = "Сессия не выбрана.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.no_session", "Сессия не выбрана.");
       return;
     }
     const actions = collectAdminSshActionsFromUi();
@@ -1163,7 +1222,7 @@
         `[${statusValueText(eventTs)}] ${statusValueText(eventType)} status=${statusValueText(eventStatus)}${message ? ` | ${statusValueText(message)}` : ""}`,
       );
     });
-    return lines.join("\n").trim() || "Нет данных.";
+    return lines.join("\n").trim() || t("miniapp.status.no_data", "Нет данных.");
   }
 
   async function viewAdminRunDetail() {
@@ -1175,10 +1234,10 @@
     const selected = tbody?.querySelector("tr.selected");
     const runId = String(selected?.dataset?.runId || "").trim();
     if (!runId) {
-      detailBody.textContent = "Выберите run в таблице.";
+      detailBody.textContent = t("miniapp.runs.select_hint", "Выберите run в таблице.");
       return;
     }
-    detailBody.textContent = "Загрузка…";
+    detailBody.textContent = t("miniapp.status.loading", "Загрузка…");
     try {
       const payload = await api(
         `/v1/admin/runs/${encodeURIComponent(runId)}?session_uid=${encodeURIComponent(sessionUid)}&events_limit=50`
@@ -1200,7 +1259,7 @@
     const panel = document.getElementById("settingsPanel");
     const empty = document.getElementById("settingsEmpty");
     if (!uid) {
-      empty.textContent = "Выберите сессию для управления настройками.";
+      empty.textContent = t("miniapp.settings.choose_session", "Выберите сессию для управления настройками.");
       empty.classList.remove("hidden");
       panel.classList.add("hidden");
       return;
@@ -1244,7 +1303,7 @@
       : (Array.isArray(state.statusLastPayload?.modes) ? state.statusLastPayload.modes : []);
     const directCliAllowed = data.available?.direct_cli_allowed !== false;
     const activeModeOptions = [
-      ...(directCliAllowed ? ['<option value="">Прямой CLI</option>'] : []),
+      ...(directCliAllowed ? [`<option value="">${escapeHtml(t("miniapp.mode.direct_cli", "Прямой CLI"))}</option>`] : []),
       ...modeItems
         .map((item) => {
           const modeId = String(item?.id || "");
@@ -1355,9 +1414,9 @@
       tg.showScanResult?.("Настройки сохранены");
       await fetchSessionSettings();
     } catch (err) {
-      const preflightError = err?.body?.preflight?.error;
+      const preflightError = err?.body?.preflight?.error ?? err?.body?.error;
       rcError.textContent = preflightError
-        ? `Preflight failed: ${preflightError}`
+        ? `Preflight failed: ${t("errors." + preflightError, preflightError)}`
         : `Ошибка сохранения: ${err.message || "unknown"}`;
       rcError.style.display = "block";
     }
@@ -2140,7 +2199,7 @@
   function adminObjectHtml(value, depth) {
     const entries = Object.entries(value || {});
     if (!entries.length) {
-      return '<div class="admin-empty-note">Нет данных</div>';
+      return `<div class="admin-empty-note">${escapeHtml(t("miniapp.status.no_data_short", "Нет данных"))}</div>`;
     }
     const simpleEntries = entries.every(
       ([, nested]) => !Array.isArray(nested) && !isPlainObject(nested),
@@ -2166,7 +2225,7 @@
   function adminArrayHtml(value, depth) {
     const items = Array.isArray(value) ? value : [];
     if (!items.length) {
-      return '<div class="admin-empty-note">Нет данных</div>';
+      return `<div class="admin-empty-note">${escapeHtml(t("miniapp.status.no_data_short", "Нет данных"))}</div>`;
     }
     const rows = items.map((item) => `
       <div class="admin-stack-item">
@@ -2178,7 +2237,7 @@
 
   function adminStructuredValueHtml(value, { depth = 0 } = {}) {
     if (adminIsEmptyValue(value)) {
-      return '<div class="admin-empty-note">Нет данных</div>';
+      return `<div class="admin-empty-note">${escapeHtml(t("miniapp.status.no_data_short", "Нет данных"))}</div>`;
     }
     if (Array.isArray(value)) {
       return adminArrayHtml(value, depth);
@@ -2340,7 +2399,7 @@
     }
     if (skillApprovalSelect) {
       const previous = String(skillApprovalSelect.value || "");
-      const options = ['<option value="">Выберите pending skill install</option>'].concat(
+      const options = [`<option value="">${escapeHtml(t("miniapp.admin.choose_skill", "Выберите pending skill install"))}</option>`].concat(
         pendingSkillItems.map((item) => {
           const approvalId = String(item?.approval_id || "");
           const skillId = String(item?.skill_id || "skill");
@@ -2513,7 +2572,7 @@
       setAdminStatusBanner("");
       setAdminStateVisibility({});
       setAdminStructuredVisibility(false);
-      setAdminStatusMessage("Сессия не выбрана");
+      setAdminStatusMessage(t("miniapp.status.no_session", "Сессия не выбрана"));
       return null;
     }
     if (cachedPayload) {
@@ -2753,7 +2812,7 @@
 
   async function postAdminChatMessage() {
     const sessionUid = adminChatSessionUid();
-    if (!sessionUid) { setAdminChatStatus("Выберите сессию"); return; }
+    if (!sessionUid) { setAdminChatStatus(t("miniapp.label.choose_session", "Выберите сессию")); return; }
     const input = document.getElementById("adminChatInput");
     const text = input ? String(input.value || "").trim() : "";
     if (!text) return;
@@ -2838,7 +2897,7 @@
 
   async function saveAdminChatMemory() {
     const sessionUid = adminChatSessionUid();
-    if (!sessionUid) { setAdminChatStatus("Выберите сессию"); return; }
+    if (!sessionUid) { setAdminChatStatus(t("miniapp.label.choose_session", "Выберите сессию")); return; }
     const textarea = document.getElementById("adminChatMemory");
     const text = textarea ? String(textarea.value || "") : "";
     try {
@@ -2972,7 +3031,7 @@
       const options = projectList
         .map((item) => `<option value="${escapeHtml(item.slug)}">${escapeHtml(item.name || item.slug)}</option>`)
         .join("");
-      select.innerHTML = `<option value="">Выберите проект</option>${options}`;
+      select.innerHTML = `<option value="">${escapeHtml(t("miniapp.label.choose_project", "Выберите проект"))}</option>${options}`;
       state.schedulerProjectsSignature = nextSignature;
     }
     if (desiredSelected) {
@@ -2993,7 +3052,7 @@
       const items = values
         .map((item) => `<option value="${escapeHtml(item.telegram_session_uid)}">${escapeHtml(item.label || item.telegram_session_uid)}</option>`)
         .join("");
-      select.innerHTML = `<option value="">Выберите session_uid</option>${items}`;
+      select.innerHTML = `<option value="">${escapeHtml(t("miniapp.label.choose_session_uid", "Выберите session_uid"))}</option>${items}`;
       state.schedulerSessionsSignature = nextSignature;
     }
     if (desiredSelected) {
@@ -3114,7 +3173,7 @@
     renderSchedulerModeOptions();
     if (!state.schedulerProjectSlug) {
       renderSchedulerJobs([]);
-      setSchedulerStatus(projects.length ? "Выберите проект для управления расписанием." : "Нет доступных проектов.");
+      setSchedulerStatus(projects.length ? t("miniapp.scheduler.choose_project", "Выберите проект для управления расписанием.") : t("miniapp.scheduler.no_projects", "Нет доступных проектов."));
       return;
     }
     renderSchedulerJobs(Array.isArray(body.jobs) ? body.jobs : []);
@@ -3356,7 +3415,7 @@
     const select = document.getElementById("statusSession");
     if (!select) return;
     const sessions = Array.isArray(payload?.available_sessions) ? payload.available_sessions : [];
-    const defaultLabel = "Выберите сессию";
+    const defaultLabel = t("miniapp.label.choose_session", "Выберите сессию");
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
@@ -3386,7 +3445,7 @@
     const select = document.getElementById("filesSession");
     if (!select) return;
     const sessions = Array.isArray(payload?.available_sessions) ? payload.available_sessions : [];
-    const defaultLabel = "Выберите сессию";
+    const defaultLabel = t("miniapp.label.choose_session", "Выберите сессию");
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
@@ -3415,7 +3474,7 @@
     const select = document.getElementById("settingsSession");
     if (!select) return;
     const sessions = Array.isArray(payload?.available_sessions) ? payload.available_sessions : [];
-    const defaultLabel = "Выберите сессию";
+    const defaultLabel = t("miniapp.label.choose_session", "Выберите сессию");
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
@@ -3506,7 +3565,7 @@
     if (!detail || !skillLog) return;
     state.runsCurrentDetail = run || null;
     if (!run) {
-      detail.textContent = "Выберите запуск.";
+      detail.textContent = t("miniapp.runs.select_run", "Выберите запуск.");
       skillLog.textContent = "";
       setRunActionButtonsEnabled(false, null);
       return;
@@ -3601,7 +3660,7 @@
       state.runsSelectedRunId = "";
       state.runsSelectedModeId = "";
       setRunsActionMessage("");
-      setRunsMessage("Выберите сессию, чтобы просмотреть run artifacts.");
+      setRunsMessage(t("miniapp.runs.choose_session", "Выберите сессию, чтобы просмотреть run artifacts."));
       renderRunDetail(null);
       return null;
     }
@@ -3745,7 +3804,7 @@
         if (stServerTime) stServerTime.textContent = serverTimeText(p.server_time_iso, p.server_time_epoch);
         if (stSessionCount) stSessionCount.textContent = String(p.session_count || 0);
 
-        setStatus(p.status_text || "Сессия не выбрана или недоступна");
+        setStatus(p.status_text || t("miniapp.status.session_unavailable", "Сессия не выбрана или недоступна"));
         setStatusRaw(JSON.stringify(payload || {}, null, 2));
         return;
     }
@@ -3851,7 +3910,7 @@
         stOrchLabel.parentElement.style.color = active.advanced_orchestrator_enabled ? "var(--tg-theme-link-color, #2481cc)" : "var(--muted)";
     }
     
-    let activeModeLabel = "Прямой CLI";
+    let activeModeLabel = t("miniapp.mode.direct_cli", "Прямой CLI");
     let isActiveMode = false;
     const mode = String(active.active_mode || "");
     const modes = Array.isArray(p.modes) ? p.modes : [];
@@ -4153,7 +4212,7 @@
     }
     if (type) {
       const options = logTypes
-        .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || item.id)}</option>`)
+        .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(t(`log_type.${item.id}`, item.label || item.id))}</option>`)
         .join("");
       type.innerHTML = options;
       if (state.logsType) {
@@ -5575,7 +5634,7 @@
     try {
       const sessionUid = currentFilesSessionUid();
       if (!sessionUid) {
-        status.textContent = "Сессия не выбрана";
+        status.textContent = t("miniapp.status.no_session", "Сессия не выбрана");
         return;
       }
       const result = await api(`/files/tree?path=${encodeURIComponent(path)}&session_uid=${encodeURIComponent(sessionUid)}`);
@@ -5608,7 +5667,7 @@
       status.textContent = "";
     } catch (err) {
       if (err.status === 400) {
-        status.textContent = "Сессия не выбрана";
+        status.textContent = t("miniapp.status.no_session", "Сессия не выбрана");
       } else {
         status.textContent = err.message;
       }
@@ -5825,7 +5884,8 @@
         if (result?.preflight?.ok) {
           tg.showScanResult?.("Preflight пройден успешно");
         } else {
-          rcError.textContent = `Preflight error: ${result?.preflight?.error || result?.error || "unknown"}`;
+          const pfeCode = result?.preflight?.error || result?.error || "unknown";
+          rcError.textContent = `Preflight error: ${t("errors." + pfeCode, pfeCode)}`;
           rcError.style.display = "block";
         }
         await fetchSessionSettings();
@@ -5913,7 +5973,7 @@
       adminSkillApprovalApprove.onclick = () => {
         const approvalId = String(document.getElementById("adminSkillApprovalSelect")?.value || "").trim();
         if (!approvalId) {
-          setAdminStatusBanner("Выберите pending skill install.", false);
+          setAdminStatusBanner(t("miniapp.admin.choose_skill", "Выберите pending skill install."), false);
           return;
         }
         void performAdminAction("approve_skill_install", { approval_id: approvalId });
@@ -5924,7 +5984,7 @@
       adminSkillApprovalReject.onclick = () => {
         const approvalId = String(document.getElementById("adminSkillApprovalSelect")?.value || "").trim();
         if (!approvalId) {
-          setAdminStatusBanner("Выберите pending skill install.", false);
+          setAdminStatusBanner(t("miniapp.admin.choose_skill", "Выберите pending skill install."), false);
           return;
         }
         void performAdminAction("reject_skill_install", { approval_id: approvalId });
@@ -6021,6 +6081,24 @@
     const autonomyMaintenance = document.getElementById("autonomyMaintenance");
     if (autonomyMaintenance) {
       autonomyMaintenance.onclick = () => { void autonomyRunDailyMaintenance(); };
+    }
+
+    const langSave = document.getElementById("langSave");
+    if (langSave) {
+      langSave.addEventListener("click", async () => {
+        const lang = document.getElementById("langSelect").value;
+        try {
+          await api("/i18n/user-lang", { method: "PUT", body: JSON.stringify({ lang }), headers: { "Content-Type": "application/json" } });
+        } catch { /* ignore save errors */ }
+        await loadI18n(lang);
+        applyI18nToDOM();
+        document.getElementById("langSelect").value = lang;
+      });
+    }
+
+    const langSelect = document.getElementById("langSelect");
+    if (langSelect) {
+      langSelect.value = i18n.lang;
     }
 
     window.addEventListener("resize", () => {
@@ -7176,11 +7254,13 @@
   }
 
   async function boot() {
+    await initLanguage();
     ensureAdminPanelLayout();
     installButtonPressFeedback();
     bindButtons();
     try {
       state.me = await api("/auth/me");
+      await syncServerLanguage();
       void connectStatusWs();
       try {
         await loadLogsMeta();

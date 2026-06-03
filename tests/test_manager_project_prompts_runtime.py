@@ -58,3 +58,59 @@ def test_manager_orchestrator_reloads_decision_prompt_from_project_yaml(monkeypa
         assert captured_system[-1] == "MARKER_DECISION_PROMPT_V2"
 
     asyncio.run(_run())
+
+
+def test_manager_orchestrator_loads_system_prompts_in_active_lang(tmp_path) -> None:
+    """W3: _load_manager_prompts must honour the per-run resolved language so
+    non-Russian users get localized LLM system prompts, not always Russian.
+    Language lives in a ContextVar (per asyncio task) so concurrent runs on the
+    shared singleton orchestrator cannot clobber each other."""
+    from agent.manager_core import _MANAGER_ACTIVE_LANG
+
+    ensure_project_prompts(str(tmp_path))
+    orch = _make_orchestrator()
+
+    tok = _MANAGER_ACTIVE_LANG.set("ru")
+    try:
+        prompts_ru = orch._load_manager_prompts(str(tmp_path))
+    finally:
+        _MANAGER_ACTIVE_LANG.reset(tok)
+
+    tok = _MANAGER_ACTIVE_LANG.set("de")
+    try:
+        prompts_de = orch._load_manager_prompts(str(tmp_path))
+    finally:
+        _MANAGER_ACTIVE_LANG.reset(tok)
+
+    # A localized SYSTEM prompt key must be served in the active language.
+    for key in ("commit_message_system", "final_report_system"):
+        assert prompts_ru.get(key), f"missing ru system prompt: {key}"
+        assert prompts_de.get(key), f"missing de system prompt: {key}"
+    assert prompts_ru["commit_message_system"] != prompts_de["commit_message_system"]
+
+    # Outside of any run() (ContextVar at its default) it falls back to Russian.
+    prompts_default = orch._load_manager_prompts(str(tmp_path))
+    assert prompts_default["commit_message_system"] == prompts_ru["commit_message_system"]
+
+
+def test_manager_active_lang_isolated_across_concurrent_tasks(tmp_path) -> None:
+    """W3 race: the shared singleton orchestrator must not let one task's
+    language leak into a concurrently-running task. ContextVar guarantees each
+    asyncio task carries its own copy."""
+    from agent.manager_core import _MANAGER_ACTIVE_LANG
+
+    ensure_project_prompts(str(tmp_path))
+    orch = _make_orchestrator()
+
+    async def _run_one(lang: str) -> str:
+        _MANAGER_ACTIVE_LANG.set(lang)
+        # Yield control so the other task interleaves between set and read.
+        await asyncio.sleep(0)
+        prompts = orch._load_manager_prompts(str(tmp_path))
+        return prompts["commit_message_system"]
+
+    async def _main() -> tuple[str, str]:
+        return await asyncio.gather(_run_one("de"), _run_one("ru"))  # type: ignore[return-value]
+
+    de_text, ru_text = asyncio.run(_main())
+    assert de_text != ru_text  # each task kept its own language despite interleaving

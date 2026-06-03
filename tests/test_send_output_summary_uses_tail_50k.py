@@ -35,7 +35,7 @@ def test_send_output_summary_uses_tail_70k(tmp_path, monkeypatch):
 
         import sessions.session_management as sm_mod
 
-        async def _fake_summary(text, config):
+        async def _fake_summary(text, config=None, *, language="ru"):
             seen["text"] = text
             return "SUMMARY", None
 

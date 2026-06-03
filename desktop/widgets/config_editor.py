@@ -104,6 +104,11 @@ DESKTOP_UNSUPPORTED_CONFIG_FIELDS = frozenset({
     "security.rate_limits.policies.*.window_sec",
     "security.rate_limits.policies.*.burst_limit",
     "security.rate_limits.policies.*.burst_window_sec",
+    # i18n fields are managed via the dedicated language selector / language API
+    # and auto-detection, not the generic config editor.
+    "defaults.default_language",
+    "telegram.user_languages",
+    "defaults.clarification_keywords_by_lang",
 })
 
 

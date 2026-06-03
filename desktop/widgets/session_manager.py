@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 
+from i18n import t
 from session import session_runtime_uid
 from utils.ui import ensure_async, format_session_title
 
@@ -251,11 +252,14 @@ class SessionManagerWidget(QWidget):
         if self.facade.config_service.config:
             tools = list(self.facade.config_service.config.tools.keys())
 
+        lang = self.facade.ui_language
         if not tools:
-            QMessageBox.warning(self, "Error", "No tools configured.")
+            QMessageBox.warning(self, t("desktop.btn.actions", lang), t("desktop.msg.no_tools", lang))
             return
 
-        tool, ok = QInputDialog.getItem(self, "New Session", "Select Tool:", tools, 0, False)
+        tool, ok = QInputDialog.getItem(
+            self, t("desktop.session.new_title", lang), t("desktop.session.select_tool", lang), tools, 0, False
+        )
         if not ok or not tool:
             return
 
@@ -309,7 +313,11 @@ class SessionManagerWidget(QWidget):
                     item.setSelected(True)
                     break
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to create session: {e}")
+            lang = self.facade.ui_language
+            QMessageBox.critical(
+                self, t("desktop.btn.actions", lang),
+                t("desktop.msg.session_create_failed", lang, error=str(e))
+            )
 
     def start_new_session(self) -> None:
         """Публичная команда для command palette."""
@@ -322,9 +330,10 @@ class SessionManagerWidget(QWidget):
 
         session_uid = items[0].data(Qt.ItemDataRole.UserRole)
 
+        lang = self.facade.ui_language
         reply = QMessageBox.question(
-            self, "Delete Session",
-            f"Are you sure you want to delete session {session_uid}?",
+            self, t("desktop.session.close_confirm_title", lang),
+            t("desktop.session.close_confirm_msg", lang, uid=session_uid),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -344,8 +353,10 @@ class SessionManagerWidget(QWidget):
         if not session:
             return
 
+        lang = self.facade.ui_language
         new_name, ok = QInputDialog.getText(
-            self, "Rename Session", "Enter new name:", text=(session.name or session.id)
+            self, t("desktop.session.rename_title", lang), t("desktop.session.rename_prompt", lang),
+            text=(session.name or session.id)
         )
         if ok:
             self.facade.rename_session(session_uid, new_name)
@@ -357,9 +368,10 @@ class SessionManagerWidget(QWidget):
             return
         session_uid = items[0].data(Qt.ItemDataRole.UserRole)
 
+        lang = self.facade.ui_language
         reply = QMessageBox.question(
-            self, "Reset Session",
-            f"Are you sure you want to reset session {session_uid}?\nThis will clear context and resume token.",
+            self, t("desktop.session.close_confirm_title", lang),
+            t("desktop.session.reset_confirm", lang, uid=session_uid),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -415,8 +427,10 @@ class SessionManagerWidget(QWidget):
         except ValueError:
             current_idx = 0
 
+        lang = self.facade.ui_language
         tool, ok = QInputDialog.getItem(
-            self, "Switch CLI", "Select new CLI tool:", tools, current_idx, False
+            self, t("desktop.session.switch_cli_title", lang),
+            t("desktop.session.select_tool", lang), tools, current_idx, False
         )
         if ok and tool:
             self.facade.set_active_cli(session_uid, tool)
@@ -432,8 +446,10 @@ class SessionManagerWidget(QWidget):
             return
 
         current_resume = getattr(session, "resume_token", "") or ""
+        lang = self.facade.ui_language
         new_resume, ok = QInputDialog.getText(
-            self, "Edit Resume Token", "Enter new resume token:", text=str(current_resume)
+            self, t("desktop.session.resume_token_title", lang),
+            t("desktop.session.rename_prompt", lang), text=str(current_resume)
         )
         if ok:
             session.resume_token = str(new_resume).strip() or None
@@ -442,3 +458,8 @@ class SessionManagerWidget(QWidget):
             except Exception:
                 pass
             self.refresh_sessions()
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.search_input.setPlaceholderText(t("desktop.session.search_placeholder", lang))
+        self.btn_new.setText(t("desktop.btn.new", lang))
+        self.btn_actions.setText(t("desktop.btn.actions", lang))

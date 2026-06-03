@@ -552,7 +552,7 @@ def test_session_settings_put_rejects_manager_without_openai(tmp_path) -> None:
             assert resp.status == 409
             body = await resp.json()
             assert body["ok"] is False
-            assert "OpenAI" in body["error"]
+            assert body["error"] == "ERR_OPENAI_REQUIRED"
             assert get_active_mode(session, "") in ("", None)
 
         app_inst.shutdown_html_process_pool()

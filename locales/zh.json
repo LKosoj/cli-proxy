@@ -18,7 +18,124 @@
   "errors": {
     "unknown": "未知错误",
     "session_not_found": "未找到会话。",
-    "mode_unavailable": "模式不可用。"
+    "mode_unavailable": "模式不可用。",
+    "ERR_OPENAI_REQUIRED": "此模式需要 OpenAI API。请在 config.yaml 中配置 openai_api_key 和 openai_model。",
+    "ERR_SESSION_WORKDIR_MISSING": "请先通过 /sessions 创建会话。"
+  },
+  "log_type": {
+    "main": "主日志",
+    "error": "错误",
+    "agent": "Agent",
+    "cli_dialog": "CLI 对话",
+    "miniapp": "MiniApp"
+  },
+  "miniapp": {
+    "tab": {
+      "config": "配置",
+      "files": "文件",
+      "logs": "日志",
+      "status": "状态",
+      "scheduler": "调度器",
+      "settings": "设置",
+      "admin": "管理"
+    },
+    "btn": {
+      "refresh": "刷新",
+      "validate": "验证",
+      "save": "保存",
+      "apply": "应用",
+      "up": "上级",
+      "create_file": "新建文件",
+      "create_dir": "新建文件夹",
+      "delete": "删除",
+      "close": "关闭",
+      "reload": "重新加载",
+      "reload_file": "重新加载文件（放弃我的更改）",
+      "download": "下载",
+      "undo": "撤销",
+      "cancel_save": "取消保存",
+      "force_save": "强制保存（覆盖）",
+      "create": "创建",
+      "reset": "重置",
+      "save_changes": "保存更改",
+      "clear": "清除",
+      "cancel": "取消"
+    },
+    "label": {
+      "session": "会话",
+      "log": "日志",
+      "history": "历史",
+      "autoscroll": "自动滚动",
+      "active_mode": "活动模式",
+      "ssh_remote": "SSH 远程",
+      "project": "项目",
+      "name": "名称",
+      "actions": "操作",
+      "choose_session": "选择会话",
+      "choose_project": "选择项目",
+      "choose_session_uid": "选择 session_uid"
+    },
+    "cfg": {
+      "restart_banner": "部分更改需要重启"
+    },
+    "editor": {
+      "no_file": "未选择文件",
+      "conflict_title": "检测到版本冲突！",
+      "conflict_desc": "自上次打开以来，文件已在服务器上被修改。"
+    },
+    "logs": {
+      "only_new": "仅新内容",
+      "prev_N": "前 {n} 条"
+    },
+    "status": {
+      "empty": "加载中或未选择会话...",
+      "loading": "加载中…",
+      "no_session": "未选择会话",
+      "no_data": "无数据。",
+      "no_data_short": "无数据",
+      "waiting": "等待中",
+      "git_free": "空闲",
+      "off": "关",
+      "mode_section": "工具和模式",
+      "kv_mode": "模式：",
+      "kv_tool": "工具：",
+      "manager_plan": "管理器计划",
+      "analyst": "分析师状态",
+      "agent": "Agent 状态",
+      "session_unavailable": "会话未选择或不可用"
+    },
+    "runs": {
+      "select_hint": "在表格中选择一个运行。",
+      "select_run": "选择一个运行。",
+      "choose_session": "选择会话以查看运行产物。"
+    },
+    "settings": {
+      "empty": "加载中或未选择会话...",
+      "choose_session": "选择会话以管理设置。",
+      "session_params": "会话参数",
+      "mode_hint": "选择会话模式或直接 CLI 以禁用活动模式。",
+      "lang_title": "语言",
+      "lang_label": "界面语言",
+      "lang_save": "保存语言"
+    },
+    "scheduler": {
+      "choose_project": "选择项目以管理调度。",
+      "no_projects": "没有可用项目。"
+    },
+    "admin": {
+      "choose_session": "选择会话以进入管理面板。",
+      "choose_skill": "选择待安装技能"
+    },
+    "mode": {
+      "direct_cli": "直接 CLI"
+    },
+    "error": {
+      "auth": "授权错误",
+      "access_denied": "访问被拒绝"
+    },
+    "ssh": {
+      "no_hosts": "未配置主机。"
+    }
   },
   "btn": {
     "session": {
@@ -37,94 +154,94 @@
       "lang": "🌐 语言"
     },
     "cli": {
-      "unavailable": "CLI недоступны"
+      "unavailable": "CLI 不可用"
     },
     "transfer": {
       "yes": "是，迁移",
       "no": "否，重新开始"
     },
     "orch": {
-      "on": "🧠✅ Оркестратор: вкл",
-      "off": "🧠⬜ Оркестратор: выкл"
+      "on": "🧠✅ 编排器：开",
+      "off": "🧠⬜ 编排器：关"
     },
     "ssh": {
-      "on": "🔗✅ SSH: вкл",
-      "off": "🔗⬜ SSH: выкл"
+      "on": "🔗✅ SSH：开",
+      "off": "🔗⬜ SSH：关"
     }
   },
   "msg": {
     "session": {
-      "no_projects": "Проекты не настроены. Обратитесь к администратору.",
-      "no_active": "Активных сессий нет.",
-      "no_scope": "Текущая scope-bound сессия не определена. Откройте нужный topic или выберите сессию через список.",
-      "choose": "Выберите сессию:",
-      "tool_choose": "Выберите инструмент для новой сессии:",
-      "project_choose": "Выберите проект:",
-      "project_choose_tool": "Выбран инструмент {tool}. Выберите проект.",
-      "created": "Сессия {id} создана и выбрана.",
-      "created_new_topic": "Сессия {id} создана. Продолжайте в новом topic.",
-      "selected_topic": "Сессия {id} выбрана. Продолжайте в её topic.",
-      "created_bound_topic": "Сессия {id} создана и привязана к новому topic. Продолжайте там.",
-      "no_tools": "CLI не найдены. Сначала установите нужные инструменты. Ожидаемые: {expected}",
-      "available_tools": "Доступные инструменты: {tools}",
-      "state_choose": "Выберите запись состояния:",
-      "state_path_missing": "Состояние недоступно: state_path не настроен.",
-      "state_not_found": "Состояние не найдено.",
-      "workdir_unavailable": "Рабочий каталог недоступен.",
-      "closed": "Сессия закрыта.",
-      "cancelled": "Отменено.",
-      "ssh_unavailable": "SSH не настроен для этого проекта",
-      "ssh_enabled": "Удалённое управление включено",
-      "ssh_disabled": "Удалённое управление выключено"
+      "no_projects": "未配置任何项目。请联系管理员。",
+      "no_active": "没有活跃会话。",
+      "no_scope": "当前 scope-bound 会话未定义。请打开相应的 topic 或通过列表选择会话。",
+      "choose": "请选择会话：",
+      "tool_choose": "请选择新会话的工具：",
+      "project_choose": "请选择项目：",
+      "project_choose_tool": "已选择工具 {tool}。请选择项目。",
+      "created": "会话 {id} 已创建并选中。",
+      "created_new_topic": "会话 {id} 已创建。请在新 topic 中继续。",
+      "selected_topic": "会话 {id} 已选中。请在其 topic 中继续。",
+      "created_bound_topic": "会话 {id} 已创建并绑定到新 topic。请在那里继续。",
+      "no_tools": "未找到 CLI。请先安装所需工具。预期：{expected}",
+      "available_tools": "可用工具：{tools}",
+      "state_choose": "请选择状态记录：",
+      "state_path_missing": "状态不可用：state_path 未配置。",
+      "state_not_found": "未找到状态。",
+      "workdir_unavailable": "工作目录不可用。",
+      "closed": "会话已关闭。",
+      "cancelled": "已取消。",
+      "ssh_unavailable": "该项目未配置 SSH",
+      "ssh_enabled": "远程管理已启用",
+      "ssh_disabled": "远程管理已禁用"
     },
     "error": {
-      "session_not_found": "Сессия не найдена.",
-      "session_busy": "Сессия занята. Переключение CLI недоступно.",
-      "session_busy_project": "Сессия занята. Переключение проекта недоступно.",
-      "session_no_scope": "Сессия не определена для текущего scope.",
-      "cli_unavailable": "CLI недоступен (не установлен или выключен в настройках).",
-      "cli_switch_failed": "Не удалось переключить CLI.",
-      "cli_switch_unsupported": "Переключение CLI не поддерживается.",
-      "mode_unavailable": "Режим недоступен.",
-      "mode_unavailable_user": "Режим недоступен для вашего пользователя.",
-      "mode_menu_failed": "Не удалось открыть меню режима.",
-      "choice_unavailable": "Выбор недоступен.",
-      "callback_format": "Ошибка: неверный формат callback.",
-      "transfer_extract_failed": "Не удалось извлечь контекст из предыдущей сессии.",
-      "transfer_write_failed": "Не удалось записать сессию в целевой CLI ({cli}).",
-      "transfer_failed": "Ошибка при переносе сессии.",
-      "orch_invalid": "Некорректный callback оркестратора.",
-      "orch_no_pending": "Нет ожидающего ввода оркестратора.",
-      "orch_stale": "Переход устарел. Отправьте сообщение снова.",
-      "orch_unavailable": "Оркестратор недоступен.",
-      "orch_unknown_action": "Неизвестное действие оркестратора.",
-      "callback_handler": "Ошибка обработки кнопки: {e}",
-      "queue_failed": "Не удалось поставить ввод в очередь. Попробуйте еще раз.",
-      "queue_append_failed": "Не удалось обновить сообщение в очереди. Попробуйте еще раз.",
-      "unknown_tool": "Неизвестный инструмент.",
-      "session_closed_stale": "Сессия уже закрыта."
+      "session_not_found": "未找到会话。",
+      "session_busy": "会话忙碌。无法切换 CLI。",
+      "session_busy_project": "会话忙碌。无法切换项目。",
+      "session_no_scope": "当前 scope 未定义会话。",
+      "cli_unavailable": "CLI 不可用（未安装或已在设置中禁用）。",
+      "cli_switch_failed": "切换 CLI 失败。",
+      "cli_switch_unsupported": "不支持切换 CLI。",
+      "mode_unavailable": "模式不可用。",
+      "mode_unavailable_user": "该模式对您的用户不可用。",
+      "mode_menu_failed": "无法打开模式菜单。",
+      "choice_unavailable": "选项不可用。",
+      "callback_format": "错误：callback 格式无效。",
+      "transfer_extract_failed": "无法从上一个会话提取上下文。",
+      "transfer_write_failed": "无法将会话写入目标 CLI ({cli})。",
+      "transfer_failed": "迁移会话时出错。",
+      "orch_invalid": "无效的编排器 callback。",
+      "orch_no_pending": "没有待处理的编排器输入。",
+      "orch_stale": "跳转已过期。请重新发送消息。",
+      "orch_unavailable": "编排器不可用。",
+      "orch_unknown_action": "未知的编排器操作。",
+      "callback_handler": "按钮处理错误：{e}",
+      "queue_failed": "无法将输入加入队列。请重试。",
+      "queue_append_failed": "无法更新队列中的消息。请重试。",
+      "unknown_tool": "未知工具。",
+      "session_closed_stale": "会话已关闭。"
     },
     "input": {
-      "no_pending": "Нет ожидающего ввода.",
-      "taken": "Взято в работу.",
-      "queued": "Ввод поставлен в очередь.",
-      "appended": "Ввод добавлен к текущему сообщению в очереди.",
-      "discarded": "Ввод отменен.",
-      "busy_queued": "Сессия занята. Переношу ввод в очередь.",
-      "interrupted": "Текущая генерация прервана. Ввод отброшен.",
-      "interrupted_freed": "Текущая генерация прервана. Сессия освобождена. Ввод отброшен.",
-      "interrupted_partial": "Текущая генерация прервана, но часть runtime еще завершает остановку. Ввод отброшен.",
-      "interrupt_failed": "Не удалось полностью прервать сессию. Ввод отброшен."
+      "no_pending": "没有待处理的输入。",
+      "taken": "已接受处理。",
+      "queued": "输入已加入队列。",
+      "appended": "输入已追加到队列中的当前消息。",
+      "discarded": "输入已丢弃。",
+      "busy_queued": "会话忙碌。正在将输入加入队列。",
+      "interrupted": "当前生成已中断。输入已丢弃。",
+      "interrupted_freed": "当前生成已中断。会话已释放。输入已丢弃。",
+      "interrupted_partial": "当前生成已中断，但部分 runtime 仍在完成停止。输入已丢弃。",
+      "interrupt_failed": "无法完全中断会话。输入已丢弃。"
     },
     "transfer": {
-      "offer": "CLI переключён: {src} → {dst}.\nПеренести контекст предыдущей сессии ({src})?",
-      "done": "Сформирован компактный перенос из {n} сообщений {src} -> {dst}. Сессия будет продолжена в {dst}.",
-      "declined": "Перенос отклонён. Работа продолжается в текущем CLI."
+      "offer": "CLI 已切换：{src} → {dst}。\n是否迁移上一个会话（{src}）的上下文？",
+      "done": "已从 {src} 的 {n} 条消息生成精简迁移 -> {dst}。会话将在 {dst} 中继续。",
+      "declined": "迁移已拒绝。继续在当前 CLI 中工作。"
     },
     "orch": {
-      "applied": "Переход применен. Выполняю запрос.",
-      "cancelled": "Переход отменен. Остаюсь в текущем режиме.",
-      "disabled": "Процесс остановлен пользователем. Продвинутый оркестратор выключен."
+      "applied": "跳转已应用。正在执行请求。",
+      "cancelled": "跳转已取消。继续在当前模式中。",
+      "disabled": "进程已被用户停止。高级编排器已关闭。"
     },
     "lang": {
       "choose": "请选择语言：",
@@ -134,88 +251,301 @@
   },
   "cmd": {
     "start": {
-      "desc": "Показать ваш Telegram ID/Chat ID и подсказку по доступу."
+      "desc": "显示您的 Telegram ID/Chat ID 及访问提示。"
     },
     "sessions": {
-      "desc": "Меню управления сессиями."
+      "desc": "会话管理菜单。"
     },
     "interrupt": {
-      "desc": "Прервать текущую генерацию."
+      "desc": "中断当前生成。"
     },
     "git": {
-      "desc": "Git-операции по сессии текущего контекста (inline-меню)."
+      "desc": "当前上下文会话的 Git 操作（内联菜单）。"
     },
     "files": {
-      "desc": "Файлы сессии текущего контекста: отправка, сохранение, переименование, удаление."
+      "desc": "当前上下文会话的文件：发送、保存、重命名、删除。"
     },
     "miniapp": {
-      "desc": "Открыть MiniApp для администрирования."
+      "desc": "打开 MiniApp 进行管理。"
     },
     "selfupdate": {
-      "desc": "Обновить код бота из git и перезапустить сервис."
+      "desc": "从 git 更新 bot 代码并重启服务。"
     },
     "lint_evolution_status": {
-      "desc": "Lint Evolution: статус уровней L1/L2/L3, autopause, schema-version."
+      "desc": "Lint Evolution：L1/L2/L3 层级状态、autopause、schema-version。"
     },
     "lint_autopause_resume": {
-      "desc": "Lint Evolution: снять autopause c уровня (1, 2 или 3)."
+      "desc": "Lint Evolution：解除某层级的 autopause（1、2 或 3）。"
     },
     "lint_schema_history": {
-      "desc": "Lint Evolution: текущая schema-версия, список полей, pending proposals."
+      "desc": "Lint Evolution：当前 schema 版本、字段列表、pending proposals。"
     },
     "lint_gate_dry_run": {
-      "desc": "Lint Evolution: прогон lint-gate по активным правилам в текущей сессии."
+      "desc": "Lint Evolution：在当前会话中按活动规则试运行 lint-gate。"
     },
     "preset": {
-      "desc": "Шаблоны задач для CLI."
+      "desc": "CLI 任务模板。"
     },
     "metrics": {
-      "desc": "Метрики бота."
+      "desc": "Bot 指标。"
     },
     "tools": {
-      "desc": "Показать доступные инструменты."
+      "desc": "显示可用工具。"
     },
     "newpath": {
-      "desc": "Задать путь для новой сессии после выбора инструмента."
+      "desc": "选择工具后为新会话设置路径。"
     },
     "close": {
-      "desc": "Закрыть сессию (через меню)."
+      "desc": "关闭会话（通过菜单）。"
     },
     "status": {
-      "desc": "Показать статус сессии текущего контекста."
+      "desc": "显示当前上下文会话的状态。"
     },
     "limits": {
-      "desc": "Показать лимиты/usage по CLI текущего чата."
+      "desc": "显示当前聊天 CLI 的限额/用量。"
     },
     "queue": {
-      "desc": "Показать очередь."
+      "desc": "显示队列。"
     },
     "clearqueue": {
-      "desc": "Очистить очередь сессии текущего контекста."
+      "desc": "清空当前上下文会话的队列。"
     },
     "rename": {
-      "desc": "Переименовать сессию."
+      "desc": "重命名会话。"
     },
     "cwd": {
-      "desc": "Создать новую сессию в другом каталоге."
+      "desc": "在其他目录中创建新会话。"
     },
     "dirs": {
-      "desc": "Просмотр каталогов (меню)."
+      "desc": "浏览目录（菜单）。"
     },
     "resume": {
-      "desc": "Показать/установить resume токен."
+      "desc": "显示/设置 resume 令牌。"
     },
     "state": {
-      "desc": "Просмотр состояния (меню)."
+      "desc": "浏览状态（菜单）。"
     },
     "setprompt": {
-      "desc": "Установить prompt_regex для инструмента."
+      "desc": "为工具设置 prompt_regex。"
     },
     "send": {
-      "desc": "Отправить текст напрямую в CLI."
+      "desc": "直接向 CLI 发送文本。"
     },
     "mode": {
-      "desc": "Меню режима: {label}."
+      "desc": "模式菜单：{label}。"
+    }
+  },
+  "desktop": {
+    "btn": {
+      "save": "保存",
+      "add": "添加",
+      "delete": "删除",
+      "new": "新建",
+      "actions": "操作",
+      "test_connection": "测试连接",
+      "generate_key": "生成密钥",
+      "save_host": "保存主机",
+      "up": "上级",
+      "refresh": "刷新",
+      "new_file": "新建文件",
+      "new_dir": "新建文件夹",
+      "reload": "重新加载",
+      "force_save": "强制保存",
+      "send": "发送",
+      "copy": "复制",
+      "clear": "清除",
+      "sessions": "会话",
+      "git": "Git",
+      "tasks": "任务",
+      "runs": "运行",
+      "session": "会话",
+      "cmd": "命令"
+    },
+    "nav": {
+      "chat": "聊天",
+      "settings": "配置",
+      "files": "文件",
+      "logs": "日志",
+      "status": "状态",
+      "scheduler": "调度器",
+      "session_settings": "会话设置",
+      "reports": "报告",
+      "plugins": "插件",
+      "admin": "管理员"
+    },
+    "settings": {
+      "lang_label": "应用语言：",
+      "session_name": "会话名称：",
+      "cli": "CLI：",
+      "active_mode": "活动模式：",
+      "ssh_enable": "启用 SSH 远程访问",
+      "ssh_remote": "SSH 远程：",
+      "ssh_hosts_group": "SSH 主机配置",
+      "rc_group": "远程控制",
+      "rc_enable": "启用远程控制",
+      "rc_label": "远程控制：",
+      "rc_target_host": "目标主机：",
+      "rc_effective_target": "有效目标：",
+      "orchestrator_enable": "启用高级编排器",
+      "orchestrator": "编排器："
+    },
+    "git": {
+      "title": "Git 集成",
+      "tab": {
+        "status": "状态",
+        "history": "历史",
+        "commit": "提交",
+        "operations": "操作"
+      },
+      "select_session": "选择会话以查看 git 状态...",
+      "commit_message_label": "提交消息：",
+      "commit_placeholder": "可选 — LLM 将自动生成消息",
+      "btn": {
+        "refresh_status": "刷新状态",
+        "refresh_history": "刷新历史",
+        "show_diff": "显示差异",
+        "commit": "提交（添加全部）",
+        "generate_msg": "AI 生成消息",
+        "pull": "拉取",
+        "push": "推送",
+        "stash": "暂存",
+        "stash_pop": "弹出暂存",
+        "create_branch": "创建分支",
+        "switch_branch": "切换分支"
+      },
+      "msg": {
+        "select_commit": "请选择一个提交以查看差异。",
+        "success": "操作成功完成。",
+        "error": "操作失败。"
+      },
+      "dialog": {
+        "create_branch_title": "创建分支",
+        "create_branch_prompt": "输入新分支名称:",
+        "switch_branch_title": "切换分支",
+        "switch_branch_prompt": "输入要切换到的分支名称:"
+      }
+    },
+    "log": {
+      "tab": {
+        "main": "主日志",
+        "filters": "过滤器",
+        "tasks": "任务"
+      },
+      "filter_placeholder": "按关键字过滤...",
+      "filter_label": "过滤：",
+      "level_label": "级别：",
+      "auto_scroll": "自动滚动",
+      "wrap_text": "自动换行",
+      "module_filter_placeholder": "输入模块名称以过滤...",
+      "tasks_monitor_title": "活动任务监视器",
+      "btn": {
+        "apply_filters": "应用过滤器",
+        "refresh_tasks": "刷新任务"
+      }
+    },
+    "session": {
+      "search_placeholder": "搜索会话...",
+      "new_title": "新建会话",
+      "select_tool": "选择工具:",
+      "close_confirm_title": "删除会话",
+      "close_confirm_msg": "确定要删除会话 {uid} 吗?",
+      "rename_title": "重命名会话",
+      "rename_prompt": "输入新名称:",
+      "reset_confirm": "确定要重置会话 {uid} 吗?\n上下文和恢复令牌将被清除。",
+      "resume_confirm": "克隆/恢复会话?",
+      "switch_cli_title": "切换 CLI",
+      "resume_token_title": "编辑恢复令牌"
+    },
+    "files": {
+      "no_file": "未选择文件",
+      "select_session": "请先在聊天中选择会话。",
+      "loading": "加载中...",
+      "load_error": "加载文件失败: {error}",
+      "read_error": "读取文件失败: {error}",
+      "saving": "保存中...",
+      "save_error": "保存文件失败: {error}",
+      "saved": "已保存。",
+      "create_error": "创建路径失败: {error}",
+      "delete_error": "删除路径失败: {error}",
+      "exec_target_local": "执行目标: 本地"
+    },
+    "chat": {
+      "input_placeholder": "输入消息...（Ctrl+Enter 发送）"
+    },
+    "status": {
+      "ready": "就绪"
+    },
+    "admin": {
+      "tab": {
+        "overview": "概览",
+        "operations": "操作",
+        "monitor": "监控",
+        "config": "配置",
+        "chat": "聊天",
+        "autonomy": "自主性",
+        "scheduler": "调度器"
+      },
+      "btn": {
+        "enable": "启用",
+        "disable": "禁用",
+        "rescan": "重新扫描",
+        "approve_skill": "批准技能",
+        "reject_skill": "拒绝技能",
+        "refresh_runs": "刷新运行",
+        "view_run_details": "查看运行详情",
+        "reload": "重新加载",
+        "add_row": "添加",
+        "save_rows": "保存",
+        "reload_config": "重新加载配置"
+      },
+      "label": {
+        "session": "会话：",
+        "pipeline": "流水线：",
+        "monitor": "监控：",
+        "analyzer": "分析器：",
+        "analyzer_detail": "分析器详情：",
+        "executor": "执行器：",
+        "executor_detail": "执行器详情：",
+        "notifier": "通知器：",
+        "scan": "扫描：",
+        "pinned_cli": "固定 CLI：",
+        "executor_profile": "执行器配置：",
+        "readiness": "就绪状态：",
+        "runtime": "运行时：",
+        "scan_detail": "扫描详情：",
+        "last_snapshot": "最后快照：",
+        "last_decision": "最后决策：",
+        "last_action": "最后操作：",
+        "waiting_now": "等待中：",
+        "mute": "静音：",
+        "recent_incidents": "最近事件：",
+        "recent_actions": "最近管理操作：",
+        "approved_overrides": "已批准覆盖：",
+        "pending_skill_installs": "待安装技能：",
+        "skill_action": "技能操作：",
+        "pipeline_runs": "流水线运行",
+        "ssh_actions_group": "SSH 操作 (admin.actions.ssh)",
+        "monitor_servers_group": "监控服务器 (admin.monitor.servers)",
+        "monitor_enabled": "已启用",
+        "monitor_hint": "SSH 主机在「设置」选项卡中配置。此处仅选择 server → action。",
+        "config_title": "Admin 配置（YAML，只读）",
+        "config_placeholder": "点击「重新加载配置」查看最终 YAML。",
+        "disabled_title": "Admin 已禁用",
+        "disabled_hint": "为此会话启用 admin 或重新扫描其环境。"
+      }
+    },
+    "msg": {
+      "no_tools": "未配置任何工具。",
+      "session_exists": "会话已存在。",
+      "create_error": "创建会话失败。",
+      "session_create_failed": "创建会话失败: {error}",
+      "resume_error": "恢复会话失败。",
+      "needs_clarification": "需要用户澄清。",
+      "answer_required": "请回答问题（选项编号或文本）。",
+      "answer_not_recognized": "未识别答案。请点击按钮或输入完整选项文本。",
+      "answer_accepted": "已接受答案: {answer}",
+      "question_closed": "问题已关闭。",
+      "select_session_first": "请先选择桌面会话。"
     }
   }
 }

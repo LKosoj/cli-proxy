@@ -46,6 +46,7 @@ from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.session_busy import is_session_busy
 from session import session_runtime_uid, session_scoped_key
 from sessions.session_state_access import get_active_mode
+from utils.lang import resolve_user_lang
 from utils.text import strip_ansi
 
 
@@ -727,8 +728,13 @@ class ManagerMode(BaseMode, RunArtifactsMixin):
                     self._log.exception("manager prompts unexpected error notification failed")
             return False
 
-    def _load_prompts(self, *, session: Any) -> Dict[str, str]:
-        return load_mode_prompt_texts(getattr(session, "workdir", ""), self.mode_id)
+    def _load_prompts(self, *, session: Any, lang: Optional[str] = None) -> Dict[str, str]:
+        if lang is None:
+            try:
+                lang = resolve_user_lang(self.config, chat_id=getattr(session, "chat_id", None))
+            except Exception:
+                lang = "ru"
+        return load_mode_prompt_texts(getattr(session, "workdir", ""), self.mode_id, lang)
 
     def _is_run_artifacts_enabled(self) -> bool:
         service = self._optional_run_artifacts()

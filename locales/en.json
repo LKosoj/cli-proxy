@@ -18,7 +18,124 @@
   "errors": {
     "unknown": "Unknown error",
     "session_not_found": "Session not found.",
-    "mode_unavailable": "Mode unavailable."
+    "mode_unavailable": "Mode unavailable.",
+    "ERR_OPENAI_REQUIRED": "This mode requires the OpenAI API. Configure openai_api_key and openai_model in config.yaml.",
+    "ERR_SESSION_WORKDIR_MISSING": "Create a session first via /sessions."
+  },
+  "log_type": {
+    "main": "Main",
+    "error": "Errors",
+    "agent": "Agent",
+    "cli_dialog": "CLI Dialog",
+    "miniapp": "MiniApp"
+  },
+  "miniapp": {
+    "tab": {
+      "config": "Config",
+      "files": "Files",
+      "logs": "Logs",
+      "status": "Status",
+      "scheduler": "Scheduler",
+      "settings": "Settings",
+      "admin": "Admin"
+    },
+    "btn": {
+      "refresh": "Refresh",
+      "validate": "Validate",
+      "save": "Save",
+      "apply": "Apply",
+      "up": "Up",
+      "create_file": "Create file",
+      "create_dir": "Create folder",
+      "delete": "Delete",
+      "close": "Close",
+      "reload": "Reload",
+      "reload_file": "Reload file (lose my changes)",
+      "download": "Download",
+      "undo": "Undo",
+      "cancel_save": "Cancel save",
+      "force_save": "Force Save (overwrite)",
+      "create": "Create",
+      "reset": "Reset",
+      "save_changes": "Save changes",
+      "clear": "Clear",
+      "cancel": "Cancel"
+    },
+    "label": {
+      "session": "Session",
+      "log": "Log",
+      "history": "History",
+      "autoscroll": "Auto-scroll",
+      "active_mode": "Active Mode",
+      "ssh_remote": "SSH Remote",
+      "project": "Project",
+      "name": "Name",
+      "actions": "Actions",
+      "choose_session": "Select session",
+      "choose_project": "Select project",
+      "choose_session_uid": "Select session_uid"
+    },
+    "cfg": {
+      "restart_banner": "Restart required for some changes"
+    },
+    "editor": {
+      "no_file": "No file selected",
+      "conflict_title": "Version conflict detected!",
+      "conflict_desc": "The file has been modified on the server since it was last opened."
+    },
+    "logs": {
+      "only_new": "New only",
+      "prev_N": "{n} previous"
+    },
+    "status": {
+      "empty": "Loading or no session selected...",
+      "loading": "Loading…",
+      "no_session": "No session selected",
+      "no_data": "No data.",
+      "no_data_short": "No data",
+      "waiting": "Waiting",
+      "git_free": "Free",
+      "off": "off",
+      "mode_section": "Tool and Mode",
+      "kv_mode": "Mode:",
+      "kv_tool": "Tool:",
+      "manager_plan": "Manager Plan",
+      "analyst": "Analyst Status",
+      "agent": "Agent Status",
+      "session_unavailable": "Session not selected or unavailable"
+    },
+    "runs": {
+      "select_hint": "Select a run in the table.",
+      "select_run": "Select a run.",
+      "choose_session": "Select a session to view run artifacts."
+    },
+    "settings": {
+      "empty": "Loading or no session selected...",
+      "choose_session": "Select a session to manage settings.",
+      "session_params": "Session parameters",
+      "mode_hint": "Select the session mode or Direct CLI to disable the active mode.",
+      "lang_title": "Language",
+      "lang_label": "Interface language",
+      "lang_save": "Save language"
+    },
+    "scheduler": {
+      "choose_project": "Select a project to manage the schedule.",
+      "no_projects": "No projects available."
+    },
+    "admin": {
+      "choose_session": "Select a session for the Admin panel.",
+      "choose_skill": "Select pending skill install"
+    },
+    "mode": {
+      "direct_cli": "Direct CLI"
+    },
+    "error": {
+      "auth": "Authorization error",
+      "access_denied": "Access denied"
+    },
+    "ssh": {
+      "no_hosts": "No hosts configured."
+    }
   },
   "btn": {
     "session": {
@@ -216,6 +333,219 @@
     },
     "mode": {
       "desc": "Mode menu: {label}."
+    }
+  },
+  "desktop": {
+    "btn": {
+      "save": "Save",
+      "add": "Add",
+      "delete": "Delete",
+      "new": "New",
+      "actions": "Actions",
+      "test_connection": "Test Connection",
+      "generate_key": "Generate Key",
+      "save_host": "Save Host",
+      "up": "Up",
+      "refresh": "Refresh",
+      "new_file": "New file",
+      "new_dir": "New dir",
+      "reload": "Reload",
+      "force_save": "Force save",
+      "send": "Send",
+      "copy": "Copy",
+      "clear": "Clear",
+      "sessions": "Sessions",
+      "git": "Git",
+      "tasks": "Tasks",
+      "runs": "Runs",
+      "session": "Session",
+      "cmd": "Cmd"
+    },
+    "nav": {
+      "chat": "Chat",
+      "settings": "Config",
+      "files": "Files",
+      "logs": "Logs",
+      "status": "Status",
+      "scheduler": "Scheduler",
+      "session_settings": "Session Settings",
+      "reports": "Reports",
+      "plugins": "Plugins",
+      "admin": "Admin"
+    },
+    "settings": {
+      "lang_label": "App Language:",
+      "session_name": "Session Name:",
+      "cli": "CLI:",
+      "active_mode": "Active Mode:",
+      "ssh_enable": "Enable SSH Remote Access",
+      "ssh_remote": "SSH Remote:",
+      "ssh_hosts_group": "SSH Hosts Configuration",
+      "rc_group": "Remote Control",
+      "rc_enable": "Enable Remote Control",
+      "rc_label": "Remote Control:",
+      "rc_target_host": "Target Host:",
+      "rc_effective_target": "Effective Target:",
+      "orchestrator_enable": "Enable Advanced Orchestrator",
+      "orchestrator": "Orchestrator:"
+    },
+    "git": {
+      "title": "Enhanced Git Integration",
+      "tab": {
+        "status": "Status",
+        "history": "History",
+        "commit": "Commit",
+        "operations": "Operations"
+      },
+      "select_session": "Select a session to see git status...",
+      "commit_message_label": "Commit Message:",
+      "commit_placeholder": "Optional — LLM will generate the message automatically",
+      "btn": {
+        "refresh_status": "Refresh Status",
+        "refresh_history": "Refresh History",
+        "show_diff": "Show Diff",
+        "commit": "Commit (Add All)",
+        "generate_msg": "Generate Message with AI",
+        "pull": "Pull",
+        "push": "Push",
+        "stash": "Stash",
+        "stash_pop": "Stash Pop",
+        "create_branch": "Create Branch",
+        "switch_branch": "Switch Branch"
+      },
+      "msg": {
+        "select_commit": "Please select a commit to view diff.",
+        "success": "Operation completed successfully.",
+        "error": "Operation failed."
+      },
+      "dialog": {
+        "create_branch_title": "Create Branch",
+        "create_branch_prompt": "Enter new branch name:",
+        "switch_branch_title": "Switch Branch",
+        "switch_branch_prompt": "Enter branch name to switch to:"
+      }
+    },
+    "log": {
+      "tab": {
+        "main": "Main Log",
+        "filters": "Filters",
+        "tasks": "Tasks"
+      },
+      "filter_placeholder": "Filter by keyword...",
+      "filter_label": "Filter:",
+      "level_label": "Level:",
+      "auto_scroll": "Auto-scroll",
+      "wrap_text": "Wrap Text",
+      "module_filter_placeholder": "Enter module name to filter...",
+      "tasks_monitor_title": "Active Tasks Monitor",
+      "btn": {
+        "apply_filters": "Apply Filters",
+        "refresh_tasks": "Refresh Tasks"
+      }
+    },
+    "session": {
+      "search_placeholder": "Search sessions...",
+      "new_title": "New Session",
+      "select_tool": "Select Tool:",
+      "close_confirm_title": "Delete Session",
+      "close_confirm_msg": "Are you sure you want to delete session {uid}?",
+      "rename_title": "Rename Session",
+      "rename_prompt": "Enter new name:",
+      "reset_confirm": "Are you sure you want to reset session {uid}?\nThis will clear context and resume token.",
+      "resume_confirm": "Clone/resume session?",
+      "switch_cli_title": "Switch CLI",
+      "resume_token_title": "Edit Resume Token"
+    },
+    "files": {
+      "no_file": "No file selected",
+      "select_session": "Select a session in Chat first.",
+      "loading": "Loading...",
+      "load_error": "Failed to load files: {error}",
+      "read_error": "Failed to read file: {error}",
+      "saving": "Saving...",
+      "save_error": "Failed to save file: {error}",
+      "saved": "Saved.",
+      "create_error": "Failed to create path: {error}",
+      "delete_error": "Failed to delete path: {error}",
+      "exec_target_local": "Execution Target: Local"
+    },
+    "chat": {
+      "input_placeholder": "Type your message... (Ctrl+Enter to send)"
+    },
+    "status": {
+      "ready": "Ready"
+    },
+    "admin": {
+      "tab": {
+        "overview": "Overview",
+        "operations": "Operations",
+        "monitor": "Monitoring",
+        "config": "Config",
+        "chat": "Chat",
+        "autonomy": "Autonomy",
+        "scheduler": "Scheduler"
+      },
+      "btn": {
+        "enable": "Enable",
+        "disable": "Disable",
+        "rescan": "Rescan",
+        "approve_skill": "Approve skill",
+        "reject_skill": "Reject skill",
+        "refresh_runs": "Refresh runs",
+        "view_run_details": "View run details",
+        "reload": "Reload",
+        "add_row": "Add",
+        "save_rows": "Save",
+        "reload_config": "Reload config"
+      },
+      "label": {
+        "session": "Session:",
+        "pipeline": "Pipeline:",
+        "monitor": "Monitor:",
+        "analyzer": "Analyzer:",
+        "analyzer_detail": "Analyzer details:",
+        "executor": "Executor:",
+        "executor_detail": "Executor details:",
+        "notifier": "Notifier:",
+        "scan": "Scan:",
+        "pinned_cli": "Pinned CLI:",
+        "executor_profile": "Executor profile:",
+        "readiness": "Readiness:",
+        "runtime": "Runtime:",
+        "scan_detail": "Scan details:",
+        "last_snapshot": "Last snapshot:",
+        "last_decision": "Last decision:",
+        "last_action": "Last action:",
+        "waiting_now": "Waiting now:",
+        "mute": "Mute:",
+        "recent_incidents": "Recent incidents:",
+        "recent_actions": "Recent admin actions:",
+        "approved_overrides": "Approved overrides:",
+        "pending_skill_installs": "Pending skill installs:",
+        "skill_action": "Skill action:",
+        "pipeline_runs": "Pipeline runs",
+        "ssh_actions_group": "SSH actions (admin.actions.ssh)",
+        "monitor_servers_group": "Monitor servers (admin.monitor.servers)",
+        "monitor_enabled": "Enabled",
+        "monitor_hint": "SSH hosts are configured in the Settings tab. Here only server → action is selected.",
+        "config_title": "Admin config (YAML, read-only)",
+        "config_placeholder": "Click \"Reload config\" to view the resulting YAML.",
+        "disabled_title": "Admin disabled",
+        "disabled_hint": "Enable admin for this session or rescan its environment."
+      }
+    },
+    "msg": {
+      "no_tools": "No tools configured.",
+      "session_exists": "Session already exists.",
+      "create_error": "Failed to create session.",
+      "session_create_failed": "Failed to create session: {error}",
+      "resume_error": "Failed to resume session.",
+      "needs_clarification": "User clarification needed.",
+      "answer_required": "Please answer the question (option number or text).",
+      "answer_not_recognized": "Answer not recognized. Choose a button or enter the full option text.",
+      "answer_accepted": "Accepted answer: {answer}",
+      "question_closed": "Question is already closed.",
+      "select_session_first": "Please select a desktop session first."
     }
   }
 }

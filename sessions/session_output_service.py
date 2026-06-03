@@ -6,6 +6,7 @@ from typing import Optional
 
 from sessions.conversation_scope import ConversationScope
 from utils.text import build_preview, strip_ansi
+from utils.lang import resolve_user_lang
 
 
 class SessionOutputService:
@@ -251,7 +252,11 @@ class SessionOutputService:
                     text_for_summary = output[-self._summary_tail_chars:] if len(output) > self._summary_tail_chars else output
                     summarize_fn = self._resolve_summarize_fn()
                     s, err = await asyncio.wait_for(
-                        summarize_fn(text_for_summary, config=self.bot_app.config),
+                        summarize_fn(
+                            text_for_summary,
+                            config=self.bot_app.config,
+                            language=resolve_user_lang(self.bot_app.config, chat_id=chat_id),
+                        ),
                         timeout=self._summary_timeout_s,
                     )
                     return s, err

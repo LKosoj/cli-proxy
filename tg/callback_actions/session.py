@@ -669,7 +669,11 @@ class SessionActionsMixin:
             return True
         config_service = getattr(self.bot_app, "config_service", None)
         if config_service is not None:
-            await config_service.set_user_language(int(user_id), code)
+            result = await config_service.set_user_language(int(user_id), code)
+            if getattr(result, "ok", False):
+                # Keep the live in-memory config coherent so subsequent
+                # resolve_user_lang() calls reflect the new choice immediately.
+                self.bot_app.config.telegram.user_languages[int(user_id)] = code
         _native_names: dict[str, str] = {
             "ru": "Русский",
             "en": "English",

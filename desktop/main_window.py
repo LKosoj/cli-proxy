@@ -41,6 +41,7 @@ from desktop.widgets.admin_panel import AdminPanel
 from desktop.widgets.scheduler_panel import SchedulerPanelWidget
 from desktop.widgets.status_panel import StatusPanelWidget
 from desktop.widgets.command_palette import CommandPaletteDialog, CommandPaletteItem
+from i18n import t
 from modes.sdk.services.tooling import ModeToolingService
 from session import session_runtime_uid
 from sessions.session_state_access import get_active_mode
@@ -554,14 +555,15 @@ class MainWindow(QMainWindow):
 
         self._active_run_task = ensure_async(_run(), parent=self)
 
-    @staticmethod
-    def _format_ask_message(question: str, options: list[str]) -> str:
+    def _format_ask_message(self, question: str, options: list[str]) -> str:
         """Форматирует текст вопроса ask_user.
 
         Варианты ответа отображаются отдельными кнопками (см. show_ask_options),
         здесь выводится только сам вопрос.
         """
-        return str(question or "").strip() or "Нужно уточнение от пользователя."
+        if str(question or "").strip():
+            return str(question).strip()
+        return t("desktop.msg.needs_clarification", self.facade.ui_language)
 
     def _show_pending_ask_for_session(self, session_id: str) -> None:
         pending = self._pending_ask_by_session.get(str(session_id))
@@ -593,7 +595,8 @@ class MainWindow(QMainWindow):
         # Показываем выбранный вариант как сообщение пользователя
         self.chat_view.append_message("user", option_text)
         self._persist_chat_message(sid, "user", option_text)
-        msg = f"Принял ответ: {option_text}" if resolved else "Вопрос уже закрыт."
+        lang = self.facade.ui_language
+        msg = t("desktop.msg.answer_accepted", lang, answer=option_text) if resolved else t("desktop.msg.question_closed", lang)
         self.chat_view.append_message("agent", msg)
         self._persist_chat_message(sid, "agent", msg)
         # Восстанавливаем loading — задача продолжает выполняться
@@ -605,8 +608,9 @@ class MainWindow(QMainWindow):
         if not isinstance(pending, dict):
             return False
         raw = str(text or "").strip()
+        lang = self.facade.ui_language
         if not raw:
-            msg = "Нужен ответ на уточняющий вопрос (номер варианта или текст)."
+            msg = t("desktop.msg.answer_required", lang)
             self.chat_view.append_message("agent", msg)
             self._persist_chat_message(sid, "agent", msg)
             return True
@@ -622,7 +626,7 @@ class MainWindow(QMainWindow):
                 answer = self._ask_option_parser.parse_selected_option(raw, allowed_options=options)
             except (ValueError, RuntimeError):
                 if not allow_custom:
-                    msg = "Ответ не распознан. Выберите кнопку или введите полный текст варианта."
+                    msg = t("desktop.msg.answer_not_recognized", lang)
                     self.chat_view.append_message("agent", msg)
                     self._persist_chat_message(sid, "agent", msg)
                     return True
@@ -631,7 +635,7 @@ class MainWindow(QMainWindow):
         self._pending_ask_by_session.pop(sid, None)
         # Скрываем кнопки вариантов, т.к. пользователь ответил текстом
         self.chat_view.hide_ask_options()
-        msg = f"Принял ответ: {answer}" if resolved else "Вопрос уже закрыт."
+        msg = t("desktop.msg.answer_accepted", lang, answer=answer) if resolved else t("desktop.msg.question_closed", lang)
         self.chat_view.append_message("agent", msg)
         self._persist_chat_message(sid, "agent", msg)
         # Восстанавливаем loading — задача продолжает выполняться
@@ -686,6 +690,11 @@ class MainWindow(QMainWindow):
         # UI-level messaging from modes (menus, dialogs, etc.)
         if event == "ui:theme_changed":
             self._apply_theme()
+            return
+
+        if event == "ui:language_changed":
+            lang = str(payload.get("lang") or "ru")
+            self._retranslate_all(lang)
             return
 
         if event in ("ui:session_updated", "ui:session_settings_changed"):
@@ -1093,7 +1102,7 @@ class MainWindow(QMainWindow):
             return
         if command_id == "session:limits":
             if not self._current_session_uid:
-                self.statusBar().showMessage("Сначала выберите desktop-сессию.")
+                self.statusBar().showMessage(t("desktop.msg.select_session_first", self.facade.ui_language))
                 return
 
             async def _show_limits() -> None:
@@ -1206,6 +1215,60 @@ class MainWindow(QMainWindow):
         for w in widgets:
             if hasattr(w, "set_theme_colors"):
                 w.set_theme_colors(colors)
+
+    def _retranslate_all(self, lang: str) -> None:
+        """Обход всех дочерних виджетов с retranslate_ui."""
+        widgets = [
+            self.session_manager,
+            self.session_settings_panel,
+            self.session_settings_page,
+            self.git_panel,
+            self.chat_view,
+            self.files_page,
+            self.log_viewer,
+            self.status_page,
+            self.scheduler_page,
+            self.reports_page,
+            self.plugins_page,
+            self.task_progress,
+            self.mode_panel,
+            self.mode_menu,
+            self.context_task_queue,
+            self.context_run_operations,
+        ]
+        if self.admin_page is not None:
+            widgets.append(self.admin_page)
+        for w in widgets:
+            if hasattr(w, "retranslate_ui"):
+                try:
+                    w.retranslate_ui(lang)
+                except Exception:
+                    self.logger.exception("retranslate_ui failed widget=%s", type(w).__name__)
+        # Строки самого MainWindow
+        self.toggle_sessions_btn.setText(t("desktop.btn.sessions", lang))
+        self.toggle_git_btn.setText(t("desktop.btn.git", lang))
+        self.toggle_tasks_btn.setText(t("desktop.btn.tasks", lang))
+        self.toggle_runs_btn.setText(t("desktop.btn.runs", lang))
+        self.toggle_session_settings_btn.setText(t("desktop.btn.session", lang))
+        self.open_palette_btn.setText(t("desktop.btn.cmd", lang))
+        self.statusBar().showMessage(t("desktop.status.ready", lang))
+        self._refresh_command_palette()
+        _nav_tips = {
+            "chat": "desktop.nav.chat",
+            "settings": "desktop.nav.settings",
+            "files": "desktop.nav.files",
+            "logs": "desktop.nav.logs",
+            "status": "desktop.nav.status",
+            "scheduler": "desktop.nav.scheduler",
+            "session_settings": "desktop.nav.session_settings",
+            "reports": "desktop.nav.reports",
+            "plugins": "desktop.nav.plugins",
+            "admin": "desktop.nav.admin",
+        }
+        for key, btn in self._nav_buttons.items():
+            tip_key = _nav_tips.get(key)
+            if tip_key:
+                btn.setToolTip(t(tip_key, lang))
 
     def _refresh_mode_menu_for_session(
         self,

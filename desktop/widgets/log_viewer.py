@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Optional, List
 
+from i18n import t
+
 from PySide6.QtCore import Signal, Slot, QObject, QTimer
 from PySide6.QtGui import QTextCursor, QColor, QTextCharFormat, QFont, QFontDatabase
 from PySide6.QtWidgets import (
@@ -97,13 +99,15 @@ class LogViewerWidget(QWidget):
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter by keyword...")
         self.filter_input.textChanged.connect(self._apply_filter)
-        toolbar.addWidget(QLabel("Filter:"))
+        self.filter_label = QLabel("Filter:")
+        toolbar.addWidget(self.filter_label)
         toolbar.addWidget(self.filter_input)
 
         self.level_filter = QComboBox()
         self.level_filter.addItems(["All", "VERBOSE", "INFO", "WARNING", "ERROR", "CRITICAL"])
         self.level_filter.currentTextChanged.connect(self._apply_filter)
-        toolbar.addWidget(QLabel("Level:"))
+        self.level_label = QLabel("Level:")
+        toolbar.addWidget(self.level_label)
         toolbar.addWidget(self.level_filter)
 
         self.auto_scroll_cb = QCheckBox("Auto-scroll")
@@ -191,9 +195,9 @@ class LogViewerWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
 
         # Заголовок
-        title = QLabel("Active Tasks Monitor")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(title)
+        self.tasks_monitor_title = QLabel("Active Tasks Monitor")
+        self.tasks_monitor_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(self.tasks_monitor_title)
 
         # Список активных задач
         self.tasks_list = QListWidget()
@@ -344,3 +348,19 @@ class LogViewerWidget(QWidget):
         if hasattr(self, "_unsubscribe"):
             self._unsubscribe()
         super().closeEvent(event)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.tabs.setTabText(0, t("desktop.log.tab.main", lang))
+        self.tabs.setTabText(1, t("desktop.log.tab.filters", lang))
+        self.tabs.setTabText(2, t("desktop.log.tab.tasks", lang))
+        self.filter_input.setPlaceholderText(t("desktop.log.filter_placeholder", lang))
+        self.filter_label.setText(t("desktop.log.filter_label", lang))
+        self.level_label.setText(t("desktop.log.level_label", lang))
+        self.auto_scroll_cb.setText(t("desktop.log.auto_scroll", lang))
+        self.wrap_text_cb.setText(t("desktop.log.wrap_text", lang))
+        self.copy_btn.setText(t("desktop.btn.copy", lang))
+        self.clear_btn.setText(t("desktop.btn.clear", lang))
+        self.module_filter_input.setPlaceholderText(t("desktop.log.module_filter_placeholder", lang))
+        self.apply_filters_btn.setText(t("desktop.log.btn.apply_filters", lang))
+        self.tasks_monitor_title.setText(t("desktop.log.tasks_monitor_title", lang))
+        self.refresh_tasks_btn.setText(t("desktop.log.btn.refresh_tasks", lang))

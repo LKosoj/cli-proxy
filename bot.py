@@ -195,6 +195,7 @@ class BotApp:
         self.runtime_service = AppRuntimeService(self)
         self.advanced_orchestrator_service = self.container.advanced_orchestrator_service
         self.artifact_intent_service = self.container.artifact_intent_service
+        self.config_service = self.container.config_service
         self.orchestrator_chat_completion = chat_completion
         self.mode_callback_router = ModeCallbackRouterService(
             mode_registry=self.mode_registry_service,

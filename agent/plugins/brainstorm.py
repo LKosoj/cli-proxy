@@ -321,7 +321,10 @@ class BrainstormTool(ToolPlugin):
             return "Не удалось получить результаты ни от одной методологии."
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        lang = resolve_user_lang(self.config, chat_id=chat_id)
+        try:
+            lang = resolve_user_lang(getattr(self, "config", None), chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         language_name = LANGUAGE_NAMES.get(lang, "Russian")
 
         parts = [f"Тема мозгового штурма: {topic}\n\n"

@@ -29,6 +29,7 @@ from app.services.runtime_progress_service import build_runtime_progress_payload
 from app.services.run_artifact_store import is_terminal_status
 from app.services.run_utils import clean_text as clean_run_listing_text, summarize_run_skill_log
 from app.services.run_operations_policy import RunOperationsPolicy
+from i18n.resolver import SUPPORTED_LANGS
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.sdk.session_busy import is_session_busy
 from modes.analyst.state_store import AnalystStateStore, build_context_key
@@ -269,6 +270,7 @@ class MiniAppRoutes:
             "is_admin": is_admin,
             "username": str(claims.get("username") or ""),
             "first_name": str(claims.get("first_name") or ""),
+            "language_code": str(claims.get("language_code") or ""),
         }
 
     def _ws_ticket_secret(self) -> bytes:
@@ -444,10 +446,10 @@ class MiniAppRoutes:
                 return ""
             defaults = getattr(getattr(self.bot_app, "config", None), "defaults", None)
             if not getattr(defaults, "openai_api_key", None) or not getattr(defaults, "openai_model", None):
-                return "Для этого режима нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml."
+                return "ERR_OPENAI_REQUIRED"
             workdir = str(getattr(session, "workdir", "") or "")
             if not workdir or not os.path.isdir(workdir):
-                return "Сначала создайте сессию через /sessions."
+                return "ERR_SESSION_WORKDIR_MISSING"
             return ""
         try:
             return str(checker(self.bot_app, session) or "").strip()
@@ -1159,6 +1161,46 @@ class MiniAppRoutes:
                 "username": user.get("username") or "",
             }
         )
+
+    async def i18n_catalog_get(self, request: web.Request) -> web.Response:
+        lang = str(request.match_info.get("lang", "") or "").lower().strip()
+        if lang not in SUPPORTED_LANGS:
+            lang = "ru"
+        catalog_path = os.path.join(os.path.dirname(__file__), "..", "locales", f"{lang}.json")
+        try:
+            with open(catalog_path, encoding="utf-8") as f:
+                catalog = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            fallback_path = os.path.join(os.path.dirname(__file__), "..", "locales", "ru.json")
+            try:
+                with open(fallback_path, encoding="utf-8") as f:
+                    catalog = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                catalog = {}
+        return web.json_response(catalog, headers={"Cache-Control": "max-age=3600"})
+
+    async def i18n_user_lang_get(self, request: web.Request) -> web.Response:
+        user = await self._require_access(request)
+        user_id = user["user_id"]
+        cfg = self.bot_app.config
+        user_languages = getattr(getattr(cfg, "telegram", None), "user_languages", {}) or {}
+        saved = user_languages.get(user_id)
+        if saved and saved in SUPPORTED_LANGS:
+            return web.json_response({"lang": saved})
+        default = str(getattr(getattr(cfg, "defaults", None), "default_language", "") or "").strip()
+        if default and default in SUPPORTED_LANGS:
+            return web.json_response({"lang": default})
+        return web.json_response({"lang": "ru"})
+
+    async def i18n_user_lang_put(self, request: web.Request) -> web.Response:
+        user = await self._require_access(request)
+        body = await self._read_json_object(request)
+        lang = str(body.get("lang") or "").strip().lower()
+        if lang not in SUPPORTED_LANGS:
+            return await self._json_error(400, "unsupported language")
+        config_service = self._container_config_service(self.bot_app)
+        await config_service.set_user_language(user["user_id"], lang)
+        return web.json_response({"ok": True, "lang": lang})
 
     async def files_ws_ticket(self, request: web.Request) -> web.Response:
         user = await self._require_access(request)
@@ -4595,6 +4637,11 @@ class MiniAppRoutes:
         app.router.add_post("/api/session/{uid}/remote-control/recheck", self.remote_control_recheck)
 
         register_ssh_routes(app, self.route_context, self.ssh_route_services)
+
+        # i18n routes — user-lang literal routes BEFORE {lang} pattern
+        app.router.add_get("/api/i18n/user-lang", self.i18n_user_lang_get)
+        app.router.add_put("/api/i18n/user-lang", self.i18n_user_lang_put)
+        app.router.add_get("/api/i18n/{lang}", self.i18n_catalog_get)
 
         app.router.add_get("/", self.index)
         static_root = os.path.join(os.path.dirname(__file__), "static")

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import re
 import time
+from contextvars import ContextVar
 from dataclasses import asdict
 from typing import Any, List, Optional, Tuple, Dict
 
@@ -70,6 +71,12 @@ from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore
 from modes.sdd.constitution import load_constitution
 
 _log = logging.getLogger(__name__)
+
+# Per-run resolved UI language for manager system prompts. A ContextVar (not an
+# instance attribute) so concurrent run() calls on the shared singleton
+# orchestrator cannot clobber each other's language — each asyncio task carries
+# its own copy. Defaults to "ru" outside of a run() (hard fallback).
+_MANAGER_ACTIVE_LANG: ContextVar[str] = ContextVar("manager_active_lang", default="ru")
 
 MANAGER_ARTIFACT_ROOT_DIR = ".manager"
 MANAGER_RESPONSE_ARCHIVE_SUBDIR = "response"
@@ -924,10 +931,10 @@ class ManagerOrchestrator:
         cache[wd] = usable
         return usable
 
-    @staticmethod
-    def _load_manager_prompts(workdir: str) -> Dict[str, str]:
+    def _load_manager_prompts(self, workdir: str) -> Dict[str, str]:
         ensure_project_prompts(workdir)
-        return load_mode_prompt_texts(workdir, "manager")
+        lang = _MANAGER_ACTIVE_LANG.get() or "ru"
+        return load_mode_prompt_texts(workdir, "manager", lang)
 
     def _manager_prompt(self, workdir: str, key: str) -> str:
         prompts = self._load_manager_prompts(workdir)
@@ -1112,6 +1119,10 @@ class ManagerOrchestrator:
 
     async def run(self, session: Session, user_text: str, bot, context, dest: dict) -> str:
         chat_id = dest.get("chat_id")
+        try:
+            _MANAGER_ACTIVE_LANG.set(resolve_user_lang(self._config, chat_id=chat_id))
+        except Exception:
+            _MANAGER_ACTIVE_LANG.set("ru")
         workdir = session.workdir
         # Determine whether git is actually used/available for this project before doing any Manager work.
         # If not used, Manager must not attempt auto-commit or run git commands for "change verification".

@@ -49,7 +49,7 @@ def test_send_output_html_truncates_tail(tmp_path, monkeypatch):
 
         monkeypatch.setattr(sm_mod, "make_html_file", _make_html_file)
 
-        async def _fake_summary(_text, config):
+        async def _fake_summary(_text, config=None, *, language="ru"):
             return "SUMMARY", None
 
         monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)

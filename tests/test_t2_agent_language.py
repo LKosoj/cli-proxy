@@ -286,3 +286,84 @@ def test_bot_summary_passes_language():
     sig = inspect.signature(summary_mod.summarize_text_with_reason)
     assert "language" in sig.parameters
     assert sig.parameters["language"].default == "ru"
+
+
+def test_session_output_summary_passes_resolved_language(tmp_path):
+    """SessionOutputService._summarize must pass the resolved user language to summarize_fn.
+
+    This is the real production call site for long agent output — a regression
+    here would silently send summaries in the wrong language.
+    """
+    from sessions.session_output_service import SessionOutputService
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_summarize(text, *, config=None, language="ru"):
+        captured["language"] = language
+        return ("summary text", None)
+
+    sent_messages: list[str] = []
+
+    async def _send_message(_context, *, text=None, **_kwargs):
+        sent_messages.append(text)
+        return True
+
+    async def _send_document(_context, *, document, **_kwargs):
+        return True
+
+    html_path = tmp_path / "out.html"
+
+    def _make_html_file(html_text, _prefix):
+        html_path.write_text(str(html_text), encoding="utf-8")
+        return str(html_path)
+
+    chat_id = 555
+    config = _make_config(user_languages={chat_id: "de"}, default_language="ru")
+    config.defaults.summary_max_chars = 2000
+    config.defaults.html_filename_prefix = "test-output"
+
+    bot_app = types.SimpleNamespace(
+        config=config,
+        metrics=types.SimpleNamespace(observe_output=lambda _v: None),
+        _send_message=_send_message,
+        _send_document=_send_document,
+    )
+
+    service = SessionOutputService(
+        bot_app=bot_app,
+        persist_sessions=lambda: None,
+        html_process_pool=None,
+        summarize_fn=_fake_summarize,
+        ansi_to_html_fn=lambda text: str(text),
+        make_html_file_fn=_make_html_file,
+    )
+
+    session = types.SimpleNamespace(
+        id="s-lang",
+        name="lang",
+        tool=types.SimpleNamespace(name="dummy"),
+        workdir=str(tmp_path),
+        queue=[],
+        resume_token=None,
+        send_lock=asyncio.Lock(),
+        state_summary=None,
+        state_updated_at=None,
+        conversation_scope=None,
+    )
+
+    long_output = "x" * 5000
+
+    async def _run():
+        await service.send_output(
+            session,
+            {"kind": "telegram", "chat_id": chat_id},
+            long_output,
+            context=None,
+            force_html=True,
+            send_summary=True,
+        )
+
+    asyncio.run(_run())
+
+    assert captured.get("language") == "de"
+    assert "summary text" in sent_messages

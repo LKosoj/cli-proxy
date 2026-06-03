@@ -247,6 +247,9 @@ async def test_cb_lang_set_redraws_menu_in_new_lang() -> None:
     bot_app.handlers.build_sessions_active_overview.assert_called_once()
     kwargs = bot_app.handlers.build_sessions_active_overview.call_args.kwargs
     assert kwargs.get("lang") == "en"
+    config_service.set_user_language.assert_awaited_once_with(99, "en")
+    # W2: live in-memory config reflects the choice for later resolve_user_lang().
+    assert config.telegram.user_languages == {99: "en"}
 
 
 @pytest.mark.asyncio
@@ -339,6 +342,39 @@ def test_build_sessions_overview_en_buttons() -> None:
     # Should have English lang button
     assert any("Language" in b for b in btns)
     # Should have English cancel
+    assert any("Cancel" in b for b in btns)
+
+
+def test_build_sessions_overview_resolves_lang_from_chat_when_not_passed() -> None:
+    """W1: when callers omit lang, the overview must resolve it from chat_id's
+    persisted language rather than silently defaulting to Russian."""
+    reload_catalogs()
+    config = _make_config(user_languages={101: "en"}, default_language="ru")
+    app, session = _make_bot_app(config=config)
+    handlers = BotHandlers(app)
+
+    handlers._is_admin = MagicMock(return_value=True)
+    handlers._visible_sessions_for_chat = MagicMock(return_value={"sess1": session})
+    handlers._resolve_overview_session = MagicMock(return_value=session)
+    handlers._is_session_visible_for_chat = MagicMock(return_value=True)
+    handlers._registered_modes = MagicMock(return_value=[])
+    handlers._active_session_status_text = MagicMock(return_value="Status")
+    handlers._ssh_remote_button = MagicMock(return_value=None)
+
+    mock_vis = MagicMock()
+    mock_vis.allows = MagicMock(return_value=False)
+
+    import app.services.menu_visibility_policy as mvp
+    original = mvp.build_session_overview_visibility
+    mvp.build_session_overview_visibility = MagicMock(return_value=mock_vis)
+    try:
+        # No lang kwarg — must auto-resolve to "en" from user_languages[101].
+        _text, keyboard = handlers.build_sessions_active_overview(101, session=session)
+    finally:
+        mvp.build_session_overview_visibility = original
+
+    btns = _extract_all_button_texts(keyboard)
+    assert any("Language" in b for b in btns)
     assert any("Cancel" in b for b in btns)
 
 

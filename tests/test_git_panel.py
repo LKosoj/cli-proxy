@@ -100,4 +100,4 @@ async def test_git_panel_on_operation_finished_error(qtbot, mock_facade):
         qtbot.waitUntil(lambda: mock_msg.called, timeout=1000)
         # QMessageBox.critical(parent, title, text)
         args, kwargs = mock_msg.call_args
-        assert args[1] == "Git Error"
+        assert args[1] == "Git"

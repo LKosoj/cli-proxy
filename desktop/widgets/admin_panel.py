@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 from app.services.path_normalization import normalize_optional_state_path
 from desktop.widgets.admin_chat_section import AdminChatSection
 from desktop.widgets.scheduler_panel import SchedulerPanelWidget
+from i18n import t
 from session import session_runtime_uid
 from utils.ui import ensure_async
 from utils.ui import format_session_title
@@ -91,7 +92,8 @@ class AdminPanel(QWidget):
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(8)
 
-        controls_layout.addWidget(QLabel("Session:"))
+        self.session_selector_label = QLabel("Session:")
+        controls_layout.addWidget(self.session_selector_label)
         self.session_selector = QComboBox()
         self.session_selector.setObjectName("admin_panel_session_selector")
         self.session_selector.currentIndexChanged.connect(self._on_session_selector_changed)
@@ -166,106 +168,128 @@ class AdminPanel(QWidget):
 
         self.pipeline_status_value_label = QLabel("-")
         self.pipeline_status_value_label.setObjectName("admin_panel_pipeline_status_value")
-        self.status_form.addRow("Pipeline:", self.pipeline_status_value_label)
+        self.pipeline_row_label = QLabel("Pipeline:")
+        self.status_form.addRow(self.pipeline_row_label, self.pipeline_status_value_label)
 
         self.monitor_status_value_label = QLabel("-")
         self.monitor_status_value_label.setObjectName("admin_panel_monitor_status_value")
-        self.status_form.addRow("Monitor:", self.monitor_status_value_label)
+        self.monitor_row_label = QLabel("Monitor:")
+        self.status_form.addRow(self.monitor_row_label, self.monitor_status_value_label)
 
         self.analyzer_status_value_label = QLabel("-")
         self.analyzer_status_value_label.setObjectName("admin_panel_analyzer_status_value")
-        self.status_form.addRow("Analyzer:", self.analyzer_status_value_label)
+        self.analyzer_row_label = QLabel("Analyzer:")
+        self.status_form.addRow(self.analyzer_row_label, self.analyzer_status_value_label)
 
         self.analyzer_detail_value_label = QLabel("-")
         self.analyzer_detail_value_label.setObjectName("admin_panel_analyzer_detail_value")
         self.analyzer_detail_value_label.setWordWrap(True)
-        self.status_form.addRow("Analyzer details:", self.analyzer_detail_value_label)
+        self.analyzer_detail_row_label = QLabel("Analyzer details:")
+        self.status_form.addRow(self.analyzer_detail_row_label, self.analyzer_detail_value_label)
 
         self.executor_status_value_label = QLabel("-")
         self.executor_status_value_label.setObjectName("admin_panel_executor_status_value")
-        self.status_form.addRow("Executor:", self.executor_status_value_label)
+        self.executor_row_label = QLabel("Executor:")
+        self.status_form.addRow(self.executor_row_label, self.executor_status_value_label)
 
         self.executor_detail_value_label = QLabel("-")
         self.executor_detail_value_label.setObjectName("admin_panel_executor_detail_value")
         self.executor_detail_value_label.setWordWrap(True)
-        self.status_form.addRow("Executor details:", self.executor_detail_value_label)
+        self.executor_detail_row_label = QLabel("Executor details:")
+        self.status_form.addRow(self.executor_detail_row_label, self.executor_detail_value_label)
 
         self.notifier_status_value_label = QLabel("-")
         self.notifier_status_value_label.setObjectName("admin_panel_notifier_status_value")
-        self.status_form.addRow("Notifier:", self.notifier_status_value_label)
+        self.notifier_row_label = QLabel("Notifier:")
+        self.status_form.addRow(self.notifier_row_label, self.notifier_status_value_label)
 
         self.scan_status_value_label = QLabel("-")
         self.scan_status_value_label.setObjectName("admin_panel_scan_status_value")
-        self.status_form.addRow("Scan:", self.scan_status_value_label)
+        self.scan_row_label = QLabel("Scan:")
+        self.status_form.addRow(self.scan_row_label, self.scan_status_value_label)
 
         self.pinned_cli_value_label = QLabel("-")
         self.pinned_cli_value_label.setObjectName("admin_panel_pinned_cli_value")
         self.pinned_cli_value_label.setWordWrap(True)
-        self.status_form.addRow("Pinned CLI:", self.pinned_cli_value_label)
+        self.pinned_cli_row_label = QLabel("Pinned CLI:")
+        self.status_form.addRow(self.pinned_cli_row_label, self.pinned_cli_value_label)
 
         self.executor_profile_value_label = QLabel("-")
         self.executor_profile_value_label.setObjectName("admin_panel_executor_profile_value")
-        self.status_form.addRow("Executor profile:", self.executor_profile_value_label)
+        self.executor_profile_row_label = QLabel("Executor profile:")
+        self.status_form.addRow(self.executor_profile_row_label, self.executor_profile_value_label)
 
         self.readiness_value_label = QLabel("-")
         self.readiness_value_label.setObjectName("admin_panel_readiness_value")
         self.readiness_value_label.setWordWrap(True)
-        self.status_form.addRow("Readiness:", self.readiness_value_label)
+        self.readiness_row_label = QLabel("Readiness:")
+        self.status_form.addRow(self.readiness_row_label, self.readiness_value_label)
 
         self.runtime_flags_value_label = QLabel("-")
         self.runtime_flags_value_label.setObjectName("admin_panel_runtime_flags_value")
         self.runtime_flags_value_label.setWordWrap(True)
-        self.status_form.addRow("Runtime:", self.runtime_flags_value_label)
+        self.runtime_row_label = QLabel("Runtime:")
+        self.status_form.addRow(self.runtime_row_label, self.runtime_flags_value_label)
 
         self.scan_detail_value_label = QLabel("-")
         self.scan_detail_value_label.setObjectName("admin_panel_scan_detail_value")
         self.scan_detail_value_label.setWordWrap(True)
-        self.status_form.addRow("Scan details:", self.scan_detail_value_label)
+        self.scan_detail_row_label = QLabel("Scan details:")
+        self.status_form.addRow(self.scan_detail_row_label, self.scan_detail_value_label)
 
         self.snapshot_summary_value_label = QLabel("-")
         self.snapshot_summary_value_label.setObjectName("admin_panel_snapshot_summary_value")
         self.snapshot_summary_value_label.setWordWrap(True)
-        self.status_form.addRow("Last snapshot:", self.snapshot_summary_value_label)
+        self.snapshot_row_label = QLabel("Last snapshot:")
+        self.status_form.addRow(self.snapshot_row_label, self.snapshot_summary_value_label)
 
         self.decision_summary_value_label = QLabel("-")
         self.decision_summary_value_label.setObjectName("admin_panel_decision_summary_value")
         self.decision_summary_value_label.setWordWrap(True)
-        self.status_form.addRow("Last decision:", self.decision_summary_value_label)
+        self.decision_row_label = QLabel("Last decision:")
+        self.status_form.addRow(self.decision_row_label, self.decision_summary_value_label)
 
         self.action_summary_value_label = QLabel("-")
         self.action_summary_value_label.setObjectName("admin_panel_action_summary_value")
         self.action_summary_value_label.setWordWrap(True)
-        self.status_form.addRow("Last action:", self.action_summary_value_label)
+        self.action_row_label = QLabel("Last action:")
+        self.status_form.addRow(self.action_row_label, self.action_summary_value_label)
 
         self.pending_value_label = QLabel("-")
         self.pending_value_label.setObjectName("admin_panel_pending_value")
         self.pending_value_label.setWordWrap(True)
-        self.operations_form.addRow("Waiting now:", self.pending_value_label)
+        self.pending_row_label = QLabel("Waiting now:")
+        self.operations_form.addRow(self.pending_row_label, self.pending_value_label)
 
         self.mute_state_value_label = QLabel("-")
         self.mute_state_value_label.setObjectName("admin_panel_mute_state_value")
         self.mute_state_value_label.setWordWrap(True)
-        self.operations_form.addRow("Mute:", self.mute_state_value_label)
+        self.mute_row_label = QLabel("Mute:")
+        self.operations_form.addRow(self.mute_row_label, self.mute_state_value_label)
 
         self.recent_incidents_value_label = QLabel("-")
         self.recent_incidents_value_label.setObjectName("admin_panel_recent_incidents_value")
         self.recent_incidents_value_label.setWordWrap(True)
-        self.operations_form.addRow("Recent incidents:", self.recent_incidents_value_label)
+        self.incidents_row_label = QLabel("Recent incidents:")
+        self.operations_form.addRow(self.incidents_row_label, self.recent_incidents_value_label)
 
         self.recent_actions_value_label = QLabel("-")
         self.recent_actions_value_label.setObjectName("admin_panel_recent_actions_value")
         self.recent_actions_value_label.setWordWrap(True)
-        self.operations_form.addRow("Recent admin actions:", self.recent_actions_value_label)
+        self.recent_actions_row_label = QLabel("Recent admin actions:")
+        self.operations_form.addRow(self.recent_actions_row_label, self.recent_actions_value_label)
 
         self.approved_overrides_value_label = QLabel("-")
         self.approved_overrides_value_label.setObjectName("admin_panel_approved_overrides_value")
         self.approved_overrides_value_label.setWordWrap(True)
-        self.operations_form.addRow("Approved overrides:", self.approved_overrides_value_label)
+        self.overrides_row_label = QLabel("Approved overrides:")
+        self.operations_form.addRow(self.overrides_row_label, self.approved_overrides_value_label)
 
         self.skill_installs_value_label = QLabel("-")
         self.skill_installs_value_label.setObjectName("admin_panel_skill_installs_value")
         self.skill_installs_value_label.setWordWrap(True)
-        self.operations_form.addRow("Pending skill installs:", self.skill_installs_value_label)
+        self.skill_installs_row_label = QLabel("Pending skill installs:")
+        self.operations_form.addRow(self.skill_installs_row_label, self.skill_installs_value_label)
 
         self.skill_approval_selector = QComboBox()
         self.skill_approval_selector.setObjectName("admin_panel_skill_approval_selector")
@@ -285,7 +309,8 @@ class AdminPanel(QWidget):
         skill_actions_layout.addWidget(self.skill_approval_selector, 1)
         skill_actions_layout.addWidget(self.skill_approve_button)
         skill_actions_layout.addWidget(self.skill_reject_button)
-        self.operations_form.addRow("Skill action:", skill_actions_layout)
+        self.skill_action_row_label = QLabel("Skill action:")
+        self.operations_form.addRow(self.skill_action_row_label, skill_actions_layout)
 
         self.skill_action_result_label = QLabel("")
         self.skill_action_result_label.setObjectName("admin_panel_skill_action_result")
@@ -295,7 +320,8 @@ class AdminPanel(QWidget):
         overview_layout.addLayout(self.status_form)
         overview_layout.addStretch(1)
 
-        runs_title = QLabel("Pipeline runs")
+        self.runs_title_label = QLabel("Pipeline runs")
+        runs_title = self.runs_title_label
         runs_title.setObjectName("admin_panel_runs_title")
         operations_layout.addLayout(self.operations_form)
         operations_layout.addWidget(self.skill_action_result_label)
@@ -337,7 +363,8 @@ class AdminPanel(QWidget):
         self.run_detail_view.setMinimumHeight(150)
         operations_layout.addWidget(self.run_detail_view)
 
-        ssh_actions_grp = QGroupBox("SSH actions (admin.actions.ssh)")
+        self.ssh_actions_grp = QGroupBox("SSH actions (admin.actions.ssh)")
+        ssh_actions_grp = self.ssh_actions_grp
         ssh_actions_layout = QVBoxLayout(ssh_actions_grp)
         ssh_actions_layout.setContentsMargins(8, 8, 8, 8)
         ssh_actions_layout.setSpacing(6)
@@ -367,7 +394,8 @@ class AdminPanel(QWidget):
         ssh_actions_layout.addWidget(self.ssh_actions_status_label)
         monitor_tab_layout.addWidget(ssh_actions_grp)
 
-        monitor_grp = QGroupBox("Monitor servers (admin.monitor.servers)")
+        self.monitor_grp = QGroupBox("Monitor servers (admin.monitor.servers)")
+        monitor_grp = self.monitor_grp
         monitor_layout = QVBoxLayout(monitor_grp)
         monitor_layout.setContentsMargins(8, 8, 8, 8)
         monitor_layout.setSpacing(6)
@@ -387,6 +415,7 @@ class AdminPanel(QWidget):
         monitor_meta = QHBoxLayout()
         monitor_meta.setSpacing(10)
         self.monitor_enabled_checkbox = QCheckBox("Включён")
+        self.monitor_enabled_checkbox.setObjectName("admin_panel_monitor_enabled_checkbox")
         monitor_meta.addWidget(self.monitor_enabled_checkbox)
         monitor_meta.addWidget(QLabel("interval_sec:"))
         self.monitor_interval_spin = QDoubleSpinBox()
@@ -404,7 +433,8 @@ class AdminPanel(QWidget):
         self.monitor_servers_table.verticalHeader().setVisible(False)
         self.monitor_servers_table.setMinimumHeight(140)
         monitor_layout.addWidget(self.monitor_servers_table)
-        monitor_hint = QLabel("SSH-хосты редактируются на вкладке «Настройки». Здесь выбирается только server → action.")
+        self.monitor_hint_label = QLabel("SSH-хосты редактируются на вкладке «Настройки». Здесь выбирается только server → action.")
+        monitor_hint = self.monitor_hint_label
         monitor_hint.setWordWrap(True)
         monitor_layout.addWidget(monitor_hint)
         self.monitor_servers_status_label = QLabel("")
@@ -414,7 +444,8 @@ class AdminPanel(QWidget):
 
         self._admin_hosts_cache: list[dict] = []
 
-        config_title = QLabel("Admin config (YAML, read-only)")
+        self.config_title_label = QLabel("Admin config (YAML, read-only)")
+        config_title = self.config_title_label
         config_title.setObjectName("admin_panel_config_title")
         config_layout.addWidget(config_title)
 
@@ -487,6 +518,63 @@ class AdminPanel(QWidget):
         self._status_refresh_timer.timeout.connect(self.refresh_status_payload)
         self._status_refresh_timer.start()
         self.refresh_sessions()
+
+    def retranslate_ui(self, lang: str) -> None:
+        """Re-set all static UI strings using i18n.t(key, lang)."""
+        self.session_selector_label.setText(t("desktop.admin.label.session", lang))
+        self.enable_button.setText(t("desktop.admin.btn.enable", lang))
+        self.disable_button.setText(t("desktop.admin.btn.disable", lang))
+        self.rescan_button.setText(t("desktop.admin.btn.rescan", lang))
+        self.admin_tabs.setTabText(0, t("desktop.admin.tab.overview", lang))
+        self.admin_tabs.setTabText(1, t("desktop.admin.tab.operations", lang))
+        self.admin_tabs.setTabText(2, t("desktop.admin.tab.monitor", lang))
+        self.admin_tabs.setTabText(3, t("desktop.admin.tab.config", lang))
+        self.admin_tabs.setTabText(4, t("desktop.admin.tab.chat", lang))
+        self.admin_tabs.setTabText(5, t("desktop.admin.tab.autonomy", lang))
+        self.admin_tabs.setTabText(6, t("desktop.admin.tab.scheduler", lang))
+        self.pipeline_row_label.setText(t("desktop.admin.label.pipeline", lang))
+        self.monitor_row_label.setText(t("desktop.admin.label.monitor", lang))
+        self.analyzer_row_label.setText(t("desktop.admin.label.analyzer", lang))
+        self.analyzer_detail_row_label.setText(t("desktop.admin.label.analyzer_detail", lang))
+        self.executor_row_label.setText(t("desktop.admin.label.executor", lang))
+        self.executor_detail_row_label.setText(t("desktop.admin.label.executor_detail", lang))
+        self.notifier_row_label.setText(t("desktop.admin.label.notifier", lang))
+        self.scan_row_label.setText(t("desktop.admin.label.scan", lang))
+        self.pinned_cli_row_label.setText(t("desktop.admin.label.pinned_cli", lang))
+        self.executor_profile_row_label.setText(t("desktop.admin.label.executor_profile", lang))
+        self.readiness_row_label.setText(t("desktop.admin.label.readiness", lang))
+        self.runtime_row_label.setText(t("desktop.admin.label.runtime", lang))
+        self.scan_detail_row_label.setText(t("desktop.admin.label.scan_detail", lang))
+        self.snapshot_row_label.setText(t("desktop.admin.label.last_snapshot", lang))
+        self.decision_row_label.setText(t("desktop.admin.label.last_decision", lang))
+        self.action_row_label.setText(t("desktop.admin.label.last_action", lang))
+        self.pending_row_label.setText(t("desktop.admin.label.waiting_now", lang))
+        self.mute_row_label.setText(t("desktop.admin.label.mute", lang))
+        self.incidents_row_label.setText(t("desktop.admin.label.recent_incidents", lang))
+        self.recent_actions_row_label.setText(t("desktop.admin.label.recent_actions", lang))
+        self.overrides_row_label.setText(t("desktop.admin.label.approved_overrides", lang))
+        self.skill_installs_row_label.setText(t("desktop.admin.label.pending_skill_installs", lang))
+        self.skill_action_row_label.setText(t("desktop.admin.label.skill_action", lang))
+        self.skill_approve_button.setText(t("desktop.admin.btn.approve_skill", lang))
+        self.skill_reject_button.setText(t("desktop.admin.btn.reject_skill", lang))
+        self.runs_title_label.setText(t("desktop.admin.label.pipeline_runs", lang))
+        self.runs_refresh_button.setText(t("desktop.admin.btn.refresh_runs", lang))
+        self.runs_view_button.setText(t("desktop.admin.btn.view_run_details", lang))
+        self.ssh_actions_grp.setTitle(t("desktop.admin.label.ssh_actions_group", lang))
+        self.ssh_actions_reload_button.setText(t("desktop.admin.btn.reload", lang))
+        self.ssh_actions_add_button.setText(t("desktop.admin.btn.add_row", lang))
+        self.ssh_actions_save_button.setText(t("desktop.admin.btn.save_rows", lang))
+        self.monitor_grp.setTitle(t("desktop.admin.label.monitor_servers_group", lang))
+        self.monitor_servers_reload_button.setText(t("desktop.admin.btn.reload", lang))
+        self.monitor_servers_add_button.setText(t("desktop.admin.btn.add_row", lang))
+        self.monitor_servers_save_button.setText(t("desktop.admin.btn.save_rows", lang))
+        self.monitor_enabled_checkbox.setText(t("desktop.admin.label.monitor_enabled", lang))
+        self.monitor_hint_label.setText(t("desktop.admin.label.monitor_hint", lang))
+        self.config_title_label.setText(t("desktop.admin.label.config_title", lang))
+        self.config_reload_button.setText(t("desktop.admin.btn.reload_config", lang))
+        self.config_editor.setPlaceholderText(t("desktop.admin.label.config_placeholder", lang))
+        self.disabled_title_label.setText(t("desktop.admin.label.disabled_title", lang))
+        self.disabled_hint_label.setText(t("desktop.admin.label.disabled_hint", lang))
 
     @property
     def active_session_uid(self) -> Optional[str]:

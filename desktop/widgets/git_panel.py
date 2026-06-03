@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
 )
 
+from i18n import t
 from utils.ui import ensure_async
 
 if TYPE_CHECKING:
@@ -59,9 +60,9 @@ class GitPanelWidget(QWidget):
         layout.addWidget(self.remote_banner)
 
         # Заголовок
-        title = QLabel("Enhanced Git Integration")
-        title.setObjectName("git_title")
-        layout.addWidget(title)
+        self.git_title_label = QLabel("Enhanced Git Integration")
+        self.git_title_label.setObjectName("git_title")
+        layout.addWidget(self.git_title_label)
 
         # Создаем вкладки для разных функций Git
         self.tabs = QTabWidget()
@@ -140,7 +141,8 @@ class GitPanelWidget(QWidget):
 
         # Секция коммита
         commit_group_layout = QVBoxLayout()
-        commit_group_layout.addWidget(QLabel("Commit Message:"))
+        self.commit_msg_label = QLabel("Commit Message:")
+        commit_group_layout.addWidget(self.commit_msg_label)
         self.commit_msg_input = QLineEdit()
         self.commit_msg_input.setPlaceholderText("Optional — LLM сгенерирует сообщение автоматически")
         commit_group_layout.addWidget(self.commit_msg_input)
@@ -328,7 +330,8 @@ class GitPanelWidget(QWidget):
         """Показывает diff выбранного коммита."""
         selected_items = self.history_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "Git", "Please select a commit to view diff")
+            lang = self.facade.ui_language
+            QMessageBox.warning(self, "Git", t("desktop.git.msg.select_commit", lang))
             return
 
         commit_hash = selected_items[0].text(0)  # Первый столбец содержит хеш
@@ -477,8 +480,10 @@ class GitPanelWidget(QWidget):
     def _on_branch_create_clicked(self):
         # Запрашиваем имя новой ветки у пользователя
         from PySide6.QtWidgets import QInputDialog
+        lang = self.facade.ui_language
         branch_name, ok = QInputDialog.getText(
-            self, "Create Branch", "Enter new branch name:"
+            self, t("desktop.git.dialog.create_branch_title", lang),
+            t("desktop.git.dialog.create_branch_prompt", lang)
         )
         if ok and branch_name:
             self._set_busy(True)
@@ -497,8 +502,10 @@ class GitPanelWidget(QWidget):
     def _on_branch_switch_clicked(self):
         # Запрашиваем имя ветки для переключения
         from PySide6.QtWidgets import QInputDialog
+        lang = self.facade.ui_language
         branch_name, ok = QInputDialog.getText(
-            self, "Switch Branch", "Enter branch name to switch to:"
+            self, t("desktop.git.dialog.switch_branch_title", lang),
+            t("desktop.git.dialog.switch_branch_prompt", lang)
         )
         if ok and branch_name:
             self._set_busy(True)
@@ -520,13 +527,19 @@ class GitPanelWidget(QWidget):
         # Отложить UI-обновление, чтобы избежать конфликта с qasync (Cannot enter into task)
 
         def _show():
+            lang = self.facade.ui_language
             if code == 0:
-                QMessageBox.information(self, "Git Success", output if output else "Operation completed successfully.")
+                QMessageBox.information(
+                    self, "Git", output if output else t("desktop.git.msg.success", lang)
+                )
                 self.commit_msg_input.clear()
                 self.refresh_status()
                 self.refresh_history()
             else:
-                QMessageBox.critical(self, "Git Error", f"Operation failed with code {code}:\n{output}")
+                QMessageBox.critical(
+                    self, "Git",
+                    t("desktop.git.msg.error", lang) + f"\n{output}" if output else t("desktop.git.msg.error", lang)
+                )
         QTimer.singleShot(0, _show)
 
     @Slot(str)
@@ -553,3 +566,24 @@ class GitPanelWidget(QWidget):
             self.setCursor(Qt.CursorShape.WaitCursor)
         else:
             self.unsetCursor()
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.git_title_label.setText(t("desktop.git.title", lang))
+        self.tabs.setTabText(0, t("desktop.git.tab.status", lang))
+        self.tabs.setTabText(1, t("desktop.git.tab.history", lang))
+        self.tabs.setTabText(2, t("desktop.git.tab.commit", lang))
+        self.tabs.setTabText(3, t("desktop.git.tab.operations", lang))
+        self.status_display.setPlaceholderText(t("desktop.git.select_session", lang))
+        self.refresh_btn.setText(t("desktop.git.btn.refresh_status", lang))
+        self.refresh_history_btn.setText(t("desktop.git.btn.refresh_history", lang))
+        self.show_diff_btn.setText(t("desktop.git.btn.show_diff", lang))
+        self.commit_msg_label.setText(t("desktop.git.commit_message_label", lang))
+        self.commit_msg_input.setPlaceholderText(t("desktop.git.commit_placeholder", lang))
+        self.commit_btn.setText(t("desktop.git.btn.commit", lang))
+        self.generate_msg_btn.setText(t("desktop.git.btn.generate_msg", lang))
+        self.pull_btn.setText(t("desktop.git.btn.pull", lang))
+        self.push_btn.setText(t("desktop.git.btn.push", lang))
+        self.stash_btn.setText(t("desktop.git.btn.stash", lang))
+        self.stash_pop_btn.setText(t("desktop.git.btn.stash_pop", lang))
+        self.branch_create_btn.setText(t("desktop.git.btn.create_branch", lang))
+        self.branch_switch_btn.setText(t("desktop.git.btn.switch_branch", lang))

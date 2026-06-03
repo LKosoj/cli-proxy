@@ -18,7 +18,124 @@
   "errors": {
     "unknown": "Unbekannter Fehler",
     "session_not_found": "Sitzung nicht gefunden.",
-    "mode_unavailable": "Modus nicht verfügbar."
+    "mode_unavailable": "Modus nicht verfügbar.",
+    "ERR_OPENAI_REQUIRED": "Dieser Modus benötigt die OpenAI API. Konfigurieren Sie openai_api_key und openai_model in config.yaml.",
+    "ERR_SESSION_WORKDIR_MISSING": "Erstellen Sie zuerst eine Sitzung über /sessions."
+  },
+  "log_type": {
+    "main": "Hauptprotokoll",
+    "error": "Fehler",
+    "agent": "Agent",
+    "cli_dialog": "CLI-Dialog",
+    "miniapp": "MiniApp"
+  },
+  "miniapp": {
+    "tab": {
+      "config": "Konfiguration",
+      "files": "Dateien",
+      "logs": "Protokolle",
+      "status": "Status",
+      "scheduler": "Scheduler",
+      "settings": "Einstellungen",
+      "admin": "Admin"
+    },
+    "btn": {
+      "refresh": "Aktualisieren",
+      "validate": "Prüfen",
+      "save": "Speichern",
+      "apply": "Anwenden",
+      "up": "Hoch",
+      "create_file": "Datei erstellen",
+      "create_dir": "Ordner erstellen",
+      "delete": "Löschen",
+      "close": "Schließen",
+      "reload": "Neu laden",
+      "reload_file": "Datei neu laden (meine Änderungen verwerfen)",
+      "download": "Herunterladen",
+      "undo": "Rückgängig",
+      "cancel_save": "Speichern abbrechen",
+      "force_save": "Force Save (überschreiben)",
+      "create": "Erstellen",
+      "reset": "Zurücksetzen",
+      "save_changes": "Änderungen speichern",
+      "clear": "Leeren",
+      "cancel": "Abbrechen"
+    },
+    "label": {
+      "session": "Sitzung",
+      "log": "Protokoll",
+      "history": "Verlauf",
+      "autoscroll": "Autoscroll",
+      "active_mode": "Aktiver Modus",
+      "ssh_remote": "SSH Remote",
+      "project": "Projekt",
+      "name": "Name",
+      "actions": "Aktionen",
+      "choose_session": "Sitzung auswählen",
+      "choose_project": "Projekt auswählen",
+      "choose_session_uid": "session_uid auswählen"
+    },
+    "cfg": {
+      "restart_banner": "Neustart für einige Änderungen erforderlich"
+    },
+    "editor": {
+      "no_file": "Keine Datei ausgewählt",
+      "conflict_title": "Versionskonflikt erkannt!",
+      "conflict_desc": "Die Datei wurde seit dem letzten Öffnen auf dem Server geändert."
+    },
+    "logs": {
+      "only_new": "Nur neue",
+      "prev_N": "{n} vorherige"
+    },
+    "status": {
+      "empty": "Lädt oder keine Sitzung ausgewählt...",
+      "loading": "Lädt…",
+      "no_session": "Keine Sitzung ausgewählt",
+      "no_data": "Keine Daten.",
+      "no_data_short": "Keine Daten",
+      "waiting": "Wartet",
+      "git_free": "Frei",
+      "off": "aus",
+      "mode_section": "Werkzeug und Modus",
+      "kv_mode": "Modus:",
+      "kv_tool": "Werkzeug:",
+      "manager_plan": "Manager-Plan",
+      "analyst": "Analyst-Status",
+      "agent": "Agent-Status",
+      "session_unavailable": "Sitzung nicht ausgewählt oder nicht verfügbar"
+    },
+    "runs": {
+      "select_hint": "Run in der Tabelle auswählen.",
+      "select_run": "Run auswählen.",
+      "choose_session": "Sitzung auswählen, um Run-Artefakte anzuzeigen."
+    },
+    "settings": {
+      "empty": "Lädt oder keine Sitzung ausgewählt...",
+      "choose_session": "Sitzung auswählen, um Einstellungen zu verwalten.",
+      "session_params": "Sitzungsparameter",
+      "mode_hint": "Sitzungsmodus oder Direkt-CLI auswählen, um den aktiven Modus zu deaktivieren.",
+      "lang_title": "Sprache",
+      "lang_label": "Oberflächensprache",
+      "lang_save": "Sprache speichern"
+    },
+    "scheduler": {
+      "choose_project": "Projekt auswählen, um den Zeitplan zu verwalten.",
+      "no_projects": "Keine Projekte verfügbar."
+    },
+    "admin": {
+      "choose_session": "Sitzung für das Admin-Panel auswählen.",
+      "choose_skill": "Ausstehende Skill-Installation auswählen"
+    },
+    "mode": {
+      "direct_cli": "Direkt-CLI"
+    },
+    "error": {
+      "auth": "Autorisierungsfehler",
+      "access_denied": "Zugriff verweigert"
+    },
+    "ssh": {
+      "no_hosts": "Keine Hosts konfiguriert."
+    }
   },
   "btn": {
     "session": {
@@ -216,6 +333,219 @@
     },
     "mode": {
       "desc": "Modusmenü: {label}."
+    }
+  },
+  "desktop": {
+    "btn": {
+      "save": "Speichern",
+      "add": "Hinzufügen",
+      "delete": "Löschen",
+      "new": "Neu",
+      "actions": "Aktionen",
+      "test_connection": "Verbindung testen",
+      "generate_key": "Schlüssel erstellen",
+      "save_host": "Host speichern",
+      "up": "Hoch",
+      "refresh": "Aktualisieren",
+      "new_file": "Neue Datei",
+      "new_dir": "Neuer Ordner",
+      "reload": "Neu laden",
+      "force_save": "Erzwungenes Speichern",
+      "send": "Senden",
+      "copy": "Kopieren",
+      "clear": "Leeren",
+      "sessions": "Sitzungen",
+      "git": "Git",
+      "tasks": "Aufgaben",
+      "runs": "Läufe",
+      "session": "Sitzung",
+      "cmd": "Befehl"
+    },
+    "nav": {
+      "chat": "Chat",
+      "settings": "Konfiguration",
+      "files": "Dateien",
+      "logs": "Protokolle",
+      "status": "Status",
+      "scheduler": "Planer",
+      "session_settings": "Sitzungseinstellungen",
+      "reports": "Berichte",
+      "plugins": "Plugins",
+      "admin": "Administrator"
+    },
+    "settings": {
+      "lang_label": "App-Sprache:",
+      "session_name": "Sitzungsname:",
+      "cli": "CLI:",
+      "active_mode": "Aktiver Modus:",
+      "ssh_enable": "SSH-Fernzugriff aktivieren",
+      "ssh_remote": "SSH Remote:",
+      "ssh_hosts_group": "SSH-Host-Konfiguration",
+      "rc_group": "Fernsteuerung",
+      "rc_enable": "Fernsteuerung aktivieren",
+      "rc_label": "Fernsteuerung:",
+      "rc_target_host": "Zielhost:",
+      "rc_effective_target": "Effektives Ziel:",
+      "orchestrator_enable": "Erweiterten Orchestrator aktivieren",
+      "orchestrator": "Orchestrator:"
+    },
+    "git": {
+      "title": "Git-Integration",
+      "tab": {
+        "status": "Status",
+        "history": "Verlauf",
+        "commit": "Commit",
+        "operations": "Operationen"
+      },
+      "select_session": "Sitzung auswählen, um den Git-Status anzuzeigen...",
+      "commit_message_label": "Commit-Nachricht:",
+      "commit_placeholder": "Optional — LLM generiert die Nachricht automatisch",
+      "btn": {
+        "refresh_status": "Status aktualisieren",
+        "refresh_history": "Verlauf aktualisieren",
+        "show_diff": "Diff anzeigen",
+        "commit": "Commit (Alles hinzufügen)",
+        "generate_msg": "Nachricht mit AI generieren",
+        "pull": "Pull",
+        "push": "Push",
+        "stash": "Stash",
+        "stash_pop": "Stash Pop",
+        "create_branch": "Branch erstellen",
+        "switch_branch": "Branch wechseln"
+      },
+      "msg": {
+        "select_commit": "Bitte einen Commit auswählen, um den Diff anzuzeigen.",
+        "success": "Vorgang erfolgreich abgeschlossen.",
+        "error": "Vorgang fehlgeschlagen."
+      },
+      "dialog": {
+        "create_branch_title": "Branch erstellen",
+        "create_branch_prompt": "Namen des neuen Branches eingeben:",
+        "switch_branch_title": "Branch wechseln",
+        "switch_branch_prompt": "Namen des Branches eingeben, zu dem gewechselt werden soll:"
+      }
+    },
+    "log": {
+      "tab": {
+        "main": "Hauptprotokoll",
+        "filters": "Filter",
+        "tasks": "Aufgaben"
+      },
+      "filter_placeholder": "Nach Schlüsselwort filtern...",
+      "filter_label": "Filter:",
+      "level_label": "Ebene:",
+      "auto_scroll": "Auto-Scroll",
+      "wrap_text": "Zeilenumbruch",
+      "module_filter_placeholder": "Modulnamen zum Filtern eingeben...",
+      "tasks_monitor_title": "Aktive Aufgabenübersicht",
+      "btn": {
+        "apply_filters": "Filter anwenden",
+        "refresh_tasks": "Aufgaben aktualisieren"
+      }
+    },
+    "session": {
+      "search_placeholder": "Sitzungen suchen...",
+      "new_title": "Neue Sitzung",
+      "select_tool": "Werkzeug auswählen:",
+      "close_confirm_title": "Sitzung löschen",
+      "close_confirm_msg": "Sitzung {uid} wirklich löschen?",
+      "rename_title": "Sitzung umbenennen",
+      "rename_prompt": "Neuen Namen eingeben:",
+      "reset_confirm": "Sitzung {uid} wirklich zurücksetzen?\nKontext und Resume-Token werden gelöscht.",
+      "resume_confirm": "Sitzung klonen/fortsetzen?",
+      "switch_cli_title": "CLI wechseln",
+      "resume_token_title": "Resume-Token bearbeiten"
+    },
+    "files": {
+      "no_file": "Keine Datei ausgewählt",
+      "select_session": "Bitte zuerst eine Sitzung im Chat auswählen.",
+      "loading": "Laden...",
+      "load_error": "Dateien konnten nicht geladen werden: {error}",
+      "read_error": "Datei konnte nicht gelesen werden: {error}",
+      "saving": "Speichern...",
+      "save_error": "Datei konnte nicht gespeichert werden: {error}",
+      "saved": "Gespeichert.",
+      "create_error": "Pfad konnte nicht erstellt werden: {error}",
+      "delete_error": "Pfad konnte nicht gelöscht werden: {error}",
+      "exec_target_local": "Ausführungsziel: Lokal"
+    },
+    "chat": {
+      "input_placeholder": "Nachricht eingeben... (Strg+Enter zum Senden)"
+    },
+    "status": {
+      "ready": "Bereit"
+    },
+    "admin": {
+      "tab": {
+        "overview": "Übersicht",
+        "operations": "Operationen",
+        "monitor": "Überwachung",
+        "config": "Konfiguration",
+        "chat": "Chat",
+        "autonomy": "Autonomie",
+        "scheduler": "Scheduler"
+      },
+      "btn": {
+        "enable": "Aktivieren",
+        "disable": "Deaktivieren",
+        "rescan": "Neu scannen",
+        "approve_skill": "Skill genehmigen",
+        "reject_skill": "Skill ablehnen",
+        "refresh_runs": "Läufe aktualisieren",
+        "view_run_details": "Laufdetails anzeigen",
+        "reload": "Neu laden",
+        "add_row": "Hinzufügen",
+        "save_rows": "Speichern",
+        "reload_config": "Konfiguration neu laden"
+      },
+      "label": {
+        "session": "Sitzung:",
+        "pipeline": "Pipeline:",
+        "monitor": "Monitor:",
+        "analyzer": "Analysator:",
+        "analyzer_detail": "Analysator-Details:",
+        "executor": "Ausführer:",
+        "executor_detail": "Ausführer-Details:",
+        "notifier": "Benachrichtiger:",
+        "scan": "Scan:",
+        "pinned_cli": "Festgelegtes CLI:",
+        "executor_profile": "Ausführer-Profil:",
+        "readiness": "Bereitschaft:",
+        "runtime": "Laufzeit:",
+        "scan_detail": "Scan-Details:",
+        "last_snapshot": "Letzter Snapshot:",
+        "last_decision": "Letzte Entscheidung:",
+        "last_action": "Letzte Aktion:",
+        "waiting_now": "Wartet jetzt:",
+        "mute": "Stummschaltung:",
+        "recent_incidents": "Aktuelle Vorfälle:",
+        "recent_actions": "Letzte Admin-Aktionen:",
+        "approved_overrides": "Genehmigte Überschreibungen:",
+        "pending_skill_installs": "Ausstehende Skill-Installationen:",
+        "skill_action": "Skill-Aktion:",
+        "pipeline_runs": "Pipeline-Läufe",
+        "ssh_actions_group": "SSH-Aktionen (admin.actions.ssh)",
+        "monitor_servers_group": "Überwachungsserver (admin.monitor.servers)",
+        "monitor_enabled": "Aktiviert",
+        "monitor_hint": "SSH-Hosts werden im Tab «Einstellungen» konfiguriert. Hier wird nur server → action ausgewählt.",
+        "config_title": "Admin-Konfiguration (YAML, schreibgeschützt)",
+        "config_placeholder": "Klicken Sie auf «Konfiguration neu laden», um das resultierende YAML anzuzeigen.",
+        "disabled_title": "Admin deaktiviert",
+        "disabled_hint": "Aktivieren Sie Admin für diese Sitzung oder scannen Sie die Umgebung neu."
+      }
+    },
+    "msg": {
+      "no_tools": "Keine Werkzeuge konfiguriert.",
+      "session_exists": "Sitzung existiert bereits.",
+      "create_error": "Sitzung konnte nicht erstellt werden.",
+      "session_create_failed": "Fehler beim Erstellen der Sitzung: {error}",
+      "resume_error": "Sitzung konnte nicht fortgesetzt werden.",
+      "needs_clarification": "Klärung durch den Benutzer erforderlich.",
+      "answer_required": "Bitte beantworten Sie die Frage (Optionsnummer oder Text).",
+      "answer_not_recognized": "Antwort nicht erkannt. Bitte Schaltfläche klicken oder vollständigen Optionstext eingeben.",
+      "answer_accepted": "Antwort akzeptiert: {answer}",
+      "question_closed": "Frage ist bereits geschlossen.",
+      "select_session_first": "Bitte zuerst eine Desktop-Sitzung auswählen."
     }
   }
 }

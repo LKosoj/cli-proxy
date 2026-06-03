@@ -45,6 +45,7 @@ from modes.sdk.session_busy import is_session_busy
 from modes.sdk.services import CodebaseContextService, CodebaseContextText, MessagingService
 from session import session_scoped_key
 from sessions.session_state_access import set_analyst_mode
+from utils.lang import resolve_user_lang
 from utils.text import strip_ansi
 
 _TOOL_CALL_BLOCK_RE = re.compile(r"\[TOOL_CALL\].*?\[/TOOL_CALL\]", re.IGNORECASE | re.DOTALL)
@@ -245,7 +246,11 @@ class AnalystMode(BaseMode, RunArtifactsMixin):
             detail_level: str = intent_data["detail_level"]
             summary: str = intent_data["summary"]
 
-            template_id, template = self._resolve_template(intent_data, user_text)
+            try:
+                _lang = resolve_user_lang(self.config, chat_id=getattr(session, "chat_id", None))
+            except Exception:
+                _lang = "ru"
+            template_id, template = self._resolve_template(intent_data, user_text, _lang)
             clarification_questions = self._filter_gate1_questions(
                 analysis_profile=analysis_profile,
                 template=template,
@@ -927,12 +932,14 @@ class AnalystMode(BaseMode, RunArtifactsMixin):
         self,
         intent_data: Dict[str, Any],
         user_text: str,
+        lang: str = "ru",
     ) -> tuple[str, Dict[str, Any]]:
         """Resolve template from intent classification result.
 
         Args:
             intent_data: Result of _classify_intent.
             user_text: Original user request text.
+            lang: Language code for localized template loading.
 
         Returns:
             Tuple of (template_id, template_dict).
@@ -947,7 +954,7 @@ class AnalystMode(BaseMode, RunArtifactsMixin):
         # If the LLM provided a template_hint, try it first
         if template_hint:
             try:
-                registry = analyst_templates.get_analyst_templates_cached()
+                registry = analyst_templates.get_analyst_templates_for_lang(lang)
                 template = analyst_templates.resolve_template(registry, template_hint)
                 self._log.info(
                     "analyst template resolved from hint: %s", template_hint,
@@ -962,7 +969,7 @@ class AnalystMode(BaseMode, RunArtifactsMixin):
         # Profile-based routing with cue-word adjustments
         template_id = build_template_from_profile(profile, document_kind, user_text)
 
-        registry = analyst_templates.get_analyst_templates_cached()
+        registry = analyst_templates.get_analyst_templates_for_lang(lang)
         template = analyst_templates.resolve_template(registry, template_id)
         self._log.info(
             "analyst template resolved from profile routing: profile=%s kind=%s -> %s",

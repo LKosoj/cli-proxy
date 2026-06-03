@@ -6,8 +6,14 @@ from typing import Any, Dict
 from app.services.run_artifact_store import RunArtifactHandle, RunArtifactStore
 from modes.sdk import SharedOrchestratorRunner
 from session import session_scoped_key
+from utils.lang import resolve_user_lang
 from .state_store import AnalystStateStore, build_context_key, resolve_analyst_state_root
-from .template_service import get_analyst_templates_cached, get_effective_template, get_template_for_session
+from .template_service import (
+    get_analyst_templates_cached,
+    get_analyst_templates_for_lang,
+    get_effective_template,
+    get_template_for_session,
+)
 
 _ANALYST_BLOCKING_CLARIFICATION_RUNTIME_ATTR = "analyst_blocking_clarification_runtime"
 _ANALYST_RUN_HANDLE_SESSION_ATTR = "analyst_run_artifact_handle"
@@ -66,8 +72,14 @@ class AnalystModeRunnerService:
             return False
         return bool(raw_flags.get("clarification_is_blocking"))
 
+    def _resolve_lang(self, session: Any) -> str:
+        try:
+            return resolve_user_lang(self._config, chat_id=getattr(session, "chat_id", None))
+        except Exception:
+            return "ru"
+
     def _get_effective_template_for_session(self, session: Any) -> Dict[str, Any]:
-        registry = get_analyst_templates_cached()
+        registry = get_analyst_templates_for_lang(self._resolve_lang(session))
         chat_id = getattr(session, "chat_id", None)
         session_id = str(getattr(session, "id", "") or "").strip()
         store = AnalystStateStore(resolve_analyst_state_root(session))
@@ -81,7 +93,7 @@ class AnalystModeRunnerService:
         return dict(template or {})
 
     def get_template_for_session(self, session: Any) -> Dict[str, Any]:
-        return dict(get_template_for_session(session) or {})
+        return dict(get_template_for_session(session, lang=self._resolve_lang(session)) or {})
 
     def get_templates_cached(self, path: str | None = None) -> Dict[str, Dict[str, Any]]:
         return dict(get_analyst_templates_cached(path) or {})

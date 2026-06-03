@@ -18,7 +18,124 @@
   "errors": {
     "unknown": "Неизвестная ошибка",
     "session_not_found": "Сессия не найдена.",
-    "mode_unavailable": "Режим недоступен."
+    "mode_unavailable": "Режим недоступен.",
+    "ERR_OPENAI_REQUIRED": "Для этого режима нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml.",
+    "ERR_SESSION_WORKDIR_MISSING": "Сначала создайте сессию через /sessions."
+  },
+  "log_type": {
+    "main": "Основной",
+    "error": "Ошибки",
+    "agent": "Agent",
+    "cli_dialog": "CLI диалог",
+    "miniapp": "MiniApp"
+  },
+  "miniapp": {
+    "tab": {
+      "config": "Config",
+      "files": "Файлы",
+      "logs": "Логи",
+      "status": "Статус",
+      "scheduler": "Scheduler",
+      "settings": "Настройки",
+      "admin": "Админ"
+    },
+    "btn": {
+      "refresh": "Обновить",
+      "validate": "Проверить",
+      "save": "Сохранить",
+      "apply": "Применить",
+      "up": "Вверх",
+      "create_file": "Создать файл",
+      "create_dir": "Создать папку",
+      "delete": "Удалить",
+      "close": "Закрыть",
+      "reload": "Обновить",
+      "reload_file": "Перезагрузить файл (потерять мои изменения)",
+      "download": "Скачать",
+      "undo": "Отменить",
+      "cancel_save": "Отменить сохранение",
+      "force_save": "Force Save (перезаписать)",
+      "create": "Создать",
+      "reset": "Сбросить",
+      "save_changes": "Сохранить изменения",
+      "clear": "Очистить",
+      "cancel": "Отмена"
+    },
+    "label": {
+      "session": "Сессия",
+      "log": "Лог",
+      "history": "История",
+      "autoscroll": "Автопрокрутка",
+      "active_mode": "Active Mode",
+      "ssh_remote": "SSH Remote",
+      "project": "Проект",
+      "name": "Название",
+      "actions": "Действия",
+      "choose_session": "Выберите сессию",
+      "choose_project": "Выберите проект",
+      "choose_session_uid": "Выберите session_uid"
+    },
+    "cfg": {
+      "restart_banner": "Требуется перезапуск для части изменений"
+    },
+    "editor": {
+      "no_file": "Файл не выбран",
+      "conflict_title": "Обнаружен конфликт версий!",
+      "conflict_desc": "Файл был изменён на сервере с момента последнего открытия."
+    },
+    "logs": {
+      "only_new": "Только новые",
+      "prev_N": "{n} предыдущих"
+    },
+    "status": {
+      "empty": "Загрузка или сессия не выбрана...",
+      "loading": "Загрузка…",
+      "no_session": "Сессия не выбрана",
+      "no_data": "Нет данных.",
+      "no_data_short": "Нет данных",
+      "waiting": "Ожидает",
+      "git_free": "Свободен",
+      "off": "выкл",
+      "mode_section": "Инструмент и Режим",
+      "kv_mode": "Режим (Mode):",
+      "kv_tool": "Инструмент:",
+      "manager_plan": "План Менеджера",
+      "analyst": "Статус Аналитика",
+      "agent": "Статус Агента",
+      "session_unavailable": "Сессия не выбрана или недоступна"
+    },
+    "runs": {
+      "select_hint": "Выберите run в таблице.",
+      "select_run": "Выберите запуск.",
+      "choose_session": "Выберите сессию, чтобы просмотреть run artifacts."
+    },
+    "settings": {
+      "empty": "Загрузка или сессия не выбрана...",
+      "choose_session": "Выберите сессию для управления настройками.",
+      "session_params": "Параметры сессии",
+      "mode_hint": "Выберите режим сессии или Прямой CLI, чтобы выключить активный режим.",
+      "lang_title": "Язык",
+      "lang_label": "Язык интерфейса",
+      "lang_save": "Сохранить язык"
+    },
+    "scheduler": {
+      "choose_project": "Выберите проект для управления расписанием.",
+      "no_projects": "Нет доступных проектов."
+    },
+    "admin": {
+      "choose_session": "Выберите сессию для Admin-панели.",
+      "choose_skill": "Выберите pending skill install"
+    },
+    "mode": {
+      "direct_cli": "Прямой CLI"
+    },
+    "error": {
+      "auth": "Ошибка авторизации",
+      "access_denied": "Доступ запрещен"
+    },
+    "ssh": {
+      "no_hosts": "Хосты не настроены."
+    }
   },
   "btn": {
     "session": {
@@ -216,6 +333,219 @@
     },
     "mode": {
       "desc": "Меню режима: {label}."
+    }
+  },
+  "desktop": {
+    "btn": {
+      "save": "Сохранить",
+      "add": "Добавить",
+      "delete": "Удалить",
+      "new": "Новый",
+      "actions": "Действия",
+      "test_connection": "Проверить соединение",
+      "generate_key": "Создать ключ",
+      "save_host": "Сохранить хост",
+      "up": "Вверх",
+      "refresh": "Обновить",
+      "new_file": "Новый файл",
+      "new_dir": "Новая папка",
+      "reload": "Перезагрузить",
+      "force_save": "Принудительно сохранить",
+      "send": "Отправить",
+      "copy": "Копировать",
+      "clear": "Очистить",
+      "sessions": "Сессии",
+      "git": "Git",
+      "tasks": "Задачи",
+      "runs": "Запуски",
+      "session": "Сессия",
+      "cmd": "Cmd"
+    },
+    "nav": {
+      "chat": "Чат",
+      "settings": "Конфигурация",
+      "files": "Файлы",
+      "logs": "Логи",
+      "status": "Статус",
+      "scheduler": "Планировщик",
+      "session_settings": "Настройки сессии",
+      "reports": "Отчёты",
+      "plugins": "Плагины",
+      "admin": "Администратор"
+    },
+    "settings": {
+      "lang_label": "Язык приложения:",
+      "session_name": "Имя сессии:",
+      "cli": "CLI:",
+      "active_mode": "Активный режим:",
+      "ssh_enable": "Включить SSH-удалённый доступ",
+      "ssh_remote": "SSH Remote:",
+      "ssh_hosts_group": "Настройка SSH-хостов",
+      "rc_group": "Удалённое управление",
+      "rc_enable": "Включить удалённое управление",
+      "rc_label": "Удалённое управление:",
+      "rc_target_host": "Целевой хост:",
+      "rc_effective_target": "Эффективная цель:",
+      "orchestrator_enable": "Включить продвинутый оркестратор",
+      "orchestrator": "Оркестратор:"
+    },
+    "git": {
+      "title": "Интеграция с Git",
+      "tab": {
+        "status": "Статус",
+        "history": "История",
+        "commit": "Коммит",
+        "operations": "Операции"
+      },
+      "select_session": "Выберите сессию для просмотра git-статуса...",
+      "commit_message_label": "Сообщение коммита:",
+      "commit_placeholder": "Необязательно — LLM сгенерирует сообщение автоматически",
+      "btn": {
+        "refresh_status": "Обновить статус",
+        "refresh_history": "Обновить историю",
+        "show_diff": "Показать diff",
+        "commit": "Коммит (добавить всё)",
+        "generate_msg": "Сгенерировать сообщение AI",
+        "pull": "Pull",
+        "push": "Push",
+        "stash": "Stash",
+        "stash_pop": "Stash Pop",
+        "create_branch": "Создать ветку",
+        "switch_branch": "Переключить ветку"
+      },
+      "msg": {
+        "select_commit": "Выберите коммит для просмотра diff.",
+        "success": "Операция выполнена успешно.",
+        "error": "Операция завершилась с ошибкой."
+      },
+      "dialog": {
+        "create_branch_title": "Создать ветку",
+        "create_branch_prompt": "Введите имя новой ветки:",
+        "switch_branch_title": "Переключить ветку",
+        "switch_branch_prompt": "Введите имя ветки для переключения:"
+      }
+    },
+    "log": {
+      "tab": {
+        "main": "Основной лог",
+        "filters": "Фильтры",
+        "tasks": "Задачи"
+      },
+      "filter_placeholder": "Фильтр по ключевому слову...",
+      "filter_label": "Фильтр:",
+      "level_label": "Уровень:",
+      "auto_scroll": "Авто-прокрутка",
+      "wrap_text": "Перенос текста",
+      "module_filter_placeholder": "Введите имя модуля для фильтра...",
+      "tasks_monitor_title": "Монитор активных задач",
+      "btn": {
+        "apply_filters": "Применить фильтры",
+        "refresh_tasks": "Обновить задачи"
+      }
+    },
+    "session": {
+      "search_placeholder": "Поиск сессий...",
+      "new_title": "Новая сессия",
+      "select_tool": "Выберите инструмент:",
+      "close_confirm_title": "Удалить сессию",
+      "close_confirm_msg": "Вы уверены, что хотите удалить сессию {uid}?",
+      "rename_title": "Переименовать сессию",
+      "rename_prompt": "Введите новое имя:",
+      "reset_confirm": "Вы уверены, что хотите сбросить сессию {uid}?\nКонтекст и resume-токен будут очищены.",
+      "resume_confirm": "Клонировать/возобновить сессию?",
+      "switch_cli_title": "Сменить CLI",
+      "resume_token_title": "Изменить resume-токен"
+    },
+    "files": {
+      "no_file": "Файл не выбран",
+      "select_session": "Сначала выберите сессию в Chat.",
+      "loading": "Загрузка...",
+      "load_error": "Не удалось загрузить файлы: {error}",
+      "read_error": "Не удалось прочитать файл: {error}",
+      "saving": "Сохранение...",
+      "save_error": "Не удалось сохранить файл: {error}",
+      "saved": "Сохранено.",
+      "create_error": "Не удалось создать путь: {error}",
+      "delete_error": "Не удалось удалить путь: {error}",
+      "exec_target_local": "Цель выполнения: Локально"
+    },
+    "chat": {
+      "input_placeholder": "Введите сообщение... (Ctrl+Enter для отправки)"
+    },
+    "status": {
+      "ready": "Готово"
+    },
+    "admin": {
+      "tab": {
+        "overview": "Обзор",
+        "operations": "Операции",
+        "monitor": "Мониторинг",
+        "config": "Конфиг",
+        "chat": "Чат",
+        "autonomy": "Автономность",
+        "scheduler": "Планировщик"
+      },
+      "btn": {
+        "enable": "Включить",
+        "disable": "Выключить",
+        "rescan": "Пересканировать",
+        "approve_skill": "Разрешить навык",
+        "reject_skill": "Отклонить навык",
+        "refresh_runs": "Обновить запуски",
+        "view_run_details": "Детали запуска",
+        "reload": "Перезагрузить",
+        "add_row": "Добавить",
+        "save_rows": "Сохранить",
+        "reload_config": "Перезагрузить конфиг"
+      },
+      "label": {
+        "session": "Сессия:",
+        "pipeline": "Конвейер:",
+        "monitor": "Монитор:",
+        "analyzer": "Анализатор:",
+        "analyzer_detail": "Детали анализатора:",
+        "executor": "Исполнитель:",
+        "executor_detail": "Детали исполнителя:",
+        "notifier": "Нотификатор:",
+        "scan": "Сканирование:",
+        "pinned_cli": "Закреплённый CLI:",
+        "executor_profile": "Профиль исполнителя:",
+        "readiness": "Готовность:",
+        "runtime": "Runtime:",
+        "scan_detail": "Детали скана:",
+        "last_snapshot": "Последний снимок:",
+        "last_decision": "Последнее решение:",
+        "last_action": "Последнее действие:",
+        "waiting_now": "Ожидание:",
+        "mute": "Отключение:",
+        "recent_incidents": "Последние инциденты:",
+        "recent_actions": "Последние действия:",
+        "approved_overrides": "Одобренные переопределения:",
+        "pending_skill_installs": "Ожидающие установки навыков:",
+        "skill_action": "Действие с навыком:",
+        "pipeline_runs": "Запуски конвейера",
+        "ssh_actions_group": "SSH-действия (admin.actions.ssh)",
+        "monitor_servers_group": "Серверы мониторинга (admin.monitor.servers)",
+        "monitor_enabled": "Включён",
+        "monitor_hint": "SSH-хосты редактируются на вкладке «Настройки». Здесь выбирается только server → action.",
+        "config_title": "Конфиг Admin (YAML, только чтение)",
+        "config_placeholder": "Нажмите «Перезагрузить конфиг» для просмотра итогового YAML.",
+        "disabled_title": "Admin отключён",
+        "disabled_hint": "Включите admin для этой сессии или пересканируйте её окружение."
+      }
+    },
+    "msg": {
+      "no_tools": "Нет настроенных инструментов.",
+      "session_exists": "Сессия уже существует.",
+      "create_error": "Ошибка создания сессии.",
+      "session_create_failed": "Не удалось создать сессию: {error}",
+      "resume_error": "Ошибка возобновления сессии.",
+      "needs_clarification": "Нужно уточнение от пользователя.",
+      "answer_required": "Нужен ответ на уточняющий вопрос (номер варианта или текст).",
+      "answer_not_recognized": "Ответ не распознан. Выберите кнопку или введите полный текст варианта.",
+      "answer_accepted": "Принял ответ: {answer}",
+      "question_closed": "Вопрос уже закрыт.",
+      "select_session_first": "Сначала выберите desktop-сессию."
     }
   }
 }

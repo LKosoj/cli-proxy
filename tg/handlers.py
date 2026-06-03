@@ -47,6 +47,7 @@ from tg.files_service_adapter import (
     session_uid_for_files,
 )
 from utils.ui import status_dot
+from utils.lang import resolve_user_lang
 from app.services.session_state import SessionState
 from i18n import t, SUPPORTED_LANGS
 
@@ -708,8 +709,13 @@ class BotHandlers:
         *,
         session: Optional[Session] = None,
         session_uid: Optional[str] = None,
-        lang: str = "ru",
+        lang: Optional[str] = None,
     ) -> tuple[str, InlineKeyboardMarkup]:
+        if lang is None:
+            try:
+                lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+            except Exception:
+                lang = "ru"
         is_admin = self._is_admin(chat_id)
         if not is_admin and not self.bot_app.user_projects(chat_id):
             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")]])

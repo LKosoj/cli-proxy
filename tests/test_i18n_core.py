@@ -250,6 +250,9 @@ def test_persist_flow_writes_on_first_contact() -> None:
     asyncio.run(maybe_persist_user_language(1, "en", cfg, mock_svc))
 
     mock_svc.set_user_language.assert_called_once_with(1, "en")
+    # W2: live in-memory config must reflect the persisted choice immediately,
+    # so resolve_user_lang() sees it without waiting for a full reload.
+    assert cfg.telegram.user_languages == {1: "en"}
 
 
 def test_persist_flow_idempotent() -> None:
@@ -294,6 +297,8 @@ def test_persist_flow_handles_failure_gracefully() -> None:
     asyncio.run(maybe_persist_user_language(1, "en", cfg, mock_svc))
 
     mock_svc.set_user_language.assert_called_once_with(1, "en")
+    # On failure the in-memory config must NOT be mutated.
+    assert cfg.telegram.user_languages == {}
 
 
 def _make_config_service_stub(side_effect):

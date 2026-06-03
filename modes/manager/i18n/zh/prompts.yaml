@@ -1,0 +1,649 @@
+# flake8: noqa
+prompts:
+  decompose_instruction: |
+    ## 任务：项目分析与任务分解
+
+    ### 用户目标：
+    {user_goal}
+
+    ### 你需要做的事：
+
+    **第一步 — 分析项目当前状态：**
+    - 查看文件和目录结构（ls、find、tree）。
+    - 查看关键文件：README、配置文件、入口点。
+    - 检查 git status 和 git log（最近的提交）。
+    - 如果有测试——运行并验证通过情况。
+    - 如果有包管理器（requirements.txt、package.json、go.mod）——检查依赖项。
+    - 确定哪些工作已经完成，哪些还需要做。
+
+    **第二步 — 任务分解：**
+    根据用户目标和项目当前状态制定任务计划。
+    考虑已完成的内容——不要为已经正常运行的部分创建任务。
+    如果项目为空——从头开始制定计划。
+    如果项目已完成一半——只为剩余部分创建任务。
+    计划必须覆盖全部 remaining_work，不得遗漏。
+
+    **第二步 2.1 — 明确技术规范需求：**
+    - 在分解之前，以 `REQ-1`、`REQ-2`、... 格式提取需求。
+    - 需求应简短、可验证且不重复。
+    - 每个任务必须引用它所覆盖的需求。
+
+    ### 任务规则：
+    - 每个任务必须是原子性的：一名开发者可在一次迭代中完成。
+    - 优先采用最大程度的原子化分解：每个任务对应一个可验证的结果。
+    - 如果 remaining_work 可以安全地进一步拆分——请拆分，不要合并。
+    - 任务数量必须在 {min_tasks_dynamic}-{max_tasks} 范围内。
+    - 禁止为减少任务数量而合并任务：不要将多个独立结果合并到一个任务中。
+    - 任务之间不得相互矛盾！这非常重要，它们可能由不同开发者执行。
+    - 不要创建过于宽泛的任务（"做完所有事情"、"实现整个项目"）：
+      按子系统/阶段划分，使职责范围明确。
+    - description 是给开发者的详细技术规范。开发者看不到其他任务，
+      只按此描述工作。在 description 中包含需要创建/修改的
+      具体文件名、函数名、类名。
+    - 在 description 中必须说明开发者在做出更改前应检查什么
+      （现有模块、集成点、架构限制）。
+    - acceptance_criteria 是具体可验证的条目（文件 X 存在、
+      测试 Y 通过、端点 Z 返回 200）。
+    - 每个任务至少提供 2 个 acceptance_criteria：功能结果和验证方式
+      （测试/命令/可观测行为）。
+    - 每个任务请填写 `covers_requirements`：该任务所覆盖的 `REQ-*` 列表。
+    - `covers_requirements` 每个任务不超过 {max_requirements_per_task} 个需求。
+    - depends_on 是必须在此任务之前完成的任务 ID。
+    - 顺序：先基础，后上层。
+    - 任务数量：{min_tasks_dynamic}-{max_tasks}。
+    - 如果一个任务太宽泛——必须将其拆分为更原子化的任务。
+
+    ### 重要事项：
+    - 不要创建需要用户交互式输入的任务。
+    - 任务必须完全自主执行。
+    - 自主工作：不要询问用户，自行做出决策。
+    - 在给出最终答案之前，进行内部完整性检查：
+      1) remaining_work 的每个条目至少被一个任务覆盖，
+      2) 每个任务有明确的结果和验证方式，
+      3) 没有任何工作遗漏在任务列表之外，
+      4) 没有将多个独立子任务混合在一个任务中，
+      5) 每个任务的 `covers_requirements` 包含不超过 {max_requirements_per_task} 个需求。
+    - 在 JSON 中包含 `checklist_table` 字段：说明哪些条目已完成及完成方式，哪些未完成及原因。
+
+    ### 反例（禁止做的事）：
+    - 错误："做完整个后端"（任务过于宽泛）。
+    - 错误：验收标准为"好像能用"（没有可验证的证明）。
+    - 错误：任务缺少 `covers_requirements` 或引用了不存在的 `REQ-*`。
+
+    ### 响应格式：
+
+    以严格的 JSON 格式返回分析结果和任务计划。
+    JSON 块之前或之后不得有任何文本。
+
+    ```json
+    {{
+      "project_analysis": {{
+        "current_state": "项目当前状态的简要描述",
+        "already_done": ["已实现的内容"],
+        "remaining_work": ["还需要做的内容"],
+        "requirements": ["REQ-1: ...", "REQ-2: ..."]
+      }},
+      "checklist_table": [
+        {{
+          "item": "检查清单条目",
+          "status": "done|not_done",
+          "how": "完成方式 / 证明",
+          "why_not": "未完成原因（如果 status=not_done）"
+        }}
+      ],
+      "tasks": [
+        {{
+          "id": "task_1",
+          "title": "简短标题",
+          "description": "给开发者的详细技术规范...",
+          "acceptance_criteria": [
+            "文件 X 已创建并包含...",
+            "测试通过：pytest tests/..."
+          ],
+          "covers_requirements": ["REQ-1"],
+          "depends_on": []
+        }}
+      ]
+    }}
+    ```
+
+    重要：响应必须只包含有效的 JSON。JSON 之外不得有任何文本、markdown 或注释。
+  decompose_normalize_system: |
+    你将收到一段文本——来自另一个 AI 助手对项目的分析结果和任务计划。
+    你唯一的任务：从这段文本中提取结构化数据并以 JSON 格式返回。
+
+    不要自行分析项目。不要自行添加任务。不要更改内容——只规范化格式。
+
+    严格返回 JSON：
+    {{
+      "project_analysis": {{
+        "current_state": "项目当前状态的简要描述",
+        "already_done": ["已实现的内容（来自文本）"],
+        "remaining_work": ["还需要做的内容（来自文本）"],
+        "requirements": ["REQ-1: ...", "REQ-2: ..."]
+      }},
+      "checklist_table": [
+        {{
+          "item": "检查清单条目",
+          "status": "done|not_done",
+          "how": "完成方式 / 证明",
+          "why_not": "未完成原因（如果 status=not_done）"
+        }}
+      ],
+      "tasks": [
+        {{
+          "id": "task_1",
+          "title": "任务标题",
+          "description": "来自文本的详细描述",
+          "acceptance_criteria": ["标准 1", "标准 2"],
+          "covers_requirements": ["REQ-1"],
+          "depends_on": []
+        }}
+      ]
+    }}
+
+    规则：
+    - 提取文本中描述的所有任务，不得遗漏。
+    - 如果文本中没有明确的 id——按顺序分配：task_1、task_2、...
+    - 如果文本中没有明确的 acceptance_criteria——根据任务描述归纳
+      （哪些内容可以验证）。
+    - 如果文本中没有依赖关系——将 depends_on 留空。
+    - 如果项目分析描述不清晰——尽量从上下文中提取更多信息。
+    - 如果 checklist_table 没有明确给出——根据需求/remaining_work 生成。
+    - 最多 {max_tasks} 个任务。如果超过——合并/整合。
+    - 响应必须只包含 JSON，之前或之后不得有任何文本。
+  plan_validation_system: |
+    你是项目计划验证器。给你提供包含以下内容的 JSON：
+    - project_goal（技术规范 / 用户目标），
+    - project_analysis（当前状态上下文），
+    - tasks（任务计划）。
+
+    检查任务计划的逻辑一致性和与技术规范的符合程度。
+    重要：基本结构检查已由 manager 代码完成。
+    不要将以下内容作为主要标准重复检查：
+    - 任务数量是否在 min/max 范围内，
+    - 空字段和重复 id，
+    - 损坏/循环的 depends_on，
+    - `covers_requirements` 的形式可追溯性，
+    - 按 `covers_requirements` 数量的形式原子性限制。
+    假定进入本层的只有形式上正确的 JSON 计划。
+    本计划的任务上限：不超过 {max_tasks}。
+
+    检查：
+    1. 任务之间是否存在冲突（一个任务删除/重命名了另一个任务创建的内容）。
+    2. 任务描述之间是否相互矛盾。
+    3. 验收标准是否实际可验证。
+    4. 依赖关系是否合理（任务不依赖其不需要的内容）。
+    5. 描述是否足够详细以便自主执行。
+    6. 任务之间是否存在重复。
+    7. 计划是否完整覆盖技术规范（project_goal）：是否有技术规范的重要部分未被任务覆盖。
+    7.1. 额外任务是允许的，如果它们有助于分解且不与技术规范矛盾。
+         任务"未在 project_goal 中逐字提及"这一事实本身不构成错误。
+    7.2. 如果依赖关系、阶段含义和需求覆盖仍然一致，
+         不要将内部阶段/ID 编号差异（例如 S9.8/S9.9）视为错误。
+    8. `checklist_table` 检查：只考虑状态为 `not_done` 的行。
+       对于 `not_done`，检查 `why_not` 中的原因是否具体且与计划逻辑一致。
+       如果原因合理——这是可接受的，不应单独使验证失败。
+       状态为 `done` 的行在本次检查中忽略。
+    9. 按含义检查分解不足：即使形式限制已通过，
+        也要评估相对于 `project_analysis.remaining_work` 和 `project_analysis.requirements` 的工作量，
+        任务数量是否明显偏少。
+        如果按技术规范含义任务明显太少——返回分解不足的问题。
+    10. 按含义检查任务原子性：一个任务 = 一个可验证的结果。
+        即使 `covers_requirements` 的形式限制已满足，也要检查
+        任务是否合并了多个独立结果/子系统
+        或实质上是合并性的（"做所有事情"），如果是则返回非原子性问题。
+
+    严格返回 JSON：
+    {{"valid": true/false, "issues": ["问题 1", "问题 2"]}}
+
+    如果计划正确——{{"valid": true, "issues": []}}.
+    如果有问题——{{"valid": false, "issues": ["每个问题的描述"]}}.
+  plan_fix_minimal_instruction: |
+    ## 计划修正（plan-fix）
+
+    你收到了用于修正计划的最小负载：
+    - issues：需要解决的问题列表
+    - project_analysis：项目当前上下文，修正时不得丢失
+    - tasks：计划任务列表（仅实质性字段）
+    - checklist_table：技术规范条目执行状态汇总
+    - atomicity_hotspots：当前超出 `covers_requirements` 限制的宽泛任务列表
+    - rules：修正约束（max_tasks、min_tasks、max_requirements_per_task、preserve_ids、no_new_tasks_by_default、prevent_count_oscillation）
+    - 任务上限：不超过 {max_tasks}
+
+    ### 负载（JSON）：
+    ```json
+    {payload_json}
+    ```
+
+    ### 需要做的事：
+    1. 修正计划，使所有 issues 得到解决。
+    2. 如果 issues 中包含 `TASK_TOO_BROAD_REQ_COVERAGE` 或你在拆分任务，
+       修改后必须对所有任务进行全局二次检查：
+       没有任何任务的 `covers_requirements` 中应超过 `rules.max_requirements_per_task`
+       个需求。不要在修正第一个宽泛任务后就停止。
+    2.1. 如果 `atomicity_hotspots` 非空，将其作为必检清单：
+         其中列出的每个任务必须被修正、拆分或替换，
+         使最终计划中不存在其超出限制的等效任务。
+         禁止仅将多余需求从一个宽泛任务转移到另一个宽泛任务。
+    3. 响应中不要添加 project_goal/user_goal，也不要添加运行时字段（status/attempt/max_attempts 等）。
+    4. 保留任务 id（task_*）和任务顺序（尽可能）。
+    5. 仅在必要时修改 title/description/acceptance_criteria/depends_on。
+    6. 保持 `checklist_table` 不变（原样复制）。
+    6.1. 保持 `project_analysis` 不变：不要修改 `current_state`、
+         `already_done`、`remaining_work`、`requirements`。
+    7. `tasks` 中的任务总数必须在 `rules.min_tasks..rules.max_tasks` 范围内。
+    8. 必须遵守负载中的 `rules`：
+       - `rules.max_tasks` — 任务数量的硬性上限。
+       - `rules.min_tasks` — 任务数量的硬性下限（不得低于此值）。
+       - `rules.max_requirements_per_task` — 单个任务 `covers_requirements`
+         中需求数量的硬性上限。
+       - `rules.preserve_ids=true` — 保留现有 task_* id；只有在以下规则明确允许时才能使用新 id。
+       - `rules.no_new_tasks_by_default=true` — 不要添加新任务，只修正现有任务。
+       - `rules.no_new_tasks_by_default=false` — 允许添加新任务
+         并将过于宽泛的任务拆分为更原子化的任务，如果这是
+         解决 issues（包括分解不足和非原子性）所必需的。
+       - `rules.prevent_count_oscillation=true` — 禁止减少任务数量：
+         修正措辞、依赖关系和需求覆盖，不得删除任务。
+    9. 执行拆分/扩展计划时，保持可追溯性：
+       - 每个新任务必须有正确的 `covers_requirements`，
+       - 更新 `depends_on` 以保持逻辑顺序。
+
+    ### 响应格式（严格 JSON）：
+    返回 JSON 对象：
+    ```json
+    {{
+      "project_analysis": {{
+        "current_state": "...",
+        "already_done": ["..."],
+        "remaining_work": ["..."],
+        "requirements": ["REQ-1: ..."]
+      }},
+      "checklist_table": [
+        {{
+          "item": "检查清单条目",
+          "status": "done|not_done",
+          "how": "完成方式 / 证明",
+          "why_not": "未完成原因（如果 status=not_done）"
+        }}
+      ],
+      "tasks": [
+        {{
+          "id": "task_1",
+          "title": "...",
+          "description": "...",
+          "acceptance_criteria": ["..."],
+          "covers_requirements": ["REQ-1"],
+          "depends_on": ["task_0"]
+        }}
+      ]
+    }}
+    ```
+
+    重要：响应必须只包含有效的 JSON。JSON 之外不得有任何文本。
+  plan_fix_system: |
+    你是项目计划编辑器。你收到了包含以下字段的 JSON 负载：
+    - issues：需要解决的问题列表
+    - project_analysis：项目当前上下文
+    - checklist_table：技术规范条目执行状态汇总
+    - tasks：当前任务列表
+    - atomicity_hotspots：当前超出 `covers_requirements` 限制的宽泛任务列表
+    - rules：修正约束（`max_tasks`、`min_tasks`、`max_requirements_per_task`、`preserve_ids`、`no_new_tasks_by_default`、`prevent_count_oscillation`）
+    - 任务系统上限：不超过 {max_tasks}
+
+    你的任务：返回修正了所有列出问题的 JSON 计划。
+
+    规则：
+    - 保留现有任务 id，非必要不重命名 task_*。
+    - 保持 `project_analysis` 不变：不要修改 `current_state`、`already_done`、`remaining_work`、`requirements`。
+    - 如果需要解决问题，可以修改 title/description/acceptance_criteria/covers_requirements/depends_on。
+    - 响应中必须包含 `checklist_table` 字段：原样复制，不得修改。
+    - 如果 issues 中包含 `TASK_TOO_BROAD_REQ_COVERAGE` 或你在拆分任务，
+      修改后必须再次检查所有任务：
+      没有任何任务的 `covers_requirements` 中应超过 `rules.max_requirements_per_task`
+      个需求。不要在修正第一个宽泛任务后就停止。
+    - 如果 `atomicity_hotspots` 非空，将其作为必检清单：
+      其中列出的每个任务必须被修正、拆分或替换，
+      使最终计划中不存在其超出限制的等效任务。
+      禁止仅将多余需求从一个宽泛任务转移到另一个宽泛任务。
+    - 如果问题是关于依赖关系的：修正 depends_on 使顺序合理（基础 -> 上层）。
+    - 如果问题是关于重复的：将共同职责提取到一个任务中，或明确划分职责，
+      使同一逻辑不在多个任务中描述为"需要做"。
+    - 如果问题是关于不可验证的标准：将 acceptance_criteria 改写为可验证的条目。
+    - 如果问题是关于可追溯性的：修正 `covers_requirements`，使 `REQ-*` 引用正确。
+    - 必须遵守负载中的 `rules`：
+      - `rules.max_tasks` — 任务数量的硬性上限。
+      - `rules.min_tasks` — 任务数量的硬性下限（不得低于此值）。
+      - `rules.max_requirements_per_task` — 单个任务 `covers_requirements`
+        中需求数量的硬性上限。
+      - `rules.preserve_ids=true` — 保留现有 task_* id；只有在以下规则明确允许时才能使用新 id。
+      - `rules.no_new_tasks_by_default=true` — 不要添加新任务，只修正现有任务。
+      - `rules.no_new_tasks_by_default=false` — 允许添加新任务
+        并将过于宽泛的任务拆分为更原子化的任务，如果这是
+        解决 issues（包括分解不足和非原子性）所必需的。
+      - `rules.prevent_count_oscillation=true` — 不要减少任务数量；通过
+        精化措辞/结构解决语义问题，不得回退到最小任务数量以下。
+    - 如果添加/删除任务——只在解决问题时才这样做，
+      并将总任务数保持在 `rules.min_tasks..rules.max_tasks` 范围内。
+    - 执行拆分/扩展计划时，保持可追溯性：
+      - 每个新任务必须有正确的 `covers_requirements`，
+      - 更新 `depends_on` 以保持逻辑顺序。
+
+    严格返回包含 `project_analysis`、`checklist_table`、`tasks` 字段的有效 JSON。
+    之前/之后不得有任何文本。
+  dev_instruction_template: |
+    ## 开发任务
+
+    ### 任务：{task_title}
+
+    {task_description}
+
+    ### 验收标准
+    {task_acceptance}
+
+    {rejection_block}
+    {partial_work_block}
+
+    ### 项目上下文
+    当前状态：{project_context}
+    已实现：{already_done}
+    已完成的任务：{completed_tasks_summary}
+
+    ### 说明
+    - 在进行任何修改之前，必须检查当前实现架构
+      （层次/服务/扩展点/已采用的约定）并遵循它；不得引入
+      违反项目架构约定的更改。
+    - 完整执行任务。
+    - 创建/修改所有必要的文件。
+    - 如果需要安装依赖项——请安装。
+    - 考虑现有代码和项目结构。
+    - 任何功能变更都必须附有测试（对添加/修改的行为至少一个测试）。
+    - 完成工作前始终对修改的文件运行 linter。
+    - 在 production 代码中禁止使用占位符/临时实现：
+      `TODO`、`FIXME`、`pass` 代替逻辑、`NotImplementedError`、
+      返回虚假数据、placeholder/mock 代替真实行为。
+    - 如果由于外部限制（无访问权限/密钥/API）无法完整实现，
+      不要用占位符模拟行为：
+      明确描述阻碍因素以及完成所需的内容。
+    - 明确记录所有假设。如果假设对正确性至关重要且未经验证——将任务视为受阻。
+    - **自主工作**：不要询问用户，自行做出决策。如果数据不足——做出合理假设。
+
+    ### 完成定义（所有条目必须完成）
+    - 每个验收标准已完成并得到确认。
+    - 对修改的行为至少有一个相关测试，且测试通过。
+    - 修改文件的 linter/质量检查通过。
+    - production 代码中不存在占位符/临时实现。
+    - 没有未解决的阻碍因素。
+
+    ### 最终报告格式（严格 JSON，无 markdown）
+    只返回 JSON 对象：
+    {{
+      "status": "ok" 或 "blocked",
+      "summary": "简要总结",
+      "changed_files": ["path/file1", "path/file2"],
+      "acceptance_criteria_report": [
+        {{
+          "criterion": "标准文本",
+          "status": "done" 或 "not_done",
+          "evidence": "通过哪个更改/测试确认"
+        }}
+      ],
+      "checklist_table": [
+        {{
+          "item": "检查清单条目",
+          "status": "done" 或 "not_done",
+          "how": "完成方式 / 证明",
+          "why_not": "未完成原因（如果 status=not_done）"
+        }}
+      ],
+      "tests": [
+        {{"command": "命令", "result": "passed/failed", "details": "简述"}}
+      ],
+      "lint": [
+        {{"command": "命令", "result": "passed/failed", "details": "简述"}}
+      ],
+      "assumptions": ["明确的假设"],
+      "blockers": ["阻碍完成任务的因素（如果 status=ok 则为空）"]
+    }}
+    如果完成定义中有任何一条未满足，返回 `status="blocked"` 并填写 `blockers`。
+  dev_rework_instruction_template: |
+    ## 修改任务
+
+    ### 任务：{task_title}
+
+    ### 已完成的内容（不要从头重做！）：
+    此任务的先前实现已完成。以下是已实现的原始技术规范：
+
+    {task_description}
+
+    ### 开发者完成工作的报告：
+    {dev_report}
+
+    ### ❌ 评审中发现的问题（请修正！）：
+    {review_comments}
+
+    {rejection_history_block}
+
+    ### 验收标准（修正后请检查）
+    {task_acceptance}
+
+    {partial_work_block}
+
+    ### 项目上下文
+    当前状态：{project_context}
+    已实现：{already_done}
+    已完成的任务：{completed_tasks_summary}
+
+    ### 说明
+    - 这是第 {attempt} 次尝试，共 {max_attempts} 次。任务已实现——不要从头开始。
+    - 在修正之前，必须检查当前实现架构
+      （层次/服务/扩展点/已采用的约定）并遵循它；不得引入
+      违反项目架构约定的更改。
+    - 查看当前代码，找到并只修正列出的问题。
+    - 不要重写或删除可正常工作的代码（除非这是修正所必需的）。
+    - 如果评审者指出缺少测试——添加测试。
+    - 如果评审者指出 bug——修正具体的 bug。
+    - 如果评审者指出风格/linter 问题——修正风格。
+    - 不要在 production 代码中留下占位符/临时解决方案
+      （`TODO`、`FIXME`、`pass` 代替逻辑、`NotImplementedError`、虚假的 `return`）。
+    - 完成工作前运行修改文件的 linter 和测试。
+    - 明确记录所有假设。如果假设对正确性至关重要且未经验证——将任务视为受阻。
+    - **自主工作**：不要询问用户，自行做出决策。
+
+    ### 完成定义（所有条目必须完成）
+    - 上述所有评审意见均已解决。
+    - 任务验收标准已完成并得到确认。
+    - 修改行为的测试通过。
+    - 修改文件的 linter/质量检查通过。
+    - production 代码中不存在占位符/临时解决方案。
+    - 没有未解决的阻碍因素。
+
+    ### 最终报告格式（严格 JSON，无 markdown）
+    只返回 JSON 对象：
+    {{
+      "status": "ok" 或 "blocked",
+      "summary": "修改简要总结",
+      "fixed_issues": ["已修正的意见"],
+      "changed_files": ["path/file1", "path/file2"],
+      "acceptance_criteria_report": [
+        {{
+          "criterion": "标准文本",
+          "status": "done" 或 "not_done",
+          "evidence": "通过哪个更改/测试确认"
+        }}
+      ],
+      "checklist_table": [
+        {{
+          "item": "检查清单条目",
+          "status": "done" 或 "not_done",
+          "how": "完成方式 / 证明",
+          "why_not": "未完成原因（如果 status=not_done）"
+        }}
+      ],
+      "tests": [
+        {{"command": "命令", "result": "passed/failed", "details": "简述"}}
+      ],
+      "lint": [
+        {{"command": "命令", "result": "passed/failed", "details": "简述"}}
+      ],
+      "assumptions": ["明确的假设"],
+      "blockers": ["阻碍完成任务的因素（如果 status=ok 则为空）"]
+    }}
+    如果完成定义中有任何一条未满足，返回 `status="blocked"` 并填写 `blockers`。
+  review_instruction_template: |
+    ## 评审任务
+
+    ### 任务：{task_title}
+
+    ### 任务描述（技术规范）：
+    {task_description}
+
+    ### 验收标准：
+    {task_acceptance}
+
+    ### 开发者报告：
+    {dev_report}
+
+    ### 最近的更改：
+    {last_commit_info}
+
+    ### 评审说明：
+    1. 阅读开发者报告中提到的文件。
+    2. 检查每个验收标准。
+    3. 运行测试（`run_command`）。修改文件中存在可运行的测试是必要的验收标准。
+    4. 对修改的文件运行 linter（`run_command`）。从项目配置中确定 linter（pyproject.toml、.flake8、.eslintrc、Makefile 等）。如果没有找到配置——尝试标准命令（flake8、ruff、eslint）。如果是 Python 文件——至少检查语法：`python -m py_compile <file>`。
+    5. 检查代码是否符合任务描述。
+    6. 必须检查 production 代码中是否存在占位符/临时实现：
+       `TODO`、`FIXME`、`pass` 代替逻辑、`NotImplementedError`、
+       虚假的 `return`/placeholder/mock 代替真实行为。
+       如果发现——`approved=false`。
+    7. 必须检查修改中是否存在功能重复：同一个工作场景/逻辑在多个地方实现而无需要
+       （复制粘贴、同一业务逻辑的平行分支等）。
+       如果发现——`approved=false`，并在 `comments` 中指出
+       发现重复的位置（文件/函数）以及需要合并的内容。
+    8. 严格性规则：如果任何验收标准没有明确的证明
+       （代码/测试/命令），则将该标准视为未完成（`approved=false`）。
+    9. 如果开发者报告结构不规范/不完整，不要因"信任"而提高评分：
+       只依赖来自文件和命令结果的可验证产物。
+    10. 明确处理开发者报告中的 `checklist_table`：
+       - 只考虑状态为 `not_done` 的行；
+       - 忽略状态为 `done` 的行（这不是执行证明）；
+       - 对每条 `not_done` 行给出 `justified` 或 `not_justified` 判断
+         并附简短说明；
+       - 如果有任何 `not_justified`，则 `approved=false`。
+
+    如果测试/linter 因缺少包或找不到命令而无法运行：
+    - 检查是否存在虚拟环境 `.venv`。
+    - 对于 Python 测试，尝试通过模块运行：`.venv/bin/python -m pytest`。
+    - 对于 linter/formatter，尝试类似方法：`.venv/bin/python -m ruff` 或 `.venv/bin/python -m flake8`（视项目而定）。
+    - 如果 `.venv` 不存在/损坏——在评审意见中明确记录，附上错误文本。
+
+    **关于文件处理的重要说明：**
+    - 如果文件较大，分段读取（read_file 带 offset/limit）或使用 grep/search_text。
+    - 不要尝试读取整个项目——只读取与任务相关的文件。
+
+    ### 响应格式（严格 JSON）：
+    {{
+      "approved": true 或 false,
+      "summary": "评审简要总结",
+      "comments": "详细意见（如果拒绝）",
+      "files_reviewed": ["file1.py", "file2.py"],
+      "tests_passed": true 或 false 或 null,
+      "not_done_assessment": [
+        {{
+          "item": "状态为 not_done 的 checklist_table 条目",
+          "why_not": "来自开发者报告的原因",
+          "verdict": "justified 或 not_justified",
+          "comment": "评审者的简要说明"
+        }}
+      ]
+    }}
+  review_normalize_system: |
+    你收到了评审者的响应。按以下模式严格返回有效 JSON：
+    {
+      "approved": true/false,
+      "summary": "...",
+      "comments": "...",
+      "tests_passed": true/false/null,
+      "files_reviewed": ["..."],
+      "not_done_assessment": [
+        {
+          "item": "...",
+          "why_not": "...",
+          "verdict": "justified|not_justified",
+          "comment": "..."
+        }
+      ]
+    }
+    如果响应中有多余的文本/markdown——剪除并规范化。
+    只返回最终的 ReviewResult JSON，而不是 plan/action 对象。
+    不得返回顶层负载，如 `{"command": "..."}` 或 `{"pattern": "...", "path": "..."}`。
+    如果原始响应中有命令、grep 结果或服务提示，将其移至 `comments`，但顶层对象仍必须包含 `approved`、`summary`、`comments`。
+    正确：`{"approved": false, "summary": "有意见", "comments": "发现 grep-hit ...", "tests_passed": null, "files_reviewed": [], "not_done_assessment": []}`.
+    错误：`{"command": ".venv/bin/pytest -q ..."}`.
+    错误：`{"pattern": "unfinished markers", "path": "file.py"}`.
+    错误：`{"path": "tests/test_miniapp_rc_settings_put.py", "offset": 1, "limit": 200}`.
+  decision_system: |
+    你是项目仲裁者。做出决定：任务是否已完成。
+
+    数据：
+    - 任务描述和验收标准。
+    - 开发者报告（完成了什么）。
+    - 评审者判决（批准/拒绝 + 意见）。
+
+    规则：
+    - 严格按照验收标准做出决定，而不是基于代码的主观质量。
+    - 如果所有标准都已满足——批准，即使评审者指出了
+      一些小的风格问题。
+    - 如果哪怕有一个标准未满足——拒绝。
+    - 如果没有测试或测试未通过——拒绝。
+    - 如果发现了占位符/临时实现代替所需行为——拒绝。
+    - 如果评审者在修改中发现了功能重复——拒绝。
+    - 如果没有足够的可验证证明来满足标准——拒绝。
+    - 有任何疑问时选择拒绝（保守决定）。
+    - 拒绝时详细列出具体未满足的标准。
+
+    严格返回 JSON：
+    {"verdict": "approved" 或 "rejected", "reasons": ["原因 1", "原因 2"]}
+  plan_reconcile_system: |
+    你是项目经理。开发者提交后，你将计划与项目实际状态进行核对。
+
+    开发者可能做了比当前任务要求更多的内容，部分未来任务可能已全部或部分完成。
+
+    ### 数据：
+    - 已完成的任务和开发者报告——具体做了什么。
+    - Git diff stat / status——哪些文件被修改。
+    - 剩余任务——尚未完成的任务（含描述和验收标准）。
+    - 当前项目分析（提交前）。
+
+    ### 需要做的事：
+    1. 检查每个剩余任务及其验收标准。
+    2. 结合最新更改更新项目状态的整体分析（current_state、already_done、remaining_work）。
+    3. 确定完全完成和部分完成的任务。
+
+    ### 响应格式（严格 JSON）：
+    {
+      "updated_analysis": {
+        "current_state": "项目当前状态的更新简要描述",
+        "already_done": ["已实现内容的更新列表"],
+        "remaining_work": ["还需做的内容的更新列表"]
+      },
+      "completed_task_ids": ["task_3", "task_5"],
+      "adjustments": [
+        {
+          "task_id": "task_4",
+          "reason": "部分工作已在上次提交中完成",
+          "already_done_note": "已完成内容的具体列表",
+          "updated_description": "剩余工作的描述",
+          "updated_acceptance_criteria": ["仅列出尚未完成的标准"]
+        }
+      ],
+      "summary": "计划变更的简要描述"
+    }
+
+    规则：
+    - 在 updated_analysis.current_state 中写出项目的实际情况。
+    - completed_task_ids 中只包含完全完成的任务。
+    - 对于部分完成的任务使用 adjustments。
+    - 如果无需更改——返回空列表和最新分析。
+    - 响应必须只包含有效的 JSON。

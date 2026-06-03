@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.services.session_files_service import FilesServiceError, RevisionConflictError
+from i18n import t
 from session import session_runtime_uid
 from utils.ui import ensure_async
 
@@ -143,7 +144,7 @@ class FilesPanelWidget(QWidget):
         else:
             self.file_list.clear()
             self.path_label.setText("Path: .")
-            self.status_label.setText("Select a session in Chat first.")
+            self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
 
     def refresh(self, checked: bool = False) -> None:
         _ = checked
@@ -151,11 +152,12 @@ class FilesPanelWidget(QWidget):
 
     def load_tree(self, path: str = ".") -> None:
         if not self._session_uid:
-            self.status_label.setText("Select a session in Chat first.")
+            self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
             return
 
         async def _load() -> None:
-            self.status_label.setText("Loading...")
+            lang = self.facade.ui_language
+            self.status_label.setText(t("desktop.files.loading", lang))
             try:
                 ctx = await self.facade.files_execution_context(self._session_uid)
                 result = await self.facade.files_tree(self._session_uid, path or ".")
@@ -163,7 +165,7 @@ class FilesPanelWidget(QWidget):
                 self.status_label.setText(str(exc))
                 return
             except Exception as exc:
-                self.status_label.setText(f"Failed to load files: {exc}")
+                self.status_label.setText(t("desktop.files.load_error", lang, error=str(exc)))
                 return
 
             self._current_dir = str(result.get("path") or ".")
@@ -173,7 +175,7 @@ class FilesPanelWidget(QWidget):
                 root = str(ctx.get("remote_project_root") or "-")
                 self.execution_banner.setText(f"Execution Target: Remote ({host}: {root})")
             else:
-                self.execution_banner.setText("Execution Target: Local")
+                self.execution_banner.setText(t("desktop.files.exec_target_local", lang))
             self._render_tree(result)
             self.status_label.setText("")
 
@@ -191,18 +193,19 @@ class FilesPanelWidget(QWidget):
 
     def open_file(self, path: str) -> None:
         if not self._session_uid:
-            self.status_label.setText("Select a session in Chat first.")
+            self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
             return
 
         async def _open() -> None:
-            self.status_label.setText("Loading file...")
+            lang = self.facade.ui_language
+            self.status_label.setText(t("desktop.files.loading", lang))
             try:
                 result = await self.facade.files_read(self._session_uid, path)
             except FilesServiceError as exc:
                 self.status_label.setText(str(exc))
                 return
             except Exception as exc:
-                self.status_label.setText(f"Failed to read file: {exc}")
+                self.status_label.setText(t("desktop.files.read_error", lang, error=str(exc)))
                 return
 
             self._open_path = str(path)
@@ -221,11 +224,12 @@ class FilesPanelWidget(QWidget):
         if not self._open_path:
             return
         if not self._session_uid:
-            self.status_label.setText("Select a session in Chat first.")
+            self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
             return
 
         async def _save() -> None:
-            self.status_label.setText("Saving...")
+            lang = self.facade.ui_language
+            self.status_label.setText(t("desktop.files.saving", lang))
             try:
                 result = await self.facade.files_write(
                     self._session_uid,
@@ -245,20 +249,20 @@ class FilesPanelWidget(QWidget):
                 self.status_label.setText(str(exc))
                 return
             except Exception as exc:
-                self.status_label.setText(f"Failed to save file: {exc}")
+                self.status_label.setText(t("desktop.files.save_error", lang, error=str(exc)))
                 return
 
             self._open_revision = str(result.get("revision") or "")
             self.force_save_button.hide()
             self.save_button.show()
-            self.status_label.setText("Saved.")
+            self.status_label.setText(t("desktop.files.saved", lang))
             self.refresh()
 
         ensure_async(_save(), parent=self)
 
     def create_path(self, kind: str) -> None:
         if not self._session_uid:
-            self.status_label.setText("Select a session in Chat first.")
+            self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
             return
         title = "New file" if kind == "file" else "New directory"
         name, ok = QInputDialog.getText(self, title, "Name:")
@@ -273,7 +277,7 @@ class FilesPanelWidget(QWidget):
             except FilesServiceError as exc:
                 self.status_label.setText(str(exc))
             except Exception as exc:
-                self.status_label.setText(f"Failed to create path: {exc}")
+                self.status_label.setText(t("desktop.files.create_error", self.facade.ui_language, error=str(exc)))
 
         ensure_async(_create(), parent=self)
 
@@ -298,7 +302,7 @@ class FilesPanelWidget(QWidget):
             except FilesServiceError as exc:
                 self.status_label.setText(str(exc))
             except Exception as exc:
-                self.status_label.setText(f"Failed to delete path: {exc}")
+                self.status_label.setText(t("desktop.files.delete_error", self.facade.ui_language, error=str(exc)))
 
         ensure_async(_delete(), parent=self)
 
@@ -375,3 +379,17 @@ class FilesPanelWidget(QWidget):
             if value not in (None, ""):
                 parts.append(f"{key}={value}")
         return " | ".join(parts)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.up_button.setText(t("desktop.btn.up", lang))
+        self.refresh_button.setText(t("desktop.btn.refresh", lang))
+        self.create_file_button.setText(t("desktop.btn.new_file", lang))
+        self.create_dir_button.setText(t("desktop.btn.new_dir", lang))
+        self.delete_button.setText(t("desktop.btn.delete", lang))
+        self.reload_file_button.setText(t("desktop.btn.reload", lang))
+        self.save_button.setText(t("desktop.btn.save", lang))
+        self.force_save_button.setText(t("desktop.btn.force_save", lang))
+        if not self._session_uid:
+            self.execution_banner.setText(t("desktop.files.exec_target_local", lang))
+            self.status_label.setText(t("desktop.files.select_session", lang))
+            self.editor_path_label.setText(t("desktop.files.no_file", lang))

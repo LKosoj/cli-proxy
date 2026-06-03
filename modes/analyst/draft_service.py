@@ -11,6 +11,7 @@ from modes.analyst.template_service import get_template_for_session
 from modes.sdk.json_store import read_json_locked
 from modes.sdk.runtime.memory_store import ensure_chat_workspace
 from modes.sdk.runtime.openai_client import chat_completion
+from utils.lang import resolve_user_lang
 from utils.text import strip_ansi
 
 _VALID_DOCUMENT_KINDS = {"analysis", "spec", "audit"}
@@ -378,7 +379,14 @@ async def build_draft_text(
         if not isinstance(step_results, list):
             step_results = []
 
-        template = template_override if isinstance(template_override, dict) else get_template_for_session(session)
+        if isinstance(template_override, dict):
+            template = template_override
+        else:
+            try:
+                draft_lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
+            except Exception:
+                draft_lang = "ru"
+            template = get_template_for_session(session, lang=draft_lang)
         required_sections = []
         if isinstance(template, dict):
             required_sections = list(template.get("required_sections") or [])

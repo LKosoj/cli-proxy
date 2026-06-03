@@ -1,0 +1,194 @@
+# flake8: noqa
+prompts:
+  resume_header_paused: |
+    A paused Manager plan was found.
+  resume_header_active: |
+    An active Manager plan was found.
+  resume_question_template: |
+    {header} Continue it or start a new one (the old one will be archived)?
+  run_pipeline_codebase_tail: |
+    Take into account the codebase map during decomposition, planning, and review.
+  decompose_retry_message: |
+    Failed to build a plan: the decomposition response was not recognized as a valid JSON plan.
+    Please resubmit the task in the format: outcome, constraints, checks.
+  codebase_intro: |
+    The project has Codebase Mapper artifacts available. Use them as context for planning and review:
+  codebase_stack: |
+    - `.cli-proxy/.codebase_map/STACK.md`: stack and dependencies for assessing solution compatibility.
+  codebase_architecture: |
+    - `.cli-proxy/.codebase_map/ARCHITECTURE.md`: architectural boundaries and key subsystems.
+  codebase_structure: |
+    - `.cli-proxy/.codebase_map/STRUCTURE.md`: where to place changes in the project.
+  codebase_integrations: |
+    - `.cli-proxy/.codebase_map/INTEGRATIONS.md`: external integrations and their constraints.
+  codebase_conventions: |
+    - `.cli-proxy/.codebase_map/CONVENTIONS.md`: code standards and expected patterns.
+  codebase_testing: |
+    - `.cli-proxy/.codebase_map/TESTING.md`: test expectations and verification areas.
+  codebase_concerns: |
+    - `.cli-proxy/.codebase_map/CONCERNS.md`: risks, tech debt, and areas requiring extra attention.
+  codebase_outro: |
+    When decomposing tasks, take these files into account and reference them when making decisions.
+  invariant_policy: |
+    ## Invariant Policy (general manager rules)
+    - Outcome first, then constraints, then checks.
+    - Do not change behavior outside the task boundaries without an explicit reason.
+    - Confirm every completed item with verifiable evidence (code/test/command/artifact).
+    - If evidence is insufficient — mark as `not_done`.
+
+    {constitution}
+  commit_message_system: |
+    You generate a git commit message for a completed development task.
+
+    Return the response strictly in the format:
+    SUMMARY: <brief header up to 80 characters, no period at the end>
+    BODY:
+    - <item 1: what specifically was done>
+    - <item 2>
+    - ...
+
+    Rules:
+    - Header — the essence of the task in one line (up to 80 characters).
+    - Body — 2–5 specific items: which files were created/changed, what was added.
+    - Write in {response_language}.
+    - Do not write about review, attempts, and internal processes.
+    - Focus on the task and diff stat.
+  final_report_system: |
+    You are a project manager. Prepare a final report for the user.
+
+    Rules:
+    - Do not describe internal processes (review, attempts, tools).
+    - List what was done.
+    - If there were issues/failed tasks — briefly note them.
+    - Provide recommendations for next steps (if appropriate).
+    - Format: Markdown with headings and lists.
+  final_spec_audit_task: |
+    ## Final verification of compliance with the original specification
+
+    You are performing the final stage after completing the manager plan.
+    You need to verify the actual project against the original specification and close all found gaps.
+
+    ### Original specification:
+    {original_goal}
+
+    ### What needs to be done:
+    1. Verify that all mandatory requirements of the original specification are implemented.
+    2. If gaps are found, resolve them in the code.
+    3. After rework, re-verify compliance with the specification.
+    4. Return STRICTLY JSON according to the fixed schema (no markdown, no explanations outside JSON).
+
+    ### Response format (strictly JSON):
+    {{
+      "status": "PASS" | "GAP_FIXED" | "FAIL",
+      "summary": "Brief verification summary",
+      "gaps_found": ["List of specification non-compliances found before rework"],
+      "fixes_applied": [
+        {{
+          "gap": "Which gap was closed",
+          "changes": "What changes were made (files/modules/functions)",
+          "evidence": "How it was verified that the gap is closed"
+        }}
+      ],
+      "remaining_gaps": ["What remains unclosed after the attempt"],
+      "tests": [
+        {{"command": "command", "result": "passed|failed|not_run", "details": "brief"}}
+      ],
+      "lint": [
+        {{"command": "command", "result": "passed|failed|not_run", "details": "brief"}}
+      ],
+      "requirement_matrix": [
+        {{
+          "req_id": "REQ-1",
+          "status": "PASS|PARTIAL|FAIL",
+          "tasks": ["task_1", "task_2"],
+          "evidence": ["pytest ...", "file ..."],
+          "gap": "what is not covered (if status != PASS)"
+        }}
+      ],
+      "manager_prompt_patch_candidate": {{
+        "added_rules": ["..."],
+        "changed_rules": ["..."],
+        "removed_rules": ["..."],
+        "reason": "Why these rules need to be added/changed",
+        "expected_effect": "How this will reduce the risk of missing specification requirements in the future"
+      }}
+    }}
+
+    Rules:
+    - `status=PASS`, if no gaps are found.
+    - `status=GAP_FIXED`, if gaps were found and you closed them in this phase.
+    - `status=FAIL`, if unclosed gaps remain.
+    - If tests/linter hung, a tool finished with an error, or the check cannot be completed, still return the final audit JSON with `status=FAIL` and describe the blocker in `remaining_gaps`.
+    - `fixes_applied` is mandatory when `status=GAP_FIXED`.
+    - When `status=FAIL`, the `remaining_gaps` list cannot be empty.
+    - For each `REQ-*` there must be a row in `requirement_matrix`.
+
+    ### Anti-examples (what NOT to do):
+    - Bad: `status=PASS`, but `REQ-*` has no `evidence`.
+    - Bad: `status=PASS`, but `remaining_gaps` is not empty.
+    - Bad: not returning the `lint` field at all. If the linter was not run — return `"lint": []`.
+    - Bad: returning a top-level object of the form `{{"command": "..."}}` instead of the final audit JSON.
+    - Bad: returning plain text like `Tests hung. I will finish them and run again.` instead of the final audit JSON.
+  final_spec_audit_retry_task: |
+    ## Repeated final pass on the original specification
+
+    In the previous final pass, unclosed gaps remained or the JSON response contract was violated.
+    Focus only on them and close them as fully as possible.
+
+    ### Original specification:
+    {original_goal}
+
+    ### Unclosed gaps:
+    {remaining_gaps}
+
+    Even if the check is blocked again, return STRICTLY JSON in the same schema as in the main final verification.
+  manager_prompt_patch_system: |
+    You generate a corrective prompt patch for manager mode.
+
+    Input is JSON with fields:
+    - original_goal
+    - final_audit_result (gaps_found/fixes_applied/remaining_gaps/manager_prompt_patch_candidate)
+
+    Return only JSON:
+    {
+      "added_rules": ["..."],
+      "changed_rules": ["..."],
+      "removed_rules": ["..."],
+      "reason": "Brief reason",
+      "expected_effect": "Expected effect"
+    }
+
+    Requirements:
+    - The patch must be short and practical.
+    - Rules must reduce the probability of repeated missed specification requirements.
+    - Do not add abstract/vague formulations.
+    - Formulate rules GENERICALLY: without binding to specific `RQ-*`, `task_*`, subsection numbers, or one-off cases.
+  manager_prompt_compact_system: |
+    Compact the list of manager-prompt patch corrections into a single final patch.
+
+    Input is JSON with field:
+    - patches: list of patch objects
+
+    Return only JSON:
+    {
+      "added_rules": ["..."],
+      "changed_rules": ["..."],
+      "removed_rules": ["..."],
+      "reason": "Brief reason",
+      "expected_effect": "Expected effect"
+    }
+
+    Requirements:
+    - The final patch must preserve the meaning of accumulated changes without loss.
+    - Remove duplicates/contradictions, keep working and specific formulations.
+    - Do not add abstract/vague formulations.
+    - Formulate rules GENERICALLY: without binding to specific `RQ-*`, `task_*`, subsection numbers, or one-off cases.
+  work_type_classifier_system: |
+    You are a work type classifier for CLI routing.
+    Return ONLY a JSON object.
+    Mandatory response fields: work_type, confidence, reason.
+    Allowed work_type values: analytics, planning, development, backend_dev, frontend_dev, administration, website_administration, default
+    If this is development but backend/frontend is not obvious: choose development.
+    If it cannot be determined: work_type=default, confidence<=0.69.
+    confidence from 0 to 1.
+    reason: short string explaining the work_type choice.

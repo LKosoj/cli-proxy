@@ -84,6 +84,7 @@ from agent import (
 from desktop.services.theme_service import ThemeService
 from desktop.services.desktop_identity_provider import DesktopIdentityProvider
 from desktop.services.desktop_admin_facade import DesktopAdminFacade
+from i18n import SUPPORTED_LANGS, FALLBACK_LANG
 from session import (
     consume_session_cli_switch_notice_text,
     session_scoped_key,
@@ -1642,6 +1643,15 @@ class ApplicationFacade:
                 callback(note)
             except Exception:
                 self.logger.exception("notification callback failed event=%s", event)
+
+    @property
+    def ui_language(self) -> str:
+        """Текущий язык Desktop UI из конфига. Fallback: 'ru'."""
+        cfg = self.config
+        lang = getattr(getattr(cfg, "defaults", None), "default_language", None)
+        if lang in SUPPORTED_LANGS:
+            return lang
+        return FALLBACK_LANG
 
     def list_active_tasks(
         self,

@@ -38,7 +38,11 @@ async def maybe_persist_user_language(
         # set_user_language retries internally on revision mismatch (re-reading
         # the config between attempts), so a single call is sufficient here.
         result = await config_service.set_user_language(user_id, lang)
-        if not result.ok:
+        if result.ok:
+            # Keep the live in-memory config coherent so resolve_user_lang() sees
+            # the persisted choice immediately, without waiting for a full reload.
+            config.telegram.user_languages[user_id] = lang
+        else:
             logger.warning(
                 "maybe_persist_user_language failed user_id=%d lang=%s errors=%s",
                 user_id, lang, result.errors,

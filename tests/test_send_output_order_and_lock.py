@@ -53,7 +53,7 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
         summary_started = asyncio.Event()
         allow_html = asyncio.Event()
 
-        async def _fake_summary(text, config):
+        async def _fake_summary(text, config=None, *, language="ru"):
             summary_started.set()
             return "SUMMARY", None
 
@@ -151,7 +151,7 @@ def test_send_output_can_skip_summary(tmp_path, monkeypatch):
 
         import sessions.session_management as sm_mod
 
-        async def _fake_summary(_text, config):
+        async def _fake_summary(_text, config=None, *, language="ru"):
             called["summary"] += 1
             return "SUMMARY", None
 
@@ -245,7 +245,7 @@ def test_send_output_uses_notification_queue_as_atomic_report_delivery(tmp_path,
 
         import sessions.session_management as sm_mod
 
-        async def _fake_summary(_text, config=None):
+        async def _fake_summary(_text, config=None, *, language="ru"):
             return "SUMMARY", None
 
         monkeypatch.setattr(sm_mod, "summarize_text_with_reason", _fake_summary)

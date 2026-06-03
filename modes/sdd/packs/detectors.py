@@ -10,6 +10,8 @@ from typing import Any, Dict, Iterable, List
 
 import tomllib
 
+from modes.sdk.runtime.json_normalizer import loads_safe
+
 from .schema import EvidenceItem, PackDefinition, PackScore
 
 _IGNORED_DIRS = {
@@ -151,7 +153,7 @@ def _json_field(
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = loads_safe(path.read_text(encoding="utf-8"))
     except Exception:
         return None
     value = _lookup_path(data, str(rule.get("field") or ""))

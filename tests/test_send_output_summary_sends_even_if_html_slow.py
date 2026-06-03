@@ -34,7 +34,7 @@ def test_send_output_sends_preview_even_if_html_is_slow(tmp_path, monkeypatch):
         import bot as bot_mod
 
         # Make summary return quickly (no summary, with error).
-        async def _fake_summary(_text, config):
+        async def _fake_summary(_text, config=None, *, language="ru"):
             return None, "таймаут"
 
         monkeypatch.setattr(bot_mod, "summarize_text_with_reason", _fake_summary)

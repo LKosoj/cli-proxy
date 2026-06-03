@@ -110,7 +110,7 @@ def ensure_project_prompts(workdir: str) -> Dict[str, Dict[str, Any]]:
     return loaded
 
 
-def load_mode_prompts(workdir: str, mode_id: str) -> Dict[str, Any]:
+def load_mode_prompts(workdir: str, mode_id: str, lang: str = "ru") -> Dict[str, Any]:
     root = _normalize_workdir(workdir)
     normalized_mode = _normalize_mode_id(mode_id)
     prompts_path, _ = _mode_prompt_paths(root, normalized_mode)
@@ -130,7 +130,7 @@ def load_mode_prompts(workdir: str, mode_id: str) -> Dict[str, Any]:
         if normalized_mode != "manager":
             return project_payload
 
-        system_prompts_path = _default_mode_system_prompts_path(normalized_mode)
+        system_prompts_path = _default_mode_system_prompts_path_for_lang(normalized_mode, lang)
         if not os.path.exists(system_prompts_path):
             raise InvalidProjectPromptsError(
                 f"default system prompts template not found for mode '{normalized_mode}': {system_prompts_path}"
@@ -159,8 +159,8 @@ def load_mode_prompts(workdir: str, mode_id: str) -> Dict[str, Any]:
         raise
 
 
-def load_mode_prompt_texts(workdir: str, mode_id: str) -> Dict[str, str]:
-    payload = load_mode_prompts(workdir, mode_id)
+def load_mode_prompt_texts(workdir: str, mode_id: str, lang: str = "ru") -> Dict[str, str]:
+    payload = load_mode_prompts(workdir, mode_id, lang)
     prompts = payload.get("prompts")
     if not isinstance(prompts, dict):
         raise InvalidProjectPromptsError(f"prompts section missing for mode '{mode_id}'")
@@ -242,6 +242,15 @@ def _default_mode_prompts_path(mode_id: str) -> str:
 
 def _default_mode_system_prompts_path(mode_id: str) -> str:
     return os.path.join(_repo_root(), "modes", mode_id, _SYSTEM_PROMPTS_FILE)
+
+
+def _default_mode_system_prompts_path_for_lang(mode_id: str, lang: str) -> str:
+    """Path to the i18n system_prompts.yaml for mode_id/lang.
+
+    Fallback: _default_mode_system_prompts_path(mode_id) (legacy original).
+    """
+    p = os.path.join(_repo_root(), "modes", mode_id, "i18n", lang, _SYSTEM_PROMPTS_FILE)
+    return p if os.path.isfile(p) else _default_mode_system_prompts_path(mode_id)
 
 
 def _ensure_mode_prompt_files(workdir: str, mode_id: str, prompts_path: str, learning_path: str) -> None:

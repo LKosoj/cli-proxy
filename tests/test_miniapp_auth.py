@@ -31,6 +31,34 @@ def _build_init_data(bot_token: str, user_id: int = 123) -> str:
     return f"auth_date={payload['auth_date']}&query_id=q1&user={quote(payload['user'])}&hash={sig}"
 
 
+def _build_init_data_with_lang(bot_token: str, user_id: int = 123, language_code: str = "en") -> str:
+    user_obj = {"id": user_id, "username": "admin", "first_name": "Admin", "language_code": language_code}
+    payload = {
+        "auth_date": str(int(time.time())),
+        "query_id": "q1",
+        "user": json.dumps(user_obj, ensure_ascii=False),
+    }
+    check = "\n".join(f"{k}={v}" for k, v in sorted(payload.items()))
+    secret = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
+    sig = hmac.new(secret, check.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"auth_date={payload['auth_date']}&query_id=q1&user={quote(payload['user'])}&hash={sig}"
+
+
+def test_verify_telegram_init_data_extracts_language_code() -> None:
+    token = "123:abc"
+    init_data = _build_init_data_with_lang(token, language_code="en")
+    user = verify_telegram_init_data(init_data, token)
+    assert user.language_code == "en"
+
+
+def test_verify_telegram_init_data_language_code_missing() -> None:
+    token = "123:abc"
+    # _build_init_data does not include language_code in user payload
+    init_data = _build_init_data(token)
+    user = verify_telegram_init_data(init_data, token)
+    assert user.language_code == ""
+
+
 def test_verify_telegram_init_data_ok() -> None:
     token = "123:abc"
     init_data = _build_init_data(token)

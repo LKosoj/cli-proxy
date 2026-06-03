@@ -1882,7 +1882,7 @@ def test_miniapp_status_header_meta_is_compact_without_duplicate_labels() -> Non
     assert '<span id="stWorkdir">/path</span>' in index_html
     assert '<span id="stServerTime">-</span>' in index_html
     assert '<span class="meta-icon">OUT</span> <span id="stLastOutput">0s</span>' in index_html
-    assert '<span class="meta-icon">GIT</span> <span id="stGitText">Свободен</span>' in index_html
+    assert '<span class="meta-icon">GIT</span> <span id="stGitText" data-i18n-key="miniapp.status.git_free">Свободен</span>' in index_html
 
     assert ">DIR</span>" not in index_html
 

@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QInputDialog
 )
 
+from i18n import t
 from session import session_runtime_uid
 from utils.ui import ensure_async
 from app.services.ssh_config_loader import (
@@ -408,17 +409,20 @@ class SessionSettingsWidget(QWidget):
         # Name
         self.name_edit = QLineEdit()
         self.name_edit.editingFinished.connect(self._on_name_changed)
-        self.form_layout.addRow("Session Name:", self.name_edit)
+        self.name_label = QLabel("Session Name:")
+        self.form_layout.addRow(self.name_label, self.name_edit)
 
         # CLI
         self.cli_group = QButtonGroup(self)
         self.cli_layout = QHBoxLayout()
-        self.form_layout.addRow("CLI:", self.cli_layout)
+        self.cli_row_label = QLabel("CLI:")
+        self.form_layout.addRow(self.cli_row_label, self.cli_layout)
 
         # Mode
         self.mode_combo = QComboBox()
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        self.form_layout.addRow("Active Mode:", self.mode_combo)
+        self.mode_label = QLabel("Active Mode:")
+        self.form_layout.addRow(self.mode_label, self.mode_combo)
 
         # SSH
         self.ssh_check = QCheckBox("Enable SSH Remote Access")
@@ -427,7 +431,8 @@ class SessionSettingsWidget(QWidget):
         ssh_header = QHBoxLayout()
         ssh_header.addWidget(self.ssh_check)
         ssh_header.addWidget(self.ssh_label)
-        self.form_layout.addRow("SSH Remote:", ssh_header)
+        self.ssh_row_label = QLabel("SSH Remote:")
+        self.form_layout.addRow(self.ssh_row_label, ssh_header)
 
         # SSH Hosts
         self.ssh_hosts_group = QGroupBox("SSH Hosts Configuration")
@@ -453,16 +458,19 @@ class SessionSettingsWidget(QWidget):
         self.rc_error_label.setWordWrap(True)
         self.rc_error_label.setVisible(False)
 
-        rc_layout.addRow("Remote Control:", self.rc_check)
+        self.rc_check_label = QLabel("Remote Control:")
+        rc_layout.addRow(self.rc_check_label, self.rc_check)
 
         host_row = QHBoxLayout()
         host_row.addWidget(self.rc_host_combo)
         host_row.addWidget(self.rc_recheck_btn)
-        rc_layout.addRow("Target Host:", host_row)
+        self.rc_host_label = QLabel("Target Host:")
+        rc_layout.addRow(self.rc_host_label, host_row)
 
         self.rc_effective_label = QLabel("Effective: local")
         self.rc_effective_label.setStyleSheet("color: #888;")
-        rc_layout.addRow("Effective Target:", self.rc_effective_label)
+        self.rc_effective_row_label = QLabel("Effective Target:")
+        rc_layout.addRow(self.rc_effective_row_label, self.rc_effective_label)
 
         rc_layout.addRow(self.rc_error_label)
 
@@ -472,7 +480,21 @@ class SessionSettingsWidget(QWidget):
         # Orchestrator
         self.orch_check = QCheckBox("Enable Advanced Orchestrator")
         self.orch_check.toggled.connect(self._on_orch_toggled)
-        self.form_layout.addRow("Orchestrator:", self.orch_check)
+        self.orch_row_label = QLabel("Orchestrator:")
+        self.form_layout.addRow(self.orch_row_label, self.orch_check)
+
+        # App language selector
+        self.lang_label = QLabel("App Language:")
+        self.lang_combo = QComboBox()
+        _LANG_ITEMS = [("ru", "Русский"), ("en", "English"), ("zh", "中文"), ("de", "Deutsch")]
+        for code, label in _LANG_ITEMS:
+            self.lang_combo.addItem(label, code)
+        self.lang_save_btn = QPushButton("Save")
+        self.lang_save_btn.clicked.connect(self._on_language_save)
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(self.lang_combo)
+        lang_row.addWidget(self.lang_save_btn)
+        self.form_layout.addRow(self.lang_label, lang_row)
 
         self.scroll.setWidget(self.container)
         layout.addWidget(self.scroll)
@@ -543,6 +565,12 @@ class SessionSettingsWidget(QWidget):
         self.rc_host_combo.setEnabled(not is_busy and self._rc_has_selectable_hosts)
         for btn in self.cli_group.buttons():
             btn.setEnabled(not is_busy)
+
+        # Sync language combo with current ui_language
+        current_lang = self.facade.ui_language
+        idx = self.lang_combo.findData(current_lang)
+        if idx >= 0:
+            self.lang_combo.setCurrentIndex(idx)
 
         self._loading = False
 
@@ -749,3 +777,33 @@ class SessionSettingsWidget(QWidget):
         if self._loading or not self._session_uid:
             return
         ensure_async(self.facade.update_session_setting(self._session_uid, "orchestrator_enabled", checked), parent=self)
+
+    def _on_language_save(self):
+        lang = self.lang_combo.currentData()
+        if not lang:
+            return
+        if self.facade.config and hasattr(self.facade.config, "defaults"):
+            self.facade.config.defaults.default_language = lang
+
+        async def _save():
+            await self.facade.config_service.set_default_language(lang)
+            self.facade.notify("ui:language_changed", lang=lang)
+
+        ensure_async(_save(), parent=self)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.lang_label.setText(t("desktop.settings.lang_label", lang))
+        self.lang_save_btn.setText(t("desktop.btn.save", lang))
+        self.name_label.setText(t("desktop.settings.session_name", lang))
+        self.cli_row_label.setText(t("desktop.settings.cli", lang))
+        self.mode_label.setText(t("desktop.settings.active_mode", lang))
+        self.ssh_check.setText(t("desktop.settings.ssh_enable", lang))
+        self.ssh_row_label.setText(t("desktop.settings.ssh_remote", lang))
+        self.ssh_hosts_group.setTitle(t("desktop.settings.ssh_hosts_group", lang))
+        self.rc_group.setTitle(t("desktop.settings.rc_group", lang))
+        self.rc_check.setText(t("desktop.settings.rc_enable", lang))
+        self.rc_check_label.setText(t("desktop.settings.rc_label", lang))
+        self.rc_host_label.setText(t("desktop.settings.rc_target_host", lang))
+        self.rc_effective_row_label.setText(t("desktop.settings.rc_effective_target", lang))
+        self.orch_check.setText(t("desktop.settings.orchestrator_enable", lang))
+        self.orch_row_label.setText(t("desktop.settings.orchestrator", lang))

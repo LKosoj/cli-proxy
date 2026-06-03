@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QComboBox
 )
+from i18n import t
 from utils.html_renderer import ansi_to_html
 
 
@@ -629,3 +630,7 @@ class ChatViewWidget(QWidget):
         else:
             self.status_label.setText("Ready")
             self.stop_button.hide()
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.message_input.setPlaceholderText(t("desktop.chat.input_placeholder", lang))
+        self.send_button.setText(t("desktop.btn.send", lang))

@@ -25,6 +25,8 @@ def _ensure_async(coro, parent=None):
 
 
 class _Facade:
+    ui_language = "ru"
+
     def __init__(self):
         self.write_calls = []
 

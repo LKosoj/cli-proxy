@@ -27,6 +27,31 @@ def default_templates_path() -> str:
     return os.path.join(os.path.dirname(__file__), "templates", "analyst_config.yaml")
 
 
+def localized_templates_path(lang: str) -> str:
+    """Path to the localized analyst_config.yaml for the given lang.
+
+    Fallback: default_templates_path() (legacy original).
+    """
+    base = os.path.join(os.path.dirname(__file__), "templates", lang, "analyst_config.yaml")
+    if os.path.isfile(base):
+        return base
+    return default_templates_path()
+
+
+def get_analyst_templates_for_lang(lang: str) -> Dict[str, Dict[str, Any]]:
+    """Load (with mtime cache) analyst templates for a specific language.
+
+    If ANALYST_TEMPLATES_PATH env var is set, defers to the legacy cached loader
+    (env override takes precedence over i18n path).
+    If the language file is absent, falls back to the legacy original (ru).
+    """
+    env_path = str(os.getenv("ANALYST_TEMPLATES_PATH", "") or "").strip()
+    if env_path:
+        return get_analyst_templates_cached(env_path)
+    path = localized_templates_path(lang)
+    return get_analyst_templates_cached(path)
+
+
 def resolve_templates_path(path: str | None = None) -> str:
     explicit = str(path or "").strip()
     if explicit:
@@ -486,10 +511,11 @@ def get_template_for_session(
     session: Any,
     *,
     templates_path: str | None = None,
+    lang: str = "ru",
 ) -> Dict[str, Any]:
     """
     Single point to load + resolve the active template for a given session.
     """
-    registry = get_analyst_templates_cached(templates_path)
+    registry = get_analyst_templates_for_lang(lang) if not templates_path else get_analyst_templates_cached(templates_path)
     template_id = resolve_template_id_from_session(session)
     return resolve_template(registry, template_id)

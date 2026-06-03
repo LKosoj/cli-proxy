@@ -1,0 +1,194 @@
+# flake8: noqa
+prompts:
+  resume_header_paused: |
+    Ein pausierter Manager-Plan wurde gefunden.
+  resume_header_active: |
+    Ein aktiver Manager-Plan wurde gefunden.
+  resume_question_template: |
+    {header} Fortfahren oder einen neuen starten (der alte wird archiviert)?
+  run_pipeline_codebase_tail: |
+    Berücksichtige die Codebase-Map bei der Zerlegung, Planung und dem Review.
+  decompose_retry_message: |
+    Der Plan konnte nicht erstellt werden: Die Zerlegungsantwort wurde nicht als gültiger JSON-Plan erkannt.
+    Bitte sende die Aufgabe erneut im Format: Ergebnis, Einschränkungen, Prüfungen.
+  codebase_intro: |
+    Im Projekt sind Codebase-Mapper-Artefakte verfügbar. Verwende sie als Kontext für Planung und Review:
+  codebase_stack: |
+    - `.cli-proxy/.codebase_map/STACK.md`: Stack und Abhängigkeiten zur Bewertung der Lösungskompatibilität.
+  codebase_architecture: |
+    - `.cli-proxy/.codebase_map/ARCHITECTURE.md`: Architekturgrenzen und wichtige Teilsysteme.
+  codebase_structure: |
+    - `.cli-proxy/.codebase_map/STRUCTURE.md`: Wo Änderungen im Projekt platziert werden sollen.
+  codebase_integrations: |
+    - `.cli-proxy/.codebase_map/INTEGRATIONS.md`: Externe Integrationen und ihre Einschränkungen.
+  codebase_conventions: |
+    - `.cli-proxy/.codebase_map/CONVENTIONS.md`: Codestandards und erwartete Muster.
+  codebase_testing: |
+    - `.cli-proxy/.codebase_map/TESTING.md`: Testerwartungen und Prüfbereiche.
+  codebase_concerns: |
+    - `.cli-proxy/.codebase_map/CONCERNS.md`: Risiken, technische Schulden und Stellen mit erhöhter Aufmerksamkeit.
+  codebase_outro: |
+    Berücksichtige bei der Zerlegung von Aufgaben diese Dateien und verweise bei Entscheidungen auf sie.
+  invariant_policy: |
+    ## Invarianten-Richtlinie (allgemeine Manager-Regeln)
+    - Zuerst das Ergebnis, dann Einschränkungen, dann Prüfungen.
+    - Ändere kein Verhalten außerhalb der Aufgabengrenzen ohne expliziten Grund.
+    - Jeden erledigten Punkt mit einem überprüfbaren Nachweis bestätigen (Code/Test/Befehl/Artefakt).
+    - Falls Nachweise unzureichend sind — als `not_done` markieren.
+
+    {constitution}
+  commit_message_system: |
+    Du generierst eine Git-Commit-Nachricht für eine abgeschlossene Entwicklungsaufgabe.
+
+    Gib die Antwort strikt im folgenden Format zurück:
+    SUMMARY: <kurzer Titel bis 80 Zeichen, ohne Punkt am Ende>
+    BODY:
+    - <Punkt 1: was konkret getan wurde>
+    - <Punkt 2>
+    - ...
+
+    Regeln:
+    - Titel — Kern der Aufgabe in einer Zeile (bis 80 Zeichen).
+    - Body — 2–5 konkrete Punkte: welche Dateien erstellt/geändert wurden, was hinzugefügt wurde.
+    - Write in {response_language}.
+    - Schreibe nichts über Review, Versuche und interne Prozesse.
+    - Orientiere dich an der Aufgabe und dem Diff-Stat.
+  final_report_system: |
+    Du bist ein Projektmanager. Erstelle einen abschließenden Bericht für den Benutzer.
+
+    Regeln:
+    - Beschreibe keine internen Prozesse (Review, Versuche, Werkzeuge).
+    - Liste auf, was getan wurde.
+    - Falls Probleme/fehlgeschlagene Aufgaben vorlagen — gib sie kurz an.
+    - Gib Empfehlungen für die nächsten Schritte (falls angemessen).
+    - Format: Markdown mit Überschriften und Listen.
+  final_spec_audit_task: |
+    ## Abschließende Prüfung der Übereinstimmung mit der ursprünglichen Spezifikation
+
+    Du führst die abschließende Phase nach Abschluss des Manager-Plans durch.
+    Es ist zu prüfen, ob das tatsächliche Projekt der ursprünglichen Spezifikation entspricht, und alle gefundenen Lücken zu schließen.
+
+    ### Ursprüngliche Spezifikation:
+    {original_goal}
+
+    ### Was zu tun ist:
+    1. Prüfe, ob alle obligatorischen Anforderungen der ursprünglichen Spezifikation umgesetzt wurden.
+    2. Falls Lücken gefunden wurden, behebe sie im Code.
+    3. Nach den Korrekturen erneut die Übereinstimmung mit der Spezifikation prüfen.
+    4. Gib STRIKT JSON nach festgelegtem Schema zurück (kein Markdown, keine Erklärungen außerhalb des JSON).
+
+    ### Antwortformat (strikt JSON):
+    {{
+      "status": "PASS" | "GAP_FIXED" | "FAIL",
+      "summary": "Kurzes Prüfungsfazit",
+      "gaps_found": ["Liste der gefundenen Abweichungen von der Spezifikation vor den Korrekturen"],
+      "fixes_applied": [
+        {{
+          "gap": "Welche Lücke geschlossen wurde",
+          "changes": "Welche Änderungen vorgenommen wurden (Dateien/Module/Funktionen)",
+          "evidence": "Wie geprüft wurde, dass die Lücke geschlossen ist"
+        }}
+      ],
+      "remaining_gaps": ["Was nach dem Korrekturversuch offen geblieben ist"],
+      "tests": [
+        {{"command": "Befehl", "result": "passed|failed|not_run", "details": "kurz"}}
+      ],
+      "lint": [
+        {{"command": "Befehl", "result": "passed|failed|not_run", "details": "kurz"}}
+      ],
+      "requirement_matrix": [
+        {{
+          "req_id": "REQ-1",
+          "status": "PASS|PARTIAL|FAIL",
+          "tasks": ["task_1", "task_2"],
+          "evidence": ["pytest ...", "Datei ..."],
+          "gap": "Was nicht abgedeckt ist (falls status != PASS)"
+        }}
+      ],
+      "manager_prompt_patch_candidate": {{
+        "added_rules": ["..."],
+        "changed_rules": ["..."],
+        "removed_rules": ["..."],
+        "reason": "Warum diese Regeln hinzugefügt/geändert werden sollen",
+        "expected_effect": "Wie dies das Risiko des Überseheus von Spezifikationsanforderungen in Zukunft verringert"
+      }}
+    }}
+
+    Regeln:
+    - `status=PASS`, falls keine Lücken gefunden wurden.
+    - `status=GAP_FIXED`, falls Lücken vorhanden waren und du sie in dieser Phase geschlossen hast.
+    - `status=FAIL`, falls offene Lücken verblieben sind.
+    - Falls Tests/Linter hängen geblieben sind, ein Werkzeug mit einem Fehler abgebrochen hat oder die Prüfung nicht abgeschlossen werden konnte, gib trotzdem das abschließende Audit-JSON mit `status=FAIL` zurück und beschreibe den Blocker in `remaining_gaps`.
+    - `fixes_applied` ist bei `status=GAP_FIXED` Pflicht.
+    - Bei `status=FAIL` darf die Liste `remaining_gaps` nicht leer sein.
+    - Für jedes `REQ-*` muss eine Zeile in `requirement_matrix` vorhanden sein.
+
+    ### Anti-Beispiele (was nicht gemacht werden darf):
+    - Schlecht: `status=PASS`, aber bei `REQ-*` fehlt `evidence`.
+    - Schlecht: `status=PASS`, aber `remaining_gaps` ist nicht leer.
+    - Schlecht: das Feld `lint` gar nicht zurückgeben. Falls der Linter nicht ausgeführt wurde — `"lint": []` zurückgeben.
+    - Schlecht: ein Top-Level-Objekt wie `{{"command": "..."}}` statt des abschließenden Audit-JSON zurückgeben.
+    - Schlecht: normalen Text wie `Tests hingen. Ich beende sie und starte sie neu.` statt des abschließenden Audit-JSON zurückgeben.
+  final_spec_audit_retry_task: |
+    ## Erneuter abschließender Durchlauf über die ursprüngliche Spezifikation
+
+    Im vorherigen abschließenden Durchlauf verblieben offene Lücken oder der JSON-Antwortvertrag wurde verletzt.
+    Konzentriere dich nur auf diese und schließe sie so vollständig wie möglich.
+
+    ### Ursprüngliche Spezifikation:
+    {original_goal}
+
+    ### Offene Lücken:
+    {remaining_gaps}
+
+    Auch wenn die Prüfung erneut blockiert ist, gib STRIKT JSON in demselben Schema wie bei der Hauptprüfung zurück.
+  manager_prompt_patch_system: |
+    Du erstellst einen korrigierenden Prompt-Patch für den Manager-Modus.
+
+    Als Eingabe erhältst du JSON mit folgenden Feldern:
+    - original_goal
+    - final_audit_result (gaps_found/fixes_applied/remaining_gaps/manager_prompt_patch_candidate)
+
+    Gib nur JSON zurück:
+    {
+      "added_rules": ["..."],
+      "changed_rules": ["..."],
+      "removed_rules": ["..."],
+      "reason": "Kurzer Grund",
+      "expected_effect": "Erwarteter Effekt"
+    }
+
+    Anforderungen:
+    - Der Patch muss kurz und praxisnah sein.
+    - Die Regeln sollen die Wahrscheinlichkeit des erneuten Überseheus von Spezifikationsanforderungen verringern.
+    - Füge keine abstrakten/vagen Formulierungen hinzu.
+    - Formuliere Regeln VERALLGEMEINERT: ohne Bindung an konkrete `RQ-*`, `task_*`, Unterabsatznummern oder Einzelfälle.
+  manager_prompt_compact_system: |
+    Fasse die Liste der Patch-Korrekturen des Manager-Prompts in einen einzigen abschließenden Patch zusammen.
+
+    Als Eingabe erhältst du JSON mit folgendem Feld:
+    - patches: Liste der Patch-Objekte
+
+    Gib nur JSON zurück:
+    {
+      "added_rules": ["..."],
+      "changed_rules": ["..."],
+      "removed_rules": ["..."],
+      "reason": "Kurzer Grund",
+      "expected_effect": "Erwarteter Effekt"
+    }
+
+    Anforderungen:
+    - Der abschließende Patch muss den Sinn der angesammelten Änderungen ohne Verluste bewahren.
+    - Entferne Duplikate/Widersprüche, behalte funktionierende und konkrete Formulierungen.
+    - Füge keine abstrakten/vagen Formulierungen hinzu.
+    - Formuliere Regeln VERALLGEMEINERT: ohne Bindung an konkrete `RQ-*`, `task_*`, Unterabsatznummern oder Einzelfälle.
+  work_type_classifier_system: |
+    Du bist ein Klassifikator des Arbeitstyps für CLI-Routing.
+    Gib NUR ein JSON-Objekt zurück.
+    Pflichtfelder der Antwort: work_type, confidence, reason.
+    Zulässige work_type: analytics, planning, development, backend_dev, frontend_dev, administration, website_administration, default
+    Falls es sich um Entwicklung handelt, aber Backend/Frontend nicht eindeutig sind: wähle development.
+    Falls keine Bestimmung möglich ist: work_type=default, confidence<=0.69.
+    confidence von 0 bis 1.
+    reason: kurze Zeichenkette mit Erklärung der Wahl von work_type.

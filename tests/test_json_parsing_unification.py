@@ -19,6 +19,10 @@ def test_no_direct_json_loads_outside_json_normalizer() -> None:
             continue
         if "tests" in path.parts:
             continue
+        # .cli-proxy holds gitignored runtime artifacts (run logs, agent dumps)
+        # and the codebase map — not project source code.
+        if ".cli-proxy" in path.parts:
+            continue
         if path in allowlist:
             continue
         text = path.read_text(encoding="utf-8")

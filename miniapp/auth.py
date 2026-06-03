@@ -17,6 +17,7 @@ class TelegramMiniAppUser:
     user_id: int
     username: str
     first_name: str
+    language_code: str = ""
 
 
 def verify_telegram_init_data(init_data: str, bot_token: str, max_age_sec: int = 86_400) -> TelegramMiniAppUser:
@@ -64,4 +65,5 @@ def verify_telegram_init_data(init_data: str, bot_token: str, max_age_sec: int =
         user_id=user_id,
         username=str(user_obj.get("username") or ""),
         first_name=str(user_obj.get("first_name") or ""),
+        language_code=str(user_obj.get("language_code") or ""),
     )

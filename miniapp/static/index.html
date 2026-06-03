@@ -15,24 +15,24 @@
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Навигация MiniApp">
-    <button type="button" role="tab" aria-selected="true" aria-controls="tab-config" data-tab="config" class="active">Config</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-files" data-tab="files">Файлы</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-logs" data-tab="logs">Логи</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-status" data-tab="status">Статус</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-scheduler" data-tab="scheduler">Scheduler</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings">Настройки</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-admin" data-tab="admin">Админ</button>
+    <button type="button" role="tab" aria-selected="true" aria-controls="tab-config" data-tab="config" class="active" data-i18n-key="miniapp.tab.config">Config</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-files" data-tab="files" data-i18n-key="miniapp.tab.files">Файлы</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-logs" data-tab="logs" data-i18n-key="miniapp.tab.logs">Логи</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-status" data-tab="status" data-i18n-key="miniapp.tab.status">Статус</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-scheduler" data-tab="scheduler" data-i18n-key="miniapp.tab.scheduler">Scheduler</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" data-i18n-key="miniapp.tab.settings">Настройки</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-admin" data-tab="admin" data-i18n-key="miniapp.tab.admin">Админ</button>
   </nav>
 
   <main>
     <section id="tab-config" class="tab active">
       <div class="toolbar">
-        <button id="cfgRefresh">Обновить</button>
-        <button id="cfgValidate">Проверить</button>
+        <button id="cfgRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
+        <button id="cfgValidate" data-i18n-key="miniapp.btn.validate">Проверить</button>
         <button id="cfgDiff">Preview diff</button>
-        <button id="cfgSave" disabled>Сохранить</button>
+        <button id="cfgSave" disabled data-i18n-key="miniapp.btn.save">Сохранить</button>
       </div>
-      <div id="cfgRestartBanner" class="banner hidden">Требуется перезапуск для части изменений</div>
+      <div id="cfgRestartBanner" class="banner hidden" data-i18n-key="miniapp.cfg.restart_banner">Требуется перезапуск для части изменений</div>
       <div id="cfgDirty"></div>
       <div id="cfgValidation"></div>
       <div id="cfgReloadResult"></div>
@@ -44,14 +44,14 @@
       <div id="filesExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
       <div id="filesRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Remote FS</div>
       <div class="toolbar">
-        <label for="filesSession">Сессия</label>
+        <label for="filesSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="filesSession"></select>
-        <button id="filesApply">Применить</button>
-        <button id="filesUp">Вверх</button>
-        <button id="filesRefresh">Обновить</button>
-        <button id="filesCreateFile">Создать файл</button>
-        <button id="filesCreateDir">Создать папку</button>
-        <button id="filesDelete">Удалить</button>
+        <button id="filesApply" data-i18n-key="miniapp.btn.apply">Применить</button>
+        <button id="filesUp" data-i18n-key="miniapp.btn.up">Вверх</button>
+        <button id="filesRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
+        <button id="filesCreateFile" data-i18n-key="miniapp.btn.create_file">Создать файл</button>
+        <button id="filesCreateDir" data-i18n-key="miniapp.btn.create_dir">Создать папку</button>
+        <button id="filesDelete" data-i18n-key="miniapp.btn.delete">Удалить</button>
       </div>
       <div id="filesPath"></div>
       <div id="filesStatus"></div>
@@ -62,23 +62,23 @@
       <div id="editorExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
       <div id="editorRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Remote FS</div>
       <div class="toolbar">
-        <span id="editorPath">Файл не выбран</span>
-        <button id="editorClose">Закрыть</button>
-        <button id="editorReload">Обновить</button>
-        <button id="editorDownload">Скачать</button>
-        <button id="editorSave">Сохранить</button>
+        <span id="editorPath" data-i18n-key="miniapp.editor.no_file">Файл не выбран</span>
+        <button id="editorClose" data-i18n-key="miniapp.btn.close">Закрыть</button>
+        <button id="editorReload" data-i18n-key="miniapp.btn.reload">Обновить</button>
+        <button id="editorDownload" data-i18n-key="miniapp.btn.download">Скачать</button>
+        <button id="editorSave" data-i18n-key="miniapp.btn.save">Сохранить</button>
         <button id="editorForceSave" style="display: none; background-color: var(--danger);">Force Save</button>
-        <button id="editorUndo">Отменить</button>
+        <button id="editorUndo" data-i18n-key="miniapp.btn.undo">Отменить</button>
       </div>
       <div id="editorMeta"></div>
       <div id="editorConflictDialog" style="display: none; margin-bottom: 16px; border: 1px solid var(--danger); padding: 16px; border-radius: 4px; background-color: var(--bg);">
-        <h3 style="color: var(--danger); margin-top: 0;">Обнаружен конфликт версий!</h3>
-        <p>Файл был изменён на сервере с момента последнего открытия.</p>
+        <h3 style="color: var(--danger); margin-top: 0;" data-i18n-key="miniapp.editor.conflict_title">Обнаружен конфликт версий!</h3>
+        <p data-i18n-key="miniapp.editor.conflict_desc">Файл был изменён на сервере с момента последнего открытия.</p>
         <pre id="editorConflictDiff" style="background: var(--card-bg); padding: 12px; overflow-x: auto; font-family: monospace; font-size: 12px; border: 1px solid var(--border);"></pre>
         <div style="margin-top: 12px; display: flex; gap: 8px;">
-          <button id="editorConflictCancel">Отменить сохранение</button>
-          <button id="editorConflictReload">Перезагрузить файл (потерять мои изменения)</button>
-          <button id="editorConflictForceSave" style="background-color: var(--danger); color: white;">Force Save (перезаписать)</button>
+          <button id="editorConflictCancel" data-i18n-key="miniapp.btn.cancel_save">Отменить сохранение</button>
+          <button id="editorConflictReload" data-i18n-key="miniapp.btn.reload_file">Перезагрузить файл (потерять мои изменения)</button>
+          <button id="editorConflictForceSave" style="background-color: var(--danger); color: white;" data-i18n-key="miniapp.btn.force_save">Force Save (перезаписать)</button>
         </div>
       </div>
       <div id="ace"></div>
@@ -86,24 +86,24 @@
 
     <section id="tab-logs" class="tab">
       <div class="toolbar logs-toolbar">
-        <label for="logsType">Лог</label>
+        <label for="logsType" data-i18n-key="miniapp.label.log">Лог</label>
         <select id="logsType"></select>
-        <label for="logsHistory">История</label>
+        <label for="logsHistory" data-i18n-key="miniapp.label.history">История</label>
         <select id="logsHistory">
-          <option value="0">Только новые</option>
-          <option value="100">100 предыдущих</option>
-          <option value="200">200 предыдущих</option>
-          <option value="500">500 предыдущих</option>
-          <option value="1000">1000 предыдущих</option>
+          <option value="0" data-i18n-key="miniapp.logs.only_new">Только новые</option>
+          <option value="100" data-i18n-key-n="miniapp.logs.prev_N">100 предыдущих</option>
+          <option value="200" data-i18n-key-n="miniapp.logs.prev_N">200 предыдущих</option>
+          <option value="500" data-i18n-key-n="miniapp.logs.prev_N">500 предыдущих</option>
+          <option value="1000" data-i18n-key-n="miniapp.logs.prev_N">1000 предыдущих</option>
         </select>
-        <label for="logsSession">Сессия</label>
+        <label for="logsSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="logsSession"></select>
-        <button id="logsApply">Применить</button>
-        <button id="logsClear">Очистить</button>
-        <button id="logsDownload">Скачать</button>
+        <button id="logsApply" data-i18n-key="miniapp.btn.apply">Применить</button>
+        <button id="logsClear" data-i18n-key="miniapp.btn.clear">Очистить</button>
+        <button id="logsDownload" data-i18n-key="miniapp.btn.download">Скачать</button>
         <label for="logsAutoScroll" class="toolbar-checkbox">
           <input type="checkbox" id="logsAutoScroll" checked>
-          <span>Автопрокрутка</span>
+          <span data-i18n-key="miniapp.label.autoscroll">Автопрокрутка</span>
         </label>
       </div>
       <div id="logsStatus"></div>
@@ -119,24 +119,24 @@
       </div>
       
       <div class="status-dashboard">
-        <div id="statusEmpty" class="status-empty">Загрузка или сессия не выбрана...</div>
+        <div id="statusEmpty" class="status-empty" data-i18n-key="miniapp.status.empty">Загрузка или сессия не выбрана...</div>
 
         <div id="statusDashboard" class="hidden">
           <div class="status-header-card">
             <div class="status-meta" id="stStatusMeta">
               <div class="meta-item"><span id="stWorkdir">/path</span></div>
               <div class="meta-item" id="stStatusContainer">
-                <span class="meta-icon" id="stStatusIcon">RUN</span> <span id="stStatusText">Ожидает</span>
+                <span class="meta-icon" id="stStatusIcon">RUN</span> <span id="stStatusText" data-i18n-key="miniapp.status.waiting">Ожидает</span>
               </div>
               <div class="meta-item" id="stQueueContainer">
                 <span class="meta-icon">Q</span> <span id="stQueueLabel">0</span>
               </div>
               <div class="meta-item"><span class="meta-icon">OUT</span> <span id="stLastOutput">0s</span></div>
               <div class="meta-item" id="stGitContainer">
-                <span class="meta-icon">GIT</span> <span id="stGitText">Свободен</span>
+                <span class="meta-icon">GIT</span> <span id="stGitText" data-i18n-key="miniapp.status.git_free">Свободен</span>
               </div>
               <div class="meta-item" id="stOrchestratorContainer">
-                <span class="meta-icon">ORCH</span> <span id="stOrchestratorLabel">выкл</span>
+                <span class="meta-icon">ORCH</span> <span id="stOrchestratorLabel" data-i18n-key="miniapp.status.off">выкл</span>
               </div>
               <div class="meta-item"><span class="meta-icon">UP</span> <span id="stUptime">0s</span></div>
               <div class="meta-item"><span class="meta-icon">CNT</span> <span id="stSessionCount">0</span></div>
@@ -147,14 +147,14 @@
           <details class="status-card-details" id="statusModeDetails" style="margin-top: 12px;">
             <summary>
               <span class="status-summary-label">
-                <span>Инструмент и Режим</span>
+                <span data-i18n-key="miniapp.status.mode_section">Инструмент и Режим</span>
                 <span class="pulse-dot" id="stPulseDot" style="display: none;"></span>
               </span>
             </summary>
             <div class="status-card-body card-body-flex">
               <div class="kv-list">
-                <div class="kv-row"><span class="kv-key">Режим (Mode):</span> <span class="kv-val" id="stMode">-</span></div>
-                <div class="kv-row"><span class="kv-key">Инструмент:</span> <span class="kv-val" id="stTool">-</span></div>
+                <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_mode">Режим (Mode):</span> <span class="kv-val" id="stMode">-</span></div>
+                <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_tool">Инструмент:</span> <span class="kv-val" id="stTool">-</span></div>
                 <div class="kv-row"><span class="kv-key">CLI / Профиль:</span> <span class="kv-val" id="stCli">-</span></div>
                 <div class="kv-row"><span class="kv-key">Work type:</span> <span class="kv-val" id="stWorkType">-</span></div>
                 <div class="kv-row"><span class="kv-key">Resume Token:</span> <span class="kv-val" id="stResumeToken">-</span></div>
@@ -164,12 +164,12 @@
           </details>
 
           <details class="status-card-details hidden" id="stManagerPlanCard">
-            <summary>План Менеджера</summary>
+            <summary data-i18n-key="miniapp.status.manager_plan">План Менеджера</summary>
             <div class="status-card-body pre-wrap" id="statusManagerPlanText"></div>
           </details>
 
           <details class="status-card-details hidden" id="stAnalystCard">
-            <summary>Статус Аналитика</summary>
+            <summary data-i18n-key="miniapp.status.analyst">Статус Аналитика</summary>
             <div class="status-card-body pre-wrap" id="statusAnalystModeText"></div>
           </details>
 
@@ -179,7 +179,7 @@
           </details>
 
           <details class="status-card-details hidden" id="stAgentCard">
-            <summary>Статус Агента</summary>
+            <summary data-i18n-key="miniapp.status.agent">Статус Агента</summary>
             <div class="status-card-body pre-wrap" id="statusAgentModeText"></div>
           </details>
 
@@ -226,7 +226,7 @@
           <details class="status-card-details" id="statusRunsDetails">
             <summary>Run Operations</summary>
             <div class="status-card-body">
-              <div id="statusRunsMessage" class="status-empty">Выберите сессию, чтобы просмотреть run artifacts.</div>
+              <div id="statusRunsMessage" class="status-empty" data-i18n-key="miniapp.runs.choose_session">Выберите сессию, чтобы просмотреть run artifacts.</div>
               <div id="statusRunsPanel" class="hidden">
                 <div id="statusRunsActionMessage" class="status-empty hidden"></div>
                 <div class="status-cards-grid" style="margin-top: 12px;">
@@ -239,7 +239,7 @@
                   <div class="status-card">
                     <div class="status-card-header">Выбранный run</div>
                     <div class="status-card-body">
-                      <div id="statusRunDetailText" class="pre-wrap">Выберите запуск.</div>
+                      <div id="statusRunDetailText" class="pre-wrap" data-i18n-key="miniapp.runs.select_run">Выберите запуск.</div>
                       <div id="statusRunSkillLog" class="pre-wrap" style="margin-top: 12px;"></div>
                       <div class="toolbar" style="margin-top: 12px;">
                         <button id="statusRunDoctor" type="button">Doctor</button>
@@ -267,20 +267,20 @@
 
     <section id="tab-scheduler" class="tab">
       <div class="toolbar status-toolbar">
-        <label for="schedulerProject">Проект</label>
+        <label for="schedulerProject" data-i18n-key="miniapp.label.project">Проект</label>
         <select id="schedulerProject"></select>
         <label for="schedulerSession">Telegram session_uid</label>
         <select id="schedulerSession"></select>
         <button id="schedulerRefresh">Обновить</button>
       </div>
-      <div id="schedulerStatus" class="status-empty">Выберите проект для управления расписанием.</div>
+      <div id="schedulerStatus" class="status-empty" data-i18n-key="miniapp.scheduler.choose_project">Выберите проект для управления расписанием.</div>
       <div id="schedulerPanel" class="hidden">
         <div class="status-cards-grid" style="margin-top: 12px;">
           <div class="status-card">
             <div class="status-card-header">Job</div>
             <div class="status-card-body">
               <div class="field">
-                <label for="schedulerJobName">Название</label>
+                <label for="schedulerJobName" data-i18n-key="miniapp.label.name">Название</label>
                 <input id="schedulerJobName" type="text" />
               </div>
               <div class="field">
@@ -300,10 +300,10 @@
                 <textarea id="schedulerPayload" rows="5" placeholder='{"key": "value"}'></textarea>
               </div>
               <div class="toolbar">
-                <button id="schedulerSave">Создать</button>
-                <button id="schedulerDelete">Удалить</button>
+                <button id="schedulerSave" data-i18n-key="miniapp.btn.create">Создать</button>
+                <button id="schedulerDelete" data-i18n-key="miniapp.btn.delete">Удалить</button>
                 <button id="schedulerRunNow">Run now</button>
-                <button id="schedulerReset">Сбросить</button>
+                <button id="schedulerReset" data-i18n-key="miniapp.btn.reset">Сбросить</button>
               </div>
             </div>
           </div>
@@ -320,24 +320,24 @@
 
     <section id="tab-settings" class="tab">
       <div class="toolbar status-toolbar">
-        <label for="settingsSession">Сессия</label>
+        <label for="settingsSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="settingsSession"></select>
         <button id="settingsApply">Применить</button>
       </div>
-      <div id="settingsEmpty" class="status-empty">Загрузка или сессия не выбрана...</div>
+      <div id="settingsEmpty" class="status-empty" data-i18n-key="miniapp.settings.empty">Загрузка или сессия не выбрана...</div>
       <div id="settingsPanel" class="hidden">
         <div class="status-dashboard">
           <div class="status-card">
-            <div class="status-card-header">Параметры сессии</div>
+            <div class="status-card-header" data-i18n-key="miniapp.settings.session_params">Параметры сессии</div>
             <div class="status-card-body">
               <div id="settingsExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center;">Execution Target: Local</div>
               <div class="field">
-                <label for="settingsActiveMode">Active Mode</label>
+                <label for="settingsActiveMode" data-i18n-key="miniapp.label.active_mode">Active Mode</label>
                 <select id="settingsActiveMode"></select>
-                <small>Выберите режим сессии или Прямой CLI, чтобы выключить активный режим.</small>
+                <small data-i18n-key="miniapp.settings.mode_hint">Выберите режим сессии или Прямой CLI, чтобы выключить активный режим.</small>
               </div>
               <div class="field">
-                <label for="settingsSshEnabled">SSH Remote</label>
+                <label for="settingsSshEnabled" data-i18n-key="miniapp.label.ssh_remote">SSH Remote</label>
                 <input type="checkbox" id="settingsSshEnabled" />
                 <small id="settingsSshNote">Включает/выключает удаленное выполнение команд через SSH.</small>
               </div>
@@ -353,7 +353,7 @@
               </div>
               <div id="settingsRemoteControlError" style="color: var(--danger); margin-top: 8px; font-size: 0.9em; display: none;"></div>
               <div class="toolbar" style="margin-top: 16px;">
-                <button id="settingsSave">Сохранить изменения</button>
+                <button id="settingsSave" data-i18n-key="miniapp.btn.save_changes">Сохранить изменения</button>
               </div>
             </div>
           </div>
@@ -364,7 +364,7 @@
               <button id="sshHostAdd" class="btn-sm">Добавить хост</button>
             </div>
             <div class="status-card-body">
-              <div id="sshHostsEmpty" class="status-empty">Хосты не настроены.</div>
+              <div id="sshHostsEmpty" class="status-empty" data-i18n-key="miniapp.ssh.no_hosts">Хосты не настроены.</div>
               <div id="sshHostsList" class="hidden">
                 <table class="admin-table" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
                   <thead>
@@ -373,7 +373,7 @@
                       <th style="padding: 8px;">Host</th>
                       <th style="padding: 8px;">User</th>
                       <th style="padding: 8px;">Auth</th>
-                      <th style="padding: 8px;">Действия</th>
+                      <th style="padding: 8px;" data-i18n-key="miniapp.label.actions">Действия</th>
                     </tr>
                   </thead>
                   <tbody id="sshHostsTableBody"></tbody>
@@ -459,10 +459,27 @@
                   <input type="number" id="sshHostTimeout" value="1200" />
                 </div>
                 <div class="toolbar" style="margin-top: 16px;">
-                  <button id="sshHostSave">Сохранить</button>
-                  <button id="sshHostCancel">Отмена</button>
+                  <button id="sshHostSave" data-i18n-key="miniapp.btn.save">Сохранить</button>
+                  <button id="sshHostCancel" data-i18n-key="miniapp.btn.cancel">Отмена</button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+        <div class="status-card" id="langCard" style="margin-top: 12px;">
+          <div class="status-card-header" data-i18n-key="miniapp.settings.lang_title">Язык</div>
+          <div class="status-card-body">
+            <div class="field">
+              <label for="langSelect" data-i18n-key="miniapp.settings.lang_label">Язык интерфейса</label>
+              <select id="langSelect">
+                <option value="ru">🇷🇺 Русский</option>
+                <option value="en">🇬🇧 English</option>
+                <option value="zh">🇨🇳 中文</option>
+                <option value="de">🇩🇪 Deutsch</option>
+              </select>
+            </div>
+            <div class="toolbar" style="margin-top: 12px;">
+              <button id="langSave" data-i18n-key="miniapp.settings.lang_save">Сохранить язык</button>
             </div>
           </div>
         </div>

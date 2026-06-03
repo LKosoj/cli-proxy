@@ -4,6 +4,7 @@ import asyncio
 import dataclasses
 import difflib
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -183,6 +184,28 @@ def _looks_like_nonfinal_rework_text(text: Any, *, language: str = "ru") -> bool
     # Always also check ru prefixes as safety net (agent may switch languages)
     ru_prefixes = _NONFINAL_REWORK_PREFIXES["ru"]
     return lowered.startswith(prefixes) or lowered.startswith(ru_prefixes)
+
+
+def _callable_accepts_kw(fn: Any, name: str) -> bool:
+    """True if *fn* accepts keyword *name* (explicitly or via **kwargs).
+
+    Used to pass the optional ``language`` kwarg to dependency callables (e.g.
+    plan_steps) only when their signature supports it — without swallowing
+    unrelated TypeErrors. Test mocks with a fixed 3-arg signature simply skip it.
+    """
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        return False
+    for param in sig.parameters.values():
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            return True
+        if param.name == name and param.kind in (
+            inspect.Parameter.KEYWORD_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            return True
+    return False
 
 
 def _is_analyst_runtime_context(
@@ -6461,20 +6484,16 @@ class OrchestratorRunner:
                     self._log.warning("failed to serialize prior step hints: %s", e)
                     prior_hints = ""
 
-            try:
-                steps = await self._deps.plan_steps(
-                    self._config,
-                    planning_text,
-                    ctx_summary + _progress_context() + prior_hints,
-                    language=_lang,
-                )
-            except TypeError:
-                # Fallback for mocked plan_steps that don't accept language kwarg
-                steps = await self._deps.plan_steps(
-                    self._config,
-                    planning_text,
-                    ctx_summary + _progress_context() + prior_hints,
-                )
+            plan_args = (
+                self._config,
+                planning_text,
+                ctx_summary + _progress_context() + prior_hints,
+            )
+            if _callable_accepts_kw(self._deps.plan_steps, "language"):
+                steps = await self._deps.plan_steps(*plan_args, language=_lang)
+            else:
+                # Some test doubles use a fixed 3-arg signature without language.
+                steps = await self._deps.plan_steps(*plan_args)
             steps = self._order_steps_safely(steps)
             steps = _stabilize_step_ids(steps)
             for planned_step in steps:

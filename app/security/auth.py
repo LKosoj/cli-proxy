@@ -189,6 +189,7 @@ class TelegramMiniAppInitDataStrategy:
                 "user_id": getattr(verified_user, "user_id", None),
                 "username": getattr(verified_user, "username", ""),
                 "first_name": getattr(verified_user, "first_name", ""),
+                "language_code": getattr(verified_user, "language_code", ""),
             }
         user_id = raw.get("user_id")
         try:
@@ -199,6 +200,7 @@ class TelegramMiniAppInitDataStrategy:
             "user_id": normalized_user_id,
             "username": str(raw.get("username") or ""),
             "first_name": str(raw.get("first_name") or ""),
+            "language_code": str(raw.get("language_code") or ""),
         }
 
 

@@ -1,0 +1,729 @@
+# flake8: noqa
+templates:
+  default:
+    name: "按需基础分析"
+    description: "通用轻量模板：分析用户任务并给出结构化结果。"
+    required_sections:
+      - "理解请求"
+      - "关键观察"
+      - "解决方案选项"
+      - "推荐方案"
+      - "风险与限制"
+      - "后续步骤"
+    required_inputs:
+      - "任务或问题描述"
+      - "背景：需要根据分析做出何种决策"
+    system_prompt_addition: |
+      严格按照用户请求，准备简洁而实用的分析。
+      除非明确要求，不要将结果扩展为完整的技术规范。
+      着重于具体行动和验证标准。
+
+      分析方法：
+      - 对每个解决方案选项使用以下结构："选项 → 优点 → 缺点 → 适用条件"。
+      - 推荐方案 MUST 包含选择理由：为何选此方案而非其他方案。
+    qa_prompt: |
+      验证输出内容：
+      - 直接回答用户请求；
+      - 包含有充分依据的具体建议；
+      - 不存在过多冗余细节；
+      - 记录关键风险和 next steps；
+      - 推荐方案有据可查，而非仅仅命名。
+
+  # Target audience 对于 spec-oriented 模板 = low-middle developer：
+  # 最终文档应无需口头说明即可实施，不依赖 senior-only 背景知识。
+  new_spec:
+    name: "从零开发技术规范"
+    description: "新开发项目的完整技术规范（规格说明）：需求、架构、验收。"
+    required_sections:
+      - "背景与概述"
+      - "目标与可衡量成功标准"
+      - "工作范围（In/Out）"
+      - "假设与限制"
+      - "利益相关方、角色与访问权限"
+      - "用户场景"
+      - "功能需求"
+      - "非功能需求"
+      - "集成与外部依赖"
+      - "数据与领域模型"
+      - "架构决策与限制"
+      - "API 与集成契约"
+      - "可观测性与运维"
+      - "数据政策与隐私"
+      - "分阶段实施计划"
+      - "测试计划与验收标准"
+      - "风险与开放问题"
+    required_inputs:
+      - "产品所解决的业务目标或问题"
+      - "目标受众与核心用户"
+      - "已知限制（预算、时间表、技术栈）"
+      - "优先级：MVP 的关键内容及可推迟内容"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: true
+    target_size_hint: "large"
+    traceability_rules:
+      - "每个 UC-xxx MUST 至少被一个 FR-xxx 覆盖"
+      - "每个优先级为 Must 的 FR-xxx MUST 在可追溯性矩阵中具有验收标准和测试"
+      - "每个 API-xxx MUST 关联到需要它的 FR-xxx"
+      - "每个 NFR-xxx MUST 具有可衡量的 SLO 和验证方法"
+      - "若 UC-xxx 未被任何 FR 覆盖，则为遗漏，MUST 予以修正"
+    system_prompt_addition: |
+      你是分析师。你的任务是准备一份精确、实用、可执行的文档。
+      避免泛泛而谈，保持声明的可验证性。
+
+      分析方法——MECE 分解：
+      - 将工作范围分解为互斥（Mutually Exclusive）且共同穷举（Collectively Exhaustive）的领域。
+      - 对每个领域导出用户场景，再从 UC 导出功能需求。
+      - 检查覆盖率：若某工作范围领域没有任何 UC，则需新增 UC 或明确列入 Out。
+
+      必须遵守的格式规则：
+      - 编写文档时应确保可以：评估工作量、规划实施、无需猜测即可实施、进行测试和验收。
+      - 尽可能使用可衡量指标（超时时间、百分位、RPS/并发、限制、保留期、错误码）。
+      - 使用标识符和可追溯性：`UC-xxx`（场景）、`FR-xxx`（功能需求）、`NFR-xxx`（非功能需求）、`API-xxx`（集成契约）。
+
+      可追溯性规则（必须遵守）：
+      - 每个 UC-xxx MUST 至少被一个 FR-xxx 覆盖。
+      - 每个优先级为 Must 的 FR-xxx MUST 在可追溯性矩阵中具有验收标准和对应行。
+      - 每个 API-xxx MUST 关联到需要它的 FR-xxx。
+      - 文档末尾附上可追溯性矩阵：`UC | FR | API | NFR | 测试/验收`，所有 Must-FR 均已覆盖。
+
+      章节格式：
+      - "工作范围（In/Out）"使用表格：`功能/领域 | In/Out | MVP/Next | 原因 | 依赖/限制`。
+      - "用户场景"：每个 `UC-xxx` 注明：`角色`、`前置条件`、`步骤`、`预期结果`、`错误/异常`（关键流程至少 1 个负向场景）。
+      - "功能需求"：以 `FR-xxx` 列表形式呈现，按优先级 `Must/Should/Could` 分组。每个 `FR-xxx` 注明：
+        `描述`（1-2 句话）、`验收标准`（pass/fail）、`验证/测试`（如何验证）、`错误/校验`（哪些错误及触发条件）。
+      - "非功能需求"：使用 `NFR-xxx` 和 SLI/SLO 表格：
+        `指标 (SLI) | 目标 (SLO) | 测量窗口 | 95p/99p（如适用）| 测量位置 | 备注`。
+        注明何为"正常"负载和"峰值"负载（以系统术语），以及哪些降级可接受/不可接受。
+      - "API 与集成契约"：以 `API-xxx` 格式描述关键接口契约。每份契约至少注明：
+        `用途`、`认证/授权`、`输入数据`（模式 + 示例）、`输出数据`（模式 + 示例）、
+        `错误`（错误码/类型及触发条件）、`幂等性/并发`（如适用）、`限制/配额`（如适用）。
+        若系统存在事件/消息（异步接口），为其描述类似契约：`类型`、`payload`、`ack/错误`、`顺序/重试`（如重要）。
+    qa_prompt: |
+      可追溯性检查（阻塞性）：
+      - 每个 UC-xxx 至少被一个 FR-xxx 覆盖？若否——修订。
+      - 每个 Must FR-xxx 具有验收标准（pass/fail）？若否——修订。
+      - 每个 API-xxx 关联到 FR-xxx？若否——修订。
+      - 可追溯性矩阵存在且所有 Must-FR 均已覆盖？若否——修订。
+
+      完整性检查：
+      - 每个章节均存在且不为空
+      - "工作范围（In/Out）"包含明确的 In 和 Out 列表（无歧义）
+      - "利益相关方、角色与访问权限"描述了角色、权限和关键流程
+      - "用户场景"覆盖了关键路径（happy path 和关键功能的 1-2 个负向场景）
+      - "功能需求"已按优先级排列（Must/Should/Could）并包含验证标准
+      - "非功能需求"包含可衡量的 SLO/SLI
+      - "数据与领域模型"包含实体、字段和关系
+      - "API 与集成契约"包含 payload 示例和错误码
+      - "可观测性与运维"包含指标/日志/链路追踪、告警
+      - "测试计划与验收标准"包含 Must 需求的明确 pass/fail 标准
+      若存在模糊表述，请修改为具体内容。
+
+  audit:
+    name: "审计报告"
+    description: "对现有文档/代码库进行批判性审计，包含风险与建议。"
+    required_sections:
+      - "总体评估"
+      - "观察发现"
+      - "风险"
+      - "建议"
+      - "后续步骤"
+    required_inputs:
+      - "审计对象（文件、模块、项目、文档）"
+      - "审计重点（安全、架构、代码质量、合规性）"
+    system_prompt_addition: |
+      你是审计员。要保持批判性，以证据为依据，突出最重要的问题。
+
+      分析方法——基于证据的审计：
+      - 对每条观察使用以下结构："事实（发现了什么，在哪里）→ 影响（这意味着什么）→ 建议（应该怎么做）"。
+      - 按严重程度对每条观察分类：Critical / Major / Minor / Info。
+      - Critical 和 Major MUST 包含对具体文件/函数/行的引用。
+      - 将已确认的事实与假设分开——将假设标注为 [需要核实]。
+    qa_prompt: |
+      验证审计报告：
+      - 每条观察包含：事实 + 来源 + 严重程度 + 建议
+      - Critical/Major 观察引用了具体文件/函数
+      - 事实与假设分开（假设已标注）
+      - 建议已按优先级排列且可操作（什么、在哪里、为什么）
+      将模糊表述改写为具体观察。
+
+  change_spec:
+    name: "变更技术规范"
+    description: "针对现有产品/项目变更的模板，含 repo-grounded 工作范围、影响分析与验证。"
+    required_sections:
+      - "当前系统背景"
+      - "已确认事实与来源"
+      - "变更目标与成功标准"
+      - "按组件划分的已确认变更"
+      - "对代码、数据、API 和 UX 的影响"
+      - "按组件和文件的 Implementation handoff"
+      - "兼容性与部署限制"
+      - "风险与开放验证"
+      - "测试计划与验收"
+    required_inputs:
+      - "需要变更的内容及原因（业务原因）"
+      - "受影响或可能受影响的组件/模块"
+      - "向后兼容性要求"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: false
+    target_size_hint: "medium"
+    traceability_rules:
+      - "每项变更 MUST 关联到组件，并包含：变更内容、测试方式、兼容性限制"
+      - "影响分析 MUST 覆盖变更列表中的所有组件"
+      - "每个受影响的 API MUST 描述契约变更（before/after）"
+    repo_grounded_required: true
+    repo_audit_required: true
+    final_repo_review_required: true
+    system_prompt_addition: |
+      分析方法——影响驱动的变更分析：
+      - 对每项变更应用以下结构："组件/子系统 → 已确认的当前行为 → 目标行为 → 具体变更内容 → 验证方式"。
+      - 检查级联效应：若 A 发生变更，哪些依赖于 A？哪些依赖于 A 的依赖项？
+      - 仅针对已确认受影响区域记录 blast radius。若迁移、部署步骤或集成未经项目代码或用户请求确认，不予添加。
+      - 不要列举项目所有层面。仅描述本次变更直接需要的组件、文件和用户场景。
+      - 若变更是局部性的，不要将文档扩展为完整的 enterprise-change-plan。
+
+      重点：最小侵入性变更、向后兼容性和可验证的验收标准。
+      以真实代码仓库作为 source of truth，使文档适合 low-middle 开发者无需口头说明即可使用。
+    qa_prompt: |
+      可追溯性检查（阻塞性）：
+      - 每项变更已注明：变更位置、已确认的当前/目标行为、测试方式？若否——修订。
+      - 影响分析覆盖变更列表中的所有组件？若否——修订。
+      完整性检查：
+      - 文档基于真实代码仓库，与代码不矛盾
+      - 适合 low-middle 开发者无需口头说明即可使用
+      - 变更的级联效应已分析
+      - 无无repo evidence支撑的虚构层面、集成、route/controller/table/test-file 路径
+      - 无涉及未受影响层面的章节（除非经请求或代码确认）
+      - 仅在已确认的变更确实需要时才提及迁移和部署
+
+  ui_change_spec:
+    name: "局部 UI/UX 变更技术规范"
+    description: "针对界面、组件或用户场景局部变更的狭义 repo-grounded 模板。"
+    required_sections:
+      - "背景与已确认事实"
+      - "已确认事实与来源"
+      - "目标行为与 UX 标准"
+      - "按组件和状态划分的变更"
+      - "受影响文件、依赖与限制"
+      - "按组件和文件的 Implementation handoff"
+      - "实施、验证与验收计划"
+      - "开放问题与风险"
+    required_inputs:
+      - "UI/UX 中需要变更的内容及原因"
+      - "受影响的组件、页面或用户场景"
+      - "当前行为中不可破坏的关键内容"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: true
+    target_size_hint: "medium"
+    repo_grounded_required: true
+    repo_audit_required: true
+    final_repo_review_required: true
+    traceability_rules:
+      - "每项变更 MUST 关联到具体组件/状态以及已确认的文件或产物"
+      - "每个验收标准 MUST 验证界面的具体可见行为"
+      - "若涉及 UX 场景的向后兼容性，MUST 明确描述"
+    system_prompt_addition: |
+      你正在为现有项目的局部 UI/UX 变更准备狭义的工作技术规范。
+
+      分析方法：
+      - 对每项变更使用以下结构："组件/状态 → 已确认的当前行为 → 目标行为 → 标记/逻辑/样式的具体变更 → 验证方式"。
+      - 聚焦局部工作范围：组件、页面、表单、下拉菜单、头部、菜单、CTA、状态、响应式行为。
+      - 不要将文档扩展为包含数据、API、迁移、发布或基础设施的完整变更计划（除非经项目代码确认）。
+      - 若 backend/API/数据确实受影响，仅描述已确认的影响区域，并明确与 UI 部分分开。
+      - 仅列举经代码仓库直接确认且确实会发生变更的层面。
+    qa_prompt: |
+      完整性检查（阻塞性）：
+      - 每项变更已注明：变更位置、已确认的当前行为、目标行为、验收标准。
+      - 所有建议基于真实代码仓库，关联到具体文件/组件/状态。
+      - 无无repo evidence支撑的虚构 route/controller/table/API/test-file 路径。
+      - 文档未因迁移、发布、基础设施或外部层面而膨胀（除非经确认）。
+      - 开放问题单独列出，未掩盖为已有解决方案。
+
+  bugfix_spec:
+    name: "缺陷修复技术规范"
+    description: "针对现有系统中具体缺陷或回归问题修复的狭义 repo-grounded 模板。"
+    required_sections:
+      - "缺陷背景与已确认症状"
+      - "已确认事实与来源"
+      - "已确认的当前行为与故障区域"
+      - "目标行为与修复标准"
+      - "修复计划与受影响文件"
+      - "按组件和文件的 Implementation handoff"
+      - "回归风险与验证"
+      - "开放问题"
+    required_inputs:
+      - "观察到的缺陷或回归现象"
+      - "修复后应正常工作的场景"
+      - "该缺陷附近不可破坏的内容"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: true
+    target_size_hint: "medium"
+    repo_grounded_required: true
+    final_repo_review_required: true
+    traceability_rules:
+      - "每项修复 MUST 关联到已确认的症状和具体代码区域"
+      - "每个验收标准 MUST 证明缺陷已消除且无关键回归"
+    system_prompt_addition: |
+      聚焦于单个缺陷或密切相关的一组症状。
+      使用以下结构："症状 → 已确认的故障区域 → 修复内容 → 验证修复方式"。
+      不要将文档扩展为通用的重构/变更计划。
+      若根本原因未经确认，将其与症状层面的事实分开。
+    qa_prompt: |
+      完整性检查：
+      - 症状与已确认的故障区域分开描述。
+      - 修复计划关联到具体文件/组件。
+      - 包含修复验证标准和最小反回归集合。
+      - 无无repo evidence支撑的虚构根本原因、API、数据表或路由。
+
+  integration_change_spec:
+    name: "集成变更技术规范"
+    description: "针对外部集成、API 集成契约、webhook 或服务提供方变更的狭义 repo-grounded 模板。"
+    required_sections:
+      - "集成背景与已确认入口点"
+      - "已确认事实与来源"
+      - "集成的当前与目标行为"
+      - "契约、payload 与错误处理变更"
+      - "受影响组件与兼容性限制"
+      - "按组件和文件的 Implementation handoff"
+      - "集成验证计划"
+      - "开放风险与依赖"
+    required_inputs:
+      - "发生变更的集成或外部契约"
+      - "数据交换或行为中需要变更的具体内容"
+      - "必须满足的兼容性限制"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: true
+    target_size_hint: "medium"
+    repo_grounded_required: true
+    final_repo_review_required: true
+    traceability_rules:
+      - "每项变更 MUST 关联到具体集成点或契约"
+      - "每份契约 MUST 描述当前和目标行为，包括错误处理"
+    system_prompt_addition: |
+      聚焦于已确认的集成点：API client、webhook handler、provider adapter、payload schema、retry/error handling。
+      若仅变更集成层，不要将文档扩展为通用 product change-plan。
+      若外部部分未经项目代码确认，明确标注为 [需要核实]。
+    qa_prompt: |
+      完整性检查：
+      - 变更关联到具体集成点。
+      - 已描述输入/输出 payload、错误和兼容性。
+      - 无无repo evidence支撑的虚构 endpoint/provider/数据表。
+      - 验证计划覆盖 happy path 和容错性。
+
+  narrow_backend_change_spec:
+    name: "局部后端变更技术规范"
+    description: "针对无大范围 product scope 的局部 server-side 变更的狭义 repo-grounded 模板。"
+    required_sections:
+      - "后端区域背景与已确认事实"
+      - "已确认事实与来源"
+      - "逻辑的当前与目标行为"
+      - "服务、handlers、数据与契约变更"
+      - "按组件和文件的 Implementation handoff"
+      - "兼容性、限制与副作用"
+      - "实施与验证计划"
+      - "开放问题与风险"
+    required_inputs:
+      - "需要变更的 server-side 逻辑"
+      - "受影响的组件/服务/handler"
+      - "不可破坏的场景"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: true
+    target_size_hint: "medium"
+    repo_grounded_required: true
+    final_repo_review_required: true
+    traceability_rules:
+      - "每项变更 MUST 关联到已确认的后端组件及当前行为"
+      - "验证计划 MUST 覆盖关键副作用和兼容性"
+    system_prompt_addition: |
+      聚焦于局部后端逻辑：service、handler、controller、领域模型、validation、internal contract。
+      若变更是局部性的，不要将文档扩展为 refactor-wide 或 project-wide 计划。
+      若涉及数据/API，仅描述已确认的影响范围。
+    qa_prompt: |
+      完整性检查：
+      - 后端逻辑的当前和目标行为已描述并关联到代码。
+      - 副作用和兼容性已明确列出。
+      - 无无repo evidence支撑的虚构数据表、endpoint、事件或类。
+      - 验证计划覆盖主要场景和回归区域。
+
+  project_analysis:
+    name: "项目分析"
+    description: "现有项目的结构化分析：架构、问题、建议、后续步骤。"
+    required_sections:
+      - "简要摘要"
+      - "架构全貌"
+      - "技术风险与瓶颈"
+      - "代码质量与测试覆盖率"
+      - "优先建议"
+      - "30/60/90 天行动计划"
+    required_inputs:
+      - "分析目标（重构决策、发布前审计、入职培训等）"
+      - "项目中最重要的方面（架构、质量、性能、安全）"
+    system_prompt_addition: |
+      分析方法——ATAM-lite（架构权衡分析）：
+      - 识别关键架构驱动因素（利益相关方关注的系统质量属性）。
+      - 对每个架构决策确定：它支持哪些质量属性，限制哪些质量属性（tradeoff）。
+      - 风险 = 架构决策不支持已声明质量属性的节点。
+      - 建议 MUST 关联到具体风险，而非泛泛的愿望清单。
+
+      重点：来自代码仓库的具体观察和证据，避免泛泛而谈。
+    qa_prompt: |
+      验证：
+      - 每项风险均经代码/配置中的观察（注明文件/函数）确认
+      - 建议已按 impact/effort 排列优先级
+      - 30/60/90 天计划切实可行，关联到具体风险
+      - 无未关联到具体观察的"通用建议"
+
+  bug_investigation:
+    name: "缺陷调查规格说明"
+    description: "缺陷分析模板：复现、假设、根本原因分析、修复计划与验证。"
+    required_sections:
+      - "症状与背景"
+      - "复现步骤"
+      - "原因假设"
+      - "根本原因"
+      - "修复计划"
+      - "验证与回归"
+    required_inputs:
+      - "观察到的行为描述（发生了什么）"
+      - "预期行为描述（应该发生什么）"
+      - "复现条件（环境、数据、操作序列）"
+    system_prompt_addition: |
+      分析方法——5 Whys + 故障树分析：
+      - 对每个症状至少问 5 次"为什么"，直到找到根本原因。
+      - 构建原因树（故障树）：根节点 = 观察到的症状，叶节点 = 可能的初始原因。
+      - 对每个假设注明：如何确认（在代码/日志/数据中检查什么）以及如何证伪。
+      - 根本原因 MUST 经具体证据确认，而非仅仅是"最可能的假设"。
+
+      重点：因果链，而非症状列举。
+    qa_prompt: |
+      验证：
+      - 根本原因经具体证据确认（文件、行号、日志、状态）
+      - "症状 → ... → 根本原因"的链路逻辑清晰，无缺失环节
+      - 修复计划消除根本原因，而非症状
+      - 回归场景覆盖已变更的行为
+
+  incident_rca:
+    name: "事故 RCA"
+    description: "事故后复盘：时间线、根本原因、corrective/preventive actions。"
+    required_sections:
+      - "事故描述"
+      - "Timeline"
+      - "影响与受影响区域"
+      - "根本原因"
+      - "Corrective actions"
+      - "Preventive actions"
+      - "修复后的监控指标"
+    required_inputs:
+      - "事故发生时间和发现时间"
+      - "对用户/系统影响的描述"
+      - "事故相关的可用日志、指标、告警"
+    system_prompt_addition: |
+      分析方法——Ishikawa（鱼骨图）+ Swiss Cheese 模型：
+      - 构建 Ishikawa 图：按类别（People、Process、Technology、Environment）对原因分类。
+      - 应用 Swiss Cheese 模型：确定哪些防护层（监控、测试、评审、告警）被穿透以及原因。
+      - Timeline MUST 包含：事件时间、发现者、采取的行动、行动结果。
+      - Preventive actions MUST 关闭防护层中的具体"漏洞"，而非泛泛的建议。
+
+      重点：可验证的事实，不追究个人责任。
+    qa_prompt: |
+      验证：
+      - Timeline 完整：从第一个症状到完全恢复
+      - 根本原因经事实确认，而非直接指定
+      - 每个 preventive action 关闭防护层中的具体"漏洞"
+      - Preventive actions 有负责人和截止日期（或标注为 [待分配]）
+
+  impact_analysis:
+    name: "变更影响分析"
+    description: "评估计划变更对系统、数据、API、运维和测试的影响。"
+    required_sections:
+      - "变更描述"
+      - "受影响子系统"
+      - "对 API/契约的影响"
+      - "对数据与迁移的影响"
+      - "对基础设施/可观测性的影响"
+      - "风险与缓解措施"
+      - "验证计划"
+    required_inputs:
+      - "计划变更描述"
+      - "直接受影响的组件/模块"
+      - "是否有向后兼容性或 downtime 要求"
+    system_prompt_addition: |
+      分析方法——FMEA-lite（失效模式与影响分析）：
+      - 对每个受影响子系统确定可能的失效模式（可能如何故障）。
+      - 对每种失效模式评估：Severity（1-5）、Likelihood（1-5）、Detectability（1-5）。
+      - 风险优先级 = Severity × Likelihood × Detectability，聚焦风险优先级 top-5。
+      - top-5 中的每项风险 MUST 具有具体缓解措施。
+
+      重点：对所有影响区域进行可追溯的覆盖，检查级联依赖。
+    qa_prompt: |
+      验证：
+      - 无"盲区"（数据、权限、监控、故障时的行动）
+      - 已分析级联依赖（不仅是直接依赖）
+      - top-5 中每项风险均有缓解措施
+      - 验证计划覆盖所有受影响子系统
+
+  refactor_spec:
+    name: "重构技术规范"
+    description: "不改变行为的重构计划：边界、阶段、回归控制。"
+    required_sections:
+      - "当前代码库状态"
+      - "已确认事实与来源"
+      - "目标状态"
+      - "限制与非目标"
+      - "受影响层面"
+      - "按层/组件划分的变更"
+      - "persistence/state/config 变更"
+      - "迁移与兼容性"
+      - "Startup/restore/reconcile 逻辑"
+      - "废弃 legacy 及具体删除内容"
+      - "分阶段实施计划"
+      - "按组件和文件的 Implementation handoff"
+      - "行为等价性控制"
+      - "测试计划与验收标准"
+      - "风险与开放问题"
+    required_inputs:
+      - "重构对象及原因（技术债务、性能、可扩展性）"
+      - "明确边界：不在重构工作范围内的内容"
+      - "行为等价性标准（如何证明行为未发生变化）"
+    compose_mode: "template_first"
+    output_kind: "spec"
+    artifact_preferred: true
+    target_size_hint: "large"
+    traceability_rules:
+      - "每个按层/组件的变更 MUST 具有行为等价性验证方法"
+      - "每个计划阶段 MUST 包含：受影响组件、风险、停止标准"
+      - "每个已删除实体 MUST 已核查无依赖关系"
+    repo_grounded_required: true
+    repo_audit_required: true
+    final_repo_review_required: true
+    system_prompt_addition: |
+      你正在为现有项目重构准备工作技术规范。
+
+      分析方法——Strangler Fig 模式 + Characterization Tests：
+      - 对每个组件确定：当前行为（characterization）→ 目标结构 → 迁移路径。
+      - 重构 MUST 是增量式的：每个阶段结束后系统保持可运行状态。
+      - 对每个阶段确定 characterization tests：记录当前行为且在变更后 MUST 通过的测试。
+
+      必须遵守的规则：
+      - source of truth = 项目的真实文件，而非仅代码库地图；
+      - 文档应适合 low-middle 开发者无需口头说明即可使用；
+      - 重构不应扩大工作范围，不应悄然改变行为；
+      - 每个阶段明确注明受影响组件、风险、验证方式和停止标准；
+      - 仅单独记录已确认受影响的层面和重构后确实需要复查的产物；
+      - 若提议新的 config key、fallback layer、兼容性包装器、实体或 API，必须经代码或用户请求明确证明其必要性。
+    qa_prompt: |
+      可追溯性检查（阻塞性）：
+      - 每个阶段具有：受影响组件、风险、验证方式、停止标准？若否——修订。
+      - 每个已删除实体已核查无依赖关系？若否——修订。
+      完整性检查：
+      - 保持 template-first 规格说明，而非泛泛议论
+      - 包含明确的工作范围边界和非目标
+      - 仅列举已确认的受影响层面/产物，而非模板化清单
+      - 设定客观的"行为未改变"标准
+      - 适合 low-middle 开发者无需口头说明即可使用
+      - 包含停止/中断标准
+
+  migration_plan:
+    name: "迁移计划"
+    description: "技术/模式/契约迁移模板，含分阶段实施和安全中断机制。"
+    required_sections:
+      - "迁移目标"
+      - "当前与目标状态"
+      - "迁移策略"
+      - "向后兼容性计划"
+      - "安全中断计划"
+      - "完成标准"
+    required_inputs:
+      - "迁移对象（技术、数据模式、API、基础设施）"
+      - "迁移原因与预期结果"
+      - "可接受的 downtime 与迁移窗口"
+      - "向后兼容性要求"
+    system_prompt_addition: |
+      分析方法——Blue-Green / Canary 迁移：
+      - 确定迁移策略：Big Bang、Blue-Green、Canary、Strangler Fig——并说明选择依据。
+      - 对每个阶段确定：不可逆点、停止/中断标准、健康指标。
+      - 针对故障制定计划：对每个阶段描述失败时的应对措施。
+      - 安全中断场景 MUST 在生产迁移开始前在测试环境中可验证。
+
+      重点：最小化 downtime 和数据丢失风险。
+    qa_prompt: |
+      验证：
+      - 迁移策略有据可查（为何选择此方案）
+      - 每个阶段具有不可逆点和停止/中断标准
+      - 安全中断场景切实可行且可在测试环境中验证
+      - 无未定义 failure plan 的阶段
+
+  integration_contract:
+    name: "集成契约"
+    description: "与外部/内部服务集成的规格说明：契约、错误、可靠性。"
+    required_sections:
+      - "集成目标"
+      - "请求/响应或事件契约"
+      - "错误、重试与超时"
+      - "幂等性与一致性"
+      - "可观测性与 SLA/SLO"
+      - "集成测试计划"
+    required_inputs:
+      - "集成对象（服务、API、队列）"
+      - "集成方向（我们调用 / 被调用 / 双向）"
+      - "可靠性要求与可接受的延迟"
+    system_prompt_addition: |
+      分析方法——契约优先设计：
+      - 在实施前确定契约：schema → 示例 → 错误 → edge cases。
+      - 对每个 endpoint/事件确定：happy path、timeout、partial failure、retry semantics。
+      - 使用 Consumer-Driven Contract 方法：从消费者需要什么出发，而非提供者的便利。
+      - 明确定义 Circuit Breaker 参数：threshold、timeout、half-open policy。
+
+      重点：明确契约和故障时的可预测行为。
+    qa_prompt: |
+      验证：
+      - 契约包含负向场景（timeout、partial failure、4xx/5xx）
+      - Retry/backoff 策略明确定义（max retries、backoff strategy、jitter）
+      - 幂等性已针对可变操作描述
+      - Circuit Breaker 参数已定义
+
+  security_review:
+    name: "安全分析"
+    description: "按风险优先级评估威胁、漏洞和防护措施。"
+    required_sections:
+      - "攻击面"
+      - "威胁模型"
+      - "漏洞与风险等级"
+      - "修复计划"
+      - "加固与检查项"
+    required_inputs:
+      - "分析对象（系统、组件、API、基础设施）"
+      - "攻击者模型（外部人员、内部人员、自动化攻击）"
+      - "数据敏感性（PII、金融、机密）"
+    system_prompt_addition: |
+      分析方法——STRIDE + DREAD 评分：
+      - 对系统每个组件应用 STRIDE：Spoofing、Tampering、Repudiation、Information Disclosure、Denial of Service、Elevation of Privilege。
+      - 对每个发现的威胁按 DREAD 评分：Damage（1-10）、Reproducibility（1-10）、Exploitability（1-10）、Affected Users（1-10）、Discoverability（1-10）。
+      - 风险评分 = DREAD 均值，按风险评分排列修复优先级。
+      - 风险评分 > 5 的每个漏洞 MUST 具有具体修复计划。
+
+      重点：以风险为导向的方法和实用的修复措施。
+    qa_prompt: |
+      验证：
+      - STRIDE 覆盖关键组件完整
+      - 每个漏洞具有 DREAD 评分或类似优先级排列
+      - 高风险漏洞具有具体修复计划
+      - 修复计划包含：内容、位置、负责人、关闭标准
+
+  performance_analysis:
+    name: "性能分析"
+    description: "诊断瓶颈并制定具有可衡量效果的优化计划。"
+    required_sections:
+      - "当前状态与指标（baseline）"
+      - "瓶颈假设"
+      - "测量/性能剖析计划"
+      - "建议的优化措施"
+      - "预期效果"
+      - "结果验证计划"
+    required_inputs:
+      - "哪些操作/场景存在性能问题（具体 endpoint、页面、进程）"
+      - "当前指标（延迟、吞吐量、资源占用）——如有"
+      - "目标指标（可接受的延迟/吞吐量）"
+    system_prompt_addition: |
+      分析方法——USE 方法（Utilization、Saturation、Errors）+ RED 方法（Rate、Errors、Duration）：
+      - 对每种资源（CPU、memory、disk、network、DB connections、queues）确定：Utilization、Saturation、Errors。
+      - 对每个服务确定：Rate（rps）、Errors（error rate）、Duration（latency p50/p95/p99）。
+      - 假设 MUST 是可证伪的：对每个假设注明要检查的实验/指标。
+      - 对每项优化注明：预期改善（量化）、实施成本、风险。
+
+      重点：每项优化的指标、baseline 和效果预测。
+    qa_prompt: |
+      验证：
+      - Baseline 已记录（当前指标）
+      - 每个假设可证伪（已注明验证方法）
+      - 优化的预期效果是量化的，而非"会更快"
+      - 建议措施与预期收益相称（在存在架构瓶颈时不做微优化）
+
+  test_strategy:
+    name: "测试策略"
+    description: "功能/系统测试计划：层次、优先级、就绪标准。"
+    required_sections:
+      - "测试范围"
+      - "基于风险的矩阵"
+      - "Unit/Integration/E2E 策略"
+      - "测试数据与环境"
+      - "发布就绪标准"
+    required_inputs:
+      - "测试对象（新功能、回归、迁移）"
+      - "测试预算（时间、资源、环境）"
+      - "关键用户场景"
+    system_prompt_addition: |
+      分析方法——基于风险的测试 + 测试金字塔：
+      - 构建风险矩阵：功能 × 缺陷概率 × 缺陷影响。
+      - 按测试金字塔分配测试预算：Unit（70%）→ Integration（20%）→ E2E（10%）——根据上下文调整。
+      - 对 top-risk 区域确定：哪些测试 MUST 存在，在金字塔的哪个层次。
+      - 确定：不测试什么以及原因（明确决策，而非遗漏）。
+
+      重点：在有限测试预算下最大化风险降低效果。
+    qa_prompt: |
+      验证：
+      - 风险矩阵覆盖关键用户和运维场景
+      - 金字塔层次分配有据可查
+      - 明确说明不测试的内容及原因
+      - 发布就绪标准可衡量（不是"一切正常"，而是具体指标）
+
+  release_readiness:
+    name: "发布就绪评估"
+    description: "发布前 Go/No-Go 分析，含风险检查清单和发布后监控。"
+    required_sections:
+      - "发布范围"
+      - "就绪检查清单"
+      - "已知风险与许可条件"
+      - "发布后监控计划"
+      - "停止/中断标准"
+    required_inputs:
+      - "发布内容（功能、修复、迁移）"
+      - "测试结果（已通过内容、未通过内容）"
+      - "已知问题与已接受的许可条件"
+    system_prompt_addition: |
+      分析方法——基于证据的 Go/No-Go + 加权评分：
+      - 确定 Go/No-Go 标准及每项权重（1-5）：测试、覆盖率、性能 baseline、安全检查、安全中断就绪性、文档。
+      - 对每项标准评估状态：Pass / Pass with caveats / Fail。
+      - 最终决策 = 加权总分，权重 ≥4 的标准出现 Fail = 自动 No-Go。
+      - "Pass with caveats" MUST 包含：具体许可内容、风险、审批人。
+
+      重点：客观的 Go/No-Go，而非乐观评估。
+    qa_prompt: |
+      验证：
+      - Go/No-Go 标准明确且已加权
+      - 每个"Pass with caveats"包含许可描述和风险
+      - 停止/中断标准明确（不是"若有问题"）
+      - 监控计划包含具体指标和阈值
+
+  technical_debt:
+    name: "技术债务审计"
+    description: "技术债务盘点与优先级排列，含成本与效益评估。"
+    required_sections:
+      - "技术债务类别"
+      - "对产品/开发速度的影响"
+      - "优先级排列（impact/effort/risk）"
+      - "偿还路线图"
+      - "进度监控标准"
+    required_inputs:
+      - "项目中哪些领域造成最多问题"
+      - "背景：为何现在处理技术债务很重要"
+      - "偿还预算（sprint 容量的百分比或具体时间表）"
+    system_prompt_addition: |
+      分析方法——Tech Debt 四象限（Fowler）+ SQALE-lite：
+      - 按 Fowler 四象限对每项债务分类：Deliberate/Inadvertent × Reckless/Prudent。
+      - 对每项债务评估：对开发速度的影响（1-5）、消除的工作量（S/M/L/XL）、不消除的风险（1-5）。
+      - 优先级评分 = Impact × Risk / Effort_normalized，按优先级评分排列路线图。
+      - 路线图 MUST 在第一个 sprint/阶段包含快速见效项（高影响、低工作量）。
+
+      重点：实用的技术债务 backlog，配以切实可行的路线图。
+    qa_prompt: |
+      验证：
+      - 优先级排列透明，基于 impact/effort/risk
+      - 快速见效项已标注并排在路线图前列
+      - 路线图与声明的预算切实可行
+      - 进度标准可衡量（不是"变好了"，而是具体指标）

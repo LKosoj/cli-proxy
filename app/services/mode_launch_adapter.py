@@ -747,27 +747,40 @@ class ModeLaunchAdapterService:
                     )
                     return "security_error"
         if self._is_scheduler_request(request):
+            owner_actor_id = str(
+                request.actor.get("actor_id")
+                or request.actor.get("owner_id")
+                or ""
+            ).strip()
+            # Desktop/internal scheduler jobs are trusted local activity: they are
+            # created behind desktop project-ownership checks and have no Telegram
+            # chat to resolve. authorize_mode_launch() already trusts these actor ids,
+            # so mirror that here instead of rejecting before the check runs.
+            is_trusted_local_owner = owner_actor_id.startswith(("desktop:", "internal:"))
             if actor_chat_id <= 0:
                 actor_chat_id = self._maybe_int(request.scope.chat_id) or 0
-            if actor_chat_id <= 0:
+            if actor_chat_id <= 0 and not is_trusted_local_owner:
                 await self._emit_external_launch_audit(
                     request,
                     reason="actor_unresolved",
                     actor_chat_id=0,
                 )
                 return "actor_unresolved"
-            policy = getattr(self.bot_app, "access_policy_service", None)
-            if policy is not None and hasattr(policy, "is_mode_allowed_for_chat"):
-                try:
-                    is_mode_allowed = bool(policy.is_mode_allowed_for_chat(actor_chat_id, str(request.mode_id or "")))
-                except Exception:
-                    self._logger.exception(
-                        "event mode launch scheduler policy check failed mode_id=%s session_uid=%s actor=%s",
-                        request.mode_id,
-                        request.scope.session_uid,
-                        dict(request.actor or {}),
-                    )
-                    return "security_error"
+            if is_trusted_local_owner:
+                is_mode_allowed = True
+            else:
+                policy = getattr(self.bot_app, "access_policy_service", None)
+                if policy is not None and hasattr(policy, "is_mode_allowed_for_chat"):
+                    try:
+                        is_mode_allowed = bool(policy.is_mode_allowed_for_chat(actor_chat_id, str(request.mode_id or "")))
+                    except Exception:
+                        self._logger.exception(
+                            "event mode launch scheduler policy check failed mode_id=%s session_uid=%s actor=%s",
+                            request.mode_id,
+                            request.scope.session_uid,
+                            dict(request.actor or {}),
+                        )
+                        return "security_error"
         if self._is_webhook_request(request):
             if actor_chat_id <= 0:
                 actor_chat_id = self._actor_chat_id_from_actor_id(str(request.actor.get("actor_id") or "").strip()) or 0
