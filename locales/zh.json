@@ -1,0 +1,36 @@
+{
+  "common": {
+    "yes": "是",
+    "no": "否",
+    "ok": "确定",
+    "cancel": "取消",
+    "back": "⬅️ 返回",
+    "error": "错误"
+  },
+  "lang": {
+    "choose": "请选择语言：",
+    "changed": "语言已更改：{lang}",
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+    "zh": "🇨🇳 中文",
+    "de": "🇩🇪 Deutsch"
+  },
+  "errors": {
+    "unknown": "未知错误",
+    "session_not_found": "未找到会话。",
+    "mode_unavailable": "模式不可用。"
+  },
+  "btn": {
+    "session": {
+      "new": "➕ 新建会话",
+      "list": "📚 会话列表",
+      "lang": "🌐 语言"
+    }
+  },
+  "msg": {
+    "lang": {
+      "choose": "请选择语言：",
+      "changed": "语言已更改：{lang}"
+    }
+  }
+}

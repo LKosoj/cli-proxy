@@ -67,12 +67,14 @@ class AppRuntimeService:
         "github_token",
         "tavily_api_key",
         "jina_api_key",
+        "default_language",
     )
     RELOADABLE_FIELDS = (
         "telegram.whitelist_chat_ids",
         "telegram.admlist_chat_ids",
         "telegram.user_workdirs",
         "telegram.user_modes",
+        "telegram.user_languages",
         "miniapp.public_url",
         "miniapp.enable_delete",
         "mcp.token",

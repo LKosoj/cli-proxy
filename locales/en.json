@@ -1,0 +1,36 @@
+{
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "back": "⬅️ Back",
+    "error": "Error"
+  },
+  "lang": {
+    "choose": "Choose language:",
+    "changed": "Language changed: {lang}",
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+    "zh": "🇨🇳 中文",
+    "de": "🇩🇪 Deutsch"
+  },
+  "errors": {
+    "unknown": "Unknown error",
+    "session_not_found": "Session not found.",
+    "mode_unavailable": "Mode unavailable."
+  },
+  "btn": {
+    "session": {
+      "new": "➕ New session",
+      "list": "📚 Session list",
+      "lang": "🌐 Language"
+    }
+  },
+  "msg": {
+    "lang": {
+      "choose": "Choose language:",
+      "changed": "Language changed: {lang}"
+    }
+  }
+}

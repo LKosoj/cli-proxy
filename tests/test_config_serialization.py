@@ -16,6 +16,7 @@ def _payload(tmp_path) -> dict:
         "telegram": {
             "token": "token",
             "whitelist_chat_ids": [1],
+            "user_languages": {111111111: "en"},
         },
         "tools": {
             "codex": {
@@ -26,6 +27,7 @@ def _payload(tmp_path) -> dict:
         },
         "defaults": {
             "workdir": str(tmp_path),
+            "default_language": "en",
             "cli_json_stream_archive_enabled": True,
             "assistant_preview_enabled": True,
             "pending_input_confirmation_enabled": False,
@@ -114,6 +116,10 @@ def test_serialize_config_roundtrip_preserves_canonical_mcp_clients(tmp_path) ->
         "local:global-registry",
         "ref:owner-repo-skill",
     ]
+    # PyYAML preserves int keys as-is; field_validator coerces them to int on load.
+    ul = first_payload["telegram"]["user_languages"]
+    assert ul[111111111] == "en" or ul.get("111111111") == "en"
+    assert first_payload["defaults"]["default_language"] == "en"
 
     path.write_text(first_serialized, encoding="utf-8")
 
@@ -165,6 +171,26 @@ def test_serialize_config_preserves_unicode_literals(tmp_path) -> None:
     assert "Сделай краткую сводку" in serialized
 
 
+def test_user_languages_int_key_round_trip(tmp_path) -> None:
+    """user_languages: int keys in Python → str keys in YAML → back to int on load."""
+    payload = _payload(tmp_path)
+    path = _write_config(tmp_path, payload)
+
+    # yaml.safe_dump may store int keys as ints directly; the round-trip is via ConfigService
+    service = ConfigService(FileConfigProvider(str(path)))
+    cfg = asyncio.run(service.load())
+
+    # After load, keys must be int
+    assert 111111111 in cfg.telegram.user_languages
+    assert cfg.telegram.user_languages[111111111] == "en"
+
+    # After serialize + reload, still int keys
+    serialized = asyncio.run(service.serialize_config(cfg))
+    path.write_text(serialized, encoding="utf-8")
+    cfg2 = load_config(str(path))
+    assert cfg2.telegram.user_languages[111111111] == "en"
+
+
 def test_config_files_match_runtime_policy_contract() -> None:
     root = Path(__file__).resolve().parents[1]
     example = yaml.safe_load((root / "config_example.yaml").read_text(encoding="utf-8"))
@@ -179,6 +205,11 @@ def test_config_files_match_runtime_policy_contract() -> None:
         assert policy.apply_mode == "hot_reload"
         assert policy.surface == "runtime"
         assert policy.secret is False
+
+    assert classify_config_path("telegram.user_languages").apply_mode == "hot_reload"
+    assert classify_config_path("defaults.default_language").apply_mode == "hot_reload"
+    assert "default_language" in DefaultsConfigModel.model_fields
+    assert example["defaults"]["default_language"] == "ru"
 
     local_config_path = root / "config.yaml"
     if local_config_path.exists():

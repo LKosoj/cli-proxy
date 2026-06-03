@@ -16,6 +16,12 @@ telegram:
   user_modes:
     111111111: ["agent", "analyst", "direct_cli", "orchestrator", "sdd"]
     # 222222222: "all"
+  # Per-user language preference (written by bot automatically on first contact).
+  # Supported values: "ru", "en", "zh", "de".
+  # Keys are Telegram user_id (integer).
+  user_languages:
+    # 111111111: "en"
+    {}
   # Telegram API request timeouts (python-telegram-bot / httpx)
   connection_pool_size: 8
   connect_timeout_sec: 20
@@ -85,6 +91,10 @@ tools:
 defaults:
   workdir: "/Users/you/projects"
   default_cli: "qwen"
+  # Default language for UI and agent responses.
+  # Used when user has no explicit preference (Desktop, unknown Telegram code).
+  # Supported values: "ru", "en", "zh", "de".
+  default_language: "ru"
   idle_timeout_sec: 100
   summary_max_chars: 4000
   html_filename_prefix: "cli-output"

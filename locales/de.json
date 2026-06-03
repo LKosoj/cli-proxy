@@ -1,0 +1,36 @@
+{
+  "common": {
+    "yes": "Ja",
+    "no": "Nein",
+    "ok": "OK",
+    "cancel": "Abbrechen",
+    "back": "⬅️ Zurück",
+    "error": "Fehler"
+  },
+  "lang": {
+    "choose": "Sprache wählen:",
+    "changed": "Sprache geändert: {lang}",
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+    "zh": "🇨🇳 中文",
+    "de": "🇩🇪 Deutsch"
+  },
+  "errors": {
+    "unknown": "Unbekannter Fehler",
+    "session_not_found": "Sitzung nicht gefunden.",
+    "mode_unavailable": "Modus nicht verfügbar."
+  },
+  "btn": {
+    "session": {
+      "new": "➕ Neue Sitzung",
+      "list": "📚 Sitzungsliste",
+      "lang": "🌐 Sprache"
+    }
+  },
+  "msg": {
+    "lang": {
+      "choose": "Sprache wählen:",
+      "changed": "Sprache geändert: {lang}"
+    }
+  }
+}

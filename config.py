@@ -23,6 +23,10 @@ class TelegramConfig:
     # - ["agent", "analyst", "direct_cli"] -> only listed modes / direct CLI
     # - not set -> no modes
     user_modes: Dict[int, Union[str, List[str]]] = dataclasses.field(default_factory=dict)
+    # Per-user language preference. Key: Telegram user_id (int).
+    # Supported values: "ru", "en", "zh", "de".
+    # Written by bot on first contact (auto-detect) and on explicit user change.
+    user_languages: Dict[int, str] = dataclasses.field(default_factory=dict)
     # python-telegram-bot uses httpx under the hood. Defaults are quite low and can cause
     # intermittent ConnectTimeout/TimedOut errors on unstable networks.
     connection_pool_size: int = 8
@@ -94,6 +98,10 @@ class DefaultsConfig:
     # Default CLI to activate when creating a new session (if not specified explicitly).
     # If not set, runtime falls back to "qwen".
     default_cli: Optional[str] = None
+    # Global default language for users without explicit preference.
+    # Used by Desktop (single-user) and as final fallback in Telegram.
+    # Supported values: "ru", "en", "zh", "de". Default: "ru".
+    default_language: str = "ru"
     clarification_keywords: List[str] = dataclasses.field(
         default_factory=lambda: [
             "уточни",

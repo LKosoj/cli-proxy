@@ -42,6 +42,7 @@ def adapt_validated_settings(settings: ValidatedSettings, *, path: str) -> "AppC
             int(chat_id): ("all" if value == "all" else list(value))
             for chat_id, value in settings.telegram.user_modes.items()
         },
+        user_languages={int(uid): lang for uid, lang in settings.telegram.user_languages.items()},
         connection_pool_size=settings.telegram.connection_pool_size,
         connect_timeout_sec=settings.telegram.connect_timeout_sec,
         read_timeout_sec=settings.telegram.read_timeout_sec,
@@ -105,6 +106,7 @@ def adapt_validated_settings(settings: ValidatedSettings, *, path: str) -> "AppC
         clarification_enabled=settings.defaults.clarification_enabled,
         pending_input_confirmation_enabled=settings.defaults.pending_input_confirmation_enabled,
         default_cli=settings.defaults.default_cli,
+        default_language=settings.defaults.default_language,
         clarification_keywords=list(settings.defaults.clarification_keywords),
         manager_max_tasks=settings.defaults.manager_max_tasks,
         manager_max_attempts=settings.defaults.manager_max_attempts,

@@ -38,15 +38,15 @@ These files are mandatory context and must be considered before major edits.
 - `CONCERNS.md`: Риски, технический долг и зоны повышенного внимания.
 
 ## Nodes
-- [tests](nodes/tests.md) - files: 510, source_glob: `tests/**`
-- [modes](nodes/modes.md) - files: 174, source_glob: `modes/**`
-- [app](nodes/app.md) - files: 149, source_glob: `app/**`
+- [tests](nodes/tests.md) - files: 526, source_glob: `tests/**`
+- [modes](nodes/modes.md) - files: 206, source_glob: `modes/**`
+- [app](nodes/app.md) - files: 153, source_glob: `app/**`
 - [agent](nodes/agent.md) - files: 61, source_glob: `agent/**`
 - [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`
 - [tg](nodes/tg.md) - files: 17, source_glob: `tg/**`
 - [miniapp](nodes/miniapp.md) - files: 19, source_glob: `miniapp/**`
 - [sessions](nodes/sessions.md) - files: 10, source_glob: `sessions/**`
-- [utils](nodes/utils.md) - files: 7, source_glob: `utils/**`
+- [utils](nodes/utils.md) - files: 8, source_glob: `utils/**`
 - [SESSION.json](nodes/session-json.md) - files: 0, source_glob: `SESSION.json`
 - [bot.py](nodes/bot-py.md) - files: 1, source_glob: `bot.py`
 - [code_stats.py](nodes/code-stats-py.md) - files: 1, source_glob: `code_stats.py`

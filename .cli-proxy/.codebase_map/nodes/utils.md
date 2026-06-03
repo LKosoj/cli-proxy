@@ -7,7 +7,7 @@ Generated: 2026-04-27T22:43:23Z
 
 ## Scope
 - Source glob: `utils/**`
-- Current files: 7 under `utils/**` as of last review.
+- Current files: 8 under `utils/**` as of last review.
 - Public helper exports: `utils/__init__.py`.
 - CLI/process helpers: `utils/cli.py`.
 - Rendering helpers: `utils/html_renderer.py`.

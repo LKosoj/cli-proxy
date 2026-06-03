@@ -401,6 +401,82 @@ class ConfigService:
             missing.append("telegram.token")
         return missing
 
+    async def set_user_language(
+        self, user_id: int, lang: str, *, max_retries: int = 3
+    ) -> ConfigDraftSaveResult:
+        """Set per-user language preference. Idempotent. Retries on revision mismatch."""
+        from i18n.resolver import SUPPORTED_LANGS
+        if lang not in SUPPORTED_LANGS:
+            return ConfigDraftSaveResult(
+                ok=False, revision="", diff="", changed=False,
+                restart_required=[], reloadable=[], errors=[f"unsupported lang: {lang}"],
+                backup_path=None,
+            )
+
+        for _attempt in range(max_retries):
+            cfg = await self.load()
+            if cfg.telegram.user_languages.get(user_id) == lang:
+                return ConfigDraftSaveResult(
+                    ok=True, revision=await self.current_revision(), diff="",
+                    changed=False, restart_required=[], reloadable=[], errors=[],
+                    backup_path=None,
+                )
+            rev = await self.current_revision(cfg)
+            draft = self._as_dict(cfg)
+            draft["telegram"].setdefault("user_languages", {})[user_id] = lang
+            result = await self.save_draft_with_revision(draft, expected_revision=rev)
+            if result.ok:
+                return result
+            if result.errors and "revision mismatch" in result.errors:
+                self._config = None  # force reload on next iteration
+                continue
+            return result  # other error — give up
+
+        return ConfigDraftSaveResult(
+            ok=False, revision="", diff="", changed=False,
+            restart_required=[], reloadable=[],
+            errors=["max retries exceeded on revision mismatch"],
+            backup_path=None,
+        )
+
+    async def set_default_language(
+        self, lang: str, *, max_retries: int = 3
+    ) -> ConfigDraftSaveResult:
+        """Set global default language. Used by Desktop. Idempotent."""
+        from i18n.resolver import SUPPORTED_LANGS
+        if lang not in SUPPORTED_LANGS:
+            return ConfigDraftSaveResult(
+                ok=False, revision="", diff="", changed=False,
+                restart_required=[], reloadable=[], errors=[f"unsupported lang: {lang}"],
+                backup_path=None,
+            )
+
+        for _attempt in range(max_retries):
+            cfg = await self.load()
+            if getattr(cfg.defaults, "default_language", None) == lang:
+                return ConfigDraftSaveResult(
+                    ok=True, revision=await self.current_revision(), diff="",
+                    changed=False, restart_required=[], reloadable=[], errors=[],
+                    backup_path=None,
+                )
+            rev = await self.current_revision(cfg)
+            draft = self._as_dict(cfg)
+            draft["defaults"]["default_language"] = lang
+            result = await self.save_draft_with_revision(draft, expected_revision=rev)
+            if result.ok:
+                return result
+            if result.errors and "revision mismatch" in result.errors:
+                self._config = None
+                continue
+            return result
+
+        return ConfigDraftSaveResult(
+            ok=False, revision="", diff="", changed=False,
+            restart_required=[], reloadable=[],
+            errors=["max retries exceeded on revision mismatch"],
+            backup_path=None,
+        )
+
     @staticmethod
     def _resolve_path(path: str, base: str) -> str:
         raw = os.path.expanduser(str(path or "").strip())

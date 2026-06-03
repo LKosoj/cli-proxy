@@ -10,6 +10,7 @@ PositiveFloat = Annotated[float, Field(gt=0)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 PortNumber = Annotated[int, Field(ge=1, le=65535)]
+SupportedLang = Literal["ru", "en", "zh", "de"]
 
 
 def _normalize_string_or_list(value: Any) -> Any:
@@ -28,6 +29,7 @@ class TelegramConfigModel(ConfigModel):
     admlist_chat_ids: list[int] = Field(default_factory=list)
     user_workdirs: dict[int, list[NonEmptyStr]] = Field(default_factory=dict)
     user_modes: dict[int, Literal["all"] | list[NonEmptyStr]] = Field(default_factory=dict)
+    user_languages: dict[int, SupportedLang] = Field(default_factory=dict)
     connection_pool_size: Annotated[int, Field(ge=1)] = 8
     connect_timeout_sec: PositiveFloat = 20.0
     read_timeout_sec: PositiveFloat = 20.0
@@ -60,6 +62,20 @@ class TelegramConfigModel(ConfigModel):
                 normalized[key] = "all" if token.lower() == "all" else [token]
                 continue
             normalized[key] = item
+        return normalized
+
+    @field_validator("user_languages", mode="before")
+    @classmethod
+    def _normalize_user_languages(cls, value: Any) -> Any:
+        """Coerce string keys (from YAML) to int, like user_workdirs/user_modes."""
+        if value is None or not isinstance(value, dict):
+            return value
+        normalized: dict[Any, Any] = {}
+        for key, lang in value.items():
+            try:
+                normalized[int(key)] = lang
+            except (ValueError, TypeError):
+                continue  # silently skip malformed keys
         return normalized
 
 
@@ -129,6 +145,7 @@ class DefaultsConfigModel(ConfigModel):
     clarification_enabled: bool = True
     pending_input_confirmation_enabled: bool = True
     default_cli: Optional[NonEmptyStr] = None
+    default_language: SupportedLang = "ru"
     clarification_keywords: list[NonEmptyStr] = Field(
         default_factory=lambda: [
             "уточни",

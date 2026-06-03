@@ -7,7 +7,7 @@ Guide agents that maintain the repository test suite: pytest unit/integration te
 
 ## Scope
 - Source glob: `tests/**`
-- Current files: 525 under `tests/**` as of last review.
+- Current files: 526 under `tests/**` as of last review.
 - Includes root pytest environment setup in `conftest.py`, test-local cleanup in `tests/conftest.py`, and pytest config in `pytest.ini`.
 - Covers focused suites such as `tests/test_admin_*`, `tests/test_analyst_*`, `tests/test_manager_*`, `tests/test_desktop_*`, `tests/test_miniapp_*`, `tests/test_ssh_*`, `tests/test_security_*`, and `tests/test_lint_evolution_*`.
 - Smoke checks live in `tests/smoke/*`.
