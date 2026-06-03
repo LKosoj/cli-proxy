@@ -21,7 +21,7 @@ Telegram-бот для управления CLI-агентами (Codex / Gemini
 - Шаблоны задач (скрытая команда `/preset`).
 - **Режим Agent** (через `/sessions` -> `Агент`) - ИИ-агент (ReAct) с набором инструментов (чтение/запись файлов, поиск, выполнение команд, web-поиск и др.), планирует и выполняет задачи поэтапно.
 - **Режим Manager** (через `/sessions` -> `Менеджер`) - мульти-агентная оркестрация: автоматическая декомпозиция задачи на подзадачи, разработка через CLI, ревью через Agent, арбитраж по критериям приёмки и финальный отчёт.
-- **Режим SDD** (через `/sessions` -> `SDD`) - Spec-Driven Development поток `specify -> plan -> tasks` с гейтами подтверждения, EARS-критериями, интеллектуальной инициализацией проекта, артефактами `specs/<NNN>-<slug>/` и handoff готового `tasks.md` в Manager.
+- **Режим SDD** (через `/sessions` -> `SDD`) - Spec-Driven Development поток `specify -> plan -> tasks -> analyze` с гейтами подтверждения, EARS-критериями, интеллектуальной инициализацией проекта, артефактами `specs/<NNN>-<slug>/`, ADR-логом `.cli-proxy/decisions.md` и handoff готового `tasks.md` в Manager.
 - **Режим Webmaster** (через `/sessions` -> `Вебмастер`) - цикл `intent -> confirm -> dev_cli -> validation_cli -> feedback` для задач веб-разработки. Успешный gate принимается только когда все пункты чеклиста имеют статус `PASS`.
 - **Режим Admin** (через `/sessions` -> `Admin`) - фоновый конвейер `Monitor -> Analyzer -> Executor -> Notifier` для мониторинга инцидентов и remediation-действий, с политиками безопасности, интерактивным `ask_user` и переиспользованием подтверждений по hash override.
 - **Режим Mapper** (через `/sessions` -> `Mapper`) - строит карту кодовой базы в `.cli-proxy/.codebase_map/` через 4 параллельных фокуса (tech/arch/quality/concerns), поддерживает md-граф инструкций (`INDEX.md`, `nodes/*.md`), умеет инициализацию/переинициализацию/детальную проверку графа и обновляет карту инкрементально по `git diff`.
@@ -242,8 +242,8 @@ python desktop/main.py
    - Требуется настроенный OpenAI API и сессия текущего контекста.
 
 8. **Режим SDD**
-   - Включите через `/sessions` -> `SDD` - режим ведет фичу через `specify`, `plan`, `tasks` с гейтами подтверждения и правками на каждом этапе.
-   - Спецификация и план пишутся в `specs/<NNN>-<slug>/spec.md` и `plan.md`, задачи - в `tasks.md`; после принятия задач режим передает план Manager через `MANAGER_CONTINUE_TOKEN`.
+   - Включите через `/sessions` -> `SDD` - режим ведет фичу через `specify`, `plan`, `tasks`, `analyze` с гейтами подтверждения и правками на каждом этапе.
+   - Спецификация и план пишутся в `specs/<NNN>-<slug>/spec.md` и `plan.md`, задачи - в `tasks.md`, отчёт о покрытии требований планом - в `analyze.md`; на терминальном гейте `analyze` ключевые решения фиксируются в `.cli-proxy/decisions.md` (ADR), после чего режим передает план Manager через `MANAGER_CONTINUE_TOKEN`.
    - В меню SDD доступна кнопка `Инициализировать проект`: для существующей кодовой базы режим сначала актуализирует Codebase Mapper, затем пишет `specs/_project/project-profile.generated.md`, `pack_manifest.json` и связанные SDD-артефакты; для пустой директории создаёт шаблоны в `specs/_templates/`.
    - Инициализация выбирает расширяемые artifact packs по evidence из проекта (`Cargo.toml`, `sdkconfig`, `platformio.ini`, `.csproj`, `pyproject.toml`, `package.json`, OpenAPI/AsyncAPI и другие маркеры). Если встроенные packs не покрывают проект, создаётся proposed pack в `.cli-proxy/sdd/packs/proposed/`; он не выбирается автоматически повторно и должен быть вручную перенесён/продвинут в project pack перед использованием как подтверждённое правило.
    - Можно стартовать сразу из исходного описания или сначала отправить его в Аналитик, после чего SDD продолжит по уточненному ТЗ.

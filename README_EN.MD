@@ -21,7 +21,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok) wit
 - Task templates (hidden `/preset` command).
 - **Agent mode** (via `/sessions` -> `Agent`) - AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.), plans and executes tasks step by step.
 - **Manager mode** (via `/sessions` -> `Manager`) - multi-agent orchestration: automatic task decomposition into subtasks, development via CLI, review via Agent, acceptance-criteria-based arbitration, and a final report.
-- **SDD mode** (via `/sessions` -> `SDD`) - Spec-Driven Development flow `specify -> plan -> tasks` with approval gates, EARS criteria, intelligent project initialization, `specs/<NNN>-<slug>/` artifacts, and handoff of accepted `tasks.md` into Manager.
+- **SDD mode** (via `/sessions` -> `SDD`) - Spec-Driven Development flow `specify -> plan -> tasks -> analyze` with approval gates, EARS criteria, intelligent project initialization, `specs/<NNN>-<slug>/` artifacts, an ADR log `.cli-proxy/decisions.md`, and handoff of accepted `tasks.md` into Manager.
 - **Webmaster mode** (via `/sessions` -> `Webmaster`) - `intent -> confirm -> dev_cli -> validation_cli -> feedback` cycle for web-development tasks. Successful gate is accepted only when all checklist items are `PASS`.
 - **Admin mode** (via `/sessions` -> `Admin`) - background `Monitor -> Analyzer -> Executor -> Notifier` pipeline for incident monitoring and remediation, with security policies, interactive `ask_user`, and hash-based approval override reuse.
 - **Mapper mode** (via `/sessions` -> `Mapper`) - builds a codebase map in `.cli-proxy/.codebase_map/` via 4 parallel focus passes (tech/arch/quality/concerns), maintains an instruction md-graph (`INDEX.md`, `nodes/*.md`), supports init/re-init/deep-verify workflows, and updates incrementally using `git diff`.
@@ -243,8 +243,8 @@ For layering and placement rules, see `ARCHITECTURE.md`.
    - Requires configured OpenAI API and an active CLI session.
 
 8. **SDD mode**
-   - Enable via `/sessions` -> `SDD` - the mode drives a feature through `specify`, `plan`, and `tasks` with approval and revision gates at each stage.
-   - Specification and plan artifacts are written to `specs/<NNN>-<slug>/spec.md` and `plan.md`; tasks are written to `tasks.md`, and accepted tasks are handed off to Manager via `MANAGER_CONTINUE_TOKEN`.
+   - Enable via `/sessions` -> `SDD` - the mode drives a feature through `specify`, `plan`, `tasks`, and `analyze` with approval and revision gates at each stage.
+   - Specification and plan artifacts are written to `specs/<NNN>-<slug>/spec.md` and `plan.md`; tasks are written to `tasks.md`, and the requirements-vs-plan coverage report to `analyze.md`; at the terminal `analyze` gate key decisions are recorded in `.cli-proxy/decisions.md` (ADR), after which the accepted plan is handed off to Manager via `MANAGER_CONTINUE_TOKEN`.
    - The SDD menu includes `Initialize project`: for an existing codebase the mode first refreshes Codebase Mapper, then writes `specs/_project/project-profile.generated.md`, `pack_manifest.json`, and related SDD artifacts; for an empty directory it creates templates under `specs/_templates/`.
    - Initialization selects extensible artifact packs from project evidence (`Cargo.toml`, `sdkconfig`, `platformio.ini`, `.csproj`, `pyproject.toml`, `package.json`, OpenAPI/AsyncAPI, and other markers). If built-in packs do not cover the project, it creates a proposed pack under `.cli-proxy/sdd/packs/proposed/`; proposed packs are not auto-selected on later runs and must be manually promoted to project packs before they are treated as confirmed rules.
    - You can start directly from the original intent or route the intent through Analyst first, then continue SDD from the refined specification.
