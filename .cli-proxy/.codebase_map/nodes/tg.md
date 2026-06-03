@@ -7,7 +7,7 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `tg/**`
-- Estimated files: 17
+- Current files: 17 under `tg/**` as of last review.
 - Подкаталог: `tg/callback_actions/` — доменные mixin'ы inline-callback'ов, собираемые в единый `CallbackActionsMixin`.
 
 ## Instructions for agent

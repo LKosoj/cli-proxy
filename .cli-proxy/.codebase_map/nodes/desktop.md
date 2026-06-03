@@ -7,7 +7,7 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `desktop/**`
-- Estimated files: 31
+- Current files: 32 under `desktop/**` as of last review.
 - Подкаталоги: `desktop/services/` (фасады и сервисы UI), `desktop/widgets/` (Qt-виджеты панелей и диалогов).
 
 ## Instructions for agent

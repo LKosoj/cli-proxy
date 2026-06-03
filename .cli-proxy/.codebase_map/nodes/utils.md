@@ -7,7 +7,8 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `utils/**`
-- Files: 8 (`utils/*.py`, ~1100 строк), пакет помечен `utils/__init__.py`.
+- Current files: 8 under `utils/**` as of last review.
+- Пакет помечен `utils/__init__.py` (`utils/*.py`, ~1100 строк).
 - Публичный фасад — `utils/__init__.py` (`__all__`): реэкспорт из `cli`, `html_renderer`, `paths`, `text`, `ui`.
 - НЕ реэкспортируются через `__init__`: `utils/lang.py` и `utils/source_artifact.py` — импортировать напрямую (`from utils.lang import resolve_user_lang`, `from utils.source_artifact import ...`).
 

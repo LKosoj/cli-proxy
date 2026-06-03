@@ -17,7 +17,7 @@ Agent Layer (слой 4 архитектуры): инструменты аген
 
 ## Scope
 - Source glob: `agent/**`
-- Estimated files: 60
+- Current files: 61 under `agent/**` as of last review.
 - Корневые модули: `agent/__init__.py`, `agent/cli_routing.py`, `agent/manager_core.py`, `agent/manager.py`, `agent/manager_prompts.py`, `agent/analyst_prompts.py`, `agent/telegram_wiring.py`.
 - Подпакеты: `agent/plugins/` (плагины + `base.py`, `plugin-development.md`), `agent/tooling/`, `agent/approvals/`, `agent/mcp/`.
 

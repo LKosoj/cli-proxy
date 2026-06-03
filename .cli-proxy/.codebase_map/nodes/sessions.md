@@ -7,7 +7,8 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `sessions/**`
-- Files: 10 (`sessions/*.py`, ~2890 строк), пакет помечен `sessions/__init__.py`.
+- Current files: 10 under `sessions/**` as of last review.
+- Пакет помечен `sessions/__init__.py` (`sessions/*.py`, ~2890 строк).
 - В скоуп НЕ входит dataclass `Session`/`SessionManager` — он живёт в корневом `session.py` (см. `nodes/session-py.md`); модули этой области работают над его экземплярами.
 
 ## Instructions for agent

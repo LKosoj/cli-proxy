@@ -38,6 +38,7 @@ SPEC_OUTPUT_SCHEMA: Dict[str, Any] = {
         "stories": {"type": "array", "items": {"type": "string"}},
         "requirements": {"type": "array", "items": _RequirementSchema},
         "acceptance_criteria": {"type": "array", "items": _AcceptanceCriterionSchema},
+        "out_of_scope": {"type": "array", "items": {"type": "string"}},
     },
     "additionalProperties": True,
 }
@@ -50,6 +51,7 @@ PLAN_OUTPUT_SCHEMA: Dict[str, Any] = {
         "stack": {"type": "array", "items": {"type": "string"}},
         "constraints": {"type": "array", "items": {"type": "string"}},
         "risks": {"type": "array", "items": {"type": "string"}},
+        "affected_modules": {"type": "array", "items": {"type": "string"}},
     },
     "additionalProperties": True,
 }
@@ -78,6 +80,33 @@ TASKS_OUTPUT_SCHEMA: Dict[str, Any] = {
     "additionalProperties": True,
 }
 
+# A4b: CLI synthesis of missing project packs. Only the fields PackDefinition.from_dict
+# strictly needs are required here; the rest is validated when constructing the pack
+# (an empty `packs` list is valid — it means the detectors already cover the project).
+_ProposedPackSchema: Dict[str, Any] = {
+    "type": "object",
+    "required": ["pack_id", "title"],
+    "properties": {
+        "pack_id": {"type": "string"},
+        "title": {"type": "string"},
+        "detectors": {"type": "object"},
+        "sdd": {"type": "object"},
+        "applies_to": {"type": "object"},
+        "merge": {"type": "object"},
+        "provenance": {"type": "object"},
+    },
+    "additionalProperties": True,
+}
+
+PACKS_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "required": ["packs"],
+    "properties": {
+        "packs": {"type": "array", "items": _ProposedPackSchema},
+    },
+    "additionalProperties": True,
+}
+
 
 def validate_sdd_payload(payload: Dict[str, Any], schema: Dict[str, Any], *, contract: str) -> None:
     try:
@@ -94,5 +123,6 @@ __all__ = [
     "SPEC_OUTPUT_SCHEMA",
     "PLAN_OUTPUT_SCHEMA",
     "TASKS_OUTPUT_SCHEMA",
+    "PACKS_OUTPUT_SCHEMA",
     "validate_sdd_payload",
 ]

@@ -14,7 +14,7 @@ Service Layer (слой 2 архитектуры): транспорт-агнос
 
 ## Scope
 - Source glob: `app/**`
-- Estimated files: 152
+- Current files: 153 under `app/**` as of last review.
 - Корневые модули: `app/bootstrap.py`, `app/mode_dependencies.py`.
 - Подпакеты: `app/services/` (+ `app/services/lint_evolution/`, `app/services/session_transfer/`), `app/config_runtime/`, `app/security/`, `app/events/`.
 

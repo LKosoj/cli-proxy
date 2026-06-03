@@ -18,28 +18,77 @@ prompts:
     Respond ONLY with valid JSON matching this schema exactly.
 
   plan: |
-    You are a senior software architect. Based on the feature specification below,
-    produce a technical implementation plan in JSON format.
+    You are a senior software architect. Based on the feature specification (provided by the user)
+    and the context of the EXISTING codebase below, produce a technical implementation plan in JSON
+    format for THIS specific project.
 
-    Project constitution (context, constraints, conventions):
+    PROJECT CONSTITUTION (follow strictly):
     {constitution}
 
-    Requirements:
-    - architecture: text description of the chosen architectural approach
-    - stack: list of technologies, libraries, frameworks to use
-    - constraints: list of technical constraints or limitations
-    - risks: list of identified technical risks
+    PROJECT PROFILE (real stack, architecture, conventions — use these, do not invent alternatives):
+    {project_profile}
+
+    RELEVANT CODEBASE MAP NODES — these are routing pointers, not the full picture. You MUST open
+    and READ the actual source files listed under "Source of truth" / "Scope" in each node BEFORE
+    planning. Work only within these areas; do not scan the whole repository:
+    {relevant_nodes}
+
+    OUT OF SCOPE — do NOT plan any of these:
+    {out_of_scope}
+
+    DECISIONS FROM PRIOR FEATURES (already chosen or rejected — do not contradict or reinvent):
+    {decisions}
+
+    Rules:
+    - Ground the plan in the project's real stack and architecture (profile + map nodes). Do not
+      propose a foreign stack.
+    - The plan MUST be self-contained: the next phase decomposes tasks from this text alone, with no
+      access to your session. List architectural decisions and the exact affected modules/files.
+    - Respect prior decisions; if there is a conflict, record it in "risks".
+    - Do NOT propose refactoring or improvements outside the feature scope.
+    - Every decision traces to a requirement. If the provided context is insufficient to decide,
+      record the gap in "risks" — do not invent.
+
+    Produce JSON with these fields:
+    - architecture: how the feature integrates into the existing architecture
+    - stack: technologies/libraries from THIS project used by the feature
+    - constraints: technical constraints from constitution/profile to satisfy
+    - risks: identified risks, including gaps in the provided context
+    - affected_modules: specific files/modules that will be touched
 
     Respond ONLY with valid JSON matching this schema exactly.
 
   tasks: |
-    You are a senior technical lead. Based on the feature specification and technical plan below,
-    produce an implementation task breakdown in JSON format.
+    You are a senior technical lead. Based on the feature specification and technical plan (provided
+    by the user) and the codebase context below, produce an implementation task breakdown in JSON
+    format.
 
-    Project constitution (context, constraints, conventions):
+    PROJECT CONSTITUTION (follow strictly):
     {constitution}
 
-    Requirements:
+    PROJECT PROFILE:
+    {project_profile}
+
+    RELEVANT CODEBASE MAP NODES — routing pointers. You MUST open and READ the actual source files
+    listed under "Source of truth" / "Scope" in each node BEFORE decomposing. Work only within these
+    areas:
+    {relevant_nodes}
+
+    OUT OF SCOPE — do NOT create tasks for any of these:
+    {out_of_scope}
+
+    DECISIONS FROM PRIOR FEATURES (do not contradict):
+    {decisions}
+
+    Rules:
+    - Build tasks from the technical plan (the source of truth) and the specific affected modules;
+      reference concrete files.
+    - Do not create tasks that contradict prior decisions or violate invariants of adjacent modules.
+    - Each task is atomic with machine-verifiable EARS acceptance criteria, linked to requirements
+      via covers_requirements. Set depends_on for correct execution order.
+    - Do NOT create tasks outside the feature scope. Every task traces to a requirement or plan item.
+
+    Produce JSON with these fields:
     - project_goal: one-sentence summary of what will be built
     - tasks: list of {id, title, description, acceptance_criteria, covers_requirements, depends_on}
       * id: TASK-N format
@@ -52,6 +101,7 @@ prompts:
   gate_spec_header: "📋 *Спецификация готова*\n\nФича: `{slug}`\n\nПроверьте spec.md и подтвердите или запросите правки."
   gate_plan_header: "🏗 *Архитектурный план готов*\n\nПроверьте plan.md и подтвердите или запросите правки."
   gate_tasks_header: "✅ *Декомпозиция задач готова*\n\nПроверьте tasks.md и подтвердите или запросите правки."
+  gate_analyze_header: "🔍 *Анализ покрытия готов*\n\nПроверьте analyze.md и подтвердите для передачи Менеджеру или запросите правки."
 
   btn_accept: "✅ Принять"
   btn_revise: "✍️ Правки"

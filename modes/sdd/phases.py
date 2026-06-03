@@ -5,7 +5,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.sdk.runtime.contracts import DevTask, ProjectPlan
@@ -14,9 +14,12 @@ from .schemas import SPEC_OUTPUT_SCHEMA, PLAN_OUTPUT_SCHEMA, TASKS_OUTPUT_SCHEMA
 
 _log = logging.getLogger(__name__)
 
-PHASE_ORDER = ("specify", "plan", "tasks")
+PHASE_ORDER = ("specify", "plan", "tasks", "analyze")
 
 ModelCall = Callable[[str, str], Awaitable[str]]
+# (work_type, system, user, schema) -> validated JSON payload. Encapsulates the routed
+# CLI call plus the LLM-API fallback (implemented in mode.py); phases stay transport-blind.
+CliCall = Callable[[str, str, str, Dict[str, Any]], Awaitable[Dict[str, Any]]]
 
 
 def next_phase(phase: str) -> Optional[str]:
@@ -145,6 +148,41 @@ def parse_spec_requirements(spec_md: str) -> List[Dict[str, str]]:
     return results
 
 
+def _parse_bullet_section(text: str, heading: str) -> List[str]:
+    """Parse '- ' bullet items under a '## <heading>' markdown section. [] if absent."""
+    items: List[str] = []
+    in_section = False
+    head_re = re.compile(r"^##\s+" + re.escape(heading) + r"\b", re.IGNORECASE)
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if head_re.match(stripped):
+            in_section = True
+            continue
+        if in_section and re.match(r"^##\s+", stripped):
+            break
+        if in_section and stripped.startswith("- "):
+            items.append(stripped[2:].strip())
+    return items
+
+
+def parse_out_of_scope(spec_md: str) -> List[str]:
+    """Parse the ## Out of Scope section of spec.md. Returns [] if absent."""
+    return _parse_bullet_section(spec_md, "out of scope")
+
+
+def parse_affected_modules(plan_md: str) -> List[str]:
+    """Parse the ## Affected Modules section of plan.md. Returns [] if absent."""
+    return _parse_bullet_section(plan_md, "affected modules")
+
+
+def _fill_prompt(template: Any, **fields: str) -> str:
+    """Substitute {key} placeholders via str.replace (literal-safe, unlike str.format)."""
+    out = str(template or "")
+    for key, val in fields.items():
+        out = out.replace("{" + key + "}", str(val or ""))
+    return out
+
+
 def render_trace_md(plan: ProjectPlan, requirements: List[Dict[str, str]]) -> str:
     """Build traceability matrix markdown: REQ → task(s) → status → files → tests."""
     lines = [
@@ -210,6 +248,85 @@ def render_trace_md(plan: ProjectPlan, requirements: List[Dict[str, str]]) -> st
     return "\n".join(lines)
 
 
+def analyze_coverage(requirements: List[Dict[str, str]], plan: ProjectPlan) -> Dict[str, Any]:
+    """Deterministic REQ↔task coverage for the analyze phase (no LLM).
+
+    A task is an orphan when none of its covers_requirements maps to a known REQ id
+    (empty covers_requirements counts as orphan). Returns covered/uncovered REQ ids,
+    orphan task ids, and totals.
+    """
+    req_ids = [str(r.get("id") or "") for r in (requirements or []) if str(r.get("id") or "")]
+    req_set = set(req_ids)
+    covered_set: set = set()
+    orphan_task_ids: List[str] = []
+    for task in plan.tasks:
+        hit = [str(c) for c in (task.covers_requirements or []) if str(c) in req_set]
+        if hit:
+            covered_set.update(hit)
+        else:
+            orphan_task_ids.append(str(task.id))
+    return {
+        "covered": [r for r in req_ids if r in covered_set],
+        "uncovered": [r for r in req_ids if r not in covered_set],
+        "orphan_task_ids": orphan_task_ids,
+        "total_reqs": len(req_ids),
+        "total_tasks": len(plan.tasks),
+    }
+
+
+def render_analyze_md(report: Dict[str, Any], requirements: List[Dict[str, str]], plan: ProjectPlan) -> str:
+    """Human-readable coverage report for the analyze gate (bulleted, no audit data)."""
+    req_text = {str(r.get("id") or ""): str(r.get("text") or "") for r in (requirements or [])}
+    task_title = {str(t.id): str(t.title) for t in plan.tasks}
+    uncovered = list(report.get("uncovered") or [])
+    orphans = list(report.get("orphan_task_ids") or [])
+    lines = [
+        "# Анализ покрытия",
+        "",
+        f"- Требований: {int(report.get('total_reqs') or 0)}",
+        f"- Покрыто: {len(report.get('covered') or [])}",
+        f"- Не покрыто: {len(uncovered)}",
+        f"- Задач: {int(report.get('total_tasks') or 0)}",
+        f"- Задач вне требований: {len(orphans)}",
+        "",
+    ]
+    if uncovered:
+        lines += ["## Непокрытые требования", ""]
+        lines += [f"- {rid}: {req_text.get(rid, '')}" for rid in uncovered]
+        lines.append("")
+    if orphans:
+        lines += ["## Задачи вне требований", ""]
+        lines += [f"- {tid}: {task_title.get(tid, '')}" for tid in orphans]
+        lines.append("")
+    if not uncovered and not orphans:
+        lines += ["✅ Все требования покрыты задачами; задач вне требований нет.", ""]
+    return "\n".join(lines)
+
+
+def parse_plan_decisions(plan_md: str) -> List[str]:
+    """Extract key decisions from plan.md for the decisions.md ADR block:
+    the Architecture paragraph (capped) plus each Constraints bullet.
+    """
+    decisions: List[str] = []
+    arch_re = re.compile(r"^##\s+architecture\b", re.IGNORECASE)
+    in_arch = False
+    arch_lines: List[str] = []
+    for line in str(plan_md or "").splitlines():
+        stripped = line.strip()
+        if arch_re.match(stripped):
+            in_arch = True
+            continue
+        if in_arch:
+            if re.match(r"^##\s+", stripped):
+                break
+            arch_lines.append(line)
+    arch_text = " ".join(s.strip() for s in arch_lines if s.strip())
+    if arch_text:
+        decisions.append(arch_text[:300])
+    decisions += _parse_bullet_section(plan_md, "constraints")
+    return decisions
+
+
 def _render_spec_md(payload: dict, intent: str) -> str:
     lines = [f"# Specification: {payload.get('feature_slug', '')}"]
     lines.append(f"\n**Intent:** {intent}\n")
@@ -230,6 +347,12 @@ def _render_spec_md(payload: dict, intent: str) -> str:
         lines.append("## Acceptance Criteria\n")
         for c in criteria:
             lines.append(f"- {c['req_id']}: {c['ears']}")
+        lines.append("")
+    out_of_scope = payload.get("out_of_scope") or []
+    if out_of_scope:
+        lines.append("## Out of Scope\n")
+        for item in out_of_scope:
+            lines.append(f"- {item}")
         lines.append("")
     return "\n".join(lines)
 
@@ -254,6 +377,12 @@ def _render_plan_md(payload: dict) -> str:
         lines.append("## Risks\n")
         for r in risks:
             lines.append(f"- {r}")
+        lines.append("")
+    affected = payload.get("affected_modules") or []
+    if affected:
+        lines.append("## Affected Modules\n")
+        for m in affected:
+            lines.append(f"- {m}")
         lines.append("")
     return "\n".join(lines)
 
@@ -290,42 +419,67 @@ async def generate_spec(
 
 
 async def generate_plan(
-    model: ModelCall,
+    cli_call: CliCall,
     *,
     spec_md: str,
     constitution: str,
+    project_profile: str = "",
+    relevant_nodes: str = "",
+    out_of_scope: str = "",
+    decisions: str = "",
     prompts: dict,
     revision: str = "",
 ) -> Tuple[str, dict]:
-    """Generate plan.md content. Returns (plan_md, payload)."""
-    system = str(prompts.get("plan", "")).replace("{constitution}", constitution)
+    """Generate plan.md via routed CLI (work_type=planning) with LLM-API fallback.
+
+    *cli_call* already validates the payload against PLAN_OUTPUT_SCHEMA and encapsulates
+    the fallback, so this function does not re-validate. Returns (plan_md, payload).
+    """
+    system = _fill_prompt(
+        prompts.get("plan", ""),
+        constitution=constitution,
+        project_profile=project_profile,
+        relevant_nodes=relevant_nodes,
+        out_of_scope=out_of_scope,
+        decisions=decisions,
+    )
     user = f"Feature specification:\n\n{spec_md}"
     if revision:
         user += f"\n\nREVISION REQUEST FROM USER:\n{revision}"
-    raw = await model(system, user)
-    payload = _parse_llm_json(raw, contract="plan")
-    validate_sdd_payload(payload, PLAN_OUTPUT_SCHEMA, contract="plan")
+    payload = await cli_call("planning", system, user, PLAN_OUTPUT_SCHEMA)
     plan_md = _render_plan_md(payload)
     return plan_md, payload
 
 
 async def generate_tasks(
-    model: ModelCall,
+    cli_call: CliCall,
     *,
     spec_md: str,
     plan_md: str,
     constitution: str,
+    project_profile: str = "",
+    relevant_nodes: str = "",
+    out_of_scope: str = "",
+    decisions: str = "",
     prompts: dict,
     revision: str = "",
 ) -> ProjectPlan:
-    """Generate tasks breakdown. Returns a ProjectPlan (renders via render_tasks_md)."""
-    system = str(prompts.get("tasks", "")).replace("{constitution}", constitution)
+    """Generate tasks breakdown via routed CLI (work_type=planning) with LLM-API fallback.
+
+    *cli_call* already validates against TASKS_OUTPUT_SCHEMA. Returns a ProjectPlan.
+    """
+    system = _fill_prompt(
+        prompts.get("tasks", ""),
+        constitution=constitution,
+        project_profile=project_profile,
+        relevant_nodes=relevant_nodes,
+        out_of_scope=out_of_scope,
+        decisions=decisions,
+    )
     user = f"Feature specification:\n\n{spec_md}\n\nTechnical plan:\n\n{plan_md}"
     if revision:
         user += f"\n\nREVISION REQUEST FROM USER:\n{revision}"
-    raw = await model(system, user)
-    payload = _parse_llm_json(raw, contract="tasks")
-    validate_sdd_payload(payload, TASKS_OUTPUT_SCHEMA, contract="tasks")
+    payload = await cli_call("planning", system, user, TASKS_OUTPUT_SCHEMA)
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     tasks_raw = payload.get("tasks") or []

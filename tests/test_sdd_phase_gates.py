@@ -391,6 +391,9 @@ def test_gate_accept_tasks_sets_handoff(tmp_path) -> None:
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
         await asyncio.sleep(0.1)
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
+        await asyncio.sleep(0.1)
+        # accept analyze gate → handoff (analyze is the new terminal phase before handoff)
+        await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
 
         sdd = get_sdd_state(session)
         assert sdd.phase == "handoff"
@@ -407,6 +410,73 @@ def test_gate_accept_tasks_sets_handoff(tmp_path) -> None:
     asyncio.run(_run())
 
 
+def test_gate_accept_tasks_advances_to_analyze(tmp_path) -> None:
+    """After accepting the tasks gate the flow enters the analyze phase (not handoff),
+    writing analyze.md and arming the analyze gate."""
+    async def _run() -> None:
+        fake_tasks = _FakeTasksService()
+        fake_ms = _FakeMessagingService()
+        session = _make_session(tmp_path)
+        bot_app = _make_bot_app()
+        mode = _make_mode(fake_tasks, fake_ms)
+        ctx = _make_ctx(session, bot_app)
+
+        await mode.handle_input(MessageModel(text="Build dashboard", chat_id=1), ctx)
+        await mode.handle_callback(CallbackModel(action="fork_direct", chat_id=1), ctx)
+        await asyncio.sleep(0.1)
+        await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)  # specify→plan
+        await asyncio.sleep(0.1)
+        await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)  # plan→tasks
+        await asyncio.sleep(0.1)
+        await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)  # tasks→analyze
+        await asyncio.sleep(0.1)
+
+        sdd = get_sdd_state(session)
+        assert sdd.phase == "analyze"
+        assert sdd.pending_gate == "analyze"
+        assert os.path.isfile(os.path.join(str(sdd.spec_dir), "analyze.md"))
+        # No handoff task scheduled yet — analyze must be confirmed first.
+        assert "sdd_handoff_manager" not in fake_tasks._launched
+
+    asyncio.run(_run())
+
+
+def test_analyze_accept_appends_decisions(tmp_path) -> None:
+    """Accepting the analyze gate persists decisions.md (out-of-scope + plan decisions)
+    synchronously before handoff, idempotent per feature_slug."""
+    async def _run() -> None:
+        fake_tasks = _FakeTasksService()
+        fake_ms = _FakeMessagingService()
+        session = _make_session(tmp_path)
+        bot_app = _make_bot_app()
+        mode = _make_mode(fake_tasks, fake_ms, pipeline=_SleepingManagerPipeline())
+        ctx = _make_ctx(session, bot_app)
+
+        await mode.handle_input(MessageModel(text="Build dashboard", chat_id=1), ctx)
+        await mode.handle_callback(CallbackModel(action="fork_direct", chat_id=1), ctx)
+        await asyncio.sleep(0.1)
+        for _ in range(4):  # specify→plan→tasks→analyze→handoff
+            await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
+            await asyncio.sleep(0.1)
+
+        sdd = get_sdd_state(session)
+        assert sdd.phase == "handoff"
+
+        decisions_path = tmp_path / ".cli-proxy" / "decisions.md"
+        assert decisions_path.is_file()
+        text = decisions_path.read_text(encoding="utf-8")
+        assert "## build-dashboard" in text          # feature_slug derived from intent
+        assert "Layered architecture" in text        # plan architecture decision
+        assert "Must be async" in text               # plan constraint
+
+        # Cancel the sleeping handoff task.
+        fake_tasks._tasks[-1].cancel()
+        with suppress(asyncio.CancelledError):
+            await fake_tasks._tasks[-1]
+
+    asyncio.run(_run())
+
+
 def test_gate_accept_tasks_restores_gate_when_spec_dir_invalid(tmp_path) -> None:
     async def _run() -> None:
         fake_tasks = _FakeTasksService()
@@ -416,16 +486,17 @@ def test_gate_accept_tasks_restores_gate_when_spec_dir_invalid(tmp_path) -> None
         mode = _make_mode(fake_tasks, fake_ms)
         ctx = _make_ctx(session, bot_app)
 
+        # analyze is the terminal gate whose accept triggers handoff (and its spec_dir guard)
         sdd = get_sdd_state(session)
-        sdd.phase = "tasks"
-        sdd.pending_gate = "tasks"
+        sdd.phase = "analyze"
+        sdd.pending_gate = "analyze"
         sdd.last_action = ""
         sdd.spec_dir = str(tmp_path.parent / "outside-spec")
 
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
 
-        assert sdd.phase == "tasks"
-        assert sdd.pending_gate == "tasks"
+        assert sdd.phase == "analyze"
+        assert sdd.pending_gate == "analyze"
         assert sdd.last_action == "gate_revise"
         assert "sdd_handoff_manager" not in fake_tasks._launched
         assert any(
@@ -448,16 +519,16 @@ def test_gate_accept_tasks_restores_gate_when_tasks_md_missing(tmp_path) -> None
         spec_dir = tmp_path / "specs" / "001-missing-tasks"
         spec_dir.mkdir(parents=True)
         sdd = get_sdd_state(session)
-        sdd.phase = "tasks"
-        sdd.pending_gate = "tasks"
+        sdd.phase = "analyze"
+        sdd.pending_gate = "analyze"
         sdd.last_action = ""
         sdd.spec_dir = str(spec_dir)
 
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
         await fake_tasks._tasks[-1]
 
-        assert sdd.phase == "tasks"
-        assert sdd.pending_gate == "tasks"
+        assert sdd.phase == "analyze"
+        assert sdd.pending_gate == "analyze"
         assert sdd.last_action == "gate_revise"
         assert "sdd_handoff_manager" in fake_tasks._launched
         assert any(
@@ -481,16 +552,16 @@ def test_gate_accept_tasks_restores_gate_when_tasks_md_invalid(tmp_path) -> None
         spec_dir.mkdir(parents=True)
         (spec_dir / "tasks.md").write_text("not a tasks document\n", encoding="utf-8")
         sdd = get_sdd_state(session)
-        sdd.phase = "tasks"
-        sdd.pending_gate = "tasks"
+        sdd.phase = "analyze"
+        sdd.pending_gate = "analyze"
         sdd.last_action = ""
         sdd.spec_dir = str(spec_dir)
 
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
         await fake_tasks._tasks[-1]
 
-        assert sdd.phase == "tasks"
-        assert sdd.pending_gate == "tasks"
+        assert sdd.phase == "analyze"
+        assert sdd.pending_gate == "analyze"
         assert sdd.last_action == "gate_revise"
         assert any(
             "Не удалось подготовить план" in m["text"] and m.get("markup") is not None
@@ -517,12 +588,15 @@ def test_gate_accept_tasks_restores_gate_and_keyboard_when_manager_fails(tmp_pat
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
         await asyncio.sleep(0.1)
         await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
+        await asyncio.sleep(0.1)
+        # accept analyze gate → handoff (which fails via _FailingManagerPipeline)
+        await mode.handle_callback(CallbackModel(action="gate_accept", chat_id=1), ctx)
         with suppress(RuntimeError):
             await fake_tasks._tasks[-1]
 
         sdd = get_sdd_state(session)
-        assert sdd.phase == "tasks"
-        assert sdd.pending_gate == "tasks"
+        assert sdd.phase == "analyze"
+        assert sdd.pending_gate == "analyze"
         assert sdd.last_action == "gate_revise"
         assert any(
             "Не удалось передать задачи" in m["text"] and m.get("markup") is not None

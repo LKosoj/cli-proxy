@@ -328,7 +328,7 @@ class OrchestratorState:
 class SddState:
     feature_slug: Optional[str] = None
     spec_dir: Optional[str] = None          # specs/<NNN>-<slug>
-    phase: str = "idle"                     # idle|specify|plan|tasks|handoff|done
+    phase: str = "idle"                     # idle|specify|plan|tasks|analyze|handoff|done
     pending_gate: Optional[str] = None
     constitution_path: Optional[str] = None
     source_intent: Optional[str] = None

@@ -7,7 +7,7 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `miniapp/**`
-- Estimated files: 19
+- Current files: 19 under `miniapp/**` as of last review.
 - Подкаталоги: `miniapp/services/` (бекенд-сервисы UI: config draft, файлы, логи), `miniapp/static/` (SPA на vanilla JS: `index.html`, `app.js`, `styles.css`).
 
 ## Instructions for agent

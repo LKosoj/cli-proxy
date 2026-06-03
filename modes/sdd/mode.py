@@ -3,15 +3,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from tg.markdown import escape_markdown_v2_all
 
+from agent.cli_routing import run_prompt_routed_meta
 from app.mode_dependencies import ModeDependencies
 from modes.sdk import BaseMode, CallbackModel, MessageModel, MessagingService, ToolResult
+from modes.sdk.runtime.cli_contracts import CLIResponseFormat
+from modes.sdk.runtime.json_normalizer import parse_normalize_validate
 from modes.sdk.runtime.openai_client import chat_completion
 from modes.sdk.session_busy import is_session_busy
 from modes.sdk.services.callback_data import build_mode_action_callback_data
@@ -23,30 +27,95 @@ from sessions.session_state_access import (
     set_orchestrator_enabled,
 )
 
-from .artifacts import render_tasks_md
+from .artifacts import parse_tasks_md, render_tasks_md
 from .constitution import load_constitution
+from .decisions import append_decision, load_decisions
 from .ears import extract_clarification_questions
 from .handoff import run_handoff_to_manager
+from .node_selector import load_graph, read_node_sources, select_relevant_nodes
 from .phases import (
+    CliCall,
     ModelCall,
     allocate_spec_dir,
+    analyze_coverage,
     generate_plan,
     generate_spec,
     generate_tasks,
     next_phase,
     normalize_spec_dir,
+    parse_affected_modules,
+    parse_out_of_scope,
+    parse_plan_decisions,
+    parse_spec_requirements,
+    render_analyze_md,
     slugify,
 )
-from .project_init import classify_project, run_project_initialization
+from .project_init import _git, classify_project, run_project_initialization
 from .state import clear_sdd_gate, get_sdd_state, set_sdd_phase
 
 _log = logging.getLogger(__name__)
+
+_MAX_PROFILE_CHARS = 16000
+# Generic words stripped from requirement text before lexical node scoring — they carry
+# no routing signal (EARS keywords, articles, modal verbs).
+_TERM_STOPWORDS = frozenset({
+    "the", "a", "an", "to", "of", "and", "or", "for", "in", "on", "with", "from",
+    "shall", "system", "when", "while", "where", "then", "must", "should", "that",
+    "this", "user", "users", "feature", "support", "provide", "able",
+})
+
+
+def _read_project_profile(workdir: str) -> str:
+    """Read specs/_project/project-profile.generated.md, capped. "" if absent."""
+    path = os.path.join(str(workdir or ""), "specs", "_project", "project-profile.generated.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read(_MAX_PROFILE_CHARS)
+    except OSError:
+        return ""
+
+
+def _build_feature_terms(feature_slug: str, spec_md: str) -> List[str]:
+    """Routing terms: slug tokens (>=3 chars) + significant requirement-text tokens."""
+    terms: set = set()
+    for tok in re.split(r"[^a-z0-9]+", str(feature_slug or "").lower()):
+        if len(tok) >= 3:
+            terms.add(tok)
+    for req in parse_spec_requirements(spec_md):
+        for tok in re.split(r"[^a-z0-9]+", str(req.get("text") or "").lower()):
+            if len(tok) >= 4 and tok not in _TERM_STOPWORDS:
+                terms.add(tok)
+    return sorted(terms)
+
+
+def _load_relevant_nodes(
+    workdir: str,
+    feature_terms: Sequence[str],
+    affected_modules: Sequence[str] = (),
+) -> str:
+    """Best-effort routing context from the read-only codebase map. Never raises."""
+    try:
+        map_dir = os.path.join(str(workdir or ""), ".cli-proxy", ".codebase_map")
+        graph = load_graph(map_dir)
+        if not graph:
+            return ""
+        node_ids = select_relevant_nodes(
+            feature_terms=feature_terms,
+            affected_modules=tuple(affected_modules or ()),
+            graph=graph,
+            map_dir=map_dir,
+            max_nodes=6,
+        )
+        return read_node_sources(map_dir, node_ids)
+    except Exception:
+        _log.warning("sdd _load_relevant_nodes failed; continuing with empty context", exc_info=True)
+        return ""
 
 
 class SddMode(BaseMode):
     mode_id = "sdd"
     display_name = "📐 SDD"
-    description = "Spec-Driven Development: specify → plan → tasks через гейты подтверждения"
+    description = "Spec-Driven Development: specify → plan → tasks → analyze через гейты подтверждения"
 
     def __init__(self, dependencies: Optional[ModeDependencies] = None) -> None:
         super().__init__(dependencies)
@@ -106,6 +175,105 @@ class SddMode(BaseMode):
                 bot_app, system, user, response_format={"type": "json_object"}
             )
         return _call
+
+    async def _cli_call(
+        self,
+        session: Any,
+        bot_app: Any,
+        *,
+        work_type: str,
+        system: str,
+        user: str,
+        schema: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Generate validated JSON via routed CLI agents, falling back to the LLM API.
+
+        The fallback is the legacy OpenAI seam SDD historically used; per repo policy
+        (.cli-proxy/.codebase_map/INDEX.md) it is an allowed compatibility path for an
+        existing generation flow, but it is always logged. A validation failure on the
+        FALLBACK output is deliberately NOT caught — it propagates so the error surfaces.
+        """
+        prompt = f"{str(system or '').strip()}\n\n{str(user or '').strip()}"
+        defaults = getattr(getattr(bot_app, "config", None), "defaults", None)
+        timeout = int(getattr(defaults, "manager_decompose_timeout_sec", 600) or 600)
+        try:
+            _cli_name, raw = await run_prompt_routed_meta(
+                session,
+                bot_app.config,
+                work_type,
+                prompt,
+                response_format=CLIResponseFormat.JSON_OBJECT,
+                timeout_sec=timeout,
+            )
+            return parse_normalize_validate(raw, schema)
+        except Exception as exc:
+            # The routed CLI path is best-effort: it can fail for many reasons (no CLI
+            # configured, timeout, crash, malformed output, schema mismatch). Any failure
+            # degrades to the LLM-API fallback — an allowed compatibility seam per repo
+            # policy — and is always logged. The fallback's own failure is NOT caught
+            # below, so a genuine error still surfaces instead of being masked.
+            self._log.warning(
+                "sdd _cli_call: CLI path failed (%s: %s); falling back to LLM API work_type=%s",
+                type(exc).__name__, exc, work_type,
+            )
+        raw_fb = await self._chat_completion(bot_app, system, user, response_format={"type": "json_object"})
+        return parse_normalize_validate(raw_fb, schema)
+
+    def _make_cli_call(self, session: Any, bot_app: Any) -> CliCall:
+        """Return a CliCall closure that hides session/bot_app from the phases layer."""
+        async def _call(work_type: str, system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+            return await self._cli_call(
+                session, bot_app, work_type=work_type, system=system, user=user, schema=schema
+            )
+        return _call
+
+    async def _ensure_map_freshness(self, session: Any, bot_app: Any, workdir: str) -> None:
+        """Best-effort: sync the codebase map before plan generation. Never raises.
+
+        Decides the mapper operation from the current state: no map + code present → init;
+        map present but HEAD drifted (or working tree dirty) → verify; otherwise no-op. The
+        map is consumed read-only by the node selector; the codebase_mapper process owns it,
+        so any failure here only degrades plan context (empty nodes), never blocks the phase.
+        """
+        try:
+            runtime_getter = self._optional_runtime_getter()
+            if not callable(runtime_getter):
+                return
+            mapper_status = runtime_getter("codebase_mapper_status")
+            mapper_run = runtime_getter("codebase_mapper_run")
+            if mapper_status is None or mapper_run is None:
+                return
+            status = mapper_status.get_status(workdir=workdir) or {}
+            graph_initialized = bool(status.get("graph_initialized"))
+            map_head = str(status.get("head_commit") or "").strip()
+
+            if not graph_initialized:
+                try:
+                    classification = classify_project(workdir)
+                except Exception:
+                    return
+                if not classification.is_existing_codebase:
+                    return  # greenfield: no code to map yet
+                operation = "init"
+            else:
+                cur_head = _git(["rev-parse", "HEAD"], workdir)
+                if not cur_head:
+                    return  # not a git repo / git unavailable — leave the map as-is
+                if map_head and map_head == cur_head and not _git(["status", "--short"], workdir):
+                    return  # fresh: HEAD matches and working tree is clean
+                operation = "verify"
+
+            defaults = getattr(getattr(bot_app, "config", None), "defaults", None)
+            usage = str(getattr(defaults, "codebase_mapper_usage", "auto") or "auto")
+            await mapper_run.maybe_run(
+                session=session,
+                workdir=workdir,
+                usage=usage,
+                operation=operation,
+                sync_agents=operation in {"init", "verify"},
+            )
+        except Exception:
+            self._log.warning("sdd _ensure_map_freshness failed; proceeding without map update", exc_info=True)
 
     # ------------------------------------------------------------------
     # Prompts
@@ -202,14 +370,14 @@ class SddMode(BaseMode):
             return
         constitution = load_constitution(workdir)
         prompts = self._load_prompts()
-        model = self._model_call(bot_app)
 
         try:
             if phase == "specify":
                 intent = str(sdd.source_intent or "")
                 await ms.send_text(chat_id, "⏳ Генерирую спецификацию...", md2=False)
                 spec_md, payload = await generate_spec(
-                    model, intent=intent, constitution=constitution, prompts=prompts, revision=revision
+                    self._model_call(bot_app),
+                    intent=intent, constitution=constitution, prompts=prompts, revision=revision,
                 )
                 if not spec_dir:
                     # Свежий каталог: slug из LLM-ответа, но обязательно через slugify
@@ -258,8 +426,22 @@ class SddMode(BaseMode):
                     with open(spec_path, encoding="utf-8") as fh:
                         spec_md = fh.read()
                 await ms.send_text(chat_id, "⏳ Генерирую архитектурный план...", md2=False)
+                await self._ensure_map_freshness(session, bot_app, workdir)
+                project_profile = _read_project_profile(workdir)
+                decisions = load_decisions(workdir)
+                out_of_scope = "\n".join(f"- {x}" for x in parse_out_of_scope(spec_md))
+                feature_terms = _build_feature_terms(str(sdd.feature_slug or ""), spec_md)
+                relevant_nodes = _load_relevant_nodes(workdir, feature_terms)
                 plan_md, _ = await generate_plan(
-                    model, spec_md=spec_md, constitution=constitution, prompts=prompts, revision=revision
+                    self._make_cli_call(session, bot_app),
+                    spec_md=spec_md,
+                    constitution=constitution,
+                    project_profile=project_profile,
+                    relevant_nodes=relevant_nodes,
+                    out_of_scope=out_of_scope,
+                    decisions=decisions,
+                    prompts=prompts,
+                    revision=revision,
                 )
                 os.makedirs(spec_dir, exist_ok=True)
                 plan_path = os.path.join(spec_dir, "plan.md")
@@ -283,8 +465,22 @@ class SddMode(BaseMode):
                     with open(plan_path, encoding="utf-8") as fh:
                         plan_md = fh.read()
                 await ms.send_text(chat_id, "⏳ Генерирую список задач...", md2=False)
+                project_profile = _read_project_profile(workdir)
+                decisions = load_decisions(workdir)
+                out_of_scope = "\n".join(f"- {x}" for x in parse_out_of_scope(spec_md))
+                feature_terms = _build_feature_terms(str(sdd.feature_slug or ""), spec_md)
+                affected = parse_affected_modules(plan_md)
+                relevant_nodes = _load_relevant_nodes(workdir, feature_terms, affected_modules=affected)
                 project_plan = await generate_tasks(
-                    model, spec_md=spec_md, plan_md=plan_md, constitution=constitution, prompts=prompts,
+                    self._make_cli_call(session, bot_app),
+                    spec_md=spec_md,
+                    plan_md=plan_md,
+                    constitution=constitution,
+                    project_profile=project_profile,
+                    relevant_nodes=relevant_nodes,
+                    out_of_scope=out_of_scope,
+                    decisions=decisions,
+                    prompts=prompts,
                     revision=revision,
                 )
                 os.makedirs(spec_dir, exist_ok=True)
@@ -295,6 +491,32 @@ class SddMode(BaseMode):
                 sdd.pending_gate = "tasks"
                 self._persist_sessions(bot_app)
                 gate_text = str(prompts.get("gate_tasks_header") or "✅ *Декомпозиция задач готова*")
+                await ms.send_text(chat_id, gate_text, md2=True, reply_markup=self._gate_keyboard(session, prompts))
+
+            elif phase == "analyze":
+                # Deterministic coverage analysis — no LLM/CLI call. Reads spec.md + tasks.md.
+                spec_path = os.path.join(spec_dir, "spec.md")
+                tasks_path = os.path.join(spec_dir, "tasks.md")
+                spec_md = ""
+                tasks_md_text = ""
+                if os.path.isfile(spec_path):
+                    with open(spec_path, encoding="utf-8") as fh:
+                        spec_md = fh.read()
+                if os.path.isfile(tasks_path):
+                    with open(tasks_path, encoding="utf-8") as fh:
+                        tasks_md_text = fh.read()
+                await ms.send_text(chat_id, "⏳ Анализирую покрытие требований...", md2=False)
+                requirements = parse_spec_requirements(spec_md)
+                project_plan = parse_tasks_md(tasks_md_text)
+                report = analyze_coverage(requirements, project_plan)
+                os.makedirs(spec_dir, exist_ok=True)
+                analyze_path = os.path.join(spec_dir, "analyze.md")
+                with open(analyze_path, "w", encoding="utf-8") as fh:
+                    fh.write(render_analyze_md(report, requirements, project_plan))
+                set_sdd_phase(session, "analyze")
+                sdd.pending_gate = "analyze"
+                self._persist_sessions(bot_app)
+                gate_text = str(prompts.get("gate_analyze_header") or "🔍 *Анализ покрытия готов*")
                 await ms.send_text(chat_id, gate_text, md2=True, reply_markup=self._gate_keyboard(session, prompts))
 
         except Exception:
@@ -635,6 +857,7 @@ class SddMode(BaseMode):
                 session=session,
                 runtime_getter=runtime_getter,
                 persist=lambda: self._persist_sessions(bot_app),
+                cli_call=self._make_cli_call(session, bot_app),
             )
             files_text = "\n".join(f"- `{path}`" for path in result.created_files[:12])
             if len(result.created_files) > 12:
@@ -725,7 +948,7 @@ class SddMode(BaseMode):
                 text=f"✅ Фаза `{current_phase}` принята\\. Запускаю `{nxt}`\\.", md2=True
             )
         else:
-            # tasks phase accepted — handoff to Manager
+            # analyze phase accepted (terminal phase) — persist decisions, then handoff to Manager
             gate_keyboard = self._gate_keyboard(session, self._load_prompts())
             workdir = str(getattr(session, "workdir", "") or "")
             spec_dir = normalize_spec_dir(workdir, str(sdd.spec_dir or "")) if workdir else None
@@ -742,9 +965,10 @@ class SddMode(BaseMode):
                 sdd.spec_dir = spec_dir
             set_sdd_phase(session, "handoff")
             self._persist_sessions(bot_app)
+            self._append_feature_decisions(session, workdir, spec_dir)
             await ms.send_or_edit(
                 query=query, chat_id=chat_id,
-                text="✅ Задачи приняты\\. Передаю Менеджеру\\.\\.\\.",
+                text="✅ Анализ принят\\. Передаю Менеджеру\\.\\.\\.",
                 md2=True,
             )
             tasks_md_path = os.path.join(spec_dir, "tasks.md")
@@ -764,6 +988,33 @@ class SddMode(BaseMode):
                 name="sdd_handoff_manager",
             )
         return ToolResult.ok()
+
+    def _append_feature_decisions(self, session: Any, workdir: str, spec_dir: str) -> None:
+        """Best-effort D2: persist the feature's out-of-scope + plan decisions to decisions.md.
+
+        Idempotent per feature_slug. A write failure must never block the handoff, so any
+        exception is logged and swallowed.
+        """
+        try:
+            sdd = get_sdd_state(session)
+            spec_md = ""
+            plan_md = ""
+            spec_path = os.path.join(spec_dir, "spec.md")
+            plan_path = os.path.join(spec_dir, "plan.md")
+            if os.path.isfile(spec_path):
+                with open(spec_path, encoding="utf-8") as fh:
+                    spec_md = fh.read()
+            if os.path.isfile(plan_path):
+                with open(plan_path, encoding="utf-8") as fh:
+                    plan_md = fh.read()
+            append_decision(
+                workdir,
+                feature_slug=str(sdd.feature_slug or ""),
+                out_of_scope=parse_out_of_scope(spec_md),
+                plan_decisions=parse_plan_decisions(plan_md),
+            )
+        except Exception:
+            self._log.warning("sdd decisions append failed; proceeding with handoff", exc_info=True)
 
     async def _cb_gate_revise(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
@@ -1001,7 +1252,7 @@ class SddMode(BaseMode):
                     callback_data=build_mode_action_callback_data(self.mode_id, "enable", session=session),
                 )
             ])
-            text = "📐 SDD\n\nРежим: выключен\n\nSpec-Driven Development: specify → plan → tasks."
+            text = "📐 SDD\n\nРежим: выключен\n\nSpec-Driven Development: specify → plan → tasks → analyze."
         rows.append([InlineKeyboardButton(back_text, callback_data=back_callback)])
         return text, InlineKeyboardMarkup(rows)
 

@@ -18,7 +18,7 @@ Mode Layer проекта: пакет `modes/` реализует подключ
 
 ## Scope
 - Source glob: `modes/**`
-- Estimated files: ~205
+- Current files: 220 under `modes/**` as of last review.
 - Подпакеты режимов: `modes/admin/`, `modes/agent/`, `modes/analyst/`, `modes/codebase_mapper/`, `modes/manager/`, `modes/sdd/`, `modes/webmaster/`.
 - Инфраструктура: `modes/sdk/` (в т.ч. `modes/sdk/services/`, `modes/sdk/runtime/`, `modes/sdk/runtime/mcp/`, `modes/sdk/planning/`).
 - Корневые файлы: `modes/registry.py`, `modes/DEVELOPMENT.md`, `modes/codebase_mapper_constants.py`, `modes/__init__.py`.

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from modes.codebase_mapper_constants import CODEBASE_MAPPER_GRAPH_STATE, CODEBASE_MAPPER_RESULT_STATUS
 from modes.sdk.runtime.contracts import DevTask, ProjectPlan
@@ -16,8 +17,13 @@ from .packs.detectors import meaningful_files
 from .packs.registry import load_pack_registry, save_project_pack_index, write_pack_definition
 from .packs.render import render_pack_manifest_md
 from .packs.render import render_validation_md
+from .packs.schema import PACK_SCHEMA_VERSION, PackDefinition, PackScore
 from .packs.selector import select_packs
+from .phases import CliCall
+from .schemas import PACKS_OUTPUT_SCHEMA
 from .state import get_sdd_state
+
+_log = logging.getLogger(__name__)
 
 _IGNORED_ROOTS = {
     ".git",
@@ -30,6 +36,36 @@ _IGNORED_ROOTS = {
     "node_modules",
     "__pycache__",
 }
+
+_GREENFIELD_CONSTITUTION_TEMPLATE = (
+    "# Project Constitution\n\n"
+    "This file is the source of principles, conventions, and constraints for SDD.\n"
+    "Fill in the sections before starting work; it is injected into the\n"
+    "specify / plan / tasks phases.\n\n"
+    "## Principles\n\n- [Core engineering principles: simplicity, testability, ...]\n\n"
+    "## Conventions\n\n- [Language, style, directory layout, naming.]\n\n"
+    "## Constraints\n\n- [Technology / domain constraints; what to avoid.]\n\n"
+    "## Quality Bar\n\n- [Test requirements, review expectations, definition of done.]\n"
+)
+
+# A4b §9.3: CLI synthesis of packs the deterministic detectors did not cover. Placeholders
+# are filled with str.replace (literal-safe), so braces in the context cannot break it.
+_PACKS_CLI_SYSTEM_PROMPT = (
+    "You are a codebase analyst. Deterministic detectors have already selected some packs\n"
+    "from the project manifests. Analyze the repository and propose the MISSING packs\n"
+    "(logical components of the project) that the detectors did not cover.\n\n"
+    "CODE MAP CONTEXT:\n{mapper_context}\n\n"
+    "MEANINGFUL PROJECT FILES:\n{meaningful_files}\n\n"
+    "ALREADY SELECTED PACKS — do not duplicate these:\n{selected_packs}\n\n"
+    "RULES:\n"
+    "- Propose a pack ONLY when there is real evidence in the code (files, frameworks, patterns).\n"
+    "  Every pack must have detectors.rules referencing concrete files/patterns.\n"
+    "- Do NOT invent packs without evidence. If everything is covered, return an empty list.\n"
+    "- pack_id must be a descriptive kebab-case identifier (not a hash).\n\n"
+    "RESPONSE FORMAT:\n"
+    "Return STRICTLY one JSON object, with no markdown or text outside the JSON.\n"
+    '{ "packs": [ <PackDefinition per schema version {pack_schema_version}> ] }'
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +108,7 @@ async def run_project_initialization(
     session: Any,
     runtime_getter: Any,
     persist: Any,
+    cli_call: Optional[CliCall] = None,
 ) -> ProjectInitResult:
     sdd = get_sdd_state(session)
     workdir = str(getattr(session, "workdir", "") or "").strip()
@@ -106,10 +143,12 @@ async def run_project_initialization(
             _persist(persist)
             sdd.project_init_step = "packs"
             _persist(persist)
-            pack_result = _select_and_persist_packs(
+            pack_result = await _select_and_persist_packs(
                 workdir=workdir,
+                classification=classification,
                 codebase_context=mapper_context,
                 created_files=created_files,
+                cli_call=cli_call,
             )
             sdd.project_init_step = "artifacts"
             _persist(persist)
@@ -224,16 +263,82 @@ def _assert_healthy_code_map(status: Dict[str, Any]) -> None:
         raise RuntimeError("codebase_map_degraded_nodes")
 
 
-def _select_and_persist_packs(*, workdir: str, codebase_context: str, created_files: List[str]) -> Dict[str, Any]:
+async def _select_and_persist_packs(
+    *,
+    workdir: str,
+    classification: ProjectClassification,
+    codebase_context: str,
+    created_files: List[str],
+    cli_call: Optional[CliCall] = None,
+) -> Dict[str, Any]:
     registry = load_pack_registry(workdir=workdir)
     selection = select_packs(registry=registry, workdir=workdir, codebase_context=codebase_context)
     if selection.status == "ambiguous":
         raise RuntimeError(f"pack_selection_ambiguous:{selection.reason or 'unknown'}")
-    for pack in selection.proposed:
+
+    # A4b §9.3: when no built-in pack matched, prefer CLI synthesis of the missing packs over
+    # the hash-stub. Best-effort — on any CLI/parse failure we keep the heuristic `proposed`.
+    proposed = list(selection.proposed)
+    if cli_call is not None and selection.status in ("proposed", "uncovered"):
+        cli_packs = await _synthesize_packs_via_cli(
+            cli_call=cli_call,
+            classification=classification,
+            codebase_context=codebase_context,
+            selected=selection.selected,
+        )
+        if cli_packs:
+            proposed = cli_packs
+
+    for pack in proposed:
         created_files.append(write_pack_definition(workdir=workdir, pack=pack, lifecycle="proposed"))
         registry.add(pack)
     created_files.append(save_project_pack_index(workdir=workdir, packs=registry.all()))
-    return selection.to_manifest()
+
+    manifest = selection.to_manifest()
+    manifest["proposed"] = [pack.to_dict() for pack in proposed]
+    return manifest
+
+
+async def _synthesize_packs_via_cli(
+    *,
+    cli_call: CliCall,
+    classification: ProjectClassification,
+    codebase_context: str,
+    selected: List[PackScore],
+) -> List[PackDefinition]:
+    """CLI synthesis of the packs detectors did not cover (A4b §9.3).
+
+    Best-effort: returns [] on ANY failure (CLI error, malformed payload, invalid pack), so
+    the caller keeps `selection.proposed` (the heuristic stub already computed by select_packs)
+    and init never fails as a whole. An empty `packs` list (everything covered) also returns [].
+    """
+    try:
+        meaningful = "\n".join(classification.meaningful_paths[:200]) or "(none)"
+        selected_ids = ", ".join(sorted({score.pack.pack_id for score in selected})) or "(none)"
+        system = (
+            _PACKS_CLI_SYSTEM_PROMPT
+            .replace("{mapper_context}", str(codebase_context or "(no code map)"))
+            .replace("{meaningful_files}", meaningful)
+            .replace("{selected_packs}", selected_ids)
+            .replace("{pack_schema_version}", str(PACK_SCHEMA_VERSION))
+        )
+        user = "Analyze the repository and propose the missing packs as strict JSON."
+        payload = await cli_call("analytics", system, user, PACKS_OUTPUT_SCHEMA)
+        raw_packs = payload.get("packs") if isinstance(payload, dict) else None
+        if not isinstance(raw_packs, list):
+            return []
+        packs: List[PackDefinition] = []
+        for raw in raw_packs:
+            if not isinstance(raw, dict):
+                continue
+            data = dict(raw)  # copy before defaulting — never mutate the CLI/LLM payload
+            data.setdefault("schema_version", PACK_SCHEMA_VERSION)
+            data.setdefault("lifecycle", "proposed")
+            packs.append(PackDefinition.from_dict(data, source="proposed"))
+        return packs
+    except Exception:
+        _log.warning("sdd packs CLI synthesis failed; falling back to heuristic stub", exc_info=True)
+        return []
 
 
 def _write_project_artifacts(
@@ -321,6 +426,12 @@ def _write_empty_templates(*, workdir: str, created_files: List[str]) -> str:
         created_files.append(str(path))
         if name == "project-profile.generated.md":
             profile_path = str(path)
+    # Greenfield: засеять скелет конституции (принципы/конвенции/ограничения),
+    # если её ещё нет — она инжектируется в фазы specify/plan/tasks.
+    constitution_path = _safe_output_dir(workdir, ".cli-proxy") / "constitution.md"
+    if not constitution_path.exists():
+        _write_text(constitution_path, _GREENFIELD_CONSTITUTION_TEMPLATE, overwrite=True, workdir=workdir)
+        created_files.append(str(constitution_path))
     init_path = out_dir / "project-init.json"
     _write_json(
         init_path,
