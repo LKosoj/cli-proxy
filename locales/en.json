@@ -23,14 +23,199 @@
   "btn": {
     "session": {
       "new": "➕ New session",
-      "list": "📚 Session list",
+      "list": "📚 Sessions",
+      "cancel": "❌ Cancel",
+      "back": "⬅️ Back",
+      "status": "📋 Status",
+      "rename": "✏️ Rename",
+      "resume": "🔄 Resume",
+      "queue": "📥 Queue",
+      "clearqueue": "🗑 Clear queue",
+      "state": "💾 State",
+      "close": "🚫 Close",
+      "reset": "♻️ Reset",
       "lang": "🌐 Language"
+    },
+    "cli": {
+      "unavailable": "No CLI available"
+    },
+    "transfer": {
+      "yes": "Yes, transfer",
+      "no": "No, start fresh"
+    },
+    "orch": {
+      "on": "🧠✅ Orchestrator: on",
+      "off": "🧠⬜ Orchestrator: off"
+    },
+    "ssh": {
+      "on": "🔗✅ SSH: on",
+      "off": "🔗⬜ SSH: off"
     }
   },
   "msg": {
+    "session": {
+      "no_projects": "No projects configured. Contact your administrator.",
+      "no_active": "No active sessions.",
+      "no_scope": "Current scope-bound session is not defined. Open the relevant topic or select a session from the list.",
+      "choose": "Select a session:",
+      "tool_choose": "Select a tool for the new session:",
+      "project_choose": "Select a project:",
+      "project_choose_tool": "Tool {tool} selected. Select a project.",
+      "created": "Session {id} created and selected.",
+      "created_new_topic": "Session {id} created. Continue in the new topic.",
+      "selected_topic": "Session {id} selected. Continue in its topic.",
+      "created_bound_topic": "Session {id} created and bound to a new topic. Continue there.",
+      "no_tools": "No CLI tools found. Install the required tools first. Expected: {expected}",
+      "available_tools": "Available tools: {tools}",
+      "state_choose": "Select a state entry:",
+      "state_path_missing": "State unavailable: state_path is not configured.",
+      "state_not_found": "State not found.",
+      "workdir_unavailable": "Working directory unavailable.",
+      "closed": "Session closed.",
+      "cancelled": "Cancelled.",
+      "ssh_unavailable": "SSH is not configured for this project",
+      "ssh_enabled": "Remote control enabled",
+      "ssh_disabled": "Remote control disabled"
+    },
+    "error": {
+      "session_not_found": "Session not found.",
+      "session_busy": "Session is busy. CLI switching unavailable.",
+      "session_busy_project": "Session is busy. Project switching unavailable.",
+      "session_no_scope": "Session not defined for the current scope.",
+      "cli_unavailable": "CLI unavailable (not installed or disabled in settings).",
+      "cli_switch_failed": "Failed to switch CLI.",
+      "cli_switch_unsupported": "CLI switching is not supported.",
+      "mode_unavailable": "Mode unavailable.",
+      "mode_unavailable_user": "Mode unavailable for your user.",
+      "mode_menu_failed": "Failed to open mode menu.",
+      "choice_unavailable": "Choice unavailable.",
+      "callback_format": "Error: invalid callback format.",
+      "transfer_extract_failed": "Failed to extract context from the previous session.",
+      "transfer_write_failed": "Failed to write session to target CLI ({cli}).",
+      "transfer_failed": "Error transferring session.",
+      "orch_invalid": "Invalid orchestrator callback.",
+      "orch_no_pending": "No pending orchestrator input.",
+      "orch_stale": "Transition is stale. Send your message again.",
+      "orch_unavailable": "Orchestrator unavailable.",
+      "orch_unknown_action": "Unknown orchestrator action.",
+      "callback_handler": "Button handling error: {e}",
+      "queue_failed": "Failed to queue input. Please try again.",
+      "queue_append_failed": "Failed to update queued message. Please try again.",
+      "unknown_tool": "Unknown tool.",
+      "session_closed_stale": "Session is already closed."
+    },
+    "input": {
+      "no_pending": "No pending input.",
+      "taken": "Taken.",
+      "queued": "Input queued.",
+      "appended": "Input appended to the current queued message.",
+      "discarded": "Input discarded.",
+      "busy_queued": "Session is busy. Queuing input.",
+      "interrupted": "Current generation interrupted. Input discarded.",
+      "interrupted_freed": "Current generation interrupted. Session freed. Input discarded.",
+      "interrupted_partial": "Current generation interrupted, but part of the runtime is still stopping. Input discarded.",
+      "interrupt_failed": "Failed to fully interrupt the session. Input discarded."
+    },
+    "transfer": {
+      "offer": "CLI switched: {src} → {dst}.\nTransfer context from the previous session ({src})?",
+      "done": "Compact transfer formed from {n} messages {src} -> {dst}. Session will continue in {dst}.",
+      "declined": "Transfer declined. Continuing in the current CLI."
+    },
+    "orch": {
+      "applied": "Transition applied. Executing request.",
+      "cancelled": "Transition cancelled. Staying in current mode.",
+      "disabled": "Process stopped by user. Advanced orchestrator disabled."
+    },
     "lang": {
       "choose": "Choose language:",
-      "changed": "Language changed: {lang}"
+      "changed": "Language changed: {lang}",
+      "invalid": "Unknown language code."
+    }
+  },
+  "cmd": {
+    "start": {
+      "desc": "Show your Telegram ID/Chat ID and access hint."
+    },
+    "sessions": {
+      "desc": "Session management menu."
+    },
+    "interrupt": {
+      "desc": "Interrupt the current generation."
+    },
+    "git": {
+      "desc": "Git operations for the current context session (inline menu)."
+    },
+    "files": {
+      "desc": "Files for the current context session: send, save, rename, delete."
+    },
+    "miniapp": {
+      "desc": "Open MiniApp for administration."
+    },
+    "selfupdate": {
+      "desc": "Update bot code from git and restart the service."
+    },
+    "lint_evolution_status": {
+      "desc": "Lint Evolution: L1/L2/L3 level status, autopause, schema-version."
+    },
+    "lint_autopause_resume": {
+      "desc": "Lint Evolution: remove autopause from a level (1, 2 or 3)."
+    },
+    "lint_schema_history": {
+      "desc": "Lint Evolution: current schema version, field list, pending proposals."
+    },
+    "lint_gate_dry_run": {
+      "desc": "Lint Evolution: run lint-gate against active rules in current session."
+    },
+    "preset": {
+      "desc": "Task templates for CLI."
+    },
+    "metrics": {
+      "desc": "Bot metrics."
+    },
+    "tools": {
+      "desc": "Show available tools."
+    },
+    "newpath": {
+      "desc": "Set path for a new session after selecting a tool."
+    },
+    "close": {
+      "desc": "Close session (via menu)."
+    },
+    "status": {
+      "desc": "Show current context session status."
+    },
+    "limits": {
+      "desc": "Show limits/usage for the current chat CLI."
+    },
+    "queue": {
+      "desc": "Show queue."
+    },
+    "clearqueue": {
+      "desc": "Clear the current context session queue."
+    },
+    "rename": {
+      "desc": "Rename session."
+    },
+    "cwd": {
+      "desc": "Create a new session in another directory."
+    },
+    "dirs": {
+      "desc": "Browse directories (menu)."
+    },
+    "resume": {
+      "desc": "Show/set resume token."
+    },
+    "state": {
+      "desc": "Browse state (menu)."
+    },
+    "setprompt": {
+      "desc": "Set prompt_regex for a tool."
+    },
+    "send": {
+      "desc": "Send text directly to CLI."
+    },
+    "mode": {
+      "desc": "Mode menu: {label}."
     }
   }
 }

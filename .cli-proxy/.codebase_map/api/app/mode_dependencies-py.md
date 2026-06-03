@@ -1,28 +1,28 @@
 # API Spec: `app/mode_dependencies.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
-### `class RunArtifactsService` (line 37)
-- `def is_enabled()` (line 42)
-- `def retention_window_days()` (line 45)
+### `class RunArtifactsService` (line 39)
+- `def is_enabled()` (line 44)
+- `def retention_window_days()` (line 47)
 
-### `class SkillRuntimeService` (line 53)
-- `def is_selection_enabled()` (line 60)
-- `def allows_auto_discovery()` (line 63)
-- `def allows_source(source)` (line 66)
-- `def registry_path_list()` (line 69)
-- `def registry_service()` (line 73)
-- `def policy_service()` (line 77)
-- `def promote_to_global()` (line 80)
-- `def promote_run_skills()` (line 83)
-- `def clear_cache()` (line 86)
+### `class SkillRuntimeService` (line 55)
+- `def is_selection_enabled()` (line 62)
+- `def allows_auto_discovery()` (line 65)
+- `def allows_source(source)` (line 68)
+- `def registry_path_list()` (line 71)
+- `def registry_service()` (line 75)
+- `def policy_service()` (line 79)
+- `def promote_to_global()` (line 82)
+- `def promote_run_skills()` (line 85)
+- `def clear_cache()` (line 88)
 
-### `class ModeFoundationServices` (line 94)
+### `class ModeFoundationServices` (line 96)
 
-### `class ModeDependencies` (line 169)
+### `class ModeDependencies` (line 177)
 *Typed mode-level dependencies shared across plugins.*
-- `def with_overrides()` (line 192)
+- `def with_overrides()` (line 202)
 
 ## Symbols
-- `def build_mode_foundation_services(config)` (line 102)
+- `def build_mode_foundation_services(config)` (line 105)

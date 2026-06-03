@@ -154,6 +154,7 @@ class DefaultsConfigModel(ConfigModel):
             "непонятно",
         ]
     )
+    clarification_keywords_by_lang: dict[str, list[str]] = Field(default_factory=dict)
     manager_max_tasks: Annotated[int, Field(ge=1)] = 10
     manager_max_attempts: Annotated[int, Field(ge=1)] = 3
     manager_decompose_timeout_sec: PositiveInt = 1200

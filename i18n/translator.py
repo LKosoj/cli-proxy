@@ -43,7 +43,7 @@ def reload_catalogs() -> None:
         _cache.clear()
 
 
-def _resolve_key(catalog: dict[str, Any], key: str) -> Any:
+def _resolve_key(catalog: dict[str, Any], key: str) -> Any | None:
     """Traverse dot-notation key in nested dict. Returns None if missing."""
     parts = key.split(".")
     current: Any = catalog

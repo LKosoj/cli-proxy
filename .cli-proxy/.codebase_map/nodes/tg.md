@@ -1,62 +1,90 @@
 # Node: tg
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`tg/**` is the Telegram interface layer. It wires `python-telegram-bot` handlers, defines Telegram command menus and policy, processes inbound text/doc/photo updates, routes inline callbacks, and converts Markdown-ish output into Telegram-safe text/entities.
+Транспортный слой Telegram: канал взаимодействия пользователя с ботом через библиотеку `python-telegram-bot`. Бизнес-логики не содержит — делегирует в `app/services/*`, SDK-сервисы и mode-плагины (`modes/`, `agent/`). Точка входа — `tg/wiring.py:register_handlers(app, bot_app, config)`, вызывается из `bot.py:2730`: регистрирует pre-command-хендлер (`bot_app.on_pre_command`, group=-2), оборачивает core-команды из `build_command_registry` с проверкой доступа (`bot_app.ensure_telegram_inbound_authorized`), затем ставит плагин-хендлеры через `agent.telegram_wiring.install_plugin_handlers`. Команд-классы и обработчики инстанцируются в `BotApp.__init__` (`bot.py:288-294`): `CallbackHandler`, `MessageProcessor`, `FileUploadHandler`; командные методы приходят из `BotHandlers` (`tg/handlers.py`).
 
 ## Scope
 - Source glob: `tg/**`
-- Current files: 17 under `tg/**` as of last review.
-- Entry and registration: `tg/wiring.py`, `tg/command_registry.py`, `tg/command_policy.py`.
-- Command/UI handlers: `tg/handlers.py`.
-- Inbound message and attachment processing: `tg/message_processor.py`.
-- Inline callback routing: `tg/callbacks.py`, `tg/callback_actions/*.py`.
-- Telegram formatting helpers: `tg/markdown.py`.
+- Estimated files: 17
+- Подкаталог: `tg/callback_actions/` — доменные mixin'ы inline-callback'ов, собираемые в единый `CallbackActionsMixin`.
 
 ## Instructions for agent
-- Start with `.cli-proxy/.codebase_map/INDEX.md`, then this node, then task-specific files under `tg/**`.
-- For command registration or command menu changes, read `tg/wiring.py`, `tg/command_registry.py`, and the matching `BotHandlers` method in `tg/handlers.py`.
-- For inline button behavior, read `tg/callbacks.py` plus the matching file under `tg/callback_actions/`.
-- For text/document/photo ingress, read `tg/message_processor.py` and verify Telegram route/session resolution through the exact helper used by the changed flow.
-- Keep outbound Telegram text on the shared Markdown/entities path in `tg/markdown.py` and `app/services/telegram_transport.py`; do not add new `md2=False` send paths.
-- For mode-facing Telegram changes, read `modes/DEVELOPMENT.md` and use `modes/sdk/**`/`BaseMode` helpers instead of adding shared mode logic to `BotApp`.
-- Validate Python edits with targeted `.venv/bin/pytest -q` tests near the changed behavior and `.venv/bin/flake8`.
+- Это транспортный слой: бизнес-логику здесь не размещать. Маршрутизировать через `app/services/*`, SDK-сервисы и mode-плагины; к `BotApp` обращаться только как к контейнеру сервисов.
+- Регистрация хендлеров — единственная точка `tg/wiring.py:register_handlers`. Новые core-команды добавлять в `build_command_registry` (`tg/command_registry.py`), а сам метод-обработчик — в `BotHandlers` (`tg/handlers.py`). Если команда должна работать вне топика — добавить её имя в `OUTSIDE_TOPIC_ALLOWED_COMMANDS` (`tg/command_policy.py`).
+- Новые inline-callback'и добавлять как метод соответствующего mixin'а в `tg/callback_actions/*` и регистрировать prefix в `CallbackHandler._callback_prefix_handlers` (`tg/callbacks.py`). Сигнатура: `async def _cb_*(self, *, data, chat_id, query, context) -> bool`.
+- Доступ — fail-closed: каждый входящий апдейт авторизуется через `bot_app.ensure_telegram_inbound_authorized` (см. обёртку в `tg/wiring.py`); scope (reply_chat_id/thread/owner/session) разрешать через `bot_app.resolve_telegram_callback_scope`, не вычислять вручную.
+- Исходящие сообщения форматировать через `tg/markdown.py` (`to_markdown_v2`, `to_telegram_entities`) — по умолчанию MarkdownV2 (требование `CLAUDE.md`).
+- Состояние upload/rename/media-group хранится в `bot_app.ui_state` (ChatUiState); `FileUploadHandler` (`tg/file_upload_handler.py`) только читает/пишет через этот общий объект — не дублировать состояние.
+- Синхронизировать функциональность с Desktop (`desktop/`) и MiniApp (`miniapp/`) — общий контракт сервисов (требование `CLAUDE.md`).
+- `tg/handlers.py` (~2135 строк), `tg/callbacks.py` (~840), `tg/callback_actions/session.py` (~646) большие — читать точечно через Grep. Изменения держать минимальными; валидировать `pytest -q tests/test_tg_handlers.py tests/test_markdown_v2_send_message.py tests/test_telegram_ingress_security.py tests/test_mode_callback_routing.py`.
 
 ## Source of truth
-- `tg/__init__.py`
-- `tg/command_policy.py`
-- `tg/command_registry.py`
-- `tg/wiring.py`
-- `tg/handlers.py`
-- `tg/message_processor.py`
-- `tg/callbacks.py`
-- `tg/markdown.py`
-- `tg/callback_actions/__init__.py`
-- `tg/callback_actions/dirs.py`
-- `tg/callback_actions/files.py`
-- `tg/callback_actions/preset.py`
-- `tg/callback_actions/protocol.py`
-- `tg/callback_actions/session.py`
+- `tg/wiring.py` — `register_handlers`: монтаж pre-command/command/callback/message-хендлеров на `telegram.ext.Application`; авторизация и plugin-wiring.
+- `tg/command_registry.py` — `build_command_registry(bot_app)`: список core-команд (`name`/`desc`/`handler`/`menu`).
+- `tg/command_policy.py` — `OUTSIDE_TOPIC_ALLOWED_COMMANDS` (frozenset команд, допустимых вне топика).
+- `tg/handlers.py` — `BotHandlers` (реализация команд), `format_session_state`, `build_lang_menu`, `TelegramRuntimePayload`.
+- `tg/callbacks.py` — `CallbackHandler(CallbackActionsMixin)`: prefix-диспетчер inline-callback'ов (`orch_transition:`, `ma:`/`mode_action:`, `approve_cmd:`, `deny_cmd:`, `ask:`).
+- `tg/callback_actions/__init__.py` — сборка `CallbackActionsMixin` из доменных mixin'ов.
+- `tg/callback_actions/protocol.py` — `ProtocolActionsMixin`: mode-actions, аппрув/деплай команд, ask-user.
+- `tg/callback_actions/session.py` — `SessionActionsMixin`: управление сессией/UI, SSH-toggle.
+- `tg/callback_actions/dirs.py` — `DirsActionsMixin`: directory-picker flow.
+- `tg/callback_actions/files.py` — `FileActionsMixin`: меню файлов сессии.
+- `tg/callback_actions/preset.py` — `PresetActionsMixin`: запуск preset-команд.
+- `tg/message_processor.py` — `MessageProcessor`: обработка входящих текстов/документов, pending-session-сообщений.
+- `tg/file_upload_handler.py` — `FileUploadHandler`: pending-upload, pending-rename, flush media-group (через `bot_app.ui_state`).
+- `tg/files_service_adapter.py` — Telegram-хелперы поверх `app/services/session_files_service.py` (`session_files_service`, `session_uid_for_files`, `files_rel_path`, `resolve_files_payload`).
+- `tg/markdown.py` — конвертация/экранирование MarkdownV2 и Telegram-entities (`to_markdown_v2`, `escape_markdown_v2_all`, `to_telegram_entities`, `split_telegram_entities`, `utf16_length`).
+- `tg/pending_input_ui.py` — `TelegramPendingInputUiAdapter` (`bot.py:223`): клавиатуры pending-input (confirm / queue-choice / queue-confirm / orchestrator-transition).
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [tg/callback_actions/__init__.py](../api/tg/callback_actions/__init__-py.md)
+- [tg/callback_actions/dirs.py](../api/tg/callback_actions/dirs-py.md)
+- [tg/callback_actions/files.py](../api/tg/callback_actions/files-py.md)
+- [tg/callback_actions/preset.py](../api/tg/callback_actions/preset-py.md)
+- [tg/callback_actions/protocol.py](../api/tg/callback_actions/protocol-py.md)
+- [tg/callback_actions/session.py](../api/tg/callback_actions/session-py.md)
+- [tg/callbacks.py](../api/tg/callbacks-py.md)
+- [tg/command_registry.py](../api/tg/command_registry-py.md)
+- [tg/file_upload_handler.py](../api/tg/file_upload_handler-py.md)
+- [tg/files_service_adapter.py](../api/tg/files_service_adapter-py.md)
+- [tg/handlers.py](../api/tg/handlers-py.md)
+- [tg/markdown.py](../api/tg/markdown-py.md)
+- [tg/message_processor.py](../api/tg/message_processor-py.md)
+- [tg/pending_input_ui.py](../api/tg/pending_input_ui-py.md)
 
 ## When to update
-- Any change under `tg/**`.
-- Any change in `bot.py` that changes Telegram handler composition, `BotApp` methods called by `tg/**`, or Telegram startup wiring.
-- Any change in `app/services/telegram_transport.py`, `app/services/input_dispatch_service.py`, menu visibility, path normalization, state repository, SSH config, or session creation services used by `tg/**`.
-- Any mode SDK or mode plugin change that changes Telegram command exposure, callback handling, directory picker flows, dialogs, or transport context.
-- Any config change in `config.py`, `config.yaml`, or `config_example.yaml` that affects Telegram token/admin IDs, workdir/state paths, MiniApp command behavior, SSH visibility, or command/menu policy.
-- Any test change that adds, removes, or materially changes targeted Telegram coverage.
+- Any commit touching `tg/**`.
+- Any commit touching `agent/**` because this node has import/call dependency on it (`agent.telegram_wiring`, approvals в `tg/callback_actions/protocol.py`).
+- Any commit touching `app/**` because this node has import/call dependency on it (`app/services/*`).
+- Any commit touching `bot.py` because this node has import/call dependency on it (wiring/инстанцирование хендлеров).
+- Any commit touching `desktop/**` because this node has import/call dependency on it.
+- Any commit touching `miniapp/**` because this node has import/call dependency on it.
+- Any architecture or behavior change affecting this area.
 
 ## Related nodes
-- `.cli-proxy/.codebase_map/nodes/bot-py.md` - `bot.py` imports `tg.command_policy`, `tg.command_registry`, `tg.handlers`, `tg.callbacks`, `tg.message_processor`, and `tg.wiring`.
-- `.cli-proxy/.codebase_map/nodes/app.md` - `tg/**` uses app services for input dispatch, menu visibility, paths, state repository, SSH config, Telegram transport, and session creation.
-- `.cli-proxy/.codebase_map/nodes/agent.md` - `tg/wiring.py` installs plugin handlers from `agent.telegram_wiring`; callback protocol actions import agent command approval/denial helpers.
-- `.cli-proxy/.codebase_map/nodes/modes.md` - command registry and callbacks expose mode menus, mode callbacks, dialogs, and directory picker integration.
-- `.cli-proxy/.codebase_map/nodes/sessions.md` - handlers and callbacks read/update active mode, SSH flag, orchestrator flag, and visible session state.
-- `.cli-proxy/.codebase_map/nodes/session-py.md` - handlers operate on `Session` and session runtime UID data.
-- `.cli-proxy/.codebase_map/nodes/config-py.md` - Telegram handlers read runtime config defaults and Telegram/admin settings.
-- `.cli-proxy/.codebase_map/nodes/config-example-yaml.md` - sample config must track Telegram-facing config fields.
-- `.cli-proxy/.codebase_map/nodes/tests.md` - targeted coverage includes Telegram handler, callback, markdown, routing, ingress security, SSH UI, file, git, and self-update tests.
+- `nodes/agent.md`
+- `nodes/app.md`
+- `nodes/bot-py.md`
+- `nodes/desktop.md`
+- `nodes/miniapp.md`
+- `nodes/modes.md`
+- `nodes/session-py.md`
+- `nodes/sessions.md`
+- `agent` confidence=0.90 via L0/L1/L2
+- `app` confidence=0.90 via L0/L1/L2
+- `bot.py` confidence=0.90 via L0/L2
+- `desktop` confidence=0.76 via L0
+- `miniapp` confidence=0.76 via L0
+- `modes` confidence=0.90 via L0/L1/L2
+- `session.py` confidence=0.90 via L0/L2
+- `sessions` confidence=0.90 via L0/L1/L2
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-05-30
+- 2026-06-03T02:39:47Z

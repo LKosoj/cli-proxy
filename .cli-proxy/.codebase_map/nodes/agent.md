@@ -1,62 +1,95 @@
 # Node: agent
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`agent/**` contains the local agent tool layer and manager/analyst support code: manager orchestration, CLI routing, Telegram plugin handler wiring, plugin contracts, concrete tool plugins, command approvals, and shared helper implementations used by modes and runtime entrypoints.
+Agent Layer (слой 4 архитектуры): инструменты агента (`ToolPlugin`) и поддерживающая их обвязка. Не транспорт (`tg/`, `desktop/`, `miniapp/`) и не реализация режимов (`modes/`); инструменты публикуются через `ToolRegistry` (`modes/sdk/runtime/tooling/`) и потребляются из `bot.py`/SDK-сервисов.
+
+Состав:
+- `agent/plugins/` — ~50 плагинов-инструментов (по файлу на плагин): файловые операции (`read_file.py`, `write_file.py`, `edit_file.py`, `delete_file.py`, `list_directory.py`), команды (`run_command.py`, `ssh_exec.py`), поиск (`search_files.py`, `search_text.py`, `search_web.py`, `memory_search.py`), web/research (`fetch_page.py`, `web_research.py`, `website_content.py`, `github_analysis.py`), генерация медиа и TTS (`stable_diffusion.py`, `ddg_image_search.py`, `haiper_image_to_video.py`, `gtts_text_to_speech.py`, `auto_tts.py`), задачи/память/напоминания (`manage_tasks.py`, `task_management.py`, `schedule_task.py`, `reminders.py`, `memory.py`), admin-инструменты (`admin_*.py`), служебные (`intent_plugin.py`, `analyst_intent_plugin.py`, `brainstorm.py`, `chief.py`, `ask_user.py`, `prompt_perfect.py`, `manage_message.py`, `send_file.py`, `get_tool_details.py`). Базовый класс — `agent/plugins/base.py` (`ToolPlugin`), руководство — `agent/plugins/plugin-development.md`.
+- `agent/tooling/helpers.py` — store pending-команд, approval-flow и `execute_shell_command` (реэкспортируются через `agent/__init__.py`).
+- `agent/approvals/blocked-patterns.json` — регэксп-паттерны команд, запрещённых всегда (env-leak, DoS и т.п.).
+- `agent/cli_routing.py` — маршрутизация типа работы (`analytics`/`planning`/`development`/`administration`/…) на CLI-агентов (`claude`/`codex`/`gemini`/`qwen`/`grok`); дефолты в `DEFAULT_CLI_ROUTING`.
+- `agent/manager_core.py` (+ реэкспорт `agent/manager.py`, промпты `agent/manager_prompts.py`) — ядро manager-режима: пайплайн decompose/dev/review/final audit.
+- `agent/analyst_prompts.py` — сборка промптов analyst-режима из выбранного шаблона.
+- `agent/telegram_wiring.py` — регистрация plugin-handlers в Telegram-приложении (`install_plugin_handlers`).
+- `agent/mcp/` — точка интеграции MCP; фактические MCP-клиенты в `modes/sdk/runtime/mcp/`.
 
 ## Scope
 - Source glob: `agent/**`
-- Current files: 61 under `agent/**` as of last review.
-- Manager orchestration and prompts: `agent/manager.py`, `agent/manager_core.py`, `agent/manager_prompts.py`
-- Analyst prompt assembly: `agent/analyst_prompts.py`
-- CLI work-type routing and failover: `agent/cli_routing.py`
-- Telegram plugin handler wiring: `agent/telegram_wiring.py`
-- Tool plugin contract and local plugins: `agent/plugins/base.py`, `agent/plugins/*.py`, `agent/plugins/plantuml.jar`
-- Shared tool helpers and command approvals: `agent/tooling/helpers.py`, `agent/approvals/blocked-patterns.json`
+- Estimated files: 60
+- Корневые модули: `agent/__init__.py`, `agent/cli_routing.py`, `agent/manager_core.py`, `agent/manager.py`, `agent/manager_prompts.py`, `agent/analyst_prompts.py`, `agent/telegram_wiring.py`.
+- Подпакеты: `agent/plugins/` (плагины + `base.py`, `plugin-development.md`), `agent/tooling/`, `agent/approvals/`, `agent/mcp/`.
 
 ## Instructions for agent
-- Start from `.cli-proxy/.codebase_map/INDEX.md`, then this node, then the task-specific files under `agent/**`.
-- Before claiming runtime behavior, verify the exact function/class in source and cite concrete `path:line`.
-- For manager behavior, read `modes/DEVELOPMENT.md`, `agent/manager_core.py`, and the relevant files under `modes/manager/**`; keep shared mode logic in SDK services/BaseMode paths, not direct `BotApp` coupling.
-- For tool/plugin changes, preserve the `ToolPlugin`/`DialogMixin` contract in `agent/plugins/base.py` and the `ToolSpec` contract exposed through `modes/sdk/runtime/tooling/spec.py`.
-- For command, file, web, SSH, or approval behavior, reuse `agent/tooling/helpers.py` and update `agent/approvals/blocked-patterns.json` only when the policy itself changes.
-- For CLI routing changes, check `agent/cli_routing.py`, `config.py`, `app/config_runtime/**`, and `config_example.yaml` together when config fields or defaults change.
-- Validate with targeted tests under `tests/**` for the changed surface, such as `tests/test_cli_routing_failover.py`, `tests/test_agent_plugins.py`, `tests/test_agent_plugin_dialog_mixin.py`, `tests/test_manager_*.py`, or plugin-specific tests.
+- Read only files relevant to the active task; плагинов ~50 — не загружать весь `agent/plugins/`.
+- Новый плагин — наследник `ToolPlugin` из `agent/plugins/base.py`; следовать `agent/plugins/plugin-development.md` (ToolSpec, меню, диалоги, регистрация через `ToolRegistry`). Префикс имён функций (`function_prefix`) — opt-in.
+- Тяжёлую логику не размещать здесь: операции — в `app/services/`, плагин лишь вызывает сервис.
+- Изменяя `agent/approvals/blocked-patterns.json`, не ослаблять запреты на утечку секретов/DoS; править через анализ корневой причины, не маскируя.
+- `agent/manager.py` — тонкий реэкспорт `manager_core`; логику править в `agent/manager_core.py`.
+- Prefer deterministic checks before edits. Keep changes minimal and validate with `pytest -q` and `flake8 .`.
 
 ## Source of truth
-- `agent/manager.py` - compatibility export for `agent.manager_core`.
-- `agent/manager_core.py` - `ManagerOrchestrator`, manager run state helpers, plan metadata, response archive helpers, and manager CLI/OpenAI calls.
-- `agent/manager_prompts.py` - manager decomposition, validation, review, and final audit prompt templates.
-- `agent/analyst_prompts.py` - analyst prompt construction used by `modes/analyst/mode.py`.
-- `agent/cli_routing.py` - `defaults.cli_routing` loading, work-type priority lists, session CLI switching, failover, and task-bearing CLI hook calls.
-- `agent/telegram_wiring.py` - plugin-provided Telegram message/inline handler registration called by `tg/wiring.py`.
-- `agent/plugins/base.py` - `ToolPlugin`, `DialogMixin`, and plugin UI/dialog protocol.
-- `agent/plugins/*.py` - local tool implementations loaded by `modes/sdk/runtime/tooling/loader.py`.
-- `agent/tooling/helpers.py` - pending command approval state, blocked command checks, command execution, path safety, output trimming, web search, and fetch helpers.
-- `agent/approvals/blocked-patterns.json` - command blocking policy consumed by `agent/tooling/helpers.py`.
-- `modes/sdk/runtime/tooling/loader.py`, `modes/sdk/runtime/tooling/registry.py`, `modes/sdk/runtime/tooling/spec.py`, `modes/sdk/runtime/tooling/mcp_plugin.py` - registry/loading/spec integration for `agent/plugins/**`.
+Код — единственный источник истины; точки входа области:
+- `agent/__init__.py` — публичный реэкспорт approval/pending-command API из `agent/tooling/helpers.py`.
+- `agent/plugins/base.py` — базовый класс `ToolPlugin`; `agent/plugins/plugin-development.md` — руководство.
+- `agent/plugins/*.py` — конкретные инструменты (по одному файлу на плагин).
+- `agent/tooling/helpers.py` — execute/approval pending-команд.
+- `agent/approvals/blocked-patterns.json` — запрещённые паттерны команд.
+- `agent/cli_routing.py` — `DEFAULT_CLI_ROUTING` и классификатор типа работы.
+- `agent/manager_core.py`, `agent/manager_prompts.py` — manager-пайплайн и его промпты.
+- `agent/analyst_prompts.py` — промпты analyst-режима.
+- `agent/telegram_wiring.py` — `install_plugin_handlers`.
+- `agent/mcp/__init__.py` — пакет интеграции MCP (клиенты в `modes/sdk/runtime/mcp/`).
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [agent/analyst_prompts.py](../api/agent/analyst_prompts-py.md)
+- [agent/cli_routing.py](../api/agent/cli_routing-py.md)
+- [agent/manager_core.py](../api/agent/manager_core-py.md)
+- [agent/plugins/admin_escalate.py](../api/agent/plugins/admin_escalate-py.md)
+- [agent/plugins/admin_execute_action.py](../api/agent/plugins/admin_execute_action-py.md)
+- [agent/plugins/admin_get_dossier.py](../api/agent/plugins/admin_get_dossier-py.md)
+- [agent/plugins/admin_remember_fact.py](../api/agent/plugins/admin_remember_fact-py.md)
+- [agent/plugins/admin_remember_note.py](../api/agent/plugins/admin_remember_note-py.md)
+- [agent/plugins/admin_script_run.py](../api/agent/plugins/admin_script_run-py.md)
+- [agent/plugins/analyst_intent_plugin.py](../api/agent/plugins/analyst_intent_plugin-py.md)
+- [agent/plugins/ask_user.py](../api/agent/plugins/ask_user-py.md)
+- [agent/plugins/auto_tts.py](../api/agent/plugins/auto_tts-py.md)
+- [agent/plugins/base.py](../api/agent/plugins/base-py.md)
+- [agent/plugins/brainstorm.py](../api/agent/plugins/brainstorm-py.md)
+- [agent/plugins/chief.py](../api/agent/plugins/chief-py.md)
 
 ## When to update
 - Any commit touching `agent/**`.
-- Any change to plugin loading, registry behavior, tool specs, MCP remote tool wrapping, or mode runtime tool execution under `modes/sdk/runtime/tooling/**`.
-- Any change to manager mode orchestration, schemas, services, prompts, UI, or runner integration under `modes/manager/**`.
-- Any change to analyst prompt usage in `modes/analyst/mode.py`.
-- Any change to Telegram plugin handler registration in `tg/wiring.py` or plugin UI dispatch behavior.
-- Any change to `defaults.cli_routing`, tool config, config runtime adapter/serialization, or sample config in `config.py`, `app/config_runtime/**`, `config.yaml`, or `config_example.yaml`.
-- Any change to task deadline checker startup/shutdown that imports `agent/plugins/task_management.py`.
-- Any targeted test addition/removal that changes coverage expectations for agent tools, manager orchestration, CLI routing, or plugin dialogs.
+- Any commit touching `app/**` because this node has import/call dependency on it.
+- Any commit touching `bot.py` because this node has import/call dependency on it.
+- Any commit touching `config.py` because this node has import/call dependency on it.
+- Any commit touching `config_example.yaml` because this node has import/call dependency on it.
+- Any commit touching `desktop/**` because this node has import/call dependency on it.
+- Any architecture or behavior change affecting this area.
 
 ## Related nodes
-- `nodes/modes.md` - consumes `agent.manager`, `agent.manager_core`, `agent.analyst_prompts`, and the tooling registry/loader integration for plugins.
-- `nodes/app.md` - bootstraps `ToolRegistry` and starts the task deadline checker from `agent/plugins/task_management.py`.
-- `nodes/tg.md` - `tg/wiring.py` delegates plugin handler registration to `agent/telegram_wiring.py`.
-- `nodes/desktop.md` - desktop facade binds the shared `ToolRegistry` for plugin UI/runtime use.
-- `nodes/bot-py.md` - bot runtime owns Telegram callbacks/messages that coexist with agent plugin handlers.
-- `nodes/config-py.md` - `AppConfig` drives tool availability and `defaults.cli_routing`.
-- `nodes/config-example-yaml.md` - sample config must track new or changed tool/routing config keys.
-- `nodes/session-py.md`, `nodes/sessions.md` - sessions are switched by `agent/cli_routing.py` and carry tool execution state.
-- `nodes/tests.md` - targeted coverage for agent plugins, CLI routing, manager orchestration, and Telegram/plugin UI flows.
+- `nodes/app.md`
+- `nodes/bot-py.md`
+- `nodes/config-py.md`
+- `nodes/config-example-yaml.md`
+- `nodes/desktop.md`
+- `nodes/miniapp.md`
+- `nodes/modes.md`
+- `nodes/session-py.md`
+- `app` confidence=0.95 via L0/L1/L2
+- `bot.py` confidence=0.90 via L0/L2
+- `config.py` confidence=0.90 via L2
+- `config_example.yaml` confidence=0.89 via L0
+- `desktop` confidence=0.76 via L0
+- `miniapp` confidence=0.95 via L0
+- `modes` confidence=0.95 via L0/L1/L2
+- `session.py` confidence=0.95 via L0/L2
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-06-02
+- 2026-06-03 (enriched: Purpose/Scope/Instructions/Source of truth)

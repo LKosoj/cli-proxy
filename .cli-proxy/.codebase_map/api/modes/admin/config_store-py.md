@@ -1,6 +1,6 @@
 # API Spec: `modes/admin/config_store.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
 ### `class AdminConfigStoreError(RuntimeError)` (line 36)
@@ -14,13 +14,13 @@ Generated: 2026-04-27T22:43:22Z
 - `def load_config()` (line 102)
 - `def load_effective_config()` (line 124)
 - `def build_effective_config(cls, payload)` (line 129)
-- `def merge_generated_config(generated_payload)` (line 229)
-- `def replace_generated_config(generated_payload)` (line 254)
-- `def apply_scan_result()` (line 281)
-- `def set_pinned_cli(cli_name)` (line 323)
-- `def update_runtime()` (line 339)
-- `def set_last_scan_at(scan_ts)` (line 383)
-- `def validate_config(payload)` (line 392)
+- `def merge_generated_config(generated_payload)` (line 273)
+- `def replace_generated_config(generated_payload)` (line 298)
+- `def apply_scan_result()` (line 325)
+- `def set_pinned_cli(cli_name)` (line 367)
+- `def update_runtime()` (line 383)
+- `def set_last_scan_at(scan_ts)` (line 427)
+- `def validate_config(payload)` (line 436)
 
 ## Symbols
 - `def default_admin_template_path()` (line 40)

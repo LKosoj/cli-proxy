@@ -24,13 +24,198 @@
     "session": {
       "new": "➕ Neue Sitzung",
       "list": "📚 Sitzungsliste",
+      "cancel": "❌ Abbrechen",
+      "back": "⬅️ Zurück",
+      "status": "📋 Status",
+      "rename": "✏️ Rename",
+      "resume": "🔄 Resume",
+      "queue": "📥 Queue",
+      "clearqueue": "🗑 Warteschl.",
+      "state": "💾 State",
+      "close": "🚫 Schließen",
+      "reset": "♻️ Reset",
       "lang": "🌐 Sprache"
+    },
+    "cli": {
+      "unavailable": "CLI nicht verfügbar"
+    },
+    "transfer": {
+      "yes": "Ja, übertragen",
+      "no": "Nein, neu starten"
+    },
+    "orch": {
+      "on": "🧠✅ Orchestrator: an",
+      "off": "🧠⬜ Orchestrator: aus"
+    },
+    "ssh": {
+      "on": "🔗✅ SSH: an",
+      "off": "🔗⬜ SSH: aus"
     }
   },
   "msg": {
+    "session": {
+      "no_projects": "Projekte nicht konfiguriert. Wenden Sie sich an Ihren Administrator.",
+      "no_active": "Keine aktiven Sitzungen.",
+      "no_scope": "Die aktuelle scope-gebundene Sitzung ist nicht definiert. Öffnen Sie das gewünschte Topic oder wählen Sie eine Sitzung aus der Liste.",
+      "choose": "Sitzung auswählen:",
+      "tool_choose": "Werkzeug für neue Sitzung auswählen:",
+      "project_choose": "Projekt auswählen:",
+      "project_choose_tool": "Werkzeug {tool} ausgewählt. Projekt auswählen.",
+      "created": "Sitzung {id} erstellt und ausgewählt.",
+      "created_new_topic": "Sitzung {id} erstellt. Weiter im neuen Topic.",
+      "selected_topic": "Sitzung {id} ausgewählt. Weiter in ihrem Topic.",
+      "created_bound_topic": "Sitzung {id} erstellt und an neues Topic gebunden. Weiter dort.",
+      "no_tools": "Keine CLI-Werkzeuge gefunden. Installieren Sie zuerst die benötigten Tools. Erwartet: {expected}",
+      "available_tools": "Verfügbare Werkzeuge: {tools}",
+      "state_choose": "Zustandseintrag auswählen:",
+      "state_path_missing": "Zustand nicht verfügbar: state_path ist nicht konfiguriert.",
+      "state_not_found": "Zustand nicht gefunden.",
+      "workdir_unavailable": "Arbeitsverzeichnis nicht verfügbar.",
+      "closed": "Sitzung geschlossen.",
+      "cancelled": "Abgebrochen.",
+      "ssh_unavailable": "SSH ist für dieses Projekt nicht konfiguriert",
+      "ssh_enabled": "Fernsteuerung aktiviert",
+      "ssh_disabled": "Fernsteuerung deaktiviert"
+    },
+    "error": {
+      "session_not_found": "Sitzung nicht gefunden.",
+      "session_busy": "Sitzung ist beschäftigt. CLI-Wechsel nicht verfügbar.",
+      "session_busy_project": "Sitzung ist beschäftigt. Projektwechsel nicht verfügbar.",
+      "session_no_scope": "Sitzung für den aktuellen Scope nicht definiert.",
+      "cli_unavailable": "CLI nicht verfügbar (nicht installiert oder in den Einstellungen deaktiviert).",
+      "cli_switch_failed": "CLI-Wechsel fehlgeschlagen.",
+      "cli_switch_unsupported": "CLI-Wechsel wird nicht unterstützt.",
+      "mode_unavailable": "Modus nicht verfügbar.",
+      "mode_unavailable_user": "Modus für Ihren Benutzer nicht verfügbar.",
+      "mode_menu_failed": "Modusmenü konnte nicht geöffnet werden.",
+      "choice_unavailable": "Auswahl nicht verfügbar.",
+      "callback_format": "Fehler: ungültiges Callback-Format.",
+      "transfer_extract_failed": "Kontext aus vorheriger Sitzung konnte nicht extrahiert werden.",
+      "transfer_write_failed": "Sitzung konnte nicht in Ziel-CLI geschrieben werden ({cli}).",
+      "transfer_failed": "Fehler beim Übertragen der Sitzung.",
+      "orch_invalid": "Ungültiger Orchestrator-Callback.",
+      "orch_no_pending": "Kein ausstehender Orchestrator-Input.",
+      "orch_stale": "Übergang veraltet. Senden Sie Ihre Nachricht erneut.",
+      "orch_unavailable": "Orchestrator nicht verfügbar.",
+      "orch_unknown_action": "Unbekannte Orchestrator-Aktion.",
+      "callback_handler": "Fehler bei der Schaltflächenverarbeitung: {e}",
+      "queue_failed": "Input konnte nicht in die Warteschlange gestellt werden. Bitte erneut versuchen.",
+      "queue_append_failed": "Nachricht in der Warteschlange konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "unknown_tool": "Unbekanntes Werkzeug.",
+      "session_closed_stale": "Sitzung ist bereits geschlossen."
+    },
+    "input": {
+      "no_pending": "Kein ausstehender Input.",
+      "taken": "Übernommen.",
+      "queued": "Input in Warteschlange.",
+      "appended": "Input zur aktuellen Warteschlangennachricht hinzugefügt.",
+      "discarded": "Input verworfen.",
+      "busy_queued": "Sitzung beschäftigt. Input wird in Warteschlange gestellt.",
+      "interrupted": "Aktuelle Generierung unterbrochen. Input verworfen.",
+      "interrupted_freed": "Aktuelle Generierung unterbrochen. Sitzung freigegeben. Input verworfen.",
+      "interrupted_partial": "Aktuelle Generierung unterbrochen, aber ein Teil der Laufzeit beendet noch. Input verworfen.",
+      "interrupt_failed": "Sitzung konnte nicht vollständig unterbrochen werden. Input verworfen."
+    },
+    "transfer": {
+      "offer": "CLI gewechselt: {src} → {dst}.\nKontext aus vorheriger Sitzung ({src}) übertragen?",
+      "done": "Kompakter Transfer aus {n} Nachrichten {src} -> {dst} erstellt. Sitzung wird in {dst} fortgesetzt.",
+      "declined": "Übertragung abgelehnt. Weiter im aktuellen CLI."
+    },
+    "orch": {
+      "applied": "Übergang angewendet. Anfrage wird ausgeführt.",
+      "cancelled": "Übergang abgebrochen. Bleibe im aktuellen Modus.",
+      "disabled": "Prozess vom Benutzer gestoppt. Erweiterter Orchestrator deaktiviert."
+    },
     "lang": {
       "choose": "Sprache wählen:",
-      "changed": "Sprache geändert: {lang}"
+      "changed": "Sprache geändert: {lang}",
+      "invalid": "Unbekannter Sprachcode."
+    }
+  },
+  "cmd": {
+    "start": {
+      "desc": "Ihre Telegram-ID/Chat-ID und Zugangstipp anzeigen."
+    },
+    "sessions": {
+      "desc": "Sitzungsverwaltungsmenü."
+    },
+    "interrupt": {
+      "desc": "Aktuelle Generierung unterbrechen."
+    },
+    "git": {
+      "desc": "Git-Operationen für die aktuelle Kontextsitzung (Inline-Menü)."
+    },
+    "files": {
+      "desc": "Dateien der aktuellen Kontextsitzung: senden, speichern, umbenennen, löschen."
+    },
+    "miniapp": {
+      "desc": "MiniApp zur Verwaltung öffnen."
+    },
+    "selfupdate": {
+      "desc": "Bot-Code aus git aktualisieren und Dienst neu starten."
+    },
+    "lint_evolution_status": {
+      "desc": "Lint Evolution: L1/L2/L3-Levelstatus, Autopause, Schema-Version."
+    },
+    "lint_autopause_resume": {
+      "desc": "Lint Evolution: Autopause von einem Level entfernen (1, 2 oder 3)."
+    },
+    "lint_schema_history": {
+      "desc": "Lint Evolution: aktuelle Schema-Version, Feldliste, ausstehende Vorschläge."
+    },
+    "lint_gate_dry_run": {
+      "desc": "Lint Evolution: Lint-Gate gegen aktive Regeln in der aktuellen Sitzung ausführen."
+    },
+    "preset": {
+      "desc": "Aufgabenvorlagen für CLI."
+    },
+    "metrics": {
+      "desc": "Bot-Metriken."
+    },
+    "tools": {
+      "desc": "Verfügbare Werkzeuge anzeigen."
+    },
+    "newpath": {
+      "desc": "Pfad für neue Sitzung nach Werkzeugauswahl festlegen."
+    },
+    "close": {
+      "desc": "Sitzung schließen (über Menü)."
+    },
+    "status": {
+      "desc": "Status der aktuellen Kontextsitzung anzeigen."
+    },
+    "limits": {
+      "desc": "Limits/Nutzung für das aktuelle Chat-CLI anzeigen."
+    },
+    "queue": {
+      "desc": "Warteschlange anzeigen."
+    },
+    "clearqueue": {
+      "desc": "Warteschlange der aktuellen Kontextsitzung leeren."
+    },
+    "rename": {
+      "desc": "Sitzung umbenennen."
+    },
+    "cwd": {
+      "desc": "Neue Sitzung in einem anderen Verzeichnis erstellen."
+    },
+    "dirs": {
+      "desc": "Verzeichnisse durchsuchen (Menü)."
+    },
+    "resume": {
+      "desc": "Resume-Token anzeigen/setzen."
+    },
+    "state": {
+      "desc": "Zustand durchsuchen (Menü)."
+    },
+    "setprompt": {
+      "desc": "prompt_regex für ein Werkzeug setzen."
+    },
+    "send": {
+      "desc": "Text direkt an CLI senden."
+    },
+    "mode": {
+      "desc": "Modusmenü: {label}."
     }
   }
 }

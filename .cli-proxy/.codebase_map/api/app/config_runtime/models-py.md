@@ -1,36 +1,36 @@
 # API Spec: `app/config_runtime/models.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
-### `class ConfigModel(BaseModel)` (line 21)
+### `class ConfigModel(BaseModel)` (line 22)
 
-### `class TelegramConfigModel(ConfigModel)` (line 25)
+### `class TelegramConfigModel(ConfigModel)` (line 26)
 
-### `class ToolConfigModel(ConfigModel)` (line 66)
+### `class ToolConfigModel(ConfigModel)` (line 82)
 
-### `class DefaultsConfigModel(ConfigModel)` (line 95)
+### `class DefaultsConfigModel(ConfigModel)` (line 115)
 
-### `class MCPConfigModel(ConfigModel)` (line 167)
+### `class MCPConfigModel(ConfigModel)` (line 197)
 
-### `class MCPClientConfigModel(ConfigModel)` (line 174)
+### `class MCPClientConfigModel(ConfigModel)` (line 204)
 
-### `class PresetConfigModel(ConfigModel)` (line 201)
+### `class PresetConfigModel(ConfigModel)` (line 231)
 
-### `class MiniAppConfigModel(ConfigModel)` (line 206)
+### `class MiniAppConfigModel(ConfigModel)` (line 236)
 
-### `class ThreadModeConfigModel(ConfigModel)` (line 223)
+### `class ThreadModeConfigModel(ConfigModel)` (line 253)
 
-### `class WebhooksConfigModel(ConfigModel)` (line 237)
+### `class WebhooksConfigModel(ConfigModel)` (line 267)
 
-### `class SchedulerConfigModel(ConfigModel)` (line 253)
+### `class SchedulerConfigModel(ConfigModel)` (line 283)
 
-### `class SecurityRateLimitPolicyConfigModel(ConfigModel)` (line 262)
+### `class SecurityRateLimitPolicyConfigModel(ConfigModel)` (line 292)
 
-### `class SecurityRateLimitsConfigModel(ConfigModel)` (line 281)
+### `class SecurityRateLimitsConfigModel(ConfigModel)` (line 311)
 
-### `class SecurityConfigModel(ConfigModel)` (line 295)
+### `class SecurityConfigModel(ConfigModel)` (line 325)
 
-### `class LintEvolutionConfigModel(ConfigModel)` (line 299)
+### `class LintEvolutionConfigModel(ConfigModel)` (line 329)
 
-### `class AppConfigModel(ConfigModel)` (line 312)
+### `class AppConfigModel(ConfigModel)` (line 342)

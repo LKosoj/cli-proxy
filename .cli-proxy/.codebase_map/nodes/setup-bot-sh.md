@@ -1,40 +1,47 @@
 # Node: setup_bot.sh
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-Instruction node for `/srv/git_projects/cli-proxy/setup_bot.sh`, the Ubuntu/Debian first-time setup script for CLI Proxy Telegram Bridge.
-The script installs OS/Python/npm dependencies, collects required bot/OpenAI settings, writes local runtime config files, and creates/enables a systemd service for `/srv/git_projects/cli-proxy/bot.py`.
+`setup_bot.sh` — интерактивный установщик первого запуска CLI Proxy Telegram Bridge для Ubuntu/Debian (bash, `set -euo pipefail`). За один прогон: ставит системные пакеты через `apt-get` (включая `python3-venv`, `nodejs`, `npm`, `ripgrep`, `setup_bot.sh:115-127`), создаёт venv в `.venv` и ставит зависимости из `requirements.txt` (`setup_bot.sh:129-132`), устанавливает CLI-инструменты codex/claude/gemini/qwen через `npm -g` и grok через официальный установщик xAI (`setup_bot.sh:134-176`), собирает обязательные параметры, генерирует `config.yaml` из `config_example.yaml` и `.env`, затем создаёт и запускает systemd-сервис (`setup_bot.sh:382-434`). Запуск: `./setup_bot.sh` (интерактивно) или `./setup_bot.sh --non-interactive ...` (CI/headless).
 
 ## Scope
-- Source glob: `/srv/git_projects/cli-proxy/setup_bot.sh`
+- Source glob: `setup_bot.sh`
 - Estimated files: 1
-- Covers argument/env parsing, interactive prompts, dependency installation, virtualenv setup, config generation, `.env` generation, systemd unit creation, service start, and optional ownership changes.
-- Reads `/srv/git_projects/cli-proxy/config_example.yaml` and `/srv/git_projects/cli-proxy/requirements.txt`.
-- Writes `/srv/git_projects/cli-proxy/config.yaml`, `/srv/git_projects/cli-proxy/.env`, and `/srv/git_projects/cli-proxy/.venv/`.
-- Does not define bot runtime behavior; service execution enters `/srv/git_projects/cli-proxy/bot.py`.
+- Скрипт сборки/деплоя, не часть рантайма бота. Бизнес-логику не содержит — только bootstrap окружения и инсталляцию.
 
 ## Instructions for agent
-- Before changing setup behavior, read `/srv/git_projects/cli-proxy/setup_bot.sh` and the target files it reads or writes.
-- Keep edits shellcheck-friendly Bash with `set -euo pipefail`; preserve interactive and `--non-interactive` flows.
-- If adding or changing generated config keys, update both `/srv/git_projects/cli-proxy/config.yaml` and `/srv/git_projects/cli-proxy/config_example.yaml`, then check MiniApp config editor impact.
-- Do not hardcode secrets or commit generated local files such as `/srv/git_projects/cli-proxy/.env`.
-- Prefer targeted validation: `bash -n /srv/git_projects/cli-proxy/setup_bot.sh` for syntax, plus focused tests for any touched Python/config consumers.
+- Перед утверждениями о поведении проверять конкретную строку и ссылаться на `setup_bot.sh:<строка>`.
+- Флаги и env-переменные парсятся в `usage()`/`while`-цикле (`setup_bot.sh:23-76`). При добавлении опции синхронизировать три места: парсер `case`, текст `usage()` и блок required-проверок (`setup_bot.sh:193-220`, `:250-254`).
+- `config.yaml` собирается встроенным Python-heredoc (`setup_bot.sh:290-363`) поверх загруженного `config_example.yaml`. Любой новый ключ в конфиге, который должен задаваться установщиком, добавлять и в `config_example.yaml`, и в этот heredoc.
+- Записываемые ключи конфига конкретны: `telegram.token`, `telegram.whitelist_chat_ids`, `telegram.admlist_chat_ids`, `telegram.user_workdirs`, `defaults.workdir`, `defaults.openai_*`, `defaults.zai_api_key`, `defaults.tavily_api_key`, `defaults.jina_api_key`. Инвариант: админы — подмножество whitelist (`setup_bot.sh:315-318`).
+- systemd-юнит генерируется инлайн (`setup_bot.sh:394-414`): `ExecStart=$VENV_DIR/bin/python $REPO_DIR/bot.py`. При переименовании entrypoint `bot.py` или смене venv-пути править здесь.
+- Секреты пишутся в `.env` с `chmod 600` (`setup_bot.sh:365-380`) — не логировать значения ключей, не понижать права.
 
 ## Source of truth
-- `/srv/git_projects/cli-proxy/setup_bot.sh`
-- `/srv/git_projects/cli-proxy/config_example.yaml` for default config structure consumed by the script.
-- `/srv/git_projects/cli-proxy/requirements.txt` for Python dependencies installed into `/srv/git_projects/cli-proxy/.venv/`.
+- `setup_bot.sh` — единственный файл узла.
+- Прямые файловые зависимости скрипта:
+  - `config_example.yaml` — шаблон-источник для генерации `config.yaml` (`setup_bot.sh:18`, `:295-299`).
+  - `requirements.txt` — список pip-зависимостей для venv (`setup_bot.sh:132`).
+  - `bot.py` — процессный entrypoint в `ExecStart` systemd-юнита (`setup_bot.sh:408`).
+- Артефакты, создаваемые скриптом (не в git): `config.yaml`, `.env`, `.venv/`, `/etc/systemd/system/<service>.service`.
 
 ## When to update
-- Any commit touching `/srv/git_projects/cli-proxy/setup_bot.sh`.
-- Any change to setup arguments, supported `SETUP_*` env vars, required API keys, generated `config.yaml`/`.env` fields, dependency installation, or systemd unit contents.
-- Any change to `/srv/git_projects/cli-proxy/config_example.yaml` or `/srv/git_projects/cli-proxy/requirements.txt` that changes first-time setup expectations.
+- Любой коммит, затрагивающий `setup_bot.sh`.
+- Изменение структуры `config_example.yaml` в секциях `telegram.*` / `defaults.*`, которые заполняет heredoc (`setup_bot.sh:341-359`).
+- Изменение `requirements.txt`, ломающее установку в venv, либо смена набора системных пакетов apt.
+- Переименование/перенос entrypoint `bot.py` или изменение запускаемой команды сервиса.
+- Изменение состава устанавливаемых CLI (codex/claude/gemini/qwen/grok) или их npm-пакетов.
 
 ## Related nodes
-- `config-example-yaml.md`
-- `requirements-txt.md`
-- `bot-py.md`
+- `nodes/config-example-yaml.md` — шаблон конфига, который читается и материализуется в `config.yaml`.
+- `nodes/requirements-txt.md` — pip-зависимости, ставящиеся в `.venv`.
+- `nodes/bot-py.md` — entrypoint, запускаемый сгенерированным systemd-сервисом.
+- `nodes/config-py.md` — схема `config.yaml`, валидирующая то, что пишет установщик.
+- L0-эвристика маппера также связывала узел с `nodes/agent.md`, `nodes/app.md`, `nodes/miniapp.md`, `nodes/session-py.md`, `nodes/tests.md` (confidence=0.76). Это косвенные связи через рантайм бота, а не прямые import/call-зависимости скрипта.
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-05-31
+- 2026-06-03

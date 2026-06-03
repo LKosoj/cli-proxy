@@ -1,25 +1,25 @@
 # API Spec: `app/security/auth.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
-### `class TokenAuthStrategy` (line 10)
-- `def __init__()` (line 13)
-- `def authenticate(credentials)` (line 17)
+### `class TokenAuthStrategy` (line 13)
+- `def __init__()` (line 16)
+- `def authenticate(credentials)` (line 20)
 
-### `class OAuthStrategy` (line 52)
-- `def __init__()` (line 55)
-- `def authenticate(credentials)` (line 66)
+### `class OAuthStrategy` (line 55)
+- `def __init__()` (line 58)
+- `def authenticate(credentials)` (line 69)
 
-### `class TelegramMiniAppInitDataStrategy` (line 136)
-- `def __init__()` (line 139)
-- `def authenticate(credentials)` (line 142)
+### `class TelegramMiniAppInitDataStrategy` (line 139)
+- `def __init__()` (line 142)
+- `def authenticate(credentials)` (line 145)
 
-### `class ConfigAuthService` (line 202)
+### `class ConfigAuthService` (line 205)
 *Thin auth adapter over BotApp access checks plus pluggable auth strategies.*
-- `def __init__()` (line 205)
-- `def authorize(chat_id)` (line 222)
-- `def authenticate(credentials)` (line 245)
+- `def __init__()` (line 208)
+- `def authorize(chat_id)` (line 225)
+- `def authenticate(credentials)` (line 248)
 
 ## Symbols
-- `def build_auth_service(auth_config)` (line 269)
+- `def build_auth_service(auth_config)` (line 272)

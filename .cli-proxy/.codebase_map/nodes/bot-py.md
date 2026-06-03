@@ -1,54 +1,63 @@
 # Node: bot.py
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`/srv/git_projects/cli-proxy/bot.py` is the Telegram bot runtime entrypoint. It builds the `telegram.ext.Application`, owns `TelegramInboundRoute` and `BotApp`, wires the service container, resolves Telegram chat/thread/session routing, delegates prompt and mode execution to session services, and starts polling from `main()`.
+`bot.py` — composition root (Core Layer) приложения CLI Proxy. Класс `BotApp` (`bot.py:112`) собирает все сервисы через DI-контейнер `build_application` (`app/bootstrap.py`, импорт `bot.py:74`) и держит на себе: Telegram inbound-роутинг (включая Thread Mode), авторизацию и rate-limit на входе, делегирование команд в транспортный слой `tg/*`, запуск mode-пайплайна и graceful shutdown. Функция `build_app(config)` (`bot.py:2729`) строит `telegram.ext.Application`, регистрирует хендлеры через `register_handlers` (`tg/wiring.py`) и lifecycle-хуки; `main()` (`bot.py:2748`) — процессный entrypoint (`python bot.py`).
 
 ## Scope
 - Source glob: `bot.py`
-- File: `/srv/git_projects/cli-proxy/bot.py`
-- Includes: Telegram inbound authorization/routing, `BotApp` service wiring, command/callback wrappers, MiniApp launch command, runtime config reload entrypoint, prompt/mode delegation, shutdown cleanup, `build_app()`, `main()`.
-- Excludes: handler internals in `/srv/git_projects/cli-proxy/tg/**`, session execution internals in `/srv/git_projects/cli-proxy/sessions/**`, mode implementations in `/srv/git_projects/cli-proxy/modes/**`, MiniApp routes in `/srv/git_projects/cli-proxy/miniapp/**`, config model definitions in `/srv/git_projects/cli-proxy/config.py`.
+- Estimated files: 1
+- Не содержит бизнес-логику режимов и транспортные реализации — только их связывание (wiring). Сами реализации живут в `app/services/**`, `tg/**`, `modes/**`, `sessions/**`.
 
 ## Instructions for agent
-- Read `/srv/git_projects/cli-proxy/bot.py` before changing this area.
-- For handler or command registration changes, also read `/srv/git_projects/cli-proxy/tg/wiring.py`, `/srv/git_projects/cli-proxy/tg/command_registry.py`, `/srv/git_projects/cli-proxy/tg/handlers.py`, `/srv/git_projects/cli-proxy/tg/callbacks.py`, and `/srv/git_projects/cli-proxy/tg/message_processor.py`.
-- For startup, config, or lifecycle changes, also read `/srv/git_projects/cli-proxy/config.py`, `/srv/git_projects/cli-proxy/app/config_runtime/loader.py`, `/srv/git_projects/cli-proxy/app/bootstrap.py`, and `/srv/git_projects/cli-proxy/app/services/lifecycle_service.py`.
-- For prompt, session, or mode execution changes, also read `/srv/git_projects/cli-proxy/sessions/session_management.py`, `/srv/git_projects/cli-proxy/sessions/session_run_service.py`, `/srv/git_projects/cli-proxy/modes/DEVELOPMENT.md`, and the relevant `/srv/git_projects/cli-proxy/modes/**` implementation.
-- Keep `BotApp` as orchestration glue: prefer existing services, SDK helpers, and `tg/**` handlers over adding business logic directly to `/srv/git_projects/cli-proxy/bot.py`.
-- Use targeted tests for the touched path; do not run the full suite unless shared runtime behavior changed or the user asked for a full smoke check.
+- Перед утверждениями о runtime-поведении проверять конкретный метод в `bot.py` и ссылаться на `bot.py:<строка>` (см. зеркало интерфейсов `api/bot-py.md`).
+- `BotApp.__init__` (`bot.py:113`) — порядок инициализации значим: сначала `build_application(...)`, затем атрибуты из `self.container.*`, затем SDK-сервисы и `_initialize_mode_plugins()` (`bot.py:1014`). Не переставлять зависимые шаги.
+- Большинство `cmd_*` / `on_*` методов — тонкие делегаты в `self.handlers` (`tg/handlers.py`), `self.callbacks` (`tg/callbacks.py`), `self.message_processor` (`tg/message_processor.py`), `self.session_management` (`sessions/session_management.py`). Логику менять там, а здесь — только связывание.
+- Режимы не должны получать прямой доступ к `BotApp`: SDK-сервисы передаются через `_initialize_mode_plugins` (`bot.py:1014`) и `AppServices` (`bot.py:228`). Новые зависимости режимов добавлять как именованные сервисы, а не как ссылку на `self`.
+- Тесты монипатчат модульные символы `bot.ansi_to_html` / `bot.make_html_file` / `bot.summarize_text_with_reason` — сохранять их доступность на уровне модуля (`bot.py:90`, `bot.py:1087`).
+- После правок прогонять `pytest -q` и `flake8 .`; держать изменения минимальными.
 
 ## Source of truth
-- `/srv/git_projects/cli-proxy/bot.py` — runtime behavior for this node.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/api/bot-py.md` — generated symbol inventory only; verify behavior in source.
-- `/srv/git_projects/cli-proxy/tg/wiring.py` — Telegram handler registration against `BotApp`.
-- `/srv/git_projects/cli-proxy/tg/command_registry.py` — bot command menu definitions.
-- `/srv/git_projects/cli-proxy/app/bootstrap.py` — application service container built for `BotApp`.
-- `/srv/git_projects/cli-proxy/config.py`, `/srv/git_projects/cli-proxy/config.yaml`, `/srv/git_projects/cli-proxy/config_example.yaml` — runtime config consumed by startup and `BotApp`.
+- `bot.py` — единственный файл узла.
+- Зеркало публичного API: `.cli-proxy/.codebase_map/api/bot-py.md`.
+- Ключевые прямые зависимости (импорты `bot.py:25-74`):
+  - `app/bootstrap.py` — `build_application` (DI-контейнер сервисов).
+  - `config.py` — `AppConfig`, `load_config`; `app/config_runtime/loader.py` — `load_validated_settings`.
+  - `session.py` — `Session`, `session_runtime_uid` (менеджер сессий — через `self.manager`).
+  - `tg/wiring.py` — `register_handlers`; `tg/handlers.py`, `tg/callbacks.py`, `tg/message_processor.py`.
+  - `sessions/session_management.py`, `sessions/conversation_scope.py`, `sessions/session_ui.py`.
+  - `app/services/lifecycle_service.py` — `build_post_init`, `build_post_shutdown`, `build_error_handler`.
+  - `app/services/telegram_transport.py`, `app/services/access_policy_service.py`, `app/services/dirs_service.py` и прочие `app/services/*`.
+  - `modes/sdk` — `DialogService`, `MessagingService`, `AgentRuntimeService`, `ModeToolingService`, `DirsFlowService` и др.
+  - `miniapp` — `MiniAppServer`; `agent` — `configure_pending_commands_store`, `set_approval_callback`.
 
 ## When to update
-- Any change to `/srv/git_projects/cli-proxy/bot.py`, including imports, constants, `TelegramInboundRoute`, `BotApp`, `build_app()`, or `main()`.
-- Any change in `/srv/git_projects/cli-proxy/tg/wiring.py`, `/srv/git_projects/cli-proxy/tg/command_registry.py`, `/srv/git_projects/cli-proxy/tg/handlers.py`, `/srv/git_projects/cli-proxy/tg/callbacks.py`, or `/srv/git_projects/cli-proxy/tg/message_processor.py` that changes how Telegram updates call `BotApp`.
-- Any change in `/srv/git_projects/cli-proxy/sessions/session_management.py` or `/srv/git_projects/cli-proxy/sessions/session_run_service.py` that changes `BotApp` prompt/mode delegation.
-- Any runtime config change consumed by `/srv/git_projects/cli-proxy/bot.py`, especially in `/srv/git_projects/cli-proxy/config.py`, `/srv/git_projects/cli-proxy/config.yaml`, or `/srv/git_projects/cli-proxy/config_example.yaml`.
-- Any mode SDK/container contract change used by `BotApp`, including `/srv/git_projects/cli-proxy/app/bootstrap.py`, `/srv/git_projects/cli-proxy/modes/sdk/**`, or `/srv/git_projects/cli-proxy/modes/DEVELOPMENT.md`.
-- Any MiniApp launch/auth integration change involving `BotApp` in `/srv/git_projects/cli-proxy/miniapp/**` or `/srv/git_projects/cli-proxy/app/security/**`.
-- Update `Last reviewed` after source verification.
+- Любой коммит, затрагивающий `bot.py`.
+- Любой коммит в `agent/**`, `app/**`, `config.py`, `desktop/**`, `miniapp/**` — узел имеет import/call-зависимость от них (см. Related nodes).
+- Изменение сигнатур делегатов в `tg/**` или `sessions/session_management.py`, на которые ссылаются `cmd_*` / `on_*`.
+- Изменение состава SDK-сервисов в `_initialize_mode_plugins` (`bot.py:1014`) или `AppServices` (`bot.py:228`).
+- Изменение lifecycle (`build_app` `bot.py:2729`, `shutdown_runtime` `bot.py:2649`, `main` `bot.py:2748`).
+- Любое архитектурное или поведенческое изменение в этой области.
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [bot.py](../api/bot-py.md)
 
 ## Related nodes
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tg.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/app.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/sessions.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/modes.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/agent.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/miniapp.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/config-py.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/config-example-yaml.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/session-py.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/summary-py.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/utils.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tests.md`
+- `nodes/app.md` — DI-контейнер и сервисы (`build_application`, `app/services/**`), confidence=0.90 via L0/L1/L2.
+- `nodes/agent.md` — pending-commands store и approval callback, confidence=0.90 via L0/L1/L2.
+- `nodes/config-py.md` — `AppConfig` / `load_config`, confidence=0.90 via L2.
+- `nodes/miniapp.md` — `MiniAppServer`, confidence=0.90 via L0/L1/L2.
+- `nodes/modes.md` — SDK-сервисы и mode-пайплайн, confidence=0.90 via L0/L1/L2.
+- `nodes/session-py.md` — `Session` / `SessionManager`, confidence=0.90 via L0/L2.
+- `nodes/sessions.md` — `session_management`, `conversation_scope`, `session_ui`, confidence=0.90 via L0/L1/L2.
+- `nodes/desktop.md` — синхронизация функциональности с desktop-клиентом, confidence=0.76 via L0.
+- `nodes/tg.md` — транспортные хендлеры (`handlers`, `callbacks`, `message_processor`, `wiring`).
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-05-17
+- 2026-06-03

@@ -103,7 +103,7 @@ _PLANNER_SYSTEM = """Ты — оркестратор. Построй план ш
 _ASK_CLARIFICATION_SYSTEM = ASK_USER_CLARIFICATION_SYSTEM
 
 
-async def plan_steps(config: AppConfig, user_message: str, context: str) -> List[PlanStep]:
+async def plan_steps(config: AppConfig, user_message: str, context: str, *, language: str = "ru") -> List[PlanStep]:
     _log.info("planner: start, user_message=%r context_len=%d", user_message[:200], len(context))
     deterministic_steps = _build_deterministic_analyst_plan(user_message, context)
     if deterministic_steps:
@@ -168,7 +168,9 @@ async def plan_steps(config: AppConfig, user_message: str, context: str) -> List
     if not steps:
         _log.warning("planner: no valid steps parsed, using fallback single step")
         steps = _fallback_steps(user_message, context)
-    if not any(s.step_type == "ask_user" for s in steps) and needs_clarification(user_message, config, context):
+    if not any(s.step_type == "ask_user" for s in steps) and needs_clarification(
+        user_message, config, context, language=language
+    ):
         _log.info("planner: adding clarification step (ask_user) via LLM")
         ask_step = await _build_clarification_step(config, user_message, context)
         normalize_ask_step(ask_step)

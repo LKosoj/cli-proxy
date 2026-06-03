@@ -49,6 +49,7 @@ from app.services.dirs_service import DirsService
 from app.services.session_creation_service import SessionCreationService
 from app.services.sandbox_service import AgentSandboxService
 from app.services.lifecycle_service import build_error_handler, build_post_init, build_post_shutdown
+from app.services.i18n_service import maybe_persist_user_language
 from app.services.telegram_transport import TelegramTransportContext, TelegramTransportService
 from app.services.message_buffer_service import MessageBufferService
 from app.services.input_dispatch_service import InputDispatchService
@@ -891,6 +892,17 @@ class BotApp:
             require_admin=require_admin,
         )
         if decision.allowed:
+            _user = getattr(update, "effective_user", None)
+            _user_id = getattr(_user, "id", None)
+            _lang_code = getattr(_user, "language_code", None)
+            if _user_id is not None:
+                _config_svc = getattr(self, "config_service", None)
+                if _config_svc is not None:
+                    asyncio.create_task(
+                        maybe_persist_user_language(
+                            _user_id, _lang_code, self.config, _config_svc
+                        )
+                    )
             return route
 
         if not emit_denied_message:

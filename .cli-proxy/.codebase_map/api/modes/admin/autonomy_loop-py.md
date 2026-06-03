@@ -1,6 +1,6 @@
 # API Spec: `modes/admin/autonomy_loop.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Classes
 ### `class AutonomyDecision` (line 48)

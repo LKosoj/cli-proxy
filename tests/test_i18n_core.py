@@ -249,7 +249,7 @@ def test_persist_flow_writes_on_first_contact() -> None:
 
     asyncio.run(maybe_persist_user_language(1, "en", cfg, mock_svc))
 
-    mock_svc.set_user_language.assert_called_once_with(1, "en", max_retries=1)
+    mock_svc.set_user_language.assert_called_once_with(1, "en")
 
 
 def test_persist_flow_idempotent() -> None:
@@ -276,12 +276,42 @@ def test_persist_flow_skips_unknown_code() -> None:
     mock_svc.set_user_language.assert_not_called()
 
 
-def test_persist_flow_retry_on_revision_mismatch() -> None:
+def test_persist_flow_handles_failure_gracefully() -> None:
     from app.services.i18n_service import maybe_persist_user_language
     from app.services.config_service import ConfigDraftSaveResult
 
     cfg = _make_config(user_languages={}, default_language="ru")
     mock_svc = MagicMock()
+
+    failure = ConfigDraftSaveResult(
+        ok=False, revision="r", diff="", changed=False,
+        restart_required=[], reloadable=[],
+        errors=["max retries exceeded on revision mismatch"], backup_path=None,
+    )
+    mock_svc.set_user_language = AsyncMock(return_value=failure)
+
+    # Single call (retry lives inside set_user_language); must not raise.
+    asyncio.run(maybe_persist_user_language(1, "en", cfg, mock_svc))
+
+    mock_svc.set_user_language.assert_called_once_with(1, "en")
+
+
+def _make_config_service_stub(side_effect):
+    """Bind the real ConfigService.set_user_language onto a stubbed service."""
+    from app.services.config_service import ConfigDraftSaveResult  # noqa: F401
+
+    svc = MagicMock()
+    cfg = MagicMock()
+    cfg.telegram.user_languages = {}
+    svc.load = AsyncMock(return_value=cfg)
+    svc.current_revision = AsyncMock(return_value="rev")
+    svc._as_dict = MagicMock(return_value={"telegram": {}})
+    svc.save_draft_with_revision = AsyncMock(side_effect=side_effect)
+    return svc
+
+
+def test_set_user_language_retries_on_revision_mismatch() -> None:
+    from app.services.config_service import ConfigService, ConfigDraftSaveResult
 
     mismatch = ConfigDraftSaveResult(
         ok=False, revision="r", diff="", changed=False,
@@ -289,32 +319,31 @@ def test_persist_flow_retry_on_revision_mismatch() -> None:
     )
     ok_result = ConfigDraftSaveResult(
         ok=True, revision="r2", diff="", changed=True,
-        restart_required=[], reloadable=[], errors=[], backup_path=None,
+        restart_required=[], reloadable=["telegram.user_languages"], errors=[],
+        backup_path=None,
     )
-    mock_svc.set_user_language = AsyncMock(side_effect=[mismatch, mismatch, ok_result])
+    svc = _make_config_service_stub([mismatch, mismatch, ok_result])
 
-    asyncio.run(maybe_persist_user_language(1, "en", cfg, mock_svc))
+    result = asyncio.run(ConfigService.set_user_language(svc, 1, "en"))
 
-    assert mock_svc.set_user_language.call_count == 3
+    assert result.ok
+    assert svc.save_draft_with_revision.call_count == 3
 
 
-def test_persist_flow_gives_up_after_3_retries() -> None:
-    from app.services.i18n_service import maybe_persist_user_language
-    from app.services.config_service import ConfigDraftSaveResult
-
-    cfg = _make_config(user_languages={}, default_language="ru")
-    mock_svc = MagicMock()
+def test_set_user_language_gives_up_after_max_retries() -> None:
+    from app.services.config_service import ConfigService, ConfigDraftSaveResult
 
     mismatch = ConfigDraftSaveResult(
         ok=False, revision="r", diff="", changed=False,
         restart_required=[], reloadable=[], errors=["revision mismatch"], backup_path=None,
     )
-    mock_svc.set_user_language = AsyncMock(return_value=mismatch)
+    svc = _make_config_service_stub([mismatch, mismatch, mismatch])
 
-    # Should not raise
-    asyncio.run(maybe_persist_user_language(1, "en", cfg, mock_svc))
+    result = asyncio.run(ConfigService.set_user_language(svc, 1, "en"))
 
-    assert mock_svc.set_user_language.call_count == 3
+    assert not result.ok
+    assert any("revision mismatch" in e for e in result.errors)
+    assert svc.save_draft_with_revision.call_count == 3
 
 
 # ---------------------------------------------------------------------------

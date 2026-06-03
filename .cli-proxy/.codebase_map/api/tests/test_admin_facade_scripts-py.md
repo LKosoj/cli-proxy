@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_facade_scripts.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `def test_scan_script_sources_uses_whitelist(tmp_path)` (line 39)

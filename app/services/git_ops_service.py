@@ -1170,7 +1170,9 @@ class GitOps:
                 commit_body = None
                 if os.getenv("OPENAI_API_KEY") or self.config.defaults.openai_api_key:
                     from summary import suggest_commit_message_detailed_async
-                    detailed = await suggest_commit_message_detailed_async(commit_context, self.config)
+                    from utils.lang import resolve_user_lang
+                    _lang = resolve_user_lang(self.config, chat_id=chat_id)
+                    detailed = await suggest_commit_message_detailed_async(commit_context, self.config, language=_lang)
                     if detailed:
                         commit_message, commit_body = detailed
                 if commit_message:

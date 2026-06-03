@@ -5,6 +5,7 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from config import AppConfig
+    from telegram import Update
 
 SUPPORTED_LANGS: frozenset[str] = frozenset({"ru", "en", "zh", "de"})
 FALLBACK_LANG: str = "ru"
@@ -76,3 +77,25 @@ def resolve_language(
 
     # Step 4: hard fallback
     return FALLBACK_LANG
+
+
+def lang_from_update(update: "Update", config: "AppConfig") -> str:
+    """Resolve language from a Telegram Update.
+
+    Priority: user_languages[effective_user.id] → auto → default → ru.
+    """
+    user = getattr(update, "effective_user", None)
+    user_id = getattr(user, "id", None)
+    lang_code = getattr(user, "language_code", None)
+    return resolve_language(user_id, lang_code, config)
+
+
+def lang_from_query(query: object, config: "AppConfig") -> str:
+    """Resolve language from a CallbackQuery.
+
+    Uses query.from_user.id — correct in both private chats and groups.
+    """
+    from_user = getattr(query, "from_user", None)
+    user_id = getattr(from_user, "id", None)
+    lang_code = getattr(from_user, "language_code", None)
+    return resolve_language(user_id, lang_code, config)

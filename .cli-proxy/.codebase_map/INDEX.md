@@ -1,6 +1,6 @@
 # Codebase Mapper Instruction Graph
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 This index is the entrypoint for agent instructions.
 
@@ -39,27 +39,23 @@ These files are mandatory context and must be considered before major edits.
 
 ## Nodes
 - [tests](nodes/tests.md) - files: 526, source_glob: `tests/**`
-- [modes](nodes/modes.md) - files: 206, source_glob: `modes/**`
-- [app](nodes/app.md) - files: 153, source_glob: `app/**`
-- [agent](nodes/agent.md) - files: 61, source_glob: `agent/**`
-- [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`
-- [tg](nodes/tg.md) - files: 17, source_glob: `tg/**`
+- [modes](nodes/modes.md) - files: 205, source_glob: `modes/**`
+- [app](nodes/app.md) - files: 152, source_glob: `app/**`
+- [agent](nodes/agent.md) - files: 60, source_glob: `agent/**`
+- [desktop](nodes/desktop.md) - files: 31, source_glob: `desktop/**`
 - [miniapp](nodes/miniapp.md) - files: 19, source_glob: `miniapp/**`
+- [tg](nodes/tg.md) - files: 17, source_glob: `tg/**`
 - [sessions](nodes/sessions.md) - files: 10, source_glob: `sessions/**`
 - [utils](nodes/utils.md) - files: 8, source_glob: `utils/**`
-- [SESSION.json](nodes/session-json.md) - files: 0, source_glob: `SESSION.json`
+- [i18n](nodes/i18n.md) - files: 5, source_glob: `i18n/**`
+- [locales](nodes/locales.md) - files: 4, source_glob: `locales/**`
 - [bot.py](nodes/bot-py.md) - files: 1, source_glob: `bot.py`
 - [code_stats.py](nodes/code-stats-py.md) - files: 1, source_glob: `code_stats.py`
 - [config.py](nodes/config-py.md) - files: 1, source_glob: `config.py`
 - [config_example.yaml](nodes/config-example-yaml.md) - files: 1, source_glob: `config_example.yaml`
 - [conftest.py](nodes/conftest-py.md) - files: 1, source_glob: `conftest.py`
-- [fix-permissions.sh](nodes/fix-permissions-sh.md) - files: 1, source_glob: `fix-permissions.sh`
-- [full_ui.yaml](nodes/full-ui-yaml.md) - files: 0, source_glob: `full_ui.yaml`
 - [gen_init_data.py](nodes/gen-init-data-py.md) - files: 1, source_glob: `gen_init_data.py`
-- [miniapp.pid](nodes/miniapp-pid.md) - files: 0, source_glob: `miniapp.pid`
-- [mkdocs.yml](nodes/mkdocs-yml.md) - files: 1, source_glob: `mkdocs.yml`
 - [parse_status.py](nodes/parse-status-py.md) - files: 1, source_glob: `parse_status.py`
-- [playwright_config.json](nodes/playwright-config-json.md) - files: 1, source_glob: `playwright_config.json`
 - [pytest.ini](nodes/pytest-ini.md) - files: 1, source_glob: `pytest.ini`
 - [requirements.txt](nodes/requirements-txt.md) - files: 1, source_glob: `requirements.txt`
 - [scripts](nodes/scripts.md) - files: 1, source_glob: `scripts/**`

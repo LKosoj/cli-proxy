@@ -1,6 +1,6 @@
 # API Spec: `app/services/cli_json_stream.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
 ### `class CliJsonStreamEvent` (line 51)
@@ -38,18 +38,25 @@ Generated: 2026-04-27T22:43:22Z
 - `def session_id()` (line 643)
 - `def completed()` (line 647)
 - `def final_output_text()` (line 650)
-- `def feed_line(line)` (line 653)
+- `def feed_line(line)` (line 669)
 
-### `class CliJsonStreamRecorder` (line 883)
-- `def __init__()` (line 884)
-- `def raw_path()` (line 903)
-- `def normalized_path()` (line 907)
-- `def record_raw_line(line)` (line 910)
-- `def record_event(event)` (line 918)
-- `def close()` (line 926)
+### `class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter)` (line 859)
+- `def __init__()` (line 862)
+- `def session_id()` (line 868)
+- `def completed()` (line 872)
+- `def final_output_text()` (line 875)
+- `def feed_line(line)` (line 878)
+
+### `class CliJsonStreamRecorder` (line 1013)
+- `def __init__()` (line 1014)
+- `def raw_path()` (line 1033)
+- `def normalized_path()` (line 1037)
+- `def record_raw_line(line)` (line 1040)
+- `def record_event(event)` (line 1048)
+- `def close()` (line 1056)
 
 ## Symbols
 - `def cli_json_stream_archive_enabled(config)` (line 25)
-- `def build_cli_json_stream_adapter(cli_name)` (line 838)
-- `def recover_cli_text_from_raw_stream(cli_name, raw_text)` (line 851)
-- `def extract_cli_evidence_from_normalized_stream(path)` (line 977)
+- `def build_cli_json_stream_adapter(cli_name)` (line 966)
+- `def recover_cli_text_from_raw_stream(cli_name, raw_text)` (line 981)
+- `def extract_cli_evidence_from_normalized_stream(path)` (line 1107)

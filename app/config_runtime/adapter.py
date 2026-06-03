@@ -108,6 +108,7 @@ def adapt_validated_settings(settings: ValidatedSettings, *, path: str) -> "AppC
         default_cli=settings.defaults.default_cli,
         default_language=settings.defaults.default_language,
         clarification_keywords=list(settings.defaults.clarification_keywords),
+        clarification_keywords_by_lang=dict(settings.defaults.clarification_keywords_by_lang),
         manager_max_tasks=settings.defaults.manager_max_tasks,
         manager_max_attempts=settings.defaults.manager_max_attempts,
         manager_decompose_timeout_sec=settings.defaults.manager_decompose_timeout_sec,

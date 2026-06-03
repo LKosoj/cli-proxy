@@ -21,8 +21,10 @@ from modes.sdk.runtime.openai_client import (
 from modes.sdk.runtime.tooling.registry import ToolRegistry as PluginToolRegistry
 
 from config import AppConfig
+from i18n.language_names import LANGUAGE_NAMES
 from sessions.scoped_key import session_scoped_key
 from sessions.session_state_access import get_active_mode
+from utils.lang import resolve_user_lang
 from utils.paths import sandbox_root
 from utils.text import strip_ansi
 
@@ -525,12 +527,15 @@ class ReActAgent:
         base_port = 4000 + (user_index * 10)
         user_ports = f"{base_port}-{base_port + 9}"
         tool_names = ", ".join(self._allowed_tool_names(allowed_tools))
+        lang = resolve_user_lang(self.config, user_id=user_id)
+        response_language = LANGUAGE_NAMES.get(lang, "Russian")
         prompt = (
             prompt.replace("{{cwd}}", cwd)
             .replace("{{date}}", time.strftime("%Y-%m-%d"))
             .replace("{{tools}}", tool_names)
             .replace("{{userPorts}}", user_ports)
             .replace("{{tools_disclosure_hint}}", "")
+            .replace("{{response_language}}", response_language)
         )
         prompt = re.sub(r"<TOOLS>.*?</TOOLS>", self._build_tools_block(allowed_tools), prompt, flags=re.S)
         memory_content = get_memory_for_prompt(cwd)

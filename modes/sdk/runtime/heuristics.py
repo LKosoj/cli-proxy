@@ -30,7 +30,7 @@ def _is_repo_grounded_analyst_context(context: str) -> bool:
     return bool(raw.get("requires_codebase_grounding"))
 
 
-def needs_clarification(text: str, config: AppConfig, context: str = "") -> bool:
+def needs_clarification(text: str, config: AppConfig, context: str = "", *, language: str = "ru") -> bool:
     if not config.defaults.clarification_enabled:
         return False
     # Repo-grounded analyst flows должны опираться на intent flags/model decisions,
@@ -38,11 +38,14 @@ def needs_clarification(text: str, config: AppConfig, context: str = "") -> bool
     if _is_repo_grounded_analyst_context(context):
         return False
     message = (text or "").lower()
-    # Если мы уже получили хотя бы один ответ пользователя (оркестратор добавляет его в текст запроса),
-    # не вставляем "общий" ask_user повторно. Дальнейшие уточнения должен решать сам планировщик.
+    # NOTE: "ответ пользователя:" — internal sentinel injected by orchestrator_runner.
+    # NOT user-facing; intentionally kept in Russian. Do NOT i18n.
     if "ответ пользователя:" in message:
         return False
-    for kw in config.defaults.clarification_keywords:
+    # Use per-language keywords with legacy fallback
+    by_lang = getattr(config.defaults, "clarification_keywords_by_lang", {})
+    keywords = by_lang.get(language) or config.defaults.clarification_keywords
+    for kw in keywords:
         if kw and kw in message:
             return True
     return False

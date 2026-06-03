@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_runbook_builder.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `def test_build_writes_runbook_and_scripts(tmp_path)` (line 32)

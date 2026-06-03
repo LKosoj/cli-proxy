@@ -1,6 +1,6 @@
 # API Spec: `app/events/bus.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
 ### `class BaseSystemEvent` (line 26)
@@ -41,8 +41,8 @@ Generated: 2026-04-27T22:43:22Z
 ### `class SystemEventBus` (line 237)
 *Async queue-based system event bus with typed events and handler isolation.*
 - `def __init__(logger)` (line 240)
-- `def subscribe(event, handler)` (line 249)
-- `async def publish(event, payload)` (line 274)
-- `async def drain()` (line 285)
-- `async def shutdown()` (line 291)
-- `def known_event_types()` (line 404)
+- `def subscribe(event, handler)` (line 250)
+- `async def publish(event, payload)` (line 275)
+- `async def drain()` (line 288)
+- `async def shutdown()` (line 296)
+- `def known_event_types()` (line 410)

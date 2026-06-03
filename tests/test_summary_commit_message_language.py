@@ -36,8 +36,8 @@ def test_detailed_commit_prompt_requires_russian_language_and_json_output(monkey
 
         out = await summary_mod.suggest_commit_message_detailed_async("diff context", config=object())
         assert out is not None
-        assert "строго на русском языке" in captured["system"]
-        assert "верни строго JSON-объект" in captured["system"]
+        assert "Russian" in captured["system"]
+        assert "JSON" in captured["system"]
         assert captured["response_format"] == {"type": "json_object"}
         assert captured["max_tokens"] == summary_mod._COMMIT_MESSAGE_MAX_TOKENS
 

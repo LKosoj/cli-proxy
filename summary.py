@@ -91,12 +91,76 @@ def _strip_cli_preamble(text: str) -> str:
     return text
 
 
-def _length_bucket(text_len: int) -> str:
+_LENGTH_BUCKET_LABELS: Dict[str, Tuple[str, str, str]] = {
+    "ru": ("короткий", "средний", "длинный"),
+    "en": ("short",    "medium",  "long"),
+    "zh": ("短",       "中等",    "长"),
+    "de": ("kurz",     "mittel",  "lang"),
+}
+
+_SUMMARY_SYSTEM_PROMPTS: Dict[str, str] = {
+    "ru": (
+        "Сделай резюме на русском. Дай по делу, без воды. "
+        "Адаптируй длину под объём текста: "
+        "короткий → 2–4 пункта, средний → 4–6, длинный → 6–10. "
+        "В каждом пункте 1–2 предложения. Не повторяйся и не пиши лишнего. "
+        "Важно: обязательно учти ключевую информацию в конце текста и отрази её в резюме. "
+        "В конце добавь блок 'Ключевое в конце' (2–4 пункта): "
+        "либо итог/результат доработки, либо вопросы к пользователю. "
+        "Не включай служебные метрики (например, tokens used) и счетчики."
+    ),
+    "en": (
+        "Write a summary in English. Be concise and focused. "
+        "Adapt the length to the text volume: "
+        "short → 2–4 points, medium → 4–6, long → 6–10. "
+        "1–2 sentences per point. No repetition, no filler. "
+        "Important: make sure to capture key information from the end of the text. "
+        "End with a 'Key points at the end' block (2–4 points): "
+        "either the final result/outcome or open questions for the user. "
+        "Do not include service metrics (e.g., tokens used) or counters."
+    ),
+    "zh": (
+        "用中文写摘要。简洁扼要。"
+        "根据文本量调整长度：短文→2-4点，中等→4-6点，长文→6-10点。"
+        "每点1-2句话。不重复，不废话。"
+        "重要：确保摘要包含文本末尾的关键信息。"
+        "最后添加'末尾关键点'模块（2-4点）：最终结果或用户问题。"
+        "不包含服务指标（如tokens used）和计数器。"
+    ),
+    "de": (
+        "Schreibe eine Zusammenfassung auf Deutsch. Präzise und fokussiert. "
+        "Passe die Länge dem Textumfang an: "
+        "kurz → 2–4 Punkte, mittel → 4–6, lang → 6–10. "
+        "1–2 Sätze pro Punkt. Keine Wiederholungen, kein Fülltext. "
+        "Wichtig: Berücksichtige unbedingt die Schlüsselinformationen am Ende des Textes. "
+        "Füge am Ende einen Block 'Kernpunkte am Ende' hinzu (2–4 Punkte): "
+        "entweder das Ergebnis oder offene Fragen an den Nutzer. "
+        "Keine Servicemetriken (z.B. tokens used) oder Zähler."
+    ),
+}
+
+_KEY_TAIL_LABEL: Dict[str, str] = {
+    "ru": "Ключевое в конце",
+    "en": "Key points at the end",
+    "zh": "末尾关键点",
+    "de": "Kernpunkte am Ende",
+}
+
+_TRUNCATED_LABEL: Dict[str, str] = {
+    "ru": "\n...(обрезано)...",
+    "en": "\n...(truncated)...",
+    "zh": "\n...(已截断)...",
+    "de": "\n...(abgeschnitten)...",
+}
+
+
+def _length_bucket(text_len: int, language: str = "ru") -> str:
+    labels = _LENGTH_BUCKET_LABELS.get(language, _LENGTH_BUCKET_LABELS["ru"])
     if text_len < 2000:
-        return "короткий"
+        return labels[0]
     if text_len < 12000:
-        return "средний"
-    return "длинный"
+        return labels[1]
+    return labels[2]
 
 
 def _suggest_max_tokens(text: str, max_chars: int) -> int:
@@ -116,7 +180,7 @@ def _compact_reason(reason: str) -> str:
 
 
 async def _summarize_with_cfg(
-    text: str, max_chars: int, cfg: Tuple[str, str, str]
+    text: str, max_chars: int, cfg: Tuple[str, str, str], *, language: str = "ru"
 ) -> str:
     api_key, model, base_url = cfg
 
@@ -125,26 +189,15 @@ async def _summarize_with_cfg(
     head = text[:head_len]
     tail = text[-tail_len:] if len(text) > tail_len else text
     client = _get_openai_client(api_key, base_url)
+    system_prompt = _SUMMARY_SYSTEM_PROMPTS.get(language, _SUMMARY_SYSTEM_PROMPTS["ru"])
     resp = await client.chat.completions.create(
         model=model,
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Сделай резюме на русском. Дай по делу, без воды. "
-                    "Адаптируй длину под объём текста: "
-                    "короткий → 2–4 пункта, средний → 4–6, длинный → 6–10. "
-                    "В каждом пункте 1–2 предложения. Не повторяйся и не пиши лишнего. "
-                    "Важно: обязательно учти ключевую информацию в конце текста и отрази её в резюме. "
-                    "В конце добавь блок 'Ключевое в конце' (2–4 пункта): "
-                    "либо итог/результат доработки, либо вопросы к пользователю. "
-                    "Не включай служебные метрики (например, tokens used) и счетчики."
-                ),
-            },
+            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": (
-                    f"Длина текста: {_length_bucket(len(text))}.\n"
+                    f"Длина текста: {_length_bucket(len(text), language)}.\n"
                     "Фрагменты текста:\n"
                     f"НАЧАЛО:\n{head}\n\n"
                     f"КОНЕЦ:\n{tail}"
@@ -157,16 +210,19 @@ async def _summarize_with_cfg(
     summary = (resp.choices[0].message.content or "").strip()
     tail_digest = _tail_digest(text)
     if tail_digest:
-        summary = f"{summary}\n\nКлючевое в конце:\n{tail_digest}"
+        key_label = _KEY_TAIL_LABEL.get(language, _KEY_TAIL_LABEL["ru"])
+        summary = f"{summary}\n\n{key_label}:\n{tail_digest}"
     if len(summary) > max_chars:
-        suffix = "\n...(обрезано)..."
+        suffix = _TRUNCATED_LABEL.get(language, _TRUNCATED_LABEL["ru"])
         if max_chars <= len(suffix) + 20:
             return summary[:max_chars]
         return summary[: max_chars - len(suffix)] + suffix
     return summary
 
 
-async def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppConfig] = None) -> Optional[str]:
+async def summarize_text(
+    text: str, max_chars: int = 3000, config: Optional[AppConfig] = None, *, language: str = "ru"
+) -> Optional[str]:
     cfg = _get_openai_config(config)
     if not cfg:
         return None
@@ -175,11 +231,11 @@ async def summarize_text(text: str, max_chars: int = 3000, config: Optional[AppC
     cleaned = await asyncio.to_thread(normalize_text, cleaned, True)
     if len(cleaned) < 3000:
         return cleaned
-    return await _summarize_with_cfg(cleaned, max_chars, cfg)
+    return await _summarize_with_cfg(cleaned, max_chars, cfg, language=language)
 
 
 async def summarize_text_with_reason(
-    text: str, max_chars: int = 3000, config: Optional[AppConfig] = None
+    text: str, max_chars: int = 3000, config: Optional[AppConfig] = None, *, language: str = "ru"
 ) -> Tuple[Optional[str], Optional[str]]:
     cfg = _get_openai_config(config)
     if not cfg:
@@ -189,7 +245,7 @@ async def summarize_text_with_reason(
     if len(cleaned) < 3000:
         return cleaned, None
     try:
-        summary = await _summarize_with_cfg(cleaned, max_chars, cfg)
+        summary = await _summarize_with_cfg(cleaned, max_chars, cfg, language=language)
         return summary, None
     except APITimeoutError:
         logging.getLogger(__name__).exception("OpenAI timeout")
@@ -213,6 +269,7 @@ def _tail_digest(text: str) -> str:
     selected = []
     questions = []
     results = []
+    # TODO T2-tail-digest: result_markers are Russian-only; non-ru languages skip tail digest.
     result_markers = (
         "готово", "сделано", "исправил", "исправлено", "обновил", "обновлено",
         "добавил", "добавлено", "внес", "внесено", "реализовал", "реализовано",
@@ -295,16 +352,18 @@ async def _chat_completion_async(
 
 
 async def suggest_commit_message_async(
-    text: str, config: Optional[AppConfig] = None
+    text: str, config: Optional[AppConfig] = None, *, language: str = "ru"
 ) -> Optional[str]:
     if not config:
         return None
+    from i18n.language_names import LANGUAGE_NAMES
+    lang_name = LANGUAGE_NAMES.get(language, "Russian")
     content = await _chat_completion_async(
         config,
         (
-            "Сформулируй краткое сообщение коммита по изменениям. "
-            "Одна строка, без кавычек, без точки в конце, до ~80 символов. "
-            "Пиши по-русски, отражай суть изменений."
+            f"Write a short git commit message for the changes. "
+            f"One line, no quotes, no trailing period, up to ~80 characters. "
+            f"Write in {lang_name}, reflect the essence of the changes."
         ),
         text[:12000],
         max_tokens=8000,
@@ -314,24 +373,26 @@ async def suggest_commit_message_async(
 
 
 async def suggest_commit_message_detailed_async(
-    text: str, config: Optional[AppConfig] = None
+    text: str, config: Optional[AppConfig] = None, *, language: str = "ru"
 ) -> Optional[Tuple[str, str]]:
     if not config:
         return None
+    from i18n.language_names import LANGUAGE_NAMES
+    lang_name = LANGUAGE_NAMES.get(language, "Russian")
     base_system_prompt = (
-        "Сформируй сообщение git commit и верни строго JSON-объект.\n"
-        "Формат ответа:\n"
+        "Generate a git commit message and return strictly a JSON object.\n"
+        "Response format:\n"
         "{\n"
-        '  "summary": "краткий заголовок до 80 символов, без точки в конце",\n'
-        '  "body": ["пункт 1", "пункт 2", "пункт 3"]\n'
+        '  "summary": "short title up to 80 characters, no trailing period",\n'
+        '  "body": ["point 1", "point 2", "point 3"]\n'
         "}\n"
-        "Правила:\n"
-        "- Пиши строго на русском языке.\n"
-        "- summary: одна строка, по сути изменения.\n"
-        "- body: 3-5 очень коротких пунктов по делу, максимум 12 слов в пункте.\n"
-        "- Если тесты не запускались, один из пунктов body должен быть 'Тесты: не запускались'.\n"
-        "- Если в тексте нужно сослаться на literal или строку, используй одинарные кавычки внутри значения, не двойные.\n"
-        "- Не добавляй markdown, пояснения и текст вне JSON."
+        "Rules:\n"
+        f"- Write strictly in {lang_name}.\n"
+        "- summary: one line, capturing the essence of the change.\n"
+        "- body: 3-5 very short points, maximum 12 words per point.\n"
+        "- If tests were not run, one of the body points must say 'Tests: not run'.\n"
+        "- If you need to reference a literal or string inside a value, use single quotes, not double.\n"
+        "- Do not add markdown, explanations, or text outside JSON."
     )
     for attempt in range(1, _COMMIT_MESSAGE_ATTEMPTS + 1):
         system_prompt = base_system_prompt

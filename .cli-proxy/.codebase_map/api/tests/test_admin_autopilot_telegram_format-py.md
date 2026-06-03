@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_autopilot_telegram_format.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `def test_propose_action_summary_has_action_and_exit_code()` (line 4)

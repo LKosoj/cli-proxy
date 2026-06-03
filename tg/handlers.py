@@ -48,6 +48,31 @@ from tg.files_service_adapter import (
 )
 from utils.ui import status_dot
 from app.services.session_state import SessionState
+from i18n import t, SUPPORTED_LANGS
+
+_LANG_LABELS: dict[str, str] = {
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+    "zh": "🇨🇳 中文",
+    "de": "🇩🇪 Deutsch",
+}
+
+
+def build_lang_menu(
+    current_lang: str,
+    back_callback: str = "sess_active",
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Build the language selection menu.
+
+    Language labels are NOT localised — user must find their language
+    regardless of the current locale.
+    """
+    rows = []
+    for code, label in _LANG_LABELS.items():
+        mark = "✅" if code == current_lang else "⬜"
+        rows.append([InlineKeyboardButton(f"{mark} {label}", callback_data=f"lang_set:{code}")])
+    rows.append([InlineKeyboardButton(t("btn.session.back", current_lang), callback_data=back_callback)])
+    return t("msg.lang.choose", current_lang), InlineKeyboardMarkup(rows)
 
 
 def format_session_state(st: SessionState, updated_at_str: str) -> str:
@@ -683,33 +708,34 @@ class BotHandlers:
         *,
         session: Optional[Session] = None,
         session_uid: Optional[str] = None,
+        lang: str = "ru",
     ) -> tuple[str, InlineKeyboardMarkup]:
         is_admin = self._is_admin(chat_id)
         if not is_admin and not self.bot_app.user_projects(chat_id):
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")]])
-            return "Проекты не настроены. Обратитесь к администратору.", keyboard
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")]])
+            return t("msg.session.no_projects", lang), keyboard
 
         sessions = self._visible_sessions_for_chat(chat_id)
         if not sessions:
             keyboard = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("➕ Новая сессия", callback_data="sess_new")],
-                    [InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")],
+                    [InlineKeyboardButton(t("btn.session.new", lang), callback_data="sess_new")],
+                    [InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")],
                 ]
             )
-            return "Активных сессий нет.", keyboard
+            return t("msg.session.no_active", lang), keyboard
         s = self._resolve_overview_session(chat_id, session=session, session_uid=session_uid)
         if s and not is_admin and not self._is_session_visible_for_chat(chat_id, s):
             s = None
         if not s:
             keyboard = InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("📚 Список сессий", callback_data="sess_list")],
-                    [InlineKeyboardButton("➕ Новая сессия", callback_data="sess_new")],
-                    [InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")],
+                    [InlineKeyboardButton(t("btn.session.list", lang), callback_data="sess_list")],
+                    [InlineKeyboardButton(t("btn.session.new", lang), callback_data="sess_new")],
+                    [InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")],
                 ]
             )
-            return "Текущая scope-bound сессия не определена. Откройте нужный topic или выберите сессию через список.", keyboard
+            return t("msg.session.no_scope", lang), keyboard
 
         cli_rows: list[list[InlineKeyboardButton]] = []
         available = list(sorted(self.bot_app._available_tools()))
@@ -739,24 +765,24 @@ class BotHandlers:
             if row:
                 cli_rows.append(row)
         elif visibility.allows("cli_selector"):
-            cli_rows.append([InlineKeyboardButton("CLI недоступны", callback_data=build_session_overview_callback_data(s))])
+            cli_rows.append([InlineKeyboardButton(t("btn.cli.unavailable", lang), callback_data=build_session_overview_callback_data(s))])
 
         overview_buttons: list[InlineKeyboardButton] = []
         if visibility.allows("status"):
-            overview_buttons.append(InlineKeyboardButton("📋 Status", callback_data=f"sess_status:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.status", lang), callback_data=f"sess_status:{s.id}"))
         if visibility.allows("rename"):
-            overview_buttons.append(InlineKeyboardButton("✏️ Rename", callback_data=f"sess_rename:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.rename", lang), callback_data=f"sess_rename:{s.id}"))
         if visibility.allows("resume"):
-            overview_buttons.append(InlineKeyboardButton("🔄 Resume", callback_data=f"sess_resume:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.resume", lang), callback_data=f"sess_resume:{s.id}"))
         if visibility.allows("queue"):
-            overview_buttons.append(InlineKeyboardButton("📥 Queue", callback_data=f"sess_queue:{s.id}"))
-            overview_buttons.append(InlineKeyboardButton("🗑 Clear queue", callback_data=f"sess_clearqueue:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.queue", lang), callback_data=f"sess_queue:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.clearqueue", lang), callback_data=f"sess_clearqueue:{s.id}"))
         if visibility.allows("state"):
-            overview_buttons.append(InlineKeyboardButton("💾 State", callback_data=f"sess_state:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.state", lang), callback_data=f"sess_state:{s.id}"))
         if visibility.allows("close"):
-            overview_buttons.append(InlineKeyboardButton("🚫 Close", callback_data=f"sess_close:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.close", lang), callback_data=f"sess_close:{s.id}"))
         if visibility.allows("reset"):
-            overview_buttons.append(InlineKeyboardButton("♻️ Reset", callback_data=f"sess_reset:{s.id}"))
+            overview_buttons.append(InlineKeyboardButton(t("btn.session.reset", lang), callback_data=f"sess_reset:{s.id}"))
 
         keyboard_rows = list(cli_rows)
         for idx in range(0, len(overview_buttons), 2):
@@ -778,12 +804,13 @@ class BotHandlers:
             )
         footer_buttons: list[InlineKeyboardButton] = []
         if visibility.allows("new_session"):
-            footer_buttons.append(InlineKeyboardButton("➕ Новая сессия", callback_data="sess_new"))
+            footer_buttons.append(InlineKeyboardButton(t("btn.session.new", lang), callback_data="sess_new"))
         if visibility.allows("list_sessions"):
-            footer_buttons.append(InlineKeyboardButton("📚 Список сессий", callback_data="sess_list"))
+            footer_buttons.append(InlineKeyboardButton(t("btn.session.list", lang), callback_data="sess_list"))
         if footer_buttons:
             keyboard_rows.append(footer_buttons)
-        keyboard_rows.append([InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")])
+        keyboard_rows.append([InlineKeyboardButton(t("btn.session.lang", lang), callback_data="lang_menu")])
+        keyboard_rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")])
 
         keyboard = InlineKeyboardMarkup(keyboard_rows)
         return self._active_session_status_text(s, chat_id=chat_id), keyboard
@@ -794,13 +821,11 @@ class BotHandlers:
         context: ContextTypes.DEFAULT_TYPE,
         edit_message: Optional[object] = None,
         reply_kwargs: Optional[dict] = None,
+        lang: str = "ru",
     ) -> None:
         tools = list(sorted(self.bot_app._available_tools()))
         if not tools:
-            text = (
-                "CLI не найдены. Сначала установите нужные инструменты. "
-                f"Ожидаемые: {self.bot_app._expected_tools()}"
-            )
+            text = t("msg.session.no_tools", lang, expected=self.bot_app._expected_tools())
             if edit_message:
                 if getattr(edit_message, "message", None):
                     await self.bot_app._edit_message(
@@ -817,24 +842,24 @@ class BotHandlers:
                     **dict(reply_kwargs or {"chat_id": int(chat_id)}),
                 )
             return
-        rows = [[InlineKeyboardButton(t, callback_data=f"new_tool:{t}")] for t in tools]
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="sess_active")])
+        rows = [[InlineKeyboardButton(tool, callback_data=f"new_tool:{tool}")] for tool in tools]
+        rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data="sess_active")])
         keyboard = InlineKeyboardMarkup(rows)
-        text = "Выберите инструмент для новой сессии:"
+        menu_text = t("msg.session.tool_choose", lang)
         if edit_message:
             if getattr(edit_message, "message", None):
                 await self.bot_app._edit_message(
                     context,
                     chat_id=edit_message.message.chat_id,
                     message_id=edit_message.message.message_id,
-                    text=text,
+                    text=menu_text,
                     md2=True,
                     reply_markup=keyboard,
                 )
         else:
             await self.bot_app._send_message(
                 context,
-                text=text,
+                text=menu_text,
                 reply_markup=keyboard,
                 **dict(reply_kwargs or {"chat_id": int(chat_id)}),
             )
@@ -1710,27 +1735,55 @@ class BotHandlers:
             ),
         )
 
-    def _bot_commands(self, *, include_admin: bool = False) -> list[BotCommand]:
+    def _bot_commands(self, *, include_admin: bool = False, lang: str = "ru") -> list[BotCommand]:
         commands = []
         for entry in build_command_registry(self.bot_app):
             if not entry["menu"]:
                 continue
             if bool(entry.get("admin_only")) and not include_admin:
                 continue
-            commands.append(BotCommand(command=entry["name"], description=str(entry["desc"])))
+            desc_key = entry.get("desc_key")
+            desc_params = dict(entry.get("desc_params") or {})
+            if desc_key:
+                desc = t(desc_key, lang, **desc_params)
+            else:
+                desc = str(entry.get("desc", ""))
+            desc = desc[:256]
+            commands.append(BotCommand(command=entry["name"], description=desc))
         return commands
 
     async def set_bot_commands(self, app: Application) -> None:
+        default_lang = getattr(
+            getattr(self.bot_app.config, "defaults", None), "default_language", "ru"
+        ) or "ru"
         await app.bot.set_my_commands(
-            self._bot_commands(include_admin=False),
+            self._bot_commands(include_admin=False, lang=default_lang),
             scope=BotCommandScopeDefault(),
         )
-        admin_commands = self._bot_commands(include_admin=True)
-        for chat_id in list(getattr(self.bot_app.config.telegram, "admlist_chat_ids", []) or []):
+        for lang in SUPPORTED_LANGS:
             await app.bot.set_my_commands(
-                admin_commands,
+                self._bot_commands(include_admin=False, lang=lang),
+                scope=BotCommandScopeDefault(),
+                language_code=lang,
+            )
+        admin_commands_by_lang = {
+            lang: self._bot_commands(include_admin=True, lang=lang)
+            for lang in SUPPORTED_LANGS
+        }
+        admin_commands_default = self._bot_commands(include_admin=True, lang=default_lang)
+        for chat_id in list(getattr(self.bot_app.config.telegram, "admlist_chat_ids", []) or []):
+            # Default (no language_code) scope so admins whose Telegram language is
+            # outside the supported set still get admin commands.
+            await app.bot.set_my_commands(
+                admin_commands_default,
                 scope=BotCommandScopeChat(chat_id=int(chat_id)),
             )
+            for lang in SUPPORTED_LANGS:
+                await app.bot.set_my_commands(
+                    admin_commands_by_lang[lang],
+                    scope=BotCommandScopeChat(chat_id=int(chat_id)),
+                    language_code=lang,
+                )
 
     async def cmd_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id

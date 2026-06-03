@@ -1,15 +1,16 @@
 # API Spec: `app/services/cli_limits_service.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
-### `class CliProjectRef` (line 27)
+### `class CliProjectRef` (line 30)
 
-### `class CliLimitsSnapshot` (line 34)
+### `class CliLimitsSnapshot` (line 37)
 
-### `class CliLimitsService` (line 41)
+### `class CliLimitsService` (line 44)
 *Собирает доступные лимиты и usage по активным CLI-сессиям.*
-- `def __init__()` (line 55)
-- `async def describe_for_sessions(sessions)` (line 72)
-- `async def collect_for_sessions(sessions)` (line 91)
-- `def format_snapshots(snapshots)` (line 116)
+- `def __init__()` (line 57)
+- `def set_gemini_oauth_client_secret(value)` (line 78)
+- `async def describe_for_sessions(sessions)` (line 81)
+- `async def collect_for_sessions(sessions)` (line 100)
+- `def format_snapshots(snapshots)` (line 125)

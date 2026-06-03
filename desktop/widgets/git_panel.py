@@ -410,7 +410,8 @@ class GitPanelWidget(QWidget):
         if not ctx:
             return "", None
         from summary import suggest_commit_message_detailed_async
-        detailed = await suggest_commit_message_detailed_async(ctx, cfg)
+        _lang = getattr(cfg.defaults, "default_language", "ru")
+        detailed = await suggest_commit_message_detailed_async(ctx, cfg, language=_lang)
         if not detailed:
             return "", None
         summary, body = detailed

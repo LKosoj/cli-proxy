@@ -1,48 +1,56 @@
 # Node: requirements.txt
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`/srv/git_projects/cli-proxy/requirements.txt` is the repository pip dependency manifest for bot runtime, MiniApp/web services, Desktop UI, mode/agent tooling, integrations, tests, and linting.
+Single source of pinned Python dependencies for the whole project (`requirements.txt` at repo root). One flat list, no extras/groups — the same file installs the bot, desktop client, MiniApp and the test/lint stack. Consumed by the installer (`setup_bot.sh`), by CI (`.github/workflows/ci.yml`), and bundled into the source artifact (`utils/source_artifact.py`).
 
 ## Scope
-- Source glob: `requirements.txt`
-- File: `/srv/git_projects/cli-proxy/requirements.txt`
-- Covers direct Python requirements installed by `python -m pip install -r requirements.txt`, CI, and `setup_bot.sh`.
-- Includes runtime libraries, integration clients, Markdown/content extraction packages, Desktop Qt packages, test packages, and lint tooling.
-- Does not cover transitive dependency resolution, npm/browser assets, or `pytest-cov`, which is installed separately in `/srv/git_projects/cli-proxy/.github/workflows/ci.yml`.
+- Source glob: `requirements.txt` (matches only the repo-root file).
+- Estimated files: 1.
+- Current pins (`requirements.txt:1-32`), grouped by role:
+  - Transport / Telegram: `python-telegram-bot==22.7`, `telegramify-markdown==1.0.0rc5`.
+  - Markdown rendering: `markdown-it-py==3.0.0`, `mdit-py-plugins==0.4.1`, `linkify-it-py==2.0.3`.
+  - HTTP / web: `httpx>=0.27.0,<0.29.0`, `aiohttp>=3.9.0`, `requests==2.32.3`, `beautifulsoup4>=4.12.0`, `trafilatura>=1.6.0`, `pdfminer.six>=20221105`, `duckduckgo-search==7.5.2`.
+  - LLM / agents: `openai>=1.0.0`, `tiktoken>=0.7.0`.
+  - CLI runtime: `pexpect==4.9.0`, `ansi2html==1.9.1`.
+  - Config / validation: `PyYAML==6.0.2`, `pydantic>=2.0.0,<3.0.0`, `jsonschema>=4.21.0`, `pathspec>=0.11.0`.
+  - Persistence: `SQLAlchemy>=2.0.0,<3.0.0`.
+  - Remote ops: `asyncssh>=2.14.0,<3.0.0`.
+  - Media: `gTTS==2.5.4`, `youtube-transcript-api==1.2.2`.
+  - Desktop UI: `PySide6==6.8.2`, `qasync==0.27.1`.
+  - Test / lint: `pytest==8.3.4`, `pytest-asyncio==0.25.3`, `pytest-xdist==3.8.0`, `pytest-qt==4.5.0`, `flake8`.
+- Out of scope: provider API keys and runtime config (`.env`, `config.yaml`, `config_example.yaml`); the empty MiniApp npm surface (`miniapp/package.json`); per-dependency consumer mapping (see `STACK.md`).
 
 ## Instructions for agent
-- Start with `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/INDEX.md`, then this node, then `/srv/git_projects/cli-proxy/requirements.txt`.
-- Before adding, removing, or changing a package spec, identify the consuming code or command with targeted `rg` searches and read the owning node for that area.
-- Keep dependency edits narrow; preserve the existing mix of exact pins and bounded ranges unless the task explicitly changes version policy.
-- Do not reorder or reformat the full file for an isolated dependency change.
-- For test-stack changes (`pytest`, `pytest-asyncio`, `pytest-xdist`, `pytest-qt`, `PySide6`, `qasync`), also read `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/TESTING.md`, `nodes/tests.md`, `nodes/conftest-py.md`, and `nodes/pytest-ini.md`.
-- Verify with targeted `.venv/bin/pytest -q ...` paths for the affected area; run `.venv/bin/flake8` when Python edits or lint-tool dependency changes are part of the task.
+- Pin every new dependency explicitly here; the project uses exact/bounded pins (e.g. `==`, `>=x,<y`), so follow the existing style rather than adding unbounded `pkg`.
+- `requirements.txt` is the dependency source of truth. Adding an `import` of a non-stdlib package without a matching pin here breaks `setup_bot.sh` and CI installs.
+- When bumping pins, keep the bot, desktop and MiniApp consistent (they share this one file) and re-run the affected suites; this is the same stack documented in `STACK.md`.
+- Test-stack pins (`pytest*`, `flake8`, `pytest-qt`) back `pytest.ini` and the lint gate — do not drop them; CI in `.github/workflows/ci.yml` installs from this file (`pip install -r requirements.txt`) and runs flake8 + pytest.
+- This file is part of the distributable source artifact (`utils/source_artifact.py:32,48`) and is asserted present by the installer smoke test (`tests/smoke/test_setup_bot_script.py:23`) — keep the filename/location stable.
+- After edits, validate with a real install and the suite: `pip install -r requirements.txt` then `pytest -q` and `flake8 .`.
 
 ## Source of truth
-- `/srv/git_projects/cli-proxy/requirements.txt` - direct pip requirements.
-- `/srv/git_projects/cli-proxy/.github/workflows/ci.yml` - CI install, pip cache key, lint, pytest, coverage, and smoke commands.
-- `/srv/git_projects/cli-proxy/setup_bot.sh` - setup-script install path for `requirements.txt`.
-- `/srv/git_projects/cli-proxy/README.md` and `/srv/git_projects/cli-proxy/README_EN.MD` - user-facing install command.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/STACK.md` - dependency-to-runtime stack notes.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/TESTING.md` - pytest/lint dependency expectations.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/INTEGRATIONS.md` - integration/content-extraction dependency notes.
+- `requirements.txt` (repo root) — the pinned dependency list itself.
+- `setup_bot.sh:132` — installs the venv from this file (`pip install -r requirements.txt`).
+- `.github/workflows/ci.yml:35,40` — pip cache key + install step keyed on this file.
+- `utils/source_artifact.py:32,48` — includes `requirements.txt` in the exported source bundle.
+- `tests/smoke/test_setup_bot_script.py:23` — asserts the file ships alongside `setup_bot.sh` / `config_example.yaml`.
+- `STACK.md` — maps these pins to their runtime consumers (Telegram, aiohttp/MiniApp, OpenAI SDK, tiktoken, SQLAlchemy, asyncssh, PySide6, test stack).
 
 ## When to update
-- Any change to `/srv/git_projects/cli-proxy/requirements.txt`: package add/remove, version pin/range change, or tooling dependency change.
-- Any change to `/srv/git_projects/cli-proxy/.github/workflows/ci.yml`, `/srv/git_projects/cli-proxy/setup_bot.sh`, `/srv/git_projects/cli-proxy/README.md`, or `/srv/git_projects/cli-proxy/README_EN.MD` that changes how `requirements.txt` is installed or documented.
-- Any change to `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/STACK.md`, `TESTING.md`, or `INTEGRATIONS.md` that changes documented dependency ownership.
-- Any runtime, Desktop, MiniApp, mode, agent plugin, test, or lint behavior change that introduces or removes a direct pip dependency.
+- Any commit touching `requirements.txt` (add/remove/bump a pin).
+- New non-stdlib import added anywhere in the tree that needs a pin.
+- Version bumps that change behavior of `pytest`/`pytest-asyncio`/`pytest-qt` (re-sync `pytest.ini`) or of config validation (`pydantic`, `jsonschema`).
 
 ## Related nodes
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tests.md` - pytest/lint workflow and test dependency guidance.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/conftest-py.md` - root pytest setup that consumes pytest-qt, PySide6, and qasync.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/pytest-ini.md` - pytest configuration used with the dependency stack.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/desktop.md` - PySide6/qasync Desktop runtime.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/miniapp.md` - aiohttp MiniApp/web runtime.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tg.md` - python-telegram-bot and Telegram Markdown transport.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/agent.md` - agent plugin dependencies including web/content tooling.
+- `nodes/setup-bot-sh.md` — installer that creates the venv from this file.
+- `nodes/pytest-ini.md` — test config backed by the `pytest*` pins here.
+- `nodes/config-py.md` / `nodes/config-example-yaml.md` — config surface validated via `pydantic`/`PyYAML` pinned here.
+- `nodes/bot-py.md` — entrypoint depending on `python-telegram-bot` + `aiohttp`.
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-05-08
+- 2026-06-03 (enriched: full pin inventory grouped by role, consumers in installer/CI/source-artifact/smoke-test, validation commands; verified against `requirements.txt`, `setup_bot.sh`, `.github/workflows/ci.yml`, `utils/source_artifact.py`, `tests/smoke/test_setup_bot_script.py`, `STACK.md`)

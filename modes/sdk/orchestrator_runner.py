@@ -69,6 +69,8 @@ from .runtime.json_normalizer import loads_safe, parse_normalize_validate
 from .runtime.events import EventSeverity, EventType, OrchestratorEvent
 from .runtime.reactions import ReactionAction, ReactionEngine, ReactionRule
 from utils.text import strip_ansi
+from utils.lang import resolve_user_lang
+from i18n.language_names import LANGUAGE_NAMES
 from .orchestrator_deps import OrchestratorDeps, load_default_deps
 
 _ANALYST_INTENT_FLAGS_SESSION_ATTR = "analyst_intent_flags"
@@ -107,31 +109,80 @@ def _contains_internal_runtime_markup(text: Any) -> bool:
     return any(token in lowered for token in ("[tool_", "[/tool_", "{tool =>", "corr_id"))
 
 
-def _looks_like_nonfinal_rework_text(text: Any) -> bool:
+_NONFINAL_REWORK_PREFIXES: dict[str, tuple[str, ...]] = {
+    "ru": (
+        "проанализирую",
+        "сначала проанализирую",
+        "сейчас проанализирую",
+        "я проанализирую",
+        "подготовлю ",
+        "сначала подготовлю",
+        "сейчас подготовлю",
+        "я подготовлю",
+        "проверю ",
+        "сначала проверю",
+        "я проверю",
+        "изучу ",
+        "сначала изучу",
+        "я изучу",
+    ),
+    "en": (
+        "let me analyze",
+        "i'll analyze",
+        "i will analyze",
+        "first, i'll analyze",
+        "let me prepare",
+        "i'll prepare",
+        "i will prepare",
+        "let me check",
+        "i'll check",
+        "i will check",
+        "now i'll check",
+        "let me review",
+        "i'll review",
+        "i will review",
+        "let me look",
+        "i'll look",
+        "i will look",
+    ),
+    "zh": (
+        "让我分析",
+        "我来分析",
+        "首先分析",
+        "让我准备",
+        "我来准备",
+        "让我检查",
+        "我来检查",
+        "让我查看",
+        "我来查看",
+    ),
+    "de": (
+        "ich analysiere",
+        "lass mich analysieren",
+        "ich werde analysieren",
+        "zunächst analysiere ich",
+        "ich prüfe",
+        "lass mich prüfen",
+        "ich werde prüfen",
+        "ich schaue",
+        "lass mich schauen",
+        "ich bereite",
+        "ich werde vorbereiten",
+    ),
+}
+
+
+def _looks_like_nonfinal_rework_text(text: Any, *, language: str = "ru") -> bool:
     normalized = strip_ansi(str(text or "")).strip()
     if not normalized:
         return True
     lowered = normalized.lower()
     if len(lowered) > 200:
         return False
-    return lowered.startswith(
-        (
-            "проанализирую",
-            "сначала проанализирую",
-            "сейчас проанализирую",
-            "я проанализирую",
-            "подготовлю ",
-            "сначала подготовлю",
-            "сейчас подготовлю",
-            "я подготовлю",
-            "проверю ",
-            "сначала проверю",
-            "я проверю",
-            "изучу ",
-            "сначала изучу",
-            "я изучу",
-        )
-    )
+    prefixes = _NONFINAL_REWORK_PREFIXES.get(language, _NONFINAL_REWORK_PREFIXES["ru"])
+    # Always also check ru prefixes as safety net (agent may switch languages)
+    ru_prefixes = _NONFINAL_REWORK_PREFIXES["ru"]
+    return lowered.startswith(prefixes) or lowered.startswith(ru_prefixes)
 
 
 def _is_analyst_runtime_context(
@@ -674,6 +725,8 @@ class OrchestratorRunner:
 
     async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
         chat_id = dest.get("chat_id")
+        _lang = resolve_user_lang(self._config, chat_id=chat_id)
+        _lang_name = LANGUAGE_NAMES.get(_lang, "Russian")
         cwd = ensure_chat_workspace(self._config.defaults.workdir, chat_id)
         execution_context = self._get_run_execution_context(session)
         mode_id = str(get_active_mode(session, "") or "").strip()
@@ -3468,7 +3521,7 @@ class OrchestratorRunner:
                         )
                 system = (
                     "Ты — оркестратор. Сформируй итоговый документ по материалам (JSON).\n"
-                    "Пиши на русском.\n"
+                    f"Write in {_lang_name}.\n"
                     "Верни только готовый документ в Markdown.\n"
                     "\n"
                     "СТРОГИЙ КОНТРАКТ ДОКУМЕНТА:\n"
@@ -3492,7 +3545,7 @@ class OrchestratorRunner:
             else:
                 system = (
                     "Ты — оркестратор. Сформируй итоговый ответ пользователю по материалам (JSON).\n"
-                    "Пиши на русском.\n"
+                    f"Write in {_lang_name}.\n"
                     "\n"
                     "ЖЁСТКИЙ КОНТРАКТ (обязательные разделы, в этом порядке):\n"
                     "1) Результат (2–5 строк): что получилось в итоге.\n"
@@ -3744,7 +3797,7 @@ class OrchestratorRunner:
                         preview_text
                         and preview_text not in seen_evidence
                         and not _contains_internal_runtime_markup(preview_text)
-                        and not _looks_like_nonfinal_rework_text(preview_text)
+                        and not _looks_like_nonfinal_rework_text(preview_text, language=_lang)
                     ):
                         seen_evidence.add(preview_text)
                         evidence_points.append(preview_text)
@@ -6110,7 +6163,7 @@ class OrchestratorRunner:
                             if (
                                 fallback_text
                                 and not _contains_internal_runtime_markup(fallback_text)
-                                and not _looks_like_nonfinal_rework_text(fallback_text)
+                                and not _looks_like_nonfinal_rework_text(fallback_text, language=_lang)
                             ):
                                 accepted_text, _ = _accept_reworked_candidate(fallback_text, attempt=attempt)
                                 if accepted_text:
@@ -6123,7 +6176,7 @@ class OrchestratorRunner:
                             if (
                                 fallback_text
                                 and not _contains_internal_runtime_markup(fallback_text)
-                                and not _looks_like_nonfinal_rework_text(fallback_text)
+                                and not _looks_like_nonfinal_rework_text(fallback_text, language=_lang)
                             ):
                                 accepted_text, _ = _accept_reworked_candidate(fallback_text, attempt=attempt)
                                 if accepted_text:
@@ -6408,11 +6461,20 @@ class OrchestratorRunner:
                     self._log.warning("failed to serialize prior step hints: %s", e)
                     prior_hints = ""
 
-            steps = await self._deps.plan_steps(
-                self._config,
-                planning_text,
-                ctx_summary + _progress_context() + prior_hints,
-            )
+            try:
+                steps = await self._deps.plan_steps(
+                    self._config,
+                    planning_text,
+                    ctx_summary + _progress_context() + prior_hints,
+                    language=_lang,
+                )
+            except TypeError:
+                # Fallback for mocked plan_steps that don't accept language kwarg
+                steps = await self._deps.plan_steps(
+                    self._config,
+                    planning_text,
+                    ctx_summary + _progress_context() + prior_hints,
+                )
             steps = self._order_steps_safely(steps)
             steps = _stabilize_step_ids(steps)
             for planned_step in steps:

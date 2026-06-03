@@ -1,54 +1,103 @@
 # Node: app
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`app/**` is the shared application layer for CLI Proxy runtime. It builds the application container, validates and adapts runtime config, publishes system events, centralizes security, and exposes services used by the bot, desktop UI, MiniApp, sessions, and modes.
+Service Layer (слой 2 архитектуры): транспорт-агностичная бизнес-логика, DI-обвязка режимов, типизированный config runtime, безопасность и шина событий. Не содержит транспортного кода (`tg/`, `desktop/`, `miniapp/`) и не реализует режимы (`modes/`); потребляется из `bot.py` и SDK-сервисов.
+
+Подпакеты:
+- `app/services/` — 90+ сервисов (CLI-стримы и лимиты, git/SSH-операции, скиллы, планировщик, сессии, runtime-наблюдаемость и т.д.); плюс `lint_evolution/` (эволюция lint-правил) и `session_transfer/` (перенос сессий между CLI-агентами Codex/Gemini/Qwen/Claude/Grok).
+- `app/config_runtime/` — Pydantic-модели конфига, загрузчик с ENV-оверрайдами, адаптер в `AppConfig`, сериализация YAML.
+- `app/security/` — `SecurityFacade` поверх auth/audit/rate-limits/validators.
+- `app/events/` — `SystemEventBus` и типы событий.
+- `app/bootstrap.py`, `app/mode_dependencies.py` — composition: сборка сервисов и `ModeDependencies` для DI в режимы.
 
 ## Scope
 - Source glob: `app/**`
-- Current files: 153 under `app/**` as of last review.
-- Top-level modules: `app/bootstrap.py`, `app/mode_dependencies.py`, `app/config_runtime/**`, `app/events/**`, `app/security/**`, `app/services/**`
-- Service subareas include runtime config reload, session/task orchestration, Telegram/UI state transport, run artifacts/observability/doctor/recovery, scheduler/webhook ingress, SSH/remote control, skill runtime/registry, `app/services/lint_evolution/**`, and `app/services/session_transfer/**`.
+- Estimated files: 152
+- Корневые модули: `app/bootstrap.py`, `app/mode_dependencies.py`.
+- Подпакеты: `app/services/` (+ `app/services/lint_evolution/`, `app/services/session_transfer/`), `app/config_runtime/`, `app/security/`, `app/events/`.
 
 ## Instructions for agent
-- Start with `.cli-proxy/.codebase_map/INDEX.md`, then this node, then task-specific files under `app/**`.
-- Before claiming runtime behavior, verify the exact method/function in source and cite concrete `path:line`.
-- Keep `app/services/__init__.py` lazy; do not add eager service imports there because `config.py` imports `app.services.dotenv_loader`.
-- Treat `app/config_runtime/models.py`, `app/config_runtime/adapter.py`, `app/config_runtime/serialization.py`, `config.py`, `config.yaml`, and `config_example.yaml` as one config contract when fields or semantics change.
-- For mode integration changes, read `modes/DEVELOPMENT.md` and use `app/mode_dependencies.py` plus `modes/sdk/**` services instead of coupling shared mode logic to `BotApp`.
-- For Telegram output changes, keep the shared transport/markdown path through `tg/markdown.py` and `app/services/telegram_transport.py`.
+- Read only files relevant to the active task; сервисов >90 — не загружать всё.
+- Импорты в `app/services/__init__.py` ленивые (PEP 562 `__getattr__`): не добавлять жадных импортов подмодулей — это создаёт цикл `config -> app.services -> ... -> config`.
+- Сервисы транспорт-агностичны: не тянуть сюда зависимости из `tg/`, `desktop/`, `miniapp/`; режимы получают сервисы через `app/mode_dependencies.py`, а не напрямую.
+- Публичные интерфейсы пакетов `config_runtime`/`security`/`events` экспортируются через их `__init__.py` (`__all__`) — обновлять при добавлении классов.
+- Prefer deterministic checks before edits. Keep changes minimal and validate with `pytest -q` and `flake8 .`.
 
 ## Source of truth
-- `app/bootstrap.py` - `ApplicationContainer` and deterministic construction of core runtime dependencies.
-- `app/mode_dependencies.py` - mode-facing dependency dataclasses and foundation services.
-- `app/config_runtime/models.py`, `app/config_runtime/loader.py`, `app/config_runtime/adapter.py`, `app/config_runtime/serialization.py` - validated config schema, env overlay, legacy config adapter, and serialization.
-- `app/events/bus.py` - system event dataclasses and `SystemEventBus`.
-- `app/security/__init__.py`, `app/security/facade.py`, `app/security/auth.py`, `app/security/validators.py`, `app/security/rate_limits.py`, `app/security/audit.py`, `app/security/errors.py` - security public API and implementation.
-- `app/services/__init__.py` - lazy exports for desktop-facing `ConfigService`, `SessionService`, `TaskService`, and `ThemeService`.
-- `app/services/*.py` - shared application services imported by `bot.py`, `desktop/**`, `miniapp/**`, `sessions/**`, `session.py`, and `modes/**`, including run artifact lifecycle facades.
-- `app/services/mode_run_lifecycle_service.py` - mode run artifact lifecycle facade; boundary validation failures are logged and returned as error reports.
-- `app/services/lint_evolution/**` - lint evolution runtime, rules, schema, and reports.
-- `app/services/session_transfer/**` - session transfer canonical model, readers, writers, and service.
+Код — единственный источник истины; ниже точки входа для каждого подпакета:
+- `app/bootstrap.py` — сборка сервисов (composition).
+- `app/mode_dependencies.py` — построение `ModeDependencies` для DI в режимы.
+- `app/services/__init__.py` — ленивый реестр публичных сервисов (`__getattr__`, PEP 562).
+- `app/config_runtime/__init__.py` → `models.py`, `loader.py`, `adapter.py`, `serialization.py`, `field_paths.py`.
+- `app/security/__init__.py` → `facade.py`, `auth.py`, `audit.py`, `rate_limits.py`, `validators.py`, `interfaces.py`, `errors.py`.
+- `app/events/__init__.py` → `bus.py` (`SystemEventBus` и типы событий).
+- `app/services/lint_evolution/` (`README.md`, `schemas/classification_v1.json`, `schemas/decision_weights.yaml`).
+- `app/services/session_transfer/` (`service.py`, `capsule.py`, `reader_*.py`, `writer_*.py`).
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [app/services/__init__.py](../api/app/services/__init__-py.md)
+- [app/bootstrap.py](../api/app/bootstrap-py.md)
+- [app/config_runtime/adapter.py](../api/app/config_runtime/adapter-py.md)
+- [app/config_runtime/loader.py](../api/app/config_runtime/loader-py.md)
+- [app/config_runtime/models.py](../api/app/config_runtime/models-py.md)
+- [app/config_runtime/serialization.py](../api/app/config_runtime/serialization-py.md)
+- [app/events/bus.py](../api/app/events/bus-py.md)
+- [app/mode_dependencies.py](../api/app/mode_dependencies-py.md)
+- [app/security/audit.py](../api/app/security/audit-py.md)
+- [app/security/auth.py](../api/app/security/auth-py.md)
+- [app/security/errors.py](../api/app/security/errors-py.md)
+- [app/security/facade.py](../api/app/security/facade-py.md)
+- [app/security/interfaces.py](../api/app/security/interfaces-py.md)
+- [app/security/rate_limits.py](../api/app/security/rate_limits-py.md)
+- [app/security/validators.py](../api/app/security/validators-py.md)
+- [app/services/access_policy_service.py](../api/app/services/access_policy_service-py.md)
+- [app/services/actor_identity.py](../api/app/services/actor_identity-py.md)
+- [app/services/admin_config_service.py](../api/app/services/admin_config_service-py.md)
+- [app/services/advanced_orchestrator_service.py](../api/app/services/advanced_orchestrator_service-py.md)
+- [app/services/app_runtime_service.py](../api/app/services/app_runtime_service-py.md)
+- [app/services/artifact_intent_service.py](../api/app/services/artifact_intent_service-py.md)
+- [app/services/assistant_preview_service.py](../api/app/services/assistant_preview_service-py.md)
+- [app/services/claude_env_checker.py](../api/app/services/claude_env_checker-py.md)
+- [app/services/claude_jsonl_monitor.py](../api/app/services/claude_jsonl_monitor-py.md)
+- [app/services/cli_dialog_logger.py](../api/app/services/cli_dialog_logger-py.md)
+- [app/services/cli_json_stream.py](../api/app/services/cli_json_stream-py.md)
+- [app/services/cli_limits_service.py](../api/app/services/cli_limits_service-py.md)
+- [app/services/config_apply_policy.py](../api/app/services/config_apply_policy-py.md)
+- [app/services/config_service.py](../api/app/services/config_service-py.md)
 
 ## When to update
-- Any change under `app/**`.
-- Any config schema, default, serialization, or runtime reload change in `config.py`, `config.yaml`, `config_example.yaml`, or `miniapp/services/config_service.py`.
-- Any change in `bot.py`, `desktop/**`, `miniapp/**`, `sessions/**`, `session.py`, or `modes/**` that changes how app services, events, security, mode dependencies, run artifacts, or runtime config are called.
-- Any change to `tg/markdown.py` or Telegram transport behavior that affects `app/services/telegram_transport.py`.
-- Any architecture or behavior change that moves responsibility into or out of `app/**`.
+- Any commit touching `app/**`.
+- Any commit touching `agent/**` because this node has import/call dependency on it.
+- Any commit touching `bot.py` because this node has import/call dependency on it.
+- Any commit touching `config.py` because this node has import/call dependency on it.
+- Any commit touching `config_example.yaml` because this node has import/call dependency on it.
+- Any commit touching `desktop/**` because this node has import/call dependency on it.
+- Any architecture or behavior change affecting this area.
 
 ## Related nodes
-- `nodes/bot-py.md` - imports `app.bootstrap`, app services, `app.events.bus`, and `app.security`.
-- `nodes/config-py.md` - legacy config dataclasses adapted by `app/config_runtime/adapter.py`.
-- `nodes/config-example-yaml.md` - sample config that must track validated config fields.
-- `nodes/desktop.md` - imports app-level config, session, task, theme, path, SSH, and run services.
-- `nodes/miniapp.md` - uses app security, events, runtime config, scheduler, SSH, remote control, and run services.
-- `nodes/modes.md` - uses `app.mode_dependencies` and app run artifact/progress/project-prompt services.
-- `nodes/sessions.md` - uses app orchestration, logging, runtime progress, task hook, and session state services.
-- `nodes/session-py.md` - imports CLI monitors, tool availability, SSH skill generation, state repository, and session tick services from `app/services`.
-- `nodes/tg.md` - shares Telegram formatting/transport expectations with app-level Telegram transport.
-- `nodes/tests.md` - contains targeted coverage for app services, config runtime, events, security, MiniApp/Desktop integration, and mode launch paths.
+- `nodes/agent.md`
+- `nodes/bot-py.md`
+- `nodes/config-py.md`
+- `nodes/config-example-yaml.md`
+- `nodes/desktop.md`
+- `nodes/i18n.md`
+- `nodes/miniapp.md`
+- `nodes/modes.md`
+- `agent` confidence=0.95 via L0/L1/L2
+- `bot.py` confidence=0.90 via L0/L2
+- `config.py` confidence=0.90 via L0/L2
+- `config_example.yaml` confidence=0.95 via L0
+- `desktop` confidence=0.76 via L0
+- `i18n` confidence=0.90 via L1/L2
+- `miniapp` confidence=0.95 via L0/L1/L2
+- `modes` confidence=0.95 via L0/L1/L2
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-06-01
+- 2026-06-03 (enriched: Purpose/Scope/Instructions/Source of truth)

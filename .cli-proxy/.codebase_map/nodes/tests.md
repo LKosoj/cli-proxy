@@ -1,55 +1,89 @@
 # Node: tests
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Purpose
-Guide agents that maintain the repository test suite: pytest unit/integration tests, smoke entrypoint checks, MiniApp/web browser checks, and test fixtures used across bot, app services, modes, desktop, and runtime code.
+Instruction node for the project test suite under `tests/**`: pytest-based unit, integration, and smoke tests covering all architecture layers (transport, services, modes, agent, core). Single flat package plus `tests/smoke/` for entrypoint checks.
 
 ## Scope
 - Source glob: `tests/**`
-- Current files: 526 under `tests/**` as of last review.
-- Includes root pytest environment setup in `conftest.py`, test-local cleanup in `tests/conftest.py`, and pytest config in `pytest.ini`.
-- Covers focused suites such as `tests/test_admin_*`, `tests/test_analyst_*`, `tests/test_manager_*`, `tests/test_desktop_*`, `tests/test_miniapp_*`, `tests/test_ssh_*`, `tests/test_security_*`, and `tests/test_lint_evolution_*`.
-- Smoke checks live in `tests/smoke/*`.
+- Files: 1147 total under `tests/**`, of which 524 are `test_*.py` (per `find`).
+- Subdirectories: only `tests/smoke/` (entrypoint smoke tests); the rest is a flat `tests/test_*.py` namespace.
+- Test framework config lives outside this glob: `pytest.ini` (root), `requirements.txt`.
+- Two `conftest.py` layers: root `conftest.py` (Qt/offscreen env, RLIMIT_NOFILE bump, `qapp_args` session fixture) and `tests/conftest.py` (adds repo root to `sys.path`, tracks/shuts down `BotApp` async services, resets `ToolRegistry` singleton between tests).
+- Naming convention: `tests/test_<area>_<topic>.py`, usually mirroring the source module under test (e.g. `app/services/<name>.py` → `tests/test_<name>.py`).
 
 ## Instructions for agent
-- Before changing tests, read the production path under test and the nearest matching `tests/test_*.py` file.
-- Keep test edits focused on the changed behavior; do not reorganize unrelated tests or fixtures.
-- Default verification is targeted pytest through `.venv/bin/pytest -q tests/test_file.py` or `.venv/bin/pytest -q tests/test_file.py::test_name`.
-- Use `.venv/bin/pytest -q tests/smoke/...` for entrypoint smoke coverage; do not use smoke tests as a replacement for targeted unit/integration tests.
-- Run full `.venv/bin/pytest -q` only for release/smoke-check work or shared runtime changes where targeted coverage is insufficient.
-- Run `.venv/bin/flake8` when Python edits are part of the task.
-- For MiniApp/web behavior, include the relevant `tests/test_miniapp_*.py` path and `tests/test_miniapp_playwright.py` or `playwright-cli` verification when browser behavior is affected.
-- Preserve fixture responsibilities: `conftest.py` owns Qt/offscreen and file descriptor setup; `tests/conftest.py` owns repo import path, BotApp async service cleanup, and ToolRegistry singleton reset.
+- Read only the test files relevant to the active task; the suite is large (524 test modules).
+- Default to targeted runs for changed modules and nearest integration paths:
+  - `.venv/bin/pytest -q tests/test_file.py::test_name`
+  - `.venv/bin/pytest -q tests/test_area_*.py`
+- Run the full `.venv/bin/pytest -q` only for release/smoke or shared-layer changes (`modes/sdk/runtime/*`, `modes/sdk/services/*`, `app/services/*`, `config.py`, `bot.py`, `session.py`).
+- Lint with `.venv/bin/flake8`.
+- For bugfixes: add or update a failing test that reproduces the issue before changing code.
+- Async tests use `@pytest.mark.asyncio` (loop scope `function` per `pytest.ini`); SSH integration tests are gated by the `ssh_integration` marker.
+- Do not substitute smoke tests (`tests/smoke/*`) for targeted unit/integration coverage.
+- See `../TESTING.md` for stack details, target-selection map, and quality expectations.
 
 ## Source of truth
-- `.cli-proxy/.codebase_map/TESTING.md`
-- `pytest.ini`
-- `requirements.txt`
-- `conftest.py`
 - `tests/**`
-- `tests/conftest.py`
-- `tests/test_miniapp_playwright.py`
-- `tests/smoke/_smoke_support.py`
-- `tests/smoke/test_bot_entrypoint_smoke.py`
-- `tests/smoke/test_desktop_entrypoint_smoke.py`
-- `tests/smoke/test_miniapp_server_smoke.py`
-- `tests/smoke/test_setup_bot_script.py`
-- `tests/smoke/test_setup_bot_smoke.py`
-- `tests/smoke/test_source_artifact_smoke.py`
-- `tests/smoke/test_startup_smoke.py`
-- `tests/test_readme_feature_flags_sync.py` - README/README_EN config and feature documentation sync checks, including ConfigApplyPolicy reload/restart semantics.
-- `tests/test_mode_run_lifecycle_service.py` - ModeRunLifecycleService facade coverage, including boundary validator negative-path logging/result conversion.
-- `tests/test_miniapp_config_tab_js.py` - MiniApp config tab client behavior, including redacted secret sentinel preservation, new secret submission, explicit secret clear, and secret-change save warnings.
-- `tests/test_miniapp_playwright.py` - Browser-backed MiniApp flows, including secret-safe config DOM evidence and save side-effect checks through real route auth.
-- `tests/test_task_bearing_cli_skill_hook.py` - Task-bearing direct/routed CLI skill-selection tests and prompt wrapping evidence.
+- `pytest.ini` — markers (`asyncio`, `ssh_integration`) and asyncio loop scope.
+- `conftest.py` (repo root) — Qt offscreen env, file-descriptor limit, `qapp_args` fixture.
+- `tests/conftest.py` — `sys.path` setup, `BotApp` async-service teardown, `ToolRegistry` singleton reset.
+- `tests/smoke/_smoke_support.py` and `tests/smoke/test_*_smoke.py` — entrypoint smoke tests.
+- `requirements.txt` — test stack (`pytest`, `pytest-asyncio`, `pytest-xdist`, `pytest-qt`, `PySide6`, `aiohttp`).
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [tests/smoke/_smoke_support.py](../api/tests/smoke/_smoke_support-py.md)
+- [tests/smoke/test_bot_entrypoint_smoke.py](../api/tests/smoke/test_bot_entrypoint_smoke-py.md)
+- [tests/smoke/test_desktop_entrypoint_smoke.py](../api/tests/smoke/test_desktop_entrypoint_smoke-py.md)
+- [tests/smoke/test_miniapp_server_smoke.py](../api/tests/smoke/test_miniapp_server_smoke-py.md)
+- [tests/smoke/test_setup_bot_script.py](../api/tests/smoke/test_setup_bot_script-py.md)
+- [tests/smoke/test_setup_bot_smoke.py](../api/tests/smoke/test_setup_bot_smoke-py.md)
+- [tests/smoke/test_source_artifact_smoke.py](../api/tests/smoke/test_source_artifact_smoke-py.md)
+- [tests/smoke/test_startup_smoke.py](../api/tests/smoke/test_startup_smoke-py.md)
+- [tests/test_admin_allowlist.py](../api/tests/test_admin_allowlist-py.md)
+- [tests/test_admin_analyzer.py](../api/tests/test_admin_analyzer-py.md)
+- [tests/test_admin_autonomy_e2e.py](../api/tests/test_admin_autonomy_e2e-py.md)
+- [tests/test_admin_autonomy_loop.py](../api/tests/test_admin_autonomy_loop-py.md)
+- [tests/test_admin_autonomy_policy.py](../api/tests/test_admin_autonomy_policy-py.md)
+- [tests/test_admin_autopilot_telegram_format.py](../api/tests/test_admin_autopilot_telegram_format-py.md)
+- [tests/test_admin_baseline.py](../api/tests/test_admin_baseline-py.md)
+- [tests/test_admin_chat_autopilot_verdict.py](../api/tests/test_admin_chat_autopilot_verdict-py.md)
+- [tests/test_admin_chat_gateway.py](../api/tests/test_admin_chat_gateway-py.md)
+- [tests/test_admin_chat_memory.py](../api/tests/test_admin_chat_memory-py.md)
+- [tests/test_admin_chat_schemas.py](../api/tests/test_admin_chat_schemas-py.md)
+- [tests/test_admin_chat_service.py](../api/tests/test_admin_chat_service-py.md)
+- [tests/test_admin_config_store.py](../api/tests/test_admin_config_store-py.md)
+- [tests/test_admin_drift.py](../api/tests/test_admin_drift-py.md)
+- [tests/test_admin_executor.py](../api/tests/test_admin_executor-py.md)
+- [tests/test_admin_facade.py](../api/tests/test_admin_facade-py.md)
+- [tests/test_admin_facade_scripts.py](../api/tests/test_admin_facade_scripts-py.md)
+- [tests/test_admin_local_transport.py](../api/tests/test_admin_local_transport-py.md)
+- [tests/test_admin_memory.py](../api/tests/test_admin_memory-py.md)
+- [tests/test_admin_mode_architecture.py](../api/tests/test_admin_mode_architecture-py.md)
+- [tests/test_admin_mode_lifecycle.py](../api/tests/test_admin_mode_lifecycle-py.md)
+- [tests/test_admin_mode_plugin.py](../api/tests/test_admin_mode_plugin-py.md)
+- [tests/test_admin_monitor.py](../api/tests/test_admin_monitor-py.md)
+- [tests/test_admin_notifier.py](../api/tests/test_admin_notifier-py.md)
+- [tests/test_admin_plugin_tools.py](../api/tests/test_admin_plugin_tools-py.md)
+- [tests/test_admin_prereqs.py](../api/tests/test_admin_prereqs-py.md)
+- [tests/test_admin_reconciliation.py](../api/tests/test_admin_reconciliation-py.md)
+- [tests/test_admin_runbook_builder.py](../api/tests/test_admin_runbook_builder-py.md)
+- [tests/test_admin_runbook_promoter.py](../api/tests/test_admin_runbook_promoter-py.md)
+- [tests/test_admin_runbook_validator.py](../api/tests/test_admin_runbook_validator-py.md)
+- [tests/test_admin_runbooks.py](../api/tests/test_admin_runbooks-py.md)
 
 ## When to update
-- Any change adding, removing, renaming, or moving files under `tests/**`.
-- Any change to shared pytest setup in `conftest.py`, `tests/conftest.py`, or `pytest.ini`.
-- Any change to test dependencies or commands in `requirements.txt` or `.cli-proxy/.codebase_map/TESTING.md`.
-- Any behavior change that creates, removes, or materially changes the targeted test path agents should run.
-- Any MiniApp/web test workflow change involving `tests/test_miniapp_playwright.py` or `playwright-cli`.
+- Any commit touching `tests/**`.
+- Any commit touching `agent/**` because this node has import/call dependency on it.
+- Any commit touching `app/**` because this node has import/call dependency on it.
+- Any commit touching `bot.py` because this node has import/call dependency on it.
+- Any commit touching `config.py` because this node has import/call dependency on it.
+- Any commit touching `config_example.yaml` because this node has import/call dependency on it.
+- Any architecture or behavior change affecting this area.
 
 ## Related nodes
 - `nodes/agent.md`
@@ -58,11 +92,19 @@ Guide agents that maintain the repository test suite: pytest unit/integration te
 - `nodes/config-py.md`
 - `nodes/config-example-yaml.md`
 - `nodes/desktop.md`
+- `nodes/i18n.md`
 - `nodes/miniapp.md`
-- `nodes/modes.md`
-- `nodes/session-py.md`
-- `nodes/sessions.md`
-- `nodes/tg.md`
+- `agent` confidence=0.95 via L0/L1/L2
+- `app` confidence=0.95 via L0/L1/L2
+- `bot.py` confidence=0.90 via L0/L2
+- `config.py` confidence=0.90 via L0/L2
+- `config_example.yaml` confidence=0.95 via L0
+- `desktop` confidence=0.90 via L0/L1/L2
+- `i18n` confidence=0.90 via L1/L2
+- `miniapp` confidence=0.95 via L0/L1/L2
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-06-02
+- 2026-06-03 (enriched: scope counts, conftest layers, run commands verified against `tests/`, `pytest.ini`, `conftest.py`)

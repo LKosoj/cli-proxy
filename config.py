@@ -110,6 +110,17 @@ class DefaultsConfig:
             "непонятно",
         ]
     )
+    # Per-language clarification keywords. Used by needs_clarification heuristic.
+    # Falls back to legacy clarification_keywords if language not found here.
+    # TODO: deprecate clarification_keywords once all languages are covered by clarification_keywords_by_lang.
+    clarification_keywords_by_lang: Dict[str, List[str]] = dataclasses.field(
+        default_factory=lambda: {
+            "ru": ["уточни", "уточните", "не ясно", "непонятно"],
+            "en": ["clarify", "unclear", "not clear", "please clarify", "i need clarification"],
+            "zh": ["请澄清", "不清楚", "需要澄清", "能说清楚吗"],
+            "de": ["unklar", "bitte präzisieren", "nicht klar", "klären sie", "erläutern sie"],
+        }
+    )
     # Manager mode (multi-agent orchestration via CLI + reviewer Agent)
     manager_max_tasks: int = 10
     manager_max_attempts: int = 3

@@ -4,6 +4,8 @@ from i18n.resolver import (
     FALLBACK_LANG,
     map_telegram_language_code,
     resolve_language,
+    lang_from_update,
+    lang_from_query,
 )
 from i18n.translator import t, get_catalog, reload_catalogs
 from i18n.plural import plural
@@ -14,6 +16,8 @@ __all__ = [
     "FALLBACK_LANG",
     "map_telegram_language_code",
     "resolve_language",
+    "lang_from_update",
+    "lang_from_query",
     "t",
     "get_catalog",
     "reload_catalogs",

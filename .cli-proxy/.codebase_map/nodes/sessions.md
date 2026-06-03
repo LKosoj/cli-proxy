@@ -1,62 +1,70 @@
 # Node: sessions
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`sessions/**` is the session-service layer around `session.Session`. It defines Telegram/Desktop conversation scope identifiers, session-scoped storage keys, compatibility accessors for mode/orchestrator/SSH/remote-control state, prompt and mode run orchestration, outbound output delivery, and Telegram session UI/status helpers.
+Транспорт-агностичный Service Layer для жизненного цикла сессий: идентичность/скоупинг сессии, очередь пользовательского ввода, запуск prompt-задач, доставка вывода (с HTML/summary), доступ к runtime-состоянию, построение статус-текста и Telegram-UI меню сессий. Используется ботом и режимами через сервисы; сами модули не содержат логики конкретных режимов.
 
 ## Scope
 - Source glob: `sessions/**`
-- Current files: 10 under `sessions/**` as of last review.
-- Scope identity and keys: `sessions/conversation_scope.py`, `sessions/scoped_key.py`.
-- Runtime state access/reset helpers: `sessions/session_state_access.py`.
-- Queue item contract: `sessions/queue_item.py`.
-- Bot-facing session facade and runtime services: `sessions/session_management.py`, `sessions/session_run_service.py`, `sessions/session_output_service.py`.
-- Telegram session menu/status UI: `sessions/session_ui.py`, `sessions/session_status.py`.
-- Primary external model dependency: `session.py` (`Session`, `SessionManager`, `session_runtime_uid`, CLI switching).
+- Files: 10 (`sessions/*.py`, ~2890 строк), пакет помечен `sessions/__init__.py`.
+- В скоуп НЕ входит dataclass `Session`/`SessionManager` — он живёт в корневом `session.py` (см. `nodes/session-py.md`); модули этой области работают над его экземплярами.
 
 ## Instructions for agent
-- Start with `.cli-proxy/.codebase_map/INDEX.md`, then this node, then the task-specific files under `sessions/**`.
-- Before claiming runtime behavior, inspect the exact method/function in source and cite concrete `path:line`.
-- For prompt execution changes, inspect `sessions/session_run_service.py` plus `session.py`; verify queue draining, `run_lock`, CLI switching, assistant preview, task tracking, and persistence behavior in the changed path.
-- For mode execution changes, inspect `sessions/session_run_service.py`, `modes/DEVELOPMENT.md`, and the affected mode under `modes/**`; keep mode logic on SDK/`BaseMode` contracts rather than adding shared mode behavior to `BotApp`.
-- For output delivery changes, inspect `sessions/session_output_service.py`, `app/services/notification_queue_service.py`, `tg/markdown.py`, and `app/services/telegram_transport.py`; preserve Telegram thread routing through `ConversationScope`/`message_thread_id`.
-- For session UI/status/state changes, inspect `sessions/session_ui.py`, `sessions/session_status.py`, `sessions/session_state_access.py`, plus callers in `tg/**`, `miniapp/routes.py`, and `desktop/**`.
-- Validate Python edits with targeted `.venv/bin/pytest -q` tests near the changed behavior and `.venv/bin/flake8`.
+- Read only files relevant to the active task; не грузить всю область целиком.
+- Идентичность/ключи сессии: `sessions/conversation_scope.py` (`ConversationScope`, `DesktopScope`, `session_uid`/`session_surface`) и `sessions/scoped_key.py` (`build_session_scoped_key`, `sanitize_scoped_key_token`). Менять формат ключа `{chat_id}_{session_id}` только согласованно с персистентностью `state.json`.
+- Чтение/запись runtime-флагов сессии (active_mode, orchestrator, ssh_remote, remote_control, analyst_mode) — только через геттеры/сеттеры `sessions/session_state_access.py`, не обращаться к атрибутам напрямую.
+- Очередь ввода нормализуется через `sessions/queue_item.py` (`normalize_queue_item`, `append_session_queue_item`); метаданные ограничены полями `image_path`, `image_paths`, `attachments`.
+- Доставка вывода и рендер крупных логов в HTML/summary — `sessions/session_output_service.py`; запуск prompt-задач и интеграция с оркестрацией — `sessions/session_run_service.py`.
+- Prefer deterministic checks before edits; держать изменения минимальными и валидировать через `pytest -q` и `flake8 .`.
 
 ## Source of truth
-- `sessions/conversation_scope.py` - `ConversationScope` and `DesktopScope`, canonical `session_uid`/`session_surface`, payload conversion for Telegram chats/topics and Desktop sessions.
-- `sessions/scoped_key.py` - scoped-key token sanitization and `session_scoped_key()` derivation used by sandboxes, plans, mode runtime, and Desktop.
-- `sessions/session_state_access.py` - active mode, analyst mode, SSH, remote-control, and advanced-orchestrator accessors across nested state and older flat session fields; runtime-state reset helper.
-- `sessions/queue_item.py` - typed queue item dataclass and normalizer for legacy string, mapping, and dataclass queue payloads.
-- `sessions/session_management.py` - `SessionManagement` facade installed by `bot.py`; composes output, run, interrupt, persistence, HTML rendering, and CLI dialog logging services.
-- `sessions/session_run_service.py` - direct prompt execution, mode pipeline execution, queued input dispatch, assistant preview, runtime progress, orchestrator handoff proposal, task scheduling, and persistence.
-- `sessions/session_output_service.py` - short-output Telegram sends, long-output HTML document rendering, summary sending, per-scope notification queue integration, and state summary persistence.
-- `sessions/session_ui.py` - Telegram session menu callbacks for pick/status/rename/resume/CLI/state/queue/reset/orchestrator/close actions.
-- `sessions/session_status.py` - status text and mode-stage builders shared by Telegram, MiniApp, and mode status services.
-- `sessions/__init__.py` - package marker only.
-- API mirrors: `.cli-proxy/.codebase_map/api/sessions/*.md`.
+- `sessions/**`
+- `sessions/__init__.py` — маркер пакета.
+- `sessions/conversation_scope.py` — `ConversationScope`/`DesktopScope`: идентичность сессии по `chat_id`/`message_thread_id`, `session_uid()`, `to_payload()`/`from_payload()`.
+- `sessions/scoped_key.py` — построение и санитизация составных scoped-ключей сессии.
+- `sessions/queue_item.py` — `SessionQueueItem` и нормализация/добавление элементов очереди ввода.
+- `sessions/session_management.py` — `SessionManagement`, `PendingInput`: персист сессий, отмена mode-задач, очистка буферов/медиа/pending-вопросов, трекинг задач (привязан к `bot_app`).
+- `sessions/session_run_service.py` — `SessionRunService`: `start_session_task`, `start_prompt_task`, assistant-preview, runtime-progress, интеграция с оркестрацией.
+- `sessions/session_output_service.py` — `SessionOutputService`: `send_output`, рендер HTML в файл для крупного вывода, summary, разрешение notification-scope.
+- `sessions/session_state_access.py` — чистые геттеры/сеттеры runtime-состояния сессии (mode/orchestrator/ssh/remote/analyst).
+- `sessions/session_status.py` — построение статус-текста сессии/режимов, видимые/зарегистрированные режимы, краткий runtime-progress.
+- `sessions/session_ui.py` — `SessionUI`: меню сессий, обработка callback'ов и pending-сообщений, контроль доступа, сброс полей сессии.
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [sessions/conversation_scope.py](../api/sessions/conversation_scope-py.md)
+- [sessions/queue_item.py](../api/sessions/queue_item-py.md)
+- [sessions/scoped_key.py](../api/sessions/scoped_key-py.md)
+- [sessions/session_management.py](../api/sessions/session_management-py.md)
+- [sessions/session_output_service.py](../api/sessions/session_output_service-py.md)
+- [sessions/session_run_service.py](../api/sessions/session_run_service-py.md)
+- [sessions/session_state_access.py](../api/sessions/session_state_access-py.md)
+- [sessions/session_status.py](../api/sessions/session_status-py.md)
+- [sessions/session_ui.py](../api/sessions/session_ui-py.md)
 
 ## When to update
-- Any change under `sessions/**`.
-- Any change in `session.py` that changes `Session`, `SessionManager`, `session_runtime_uid`, `session_scoped_key`, CLI selection/switching, persistence, queue, lock, or conversation-scope behavior.
-- Any change in `bot.py` that changes `SessionManagement`/`SessionUI` construction, Telegram callback scope resolution, `_handle_user_input`, `send_output`, or session cleanup.
-- Any change in `app/services/session_service.py`, `app/services/session_run_service.py`, `app/services/input_dispatch_service.py`, `app/services/mode_launch_adapter.py`, `app/services/session_interrupt_service.py`, `app/services/notification_queue_service.py`, `app/services/telegram_transport.py`, `app/services/state_repository.py`, `app/services/session_thread_manager.py`, `app/services/message_buffer_service.py`, or SSH/remote-control services consumed by session state/status helpers.
-- Any change in `tg/**`, `miniapp/routes.py`, or `desktop/**` that changes session menus, active mode, session status, SSH/remote-control/orchestrator toggles, output routing, or session selection.
-- Any change in `modes/**` that changes mode launch, active mode state, mode status, mode output delivery, scoped keys, queued input, or orchestrator handoff contracts.
-- Any targeted test change that adds, removes, or materially changes session coverage under `tests/test_session*.py`, `tests/test_send_output*.py`, `tests/test_orchestrator_post_run_transition.py`, `tests/test_telegram_outbound_thread_routing.py`, `tests/test_notification_queue_service.py`, or Desktop/MiniApp session-state tests.
+- Any commit touching `sessions/**`.
+- Изменение dataclass `Session`/`SessionManager` в `session.py` (поля состояния, scoped-ключи, persistence) — импортируется этой областью.
+- Изменение контрактов `app/services/**`, на которые опираются модули (напр. `session_run_service`, `session_interrupt_service`, `state_repository`, `advanced_orchestrator_service`, `runtime_progress_service`).
+- Изменение helpers в `utils/` (`utils.html_renderer`, `utils.text`, `utils.ui`) или `summary.py`, используемых при доставке вывода.
+- Изменение SDK режимов (`modes/sdk/**`) в части callback-данных/UI-скоупов, используемых `session_ui.py`/`session_status.py`.
+- Изменение точек входа транспорта (`bot.py`, `desktop/**`, `miniapp/**`), которые конструируют/вызывают эти сервисы.
+- Любое архитектурное/поведенческое изменение в этой области.
 
 ## Related nodes
-- `.cli-proxy/.codebase_map/nodes/session-py.md` - owns `Session`, `SessionManager`, runtime UID/scoped-key integration, CLI process execution, persistence, queue, and conversation scope storage.
-- `.cli-proxy/.codebase_map/nodes/bot-py.md` - constructs `SessionManagement`/`SessionUI` and provides BotApp methods called by session services.
-- `.cli-proxy/.codebase_map/nodes/app.md` - services used by sessions for orchestration, interrupt, notification queue, state repository, session threads, Telegram transport, SSH, remote control, and runtime progress.
-- `.cli-proxy/.codebase_map/nodes/tg.md` - Telegram handlers and callbacks consume session status/state accessors and route session actions.
-- `.cli-proxy/.codebase_map/nodes/miniapp.md` - MiniApp routes render session status and use session scoped keys/state for runs, files, logs, SSH, and remote-control UI.
-- `.cli-proxy/.codebase_map/nodes/desktop.md` - Desktop facade/widgets use session state accessors, scoped keys, status data, and Desktop session scopes.
-- `.cli-proxy/.codebase_map/nodes/modes.md` - mode SDK/runtime and mode plugins consume active mode state, session scoped keys, mode status helpers, and mode pipeline contracts.
-- `.cli-proxy/.codebase_map/nodes/utils.md` - path/text helpers used for sandbox session directories, ANSI stripping, and previews.
-- `.cli-proxy/.codebase_map/nodes/summary-py.md` - summary function injected into `SessionOutputService` for long-output previews.
-- `.cli-proxy/.codebase_map/nodes/tests.md` - targeted coverage for session runtime, output delivery, thread routing, scoped keys, state migration, SSH/remote-control state, and orchestrator handoff.
+- `nodes/session-py.md` — dataclass `Session`/`SessionManager`, над которым работают эти сервисы.
+- `nodes/app.md` — `app/services/*` (оркестрация, state-repository, interrupt, прогресс): основной потребитель и зависимость.
+- `nodes/summary-py.md` — суммаризация вывода (`summarize_text_with_reason`).
+- `nodes/modes.md` — `modes/sdk/*` (callback_data, UI-скоупы) для статуса/меню.
+- `nodes/bot-py.md` — composition root, конструирует `SessionManagement`/сервисы.
+- `nodes/desktop.md`, `nodes/miniapp.md` — транспорты, использующие сервисы сессий.
+- `nodes/agent.md` — потребитель состояния сессии через `session_state_access`.
+- Edges (из графа): `app` confidence=0.90 via L0/L1/L2 · `session.py` confidence=0.90 via L0/L2 · `summary.py` confidence=0.90 via L0/L2 · `modes` confidence=0.90 via L0/L1/L2 · `agent`/`bot.py`/`desktop`/`miniapp` confidence=0.76 via L0.
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-05-10
+- 2026-06-03 (enriched in place; based on `sessions/*.py` at commit 5193643)

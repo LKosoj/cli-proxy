@@ -1,6 +1,6 @@
 # API Spec: `app/services/claude_jsonl_monitor.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
 ### `class ClaudeTranscriptEvent` (line 290)
@@ -12,9 +12,9 @@ Generated: 2026-04-27T22:43:22Z
 ### `class ClaudeJsonlMonitor` (line 397)
 *Track one active Claude transcript file for the current workdir.*
 - `def __init__(workdir, callback, session_callback, poll_interval, username, session_id)` (line 406)
-- `def start()` (line 632)
-- `def stop()` (line 641)
-- `def get_latest_session_id()` (line 648)
+- `def start()` (line 636)
+- `def stop()` (line 645)
+- `def get_latest_session_id()` (line 652)
 
 ## Symbols
 - `def extract_progress_texts(raw_event)` (line 211)

@@ -28,6 +28,10 @@ def _payload(tmp_path) -> dict:
         "defaults": {
             "workdir": str(tmp_path),
             "default_language": "en",
+            "clarification_keywords_by_lang": {
+                "ru": ["уточни", "уточните"],
+                "en": ["clarify", "unclear"],
+            },
             "cli_json_stream_archive_enabled": True,
             "assistant_preview_enabled": True,
             "pending_input_confirmation_enabled": False,
@@ -116,10 +120,13 @@ def test_serialize_config_roundtrip_preserves_canonical_mcp_clients(tmp_path) ->
         "local:global-registry",
         "ref:owner-repo-skill",
     ]
-    # PyYAML preserves int keys as-is; field_validator coerces them to int on load.
-    ul = first_payload["telegram"]["user_languages"]
-    assert ul[111111111] == "en" or ul.get("111111111") == "en"
+    # YAML may emit the int key as int or str depending on dumper; normalize and
+    # assert the full mapping deterministically.
+    ul = {int(k): v for k, v in first_payload["telegram"]["user_languages"].items()}
+    assert ul == {111111111: "en"}
     assert first_payload["defaults"]["default_language"] == "en"
+    by_lang = first_payload["defaults"].get("clarification_keywords_by_lang", {})
+    assert by_lang.get("en") == ["clarify", "unclear"]
 
     path.write_text(first_serialized, encoding="utf-8")
 
@@ -210,6 +217,9 @@ def test_config_files_match_runtime_policy_contract() -> None:
     assert classify_config_path("defaults.default_language").apply_mode == "hot_reload"
     assert "default_language" in DefaultsConfigModel.model_fields
     assert example["defaults"]["default_language"] == "ru"
+
+    assert "clarification_keywords_by_lang" in DefaultsConfigModel.model_fields
+    assert "clarification_keywords_by_lang" in example["defaults"]
 
     local_config_path = root / "config.yaml"
     if local_config_path.exists():

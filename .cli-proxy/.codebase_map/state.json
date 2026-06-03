@@ -1,8 +1,8 @@
 {
   "state": "needs_review",
-  "updated_at": "2026-06-03T02:24:01Z",
-  "operation": "init_full",
-  "nodes_count": 30,
+  "updated_at": "2026-06-03T03:11:44Z",
+  "operation": "verify",
+  "nodes_count": 26,
   "tree": [
     ".cli-proxy/.codebase_map/",
     "  INDEX.md",
@@ -12,23 +12,19 @@
     "    app.md",
     "    agent.md",
     "    desktop.md",
-    "    tg.md",
     "    miniapp.md",
+    "    tg.md",
     "    sessions.md",
     "    utils.md",
-    "    session-json.md",
+    "    i18n.md",
+    "    locales.md",
     "    bot-py.md",
     "    code-stats-py.md",
     "    config-py.md",
     "    config-example-yaml.md",
     "    conftest-py.md",
-    "    fix-permissions-sh.md",
-    "    full-ui-yaml.md",
     "    gen-init-data-py.md",
-    "    miniapp-pid.md",
-    "    mkdocs-yml.md",
     "    parse-status-py.md",
-    "    playwright-config-json.md",
     "    pytest-ini.md",
     "    requirements-txt.md",
     "    scripts.md",
@@ -44,23 +40,19 @@
     "nodes/app.md",
     "nodes/agent.md",
     "nodes/desktop.md",
-    "nodes/tg.md",
     "nodes/miniapp.md",
+    "nodes/tg.md",
     "nodes/sessions.md",
     "nodes/utils.md",
-    "nodes/session-json.md",
+    "nodes/i18n.md",
+    "nodes/locales.md",
     "nodes/bot-py.md",
     "nodes/code-stats-py.md",
     "nodes/config-py.md",
     "nodes/config-example-yaml.md",
     "nodes/conftest-py.md",
-    "nodes/fix-permissions-sh.md",
-    "nodes/full-ui-yaml.md",
     "nodes/gen-init-data-py.md",
-    "nodes/miniapp-pid.md",
-    "nodes/mkdocs-yml.md",
     "nodes/parse-status-py.md",
-    "nodes/playwright-config-json.md",
     "nodes/pytest-ini.md",
     "nodes/requirements-txt.md",
     "nodes/scripts.md",
@@ -70,302 +62,267 @@
     "nodes/start-miniapp-py.md",
     "nodes/summary-py.md"
   ],
-  "needs_review": [
-    "nodes/tests.md",
-    "nodes/modes.md",
-    "nodes/app.md",
-    "nodes/agent.md",
-    "nodes/desktop.md",
-    "nodes/tg.md",
-    "nodes/miniapp.md",
-    "nodes/sessions.md",
-    "nodes/utils.md",
-    "nodes/session-json.md",
-    "nodes/bot-py.md",
-    "nodes/code-stats-py.md",
-    "nodes/config-py.md",
-    "nodes/config-example-yaml.md",
-    "nodes/conftest-py.md",
-    "nodes/fix-permissions-sh.md",
-    "nodes/full-ui-yaml.md",
-    "nodes/gen-init-data-py.md",
-    "nodes/miniapp-pid.md",
-    "nodes/mkdocs-yml.md",
-    "nodes/parse-status-py.md",
-    "nodes/playwright-config-json.md",
-    "nodes/pytest-ini.md",
-    "nodes/requirements-txt.md",
-    "nodes/scripts.md",
-    "nodes/session-py.md",
-    "nodes/setup-bot-sh.md",
-    "nodes/skills-lock-json.md",
-    "nodes/start-miniapp-py.md",
-    "nodes/summary-py.md"
-  ],
+  "needs_review": [],
   "reviewed": {
-    "nodes/auth-success-yaml.md": true
+    "nodes/auth-success-yaml.md": true,
+    "nodes/tests.md": true,
+    "nodes/modes.md": true,
+    "nodes/app.md": true,
+    "nodes/agent.md": true,
+    "nodes/desktop.md": true,
+    "nodes/miniapp.md": true,
+    "nodes/tg.md": true,
+    "nodes/sessions.md": true,
+    "nodes/utils.md": true,
+    "nodes/i18n.md": true,
+    "nodes/locales.md": true,
+    "nodes/bot-py.md": true,
+    "nodes/code-stats-py.md": true,
+    "nodes/config-py.md": true,
+    "nodes/config-example-yaml.md": true,
+    "nodes/conftest-py.md": true,
+    "nodes/gen-init-data-py.md": true,
+    "nodes/parse-status-py.md": true,
+    "nodes/pytest-ini.md": true,
+    "nodes/requirements-txt.md": true,
+    "nodes/scripts.md": true,
+    "nodes/session-py.md": true,
+    "nodes/setup-bot-sh.md": true,
+    "nodes/skills-lock-json.md": true,
+    "nodes/start-miniapp-py.md": true,
+    "nodes/summary-py.md": true
   },
   "rules_review_items": [
-    "rule-sync-playwright-cli-orchestrator",
-    "rule-sync-playwright-cli-agent",
-    "rule-sync-playwright-cli-app",
-    "rule-sync-playwright-cli-modes",
-    "rule-sync-playwright-cli-session-py",
-    "rule-sync-playwright-cli-sessions",
-    "rule-sync-playwright-cli-tests",
+    "rule-sync-readme-en-md-agent",
     "rule-sync-readme-en-md-app",
     "rule-sync-readme-en-md-config-example-yaml",
     "rule-sync-readme-en-md-miniapp",
     "rule-sync-readme-en-md-modes",
+    "rule-sync-readme-en-md-session-py",
+    "rule-sync-readme-en-md-setup-bot-sh",
     "rule-sync-readme-en-md-tests",
-    "rule-sync-readme-en-md-tg",
-    "rule-sync-orchestrator-agent",
-    "rule-sync-orchestrator-app",
-    "rule-sync-orchestrator-docs",
-    "rule-sync-orchestrator-modes",
-    "rule-sync-orchestrator-tests",
     "rule-sync-agent-app",
+    "rule-sync-agent-bot-py",
+    "rule-sync-agent-config-example-yaml",
+    "rule-sync-agent-crocodile-continuation-mp4",
+    "rule-sync-agent-crocodile-emerging-mp4",
+    "rule-sync-agent-crocodile-extended-mp4",
+    "rule-sync-agent-crocodile-threat-mp4",
     "rule-sync-agent-desktop",
-    "rule-sync-agent-docs",
+    "rule-sync-agent-miniapp",
     "rule-sync-agent-modes",
     "rule-sync-agent-session-py",
+    "rule-sync-agent-sessions",
+    "rule-sync-agent-setup-bot-sh",
+    "rule-sync-agent-summary-py",
     "rule-sync-agent-tests",
+    "rule-sync-agent-tg",
+    "rule-sync-agent-utils",
     "rule-sync-app-bot-py",
     "rule-sync-app-config-py",
     "rule-sync-app-config-example-yaml",
+    "rule-sync-app-crocodile-continuation-mp4",
+    "rule-sync-app-crocodile-emerging-mp4",
+    "rule-sync-app-crocodile-extended-mp4",
+    "rule-sync-app-crocodile-threat-mp4",
     "rule-sync-app-desktop",
-    "rule-sync-app-docs",
     "rule-sync-app-miniapp",
     "rule-sync-app-modes",
     "rule-sync-app-session-py",
     "rule-sync-app-sessions",
+    "rule-sync-app-setup-bot-sh",
+    "rule-sync-app-summary-py",
     "rule-sync-app-tests",
     "rule-sync-app-tg",
-    "rule-sync-bot-py-config-py",
-    "rule-sync-bot-py-config-example-yaml",
+    "rule-sync-app-utils",
     "rule-sync-bot-py-desktop",
+    "rule-sync-bot-py-miniapp",
     "rule-sync-bot-py-modes",
     "rule-sync-bot-py-session-py",
+    "rule-sync-bot-py-sessions",
+    "rule-sync-bot-py-summary-py",
     "rule-sync-bot-py-tests",
     "rule-sync-bot-py-tg",
+    "rule-sync-bot-py-utils",
     "rule-sync-config-py-config-example-yaml",
-    "rule-sync-config-py-desktop",
-    "rule-sync-config-py-miniapp",
-    "rule-sync-config-py-modes",
     "rule-sync-config-py-tests",
-    "rule-sync-config-py-tg",
-    "rule-sync-config-example-yaml-desktop",
+    "rule-sync-config-py-utils",
     "rule-sync-config-example-yaml-miniapp",
     "rule-sync-config-example-yaml-modes",
+    "rule-sync-config-example-yaml-session-py",
+    "rule-sync-config-example-yaml-setup-bot-sh",
     "rule-sync-config-example-yaml-tests",
-    "rule-sync-config-example-yaml-tg",
+    "rule-sync-config-example-yaml-utils",
+    "rule-sync-crocodile-continuation-mp4-crocodile-emerging-mp4",
+    "rule-sync-crocodile-continuation-mp4-crocodile-extended-mp4",
+    "rule-sync-crocodile-continuation-mp4-crocodile-threat-mp4",
+    "rule-sync-crocodile-continuation-mp4-tests",
+    "rule-sync-crocodile-emerging-mp4-crocodile-extended-mp4",
+    "rule-sync-crocodile-emerging-mp4-crocodile-threat-mp4",
+    "rule-sync-crocodile-emerging-mp4-tests",
+    "rule-sync-crocodile-extended-mp4-crocodile-threat-mp4",
+    "rule-sync-crocodile-extended-mp4-tests",
+    "rule-sync-crocodile-threat-mp4-tests",
     "rule-sync-desktop-miniapp",
     "rule-sync-desktop-modes",
     "rule-sync-desktop-session-py",
     "rule-sync-desktop-sessions",
+    "rule-sync-desktop-summary-py",
     "rule-sync-desktop-tests",
     "rule-sync-desktop-tg",
-    "rule-sync-docs-modes",
-    "rule-sync-docs-session-py",
-    "rule-sync-docs-sessions",
-    "rule-sync-docs-tests",
+    "rule-sync-desktop-utils",
     "rule-sync-miniapp-modes",
+    "rule-sync-miniapp-session-py",
+    "rule-sync-miniapp-sessions",
+    "rule-sync-miniapp-setup-bot-sh",
+    "rule-sync-miniapp-summary-py",
     "rule-sync-miniapp-tests",
     "rule-sync-miniapp-tg",
+    "rule-sync-miniapp-utils",
     "rule-sync-modes-session-py",
     "rule-sync-modes-sessions",
+    "rule-sync-modes-summary-py",
     "rule-sync-modes-tests",
     "rule-sync-modes-tg",
+    "rule-sync-modes-utils",
     "rule-sync-session-py-sessions",
+    "rule-sync-session-py-setup-bot-sh",
+    "rule-sync-session-py-summary-py",
     "rule-sync-session-py-tests",
     "rule-sync-session-py-tg",
+    "rule-sync-session-py-utils",
+    "rule-sync-sessions-summary-py",
     "rule-sync-sessions-tests",
     "rule-sync-sessions-tg",
-    "rule-sync-tests-tg"
+    "rule-sync-sessions-utils",
+    "rule-sync-setup-bot-sh-tests",
+    "rule-sync-summary-py-tests",
+    "rule-sync-summary-py-tg",
+    "rule-sync-summary-py-utils",
+    "rule-sync-tests-tg",
+    "rule-sync-tests-utils",
+    "rule-sync-tg-utils"
   ],
   "rules_needs_review": [
-    "rule-sync-playwright-cli-orchestrator",
-    "rule-sync-playwright-cli-agent",
-    "rule-sync-playwright-cli-app",
-    "rule-sync-playwright-cli-modes",
-    "rule-sync-playwright-cli-session-py",
-    "rule-sync-playwright-cli-sessions",
-    "rule-sync-playwright-cli-tests",
+    "rule-sync-readme-en-md-agent",
     "rule-sync-readme-en-md-app",
     "rule-sync-readme-en-md-config-example-yaml",
     "rule-sync-readme-en-md-miniapp",
     "rule-sync-readme-en-md-modes",
+    "rule-sync-readme-en-md-session-py",
+    "rule-sync-readme-en-md-setup-bot-sh",
     "rule-sync-readme-en-md-tests",
-    "rule-sync-readme-en-md-tg",
-    "rule-sync-orchestrator-agent",
-    "rule-sync-orchestrator-app",
-    "rule-sync-orchestrator-docs",
-    "rule-sync-orchestrator-modes",
-    "rule-sync-orchestrator-tests",
     "rule-sync-agent-app",
+    "rule-sync-agent-bot-py",
+    "rule-sync-agent-config-example-yaml",
+    "rule-sync-agent-crocodile-continuation-mp4",
+    "rule-sync-agent-crocodile-emerging-mp4",
+    "rule-sync-agent-crocodile-extended-mp4",
+    "rule-sync-agent-crocodile-threat-mp4",
     "rule-sync-agent-desktop",
-    "rule-sync-agent-docs",
+    "rule-sync-agent-miniapp",
     "rule-sync-agent-modes",
     "rule-sync-agent-session-py",
+    "rule-sync-agent-sessions",
+    "rule-sync-agent-setup-bot-sh",
+    "rule-sync-agent-summary-py",
     "rule-sync-agent-tests",
+    "rule-sync-agent-tg",
+    "rule-sync-agent-utils",
     "rule-sync-app-bot-py",
     "rule-sync-app-config-py",
     "rule-sync-app-config-example-yaml",
-    "rule-sync-app-docs",
+    "rule-sync-app-crocodile-continuation-mp4",
+    "rule-sync-app-crocodile-emerging-mp4",
+    "rule-sync-app-crocodile-extended-mp4",
+    "rule-sync-app-crocodile-threat-mp4",
     "rule-sync-app-miniapp",
     "rule-sync-app-session-py",
+    "rule-sync-app-setup-bot-sh",
+    "rule-sync-app-summary-py",
     "rule-sync-app-tests",
     "rule-sync-app-tg",
-    "rule-sync-bot-py-config-py",
-    "rule-sync-bot-py-config-example-yaml",
+    "rule-sync-app-utils",
     "rule-sync-bot-py-desktop",
+    "rule-sync-bot-py-miniapp",
     "rule-sync-bot-py-modes",
     "rule-sync-bot-py-session-py",
+    "rule-sync-bot-py-sessions",
+    "rule-sync-bot-py-summary-py",
     "rule-sync-bot-py-tests",
     "rule-sync-bot-py-tg",
+    "rule-sync-bot-py-utils",
     "rule-sync-config-py-config-example-yaml",
-    "rule-sync-config-py-desktop",
-    "rule-sync-config-py-miniapp",
-    "rule-sync-config-py-modes",
     "rule-sync-config-py-tests",
-    "rule-sync-config-py-tg",
-    "rule-sync-config-example-yaml-desktop",
+    "rule-sync-config-py-utils",
     "rule-sync-config-example-yaml-miniapp",
     "rule-sync-config-example-yaml-modes",
+    "rule-sync-config-example-yaml-session-py",
+    "rule-sync-config-example-yaml-setup-bot-sh",
     "rule-sync-config-example-yaml-tests",
-    "rule-sync-config-example-yaml-tg",
+    "rule-sync-config-example-yaml-utils",
+    "rule-sync-crocodile-continuation-mp4-crocodile-emerging-mp4",
+    "rule-sync-crocodile-continuation-mp4-crocodile-extended-mp4",
+    "rule-sync-crocodile-continuation-mp4-crocodile-threat-mp4",
+    "rule-sync-crocodile-continuation-mp4-tests",
+    "rule-sync-crocodile-emerging-mp4-crocodile-extended-mp4",
+    "rule-sync-crocodile-emerging-mp4-crocodile-threat-mp4",
+    "rule-sync-crocodile-emerging-mp4-tests",
+    "rule-sync-crocodile-extended-mp4-crocodile-threat-mp4",
+    "rule-sync-crocodile-extended-mp4-tests",
+    "rule-sync-crocodile-threat-mp4-tests",
     "rule-sync-desktop-session-py",
+    "rule-sync-desktop-summary-py",
     "rule-sync-desktop-tests",
     "rule-sync-desktop-tg",
-    "rule-sync-docs-modes",
-    "rule-sync-docs-session-py",
-    "rule-sync-docs-sessions",
-    "rule-sync-docs-tests",
+    "rule-sync-desktop-utils",
     "rule-sync-miniapp-modes",
+    "rule-sync-miniapp-session-py",
+    "rule-sync-miniapp-sessions",
+    "rule-sync-miniapp-setup-bot-sh",
+    "rule-sync-miniapp-summary-py",
     "rule-sync-miniapp-tests",
     "rule-sync-miniapp-tg",
+    "rule-sync-miniapp-utils",
     "rule-sync-modes-session-py",
+    "rule-sync-modes-summary-py",
     "rule-sync-modes-tests",
     "rule-sync-modes-tg",
+    "rule-sync-modes-utils",
     "rule-sync-session-py-sessions",
+    "rule-sync-session-py-setup-bot-sh",
+    "rule-sync-session-py-summary-py",
     "rule-sync-session-py-tests",
     "rule-sync-session-py-tg",
+    "rule-sync-session-py-utils",
+    "rule-sync-sessions-summary-py",
     "rule-sync-sessions-tests",
     "rule-sync-sessions-tg",
-    "rule-sync-tests-tg"
+    "rule-sync-sessions-utils",
+    "rule-sync-setup-bot-sh-tests",
+    "rule-sync-summary-py-tests",
+    "rule-sync-summary-py-tg",
+    "rule-sync-summary-py-utils",
+    "rule-sync-tests-tg",
+    "rule-sync-tests-utils",
+    "rule-sync-tg-utils"
   ],
   "rules_reviewed": {},
   "inferred_rules": [
     {
-      "id": "rule-sync-playwright-cli-orchestrator",
+      "id": "rule-sync-readme-en-md-agent",
       "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `_orchestrator`",
+      "title": "Sync `README_EN.MD` with `agent`",
       "areas": [
-        ".playwright-cli",
-        "_orchestrator"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-playwright-cli-agent",
-      "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `agent`",
-      "areas": [
-        ".playwright-cli",
+        "README_EN.MD",
         "agent"
       ],
       "source_class": "observed",
-      "confidence": 0.85,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:11/120"
-      ]
-    },
-    {
-      "id": "rule-sync-playwright-cli-app",
-      "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `app`",
-      "areas": [
-        ".playwright-cli",
-        "app"
-      ],
-      "source_class": "observed",
-      "confidence": 0.83,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:6/120"
-      ]
-    },
-    {
-      "id": "rule-sync-playwright-cli-modes",
-      "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `modes`",
-      "areas": [
-        ".playwright-cli",
-        "modes"
-      ],
-      "source_class": "observed",
-      "confidence": 0.93,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:26/120"
-      ]
-    },
-    {
-      "id": "rule-sync-playwright-cli-session-py",
-      "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `session.py`",
-      "areas": [
-        ".playwright-cli",
-        "session.py"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-playwright-cli-sessions",
-      "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `sessions`",
-      "areas": [
-        ".playwright-cli",
-        "sessions"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-playwright-cli-tests",
-      "kind": "sync_areas",
-      "title": "Sync `.playwright-cli` with `tests`",
-      "areas": [
-        ".playwright-cli",
-        "tests"
-      ],
-      "source_class": "observed",
-      "confidence": 0.95,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:35/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -377,11 +334,11 @@
         "app"
       ],
       "source_class": "observed",
-      "confidence": 0.79,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:4/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -393,11 +350,11 @@
         "config_example.yaml"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -409,11 +366,11 @@
         "miniapp"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -425,11 +382,43 @@
         "modes"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `session.py`",
+      "areas": [
+        "README_EN.MD",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.89,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/8"
+      ]
+    },
+    {
+      "id": "rule-sync-readme-en-md-setup-bot-sh",
+      "kind": "sync_areas",
+      "title": "Sync `README_EN.MD` with `setup_bot.sh`",
+      "areas": [
+        "README_EN.MD",
+        "setup_bot.sh"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -441,107 +430,11 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.79,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:4/120"
-      ]
-    },
-    {
-      "id": "rule-sync-readme-en-md-tg",
-      "kind": "sync_areas",
-      "title": "Sync `README_EN.MD` with `tg`",
-      "areas": [
-        "README_EN.MD",
-        "tg"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-orchestrator-agent",
-      "kind": "sync_areas",
-      "title": "Sync `_orchestrator` with `agent`",
-      "areas": [
-        "_orchestrator",
-        "agent"
-      ],
-      "source_class": "observed",
-      "confidence": 0.7,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:3/120"
-      ]
-    },
-    {
-      "id": "rule-sync-orchestrator-app",
-      "kind": "sync_areas",
-      "title": "Sync `_orchestrator` with `app`",
-      "areas": [
-        "_orchestrator",
-        "app"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-orchestrator-docs",
-      "kind": "sync_areas",
-      "title": "Sync `_orchestrator` with `docs`",
-      "areas": [
-        "_orchestrator",
-        "docs"
-      ],
-      "source_class": "observed",
-      "confidence": 0.7,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:3/120"
-      ]
-    },
-    {
-      "id": "rule-sync-orchestrator-modes",
-      "kind": "sync_areas",
-      "title": "Sync `_orchestrator` with `modes`",
-      "areas": [
-        "_orchestrator",
-        "modes"
-      ],
-      "source_class": "observed",
-      "confidence": 0.84,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:8/120"
-      ]
-    },
-    {
-      "id": "rule-sync-orchestrator-tests",
-      "kind": "sync_areas",
-      "title": "Sync `_orchestrator` with `tests`",
-      "areas": [
-        "_orchestrator",
-        "tests"
-      ],
-      "source_class": "observed",
-      "confidence": 0.85,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:9/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -553,11 +446,107 @@
         "app"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:6/120"
+        "observed:git_cochange:5/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-bot-py",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `bot.py`",
+      "areas": [
+        "agent",
+        "bot.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-config-example-yaml",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `config_example.yaml`",
+      "areas": [
+        "agent",
+        "config_example.yaml"
+      ],
+      "source_class": "observed",
+      "confidence": 0.89,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-crocodile-continuation-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `crocodile_continuation.mp4`",
+      "areas": [
+        "agent",
+        "crocodile_continuation.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-crocodile-emerging-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `crocodile_emerging.mp4`",
+      "areas": [
+        "agent",
+        "crocodile_emerging.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-crocodile-extended-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `crocodile_extended.mp4`",
+      "areas": [
+        "agent",
+        "crocodile_extended.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-crocodile-threat-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `crocodile_threat.mp4`",
+      "areas": [
+        "agent",
+        "crocodile_threat.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -569,27 +558,27 @@
         "desktop"
       ],
       "source_class": "observed",
-      "confidence": 0.79,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:4/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
-      "id": "rule-sync-agent-docs",
+      "id": "rule-sync-agent-miniapp",
       "kind": "sync_areas",
-      "title": "Sync `agent` with `docs`",
+      "title": "Sync `agent` with `miniapp`",
       "areas": [
         "agent",
-        "docs"
+        "miniapp"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -601,11 +590,11 @@
         "modes"
       ],
       "source_class": "observed",
-      "confidence": 0.94,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:27/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -617,11 +606,59 @@
         "session.py"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:4/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `sessions`",
+      "areas": [
+        "agent",
+        "sessions"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-setup-bot-sh",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `setup_bot.sh`",
+      "areas": [
+        "agent",
+        "setup_bot.sh"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `summary.py`",
+      "areas": [
+        "agent",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -633,11 +670,43 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.94,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:28/120"
+        "observed:git_cochange:5/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-tg",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `tg`",
+      "areas": [
+        "agent",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-agent-utils",
+      "kind": "sync_areas",
+      "title": "Sync `agent` with `utils`",
+      "areas": [
+        "agent",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -649,11 +718,11 @@
         "bot.py"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:5/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -665,11 +734,11 @@
         "config.py"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -681,11 +750,75 @@
         "config_example.yaml"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:6/120"
+        "observed:git_cochange:4/8"
+      ]
+    },
+    {
+      "id": "rule-sync-app-crocodile-continuation-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `crocodile_continuation.mp4`",
+      "areas": [
+        "app",
+        "crocodile_continuation.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-app-crocodile-emerging-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `crocodile_emerging.mp4`",
+      "areas": [
+        "app",
+        "crocodile_emerging.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-app-crocodile-extended-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `crocodile_extended.mp4`",
+      "areas": [
+        "app",
+        "crocodile_extended.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-app-crocodile-threat-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `crocodile_threat.mp4`",
+      "areas": [
+        "app",
+        "crocodile_threat.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -701,25 +834,9 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:11/120",
-        "declared:README.md",
-        "declared:README_EN.MD"
-      ]
-    },
-    {
-      "id": "rule-sync-app-docs",
-      "kind": "sync_areas",
-      "title": "Sync `app` with `docs`",
-      "areas": [
-        "app",
-        "docs"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:2/8",
+        "declared:README_EN.MD",
+        "declared:README.md"
       ]
     },
     {
@@ -731,11 +848,11 @@
         "miniapp"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:6/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -751,9 +868,9 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:19/120",
-        "declared:README.md",
-        "declared:README_EN.MD"
+        "observed:git_cochange:4/8",
+        "declared:README_EN.MD",
+        "declared:README.md"
       ]
     },
     {
@@ -765,11 +882,11 @@
         "session.py"
       ],
       "source_class": "observed",
-      "confidence": 0.84,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:7/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -785,9 +902,41 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:7/120",
-        "declared:README.md",
-        "declared:README_EN.MD"
+        "observed:git_cochange:2/8",
+        "declared:README_EN.MD",
+        "declared:README.md"
+      ]
+    },
+    {
+      "id": "rule-sync-app-setup-bot-sh",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `setup_bot.sh`",
+      "areas": [
+        "app",
+        "setup_bot.sh"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-app-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `app` with `summary.py`",
+      "areas": [
+        "app",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -803,7 +952,7 @@
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:30/120"
+        "observed:git_cochange:7/8"
       ]
     },
     {
@@ -815,43 +964,27 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.84,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:8/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
-      "id": "rule-sync-bot-py-config-py",
+      "id": "rule-sync-app-utils",
       "kind": "sync_areas",
-      "title": "Sync `bot.py` with `config.py`",
+      "title": "Sync `app` with `utils`",
       "areas": [
-        "bot.py",
-        "config.py"
+        "app",
+        "utils"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-bot-py-config-example-yaml",
-      "kind": "sync_areas",
-      "title": "Sync `bot.py` with `config_example.yaml`",
-      "areas": [
-        "bot.py",
-        "config_example.yaml"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -863,11 +996,27 @@
         "desktop"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-miniapp",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `miniapp`",
+      "areas": [
+        "bot.py",
+        "miniapp"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -879,11 +1028,11 @@
         "modes"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:5/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -895,11 +1044,43 @@
         "session.py"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `sessions`",
+      "areas": [
+        "bot.py",
+        "sessions"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `summary.py`",
+      "areas": [
+        "bot.py",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -911,11 +1092,11 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.85,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:10/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -927,11 +1108,27 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.79,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:4/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-bot-py-utils",
+      "kind": "sync_areas",
+      "title": "Sync `bot.py` with `utils`",
+      "areas": [
+        "bot.py",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -943,59 +1140,11 @@
         "config_example.yaml"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
-      ]
-    },
-    {
-      "id": "rule-sync-config-py-desktop",
-      "kind": "sync_areas",
-      "title": "Sync `config.py` with `desktop`",
-      "areas": [
-        "config.py",
-        "desktop"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-config-py-miniapp",
-      "kind": "sync_areas",
-      "title": "Sync `config.py` with `miniapp`",
-      "areas": [
-        "config.py",
-        "miniapp"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-config-py-modes",
-      "kind": "sync_areas",
-      "title": "Sync `config.py` with `modes`",
-      "areas": [
-        "config.py",
-        "modes"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1007,43 +1156,27 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
-      "id": "rule-sync-config-py-tg",
+      "id": "rule-sync-config-py-utils",
       "kind": "sync_areas",
-      "title": "Sync `config.py` with `tg`",
+      "title": "Sync `config.py` with `utils`",
       "areas": [
         "config.py",
-        "tg"
+        "utils"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-config-example-yaml-desktop",
-      "kind": "sync_areas",
-      "title": "Sync `config_example.yaml` with `desktop`",
-      "areas": [
-        "config_example.yaml",
-        "desktop"
-      ],
-      "source_class": "observed",
-      "confidence": 0.7,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1055,11 +1188,11 @@
         "miniapp"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:5/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -1071,11 +1204,43 @@
         "modes"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `session.py`",
+      "areas": [
+        "config_example.yaml",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.89,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/8"
+      ]
+    },
+    {
+      "id": "rule-sync-config-example-yaml-setup-bot-sh",
+      "kind": "sync_areas",
+      "title": "Sync `config_example.yaml` with `setup_bot.sh`",
+      "areas": [
+        "config_example.yaml",
+        "setup_bot.sh"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1087,27 +1252,187 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:6/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
-      "id": "rule-sync-config-example-yaml-tg",
+      "id": "rule-sync-config-example-yaml-utils",
       "kind": "sync_areas",
-      "title": "Sync `config_example.yaml` with `tg`",
+      "title": "Sync `config_example.yaml` with `utils`",
       "areas": [
         "config_example.yaml",
-        "tg"
+        "utils"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-continuation-mp4-crocodile-emerging-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_continuation.mp4` with `crocodile_emerging.mp4`",
+      "areas": [
+        "crocodile_continuation.mp4",
+        "crocodile_emerging.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-continuation-mp4-crocodile-extended-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_continuation.mp4` with `crocodile_extended.mp4`",
+      "areas": [
+        "crocodile_continuation.mp4",
+        "crocodile_extended.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-continuation-mp4-crocodile-threat-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_continuation.mp4` with `crocodile_threat.mp4`",
+      "areas": [
+        "crocodile_continuation.mp4",
+        "crocodile_threat.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-continuation-mp4-tests",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_continuation.mp4` with `tests`",
+      "areas": [
+        "crocodile_continuation.mp4",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-emerging-mp4-crocodile-extended-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_emerging.mp4` with `crocodile_extended.mp4`",
+      "areas": [
+        "crocodile_emerging.mp4",
+        "crocodile_extended.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-emerging-mp4-crocodile-threat-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_emerging.mp4` with `crocodile_threat.mp4`",
+      "areas": [
+        "crocodile_emerging.mp4",
+        "crocodile_threat.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-emerging-mp4-tests",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_emerging.mp4` with `tests`",
+      "areas": [
+        "crocodile_emerging.mp4",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-extended-mp4-crocodile-threat-mp4",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_extended.mp4` with `crocodile_threat.mp4`",
+      "areas": [
+        "crocodile_extended.mp4",
+        "crocodile_threat.mp4"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-extended-mp4-tests",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_extended.mp4` with `tests`",
+      "areas": [
+        "crocodile_extended.mp4",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-crocodile-threat-mp4-tests",
+      "kind": "sync_areas",
+      "title": "Sync `crocodile_threat.mp4` with `tests`",
+      "areas": [
+        "crocodile_threat.mp4",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1123,7 +1448,7 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:8/120",
+        "observed:git_cochange:2/8",
         "declared:README_EN.MD"
       ]
     },
@@ -1140,9 +1465,9 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:11/120",
-        "declared:README.md",
-        "declared:README_EN.MD"
+        "observed:git_cochange:2/8",
+        "declared:README_EN.MD",
+        "declared:README.md"
       ]
     },
     {
@@ -1154,11 +1479,11 @@
         "session.py"
       ],
       "source_class": "observed",
-      "confidence": 0.79,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:4/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1174,9 +1499,25 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:3/120",
-        "declared:README.md",
-        "declared:README_EN.MD"
+        "observed:git_cochange:2/8",
+        "declared:README_EN.MD",
+        "declared:README.md"
+      ]
+    },
+    {
+      "id": "rule-sync-desktop-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `desktop` with `summary.py`",
+      "areas": [
+        "desktop",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1188,11 +1529,11 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.89,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:17/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1204,75 +1545,27 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.84,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:7/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
-      "id": "rule-sync-docs-modes",
+      "id": "rule-sync-desktop-utils",
       "kind": "sync_areas",
-      "title": "Sync `docs` with `modes`",
+      "title": "Sync `desktop` with `utils`",
       "areas": [
-        "docs",
-        "modes"
+        "desktop",
+        "utils"
       ],
       "source_class": "observed",
-      "confidence": 0.84,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:8/120"
-      ]
-    },
-    {
-      "id": "rule-sync-docs-session-py",
-      "kind": "sync_areas",
-      "title": "Sync `docs` with `session.py`",
-      "areas": [
-        "docs",
-        "session.py"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-docs-sessions",
-      "kind": "sync_areas",
-      "title": "Sync `docs` with `sessions`",
-      "areas": [
-        "docs",
-        "sessions"
-      ],
-      "source_class": "observed",
-      "confidence": 0.62,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:2/120"
-      ]
-    },
-    {
-      "id": "rule-sync-docs-tests",
-      "kind": "sync_areas",
-      "title": "Sync `docs` with `tests`",
-      "areas": [
-        "docs",
-        "tests"
-      ],
-      "source_class": "observed",
-      "confidence": 0.84,
-      "status": "proposed",
-      "needs_review": true,
-      "evidence": [
-        "observed:git_cochange:8/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1284,11 +1577,75 @@
         "modes"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:6/120"
+        "observed:git_cochange:3/8"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-session-py",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `session.py`",
+      "areas": [
+        "miniapp",
+        "session.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.95,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:4/8"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-sessions",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `sessions`",
+      "areas": [
+        "miniapp",
+        "sessions"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-setup-bot-sh",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `setup_bot.sh`",
+      "areas": [
+        "miniapp",
+        "setup_bot.sh"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `summary.py`",
+      "areas": [
+        "miniapp",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1300,11 +1657,11 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.85,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:10/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -1316,11 +1673,27 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.7,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:3/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-miniapp-utils",
+      "kind": "sync_areas",
+      "title": "Sync `miniapp` with `utils`",
+      "areas": [
+        "miniapp",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1332,11 +1705,11 @@
         "session.py"
       ],
       "source_class": "observed",
-      "confidence": 0.84,
+      "confidence": 0.89,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:8/120"
+        "observed:git_cochange:3/8"
       ]
     },
     {
@@ -1352,9 +1725,25 @@
       "status": "active",
       "needs_review": false,
       "evidence": [
-        "observed:git_cochange:4/120",
-        "declared:README.md",
-        "declared:README_EN.MD"
+        "observed:git_cochange:2/8",
+        "declared:README_EN.MD",
+        "declared:README.md"
+      ]
+    },
+    {
+      "id": "rule-sync-modes-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `modes` with `summary.py`",
+      "areas": [
+        "modes",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1370,7 +1759,7 @@
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:84/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -1382,11 +1771,27 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.84,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:8/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-modes-utils",
+      "kind": "sync_areas",
+      "title": "Sync `modes` with `utils`",
+      "areas": [
+        "modes",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1398,11 +1803,43 @@
         "sessions"
       ],
       "source_class": "observed",
-      "confidence": 0.62,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:2/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-session-py-setup-bot-sh",
+      "kind": "sync_areas",
+      "title": "Sync `session.py` with `setup_bot.sh`",
+      "areas": [
+        "session.py",
+        "setup_bot.sh"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-session-py-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `session.py` with `summary.py`",
+      "areas": [
+        "session.py",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1414,11 +1851,11 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.85,
+      "confidence": 0.95,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:10/120"
+        "observed:git_cochange:4/8"
       ]
     },
     {
@@ -1430,11 +1867,43 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.79,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:4/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-session-py-utils",
+      "kind": "sync_areas",
+      "title": "Sync `session.py` with `utils`",
+      "areas": [
+        "session.py",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-sessions-summary-py",
+      "kind": "sync_areas",
+      "title": "Sync `sessions` with `summary.py`",
+      "areas": [
+        "sessions",
+        "summary.py"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1446,11 +1915,11 @@
         "tests"
       ],
       "source_class": "observed",
-      "confidence": 0.86,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:12/120"
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1462,11 +1931,91 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.83,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:6/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-sessions-utils",
+      "kind": "sync_areas",
+      "title": "Sync `sessions` with `utils`",
+      "areas": [
+        "sessions",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-setup-bot-sh-tests",
+      "kind": "sync_areas",
+      "title": "Sync `setup_bot.sh` with `tests`",
+      "areas": [
+        "setup_bot.sh",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-summary-py-tests",
+      "kind": "sync_areas",
+      "title": "Sync `summary.py` with `tests`",
+      "areas": [
+        "summary.py",
+        "tests"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-summary-py-tg",
+      "kind": "sync_areas",
+      "title": "Sync `summary.py` with `tg`",
+      "areas": [
+        "summary.py",
+        "tg"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-summary-py-utils",
+      "kind": "sync_areas",
+      "title": "Sync `summary.py` with `utils`",
+      "areas": [
+        "summary.py",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     },
     {
@@ -1478,29 +2027,97 @@
         "tg"
       ],
       "source_class": "observed",
-      "confidence": 0.88,
+      "confidence": 0.76,
       "status": "proposed",
       "needs_review": true,
       "evidence": [
-        "observed:git_cochange:15/120"
+        "observed:git_cochange:2/8"
+      ]
+    },
+    {
+      "id": "rule-sync-tests-utils",
+      "kind": "sync_areas",
+      "title": "Sync `tests` with `utils`",
+      "areas": [
+        "tests",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.89,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:3/8"
+      ]
+    },
+    {
+      "id": "rule-sync-tg-utils",
+      "kind": "sync_areas",
+      "title": "Sync `tg` with `utils`",
+      "areas": [
+        "tg",
+        "utils"
+      ],
+      "source_class": "observed",
+      "confidence": 0.76,
+      "status": "proposed",
+      "needs_review": true,
+      "evidence": [
+        "observed:git_cochange:2/8"
       ]
     }
   ],
   "validate_queue": [
-    "nodes/auth-success-yaml.md"
+    "nodes/auth-success-yaml.md",
+    "nodes/fix-permissions-sh.md",
+    "nodes/full-ui-yaml.md",
+    "nodes/miniapp-pid.md",
+    "nodes/mkdocs-yml.md",
+    "nodes/playwright-config-json.md",
+    "nodes/session-json.md"
   ],
   "repair_queue": [],
   "validation_report": {
     "invalid_nodes": [
-      "nodes/auth-success-yaml.md"
+      "nodes/auth-success-yaml.md",
+      "nodes/fix-permissions-sh.md",
+      "nodes/full-ui-yaml.md",
+      "nodes/miniapp-pid.md",
+      "nodes/mkdocs-yml.md",
+      "nodes/playwright-config-json.md",
+      "nodes/session-json.md"
     ],
     "invalid_reasons": {
       "nodes/auth-success-yaml.md": [
         "orphan_node"
+      ],
+      "nodes/fix-permissions-sh.md": [
+        "orphan_node"
+      ],
+      "nodes/full-ui-yaml.md": [
+        "orphan_node"
+      ],
+      "nodes/miniapp-pid.md": [
+        "orphan_node"
+      ],
+      "nodes/mkdocs-yml.md": [
+        "orphan_node"
+      ],
+      "nodes/playwright-config-json.md": [
+        "orphan_node"
+      ],
+      "nodes/session-json.md": [
+        "orphan_node"
       ]
     },
     "orphan_nodes": [
-      "nodes/auth-success-yaml.md"
+      "nodes/auth-success-yaml.md",
+      "nodes/fix-permissions-sh.md",
+      "nodes/full-ui-yaml.md",
+      "nodes/miniapp-pid.md",
+      "nodes/mkdocs-yml.md",
+      "nodes/playwright-config-json.md",
+      "nodes/session-json.md"
     ],
     "tree": [
       ".cli-proxy/.codebase_map/",
@@ -1511,23 +2128,19 @@
       "    app.md",
       "    agent.md",
       "    desktop.md",
-      "    tg.md",
       "    miniapp.md",
+      "    tg.md",
       "    sessions.md",
       "    utils.md",
-      "    session-json.md",
+      "    i18n.md",
+      "    locales.md",
       "    bot-py.md",
       "    code-stats-py.md",
       "    config-py.md",
       "    config-example-yaml.md",
       "    conftest-py.md",
-      "    fix-permissions-sh.md",
-      "    full-ui-yaml.md",
       "    gen-init-data-py.md",
-      "    miniapp-pid.md",
-      "    mkdocs-yml.md",
       "    parse-status-py.md",
-      "    playwright-config-json.md",
       "    pytest-ini.md",
       "    requirements-txt.md",
       "    scripts.md",
@@ -1537,94 +2150,166 @@
       "    start-miniapp-py.md",
       "    summary-py.md"
     ],
-    "validated_at": "2026-06-03T02:24:01Z"
+    "validated_at": "2026-06-03T03:11:44Z"
   },
   "nodes_status": {
     "nodes/tests.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/modes.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/app.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/agent.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/desktop.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/tg.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/miniapp.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/tg.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/sessions.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/utils.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
-    "nodes/session-json.md": {
+    "nodes/i18n.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/locales.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/bot-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/code-stats-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/config-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/config-example-yaml.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
+      "updated_at": "2026-06-03T03:11:44Z"
     },
     "nodes/conftest-py.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/gen-init-data-py.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/parse-status-py.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/pytest-ini.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/requirements-txt.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/scripts.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/session-py.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/setup-bot-sh.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/skills-lock-json.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/start-miniapp-py.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/summary-py.md": {
+      "status": "ok",
+      "repair_attempts": 0,
+      "last_error": "",
+      "updated_at": "2026-06-03T03:11:44Z"
+    },
+    "nodes/session-json.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
@@ -1642,12 +2327,6 @@
       "last_error": "",
       "updated_at": "2026-06-03T02:24:01Z"
     },
-    "nodes/gen-init-data-py.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
     "nodes/miniapp-pid.md": {
       "status": "ok",
       "repair_attempts": 0,
@@ -1660,61 +2339,7 @@
       "last_error": "",
       "updated_at": "2026-06-03T02:24:01Z"
     },
-    "nodes/parse-status-py.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
     "nodes/playwright-config-json.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/pytest-ini.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/requirements-txt.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/scripts.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/session-py.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/setup-bot-sh.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/skills-lock-json.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/start-miniapp-py.md": {
-      "status": "ok",
-      "repair_attempts": 0,
-      "last_error": "",
-      "updated_at": "2026-06-03T02:24:01Z"
-    },
-    "nodes/summary-py.md": {
       "status": "ok",
       "repair_attempts": 0,
       "last_error": "",
@@ -1731,14 +2356,14 @@
     "tests": [
       {
         "target": "agent",
-        "score": 0.94,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:28/120",
+          "observed:git_cochange:5/8",
           "regex_ref:tests/test_admin_script_run_plugin.py",
           "regex_ref:tests/test_agent_plugin_dialog_mixin.py",
           "regex_ref:tests/test_agent_plugins.py",
@@ -1757,14 +2382,14 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:30/120",
+          "observed:git_cochange:7/8",
+          "regex_ref:tests/test_admin_config_store.py",
           "regex_ref:tests/test_admin_mode_plugin.py",
           "regex_ref:tests/test_advanced_orchestrator_persistence.py",
           "regex_ref:tests/test_advanced_orchestrator_service.py",
           "regex_ref:tests/test_agent_mode_plugin.py",
           "regex_ref:tests/test_agent_plugins.py",
-          "regex_ref:tests/test_agent_run_artifacts_integration.py",
-          "regex_ref:tests/test_analyst_audit_flow.py"
+          "regex_ref:tests/test_agent_run_artifacts_integration.py"
         ]
       },
       {
@@ -1775,7 +2400,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:10/120",
+          "observed:git_cochange:2/8",
           "lang_specific:tests/conftest.py",
           "lang_specific:tests/smoke/test_bot_entrypoint_smoke.py",
           "lang_specific:tests/smoke/test_miniapp_server_smoke.py",
@@ -1793,24 +2418,24 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:3/120",
+          "observed:git_cochange:2/8",
           "lang_specific:tests/smoke/_smoke_support.py",
           "lang_specific:tests/smoke/test_startup_smoke.py",
           "lang_specific:tests/test_admin_mode_lifecycle.py",
           "lang_specific:tests/test_admin_mode_plugin.py",
           "lang_specific:tests/test_advanced_orchestrator_persistence.py",
-          "lang_specific:tests/test_agent_mode_plugin.py",
-          "lang_specific:tests/test_agent_plugins.py"
+          "lang_specific:tests/test_agent_core_concurrent.py",
+          "lang_specific:tests/test_agent_mode_plugin.py"
         ]
       },
       {
         "target": "config_example.yaml",
-        "score": 0.83,
+        "score": 0.95,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:6/120"
+          "observed:git_cochange:4/8"
         ]
       },
       {
@@ -1822,29 +2447,41 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:17/120",
+          "observed:git_cochange:2/8",
           "regex_ref:tests/smoke/test_desktop_entrypoint_smoke.py",
           "regex_ref:tests/smoke/test_startup_smoke.py",
           "regex_ref:tests/test_agent_plugins.py",
           "regex_ref:tests/test_chat_view.py",
           "regex_ref:tests/test_chat_view_attachments_rendering.py",
           "regex_ref:tests/test_config_editor.py",
-          "regex_ref:tests/test_desktop_admin_chat_facade.py"
+          "regex_ref:tests/test_config_editor_parity.py"
+        ]
+      },
+      {
+        "target": "i18n",
+        "score": 0.9,
+        "levels": [
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "regex_ref:tests/test_i18n_core.py",
+          "lang_specific:tests/test_i18n_core.py"
         ]
       },
       {
         "target": "miniapp",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:10/120",
+          "observed:git_cochange:4/8",
           "regex_ref:tests/test_config_adapter.py",
+          "regex_ref:tests/test_config_editor_parity.py",
           "regex_ref:tests/test_conflict_detection.py",
-          "regex_ref:tests/test_desktop_files_editor_parity.py",
           "regex_ref:tests/test_files_provider_selection.py",
           "regex_ref:tests/test_force_save.py",
           "regex_ref:tests/test_integration_cleanup.py",
@@ -1860,7 +2497,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:84/120",
+          "observed:git_cochange:4/8",
           "regex_ref:tests/conftest.py",
           "regex_ref:tests/test_admin_autonomy_e2e.py",
           "regex_ref:tests/test_admin_autonomy_loop.py",
@@ -1872,13 +2509,13 @@
       },
       {
         "target": "session.py",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:10/120",
+          "observed:git_cochange:4/8",
           "lang_specific:tests/test_admin_mode_plugin.py",
           "lang_specific:tests/test_advanced_orchestrator_persistence.py",
           "lang_specific:tests/test_agent_mode_plugin.py",
@@ -1897,7 +2534,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:12/120",
+          "observed:git_cochange:2/8",
           "regex_ref:tests/test_agent_mode_plugin.py",
           "regex_ref:tests/test_analyst_prompts_template_sections.py",
           "regex_ref:tests/test_callback_session_uid_roundtrip.py",
@@ -1908,12 +2545,24 @@
         ]
       },
       {
+        "target": "setup_bot.sh",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
         "target": "summary.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "lang_specific:tests/test_openai_client_retries.py"
         ]
       },
@@ -1926,7 +2575,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:15/120",
+          "observed:git_cochange:2/8",
           "regex_ref:tests/test_admin_mode_plugin.py",
           "regex_ref:tests/test_agent_mode_plugin.py",
           "regex_ref:tests/test_analyst_audit_flow.py",
@@ -1940,58 +2589,59 @@
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:3/8",
           "regex_ref:tests/smoke/test_source_artifact_smoke.py",
           "regex_ref:tests/test_analyst_audit_pipeline_integration.py",
           "regex_ref:tests/test_analyst_callback_and_custom_ask.py",
           "regex_ref:tests/test_analyst_draft_llm.py",
           "regex_ref:tests/test_analyst_mode_plugin.py",
           "regex_ref:tests/test_analyst_run_artifacts_integration.py",
-          "regex_ref:tests/test_build_command_resume_image.py",
-          "regex_ref:tests/test_desktop_agent_plugins_ui_flow.py"
+          "regex_ref:tests/test_build_command_resume_image.py"
         ]
       }
     ],
     "modes": [
       {
         "target": "agent",
-        "score": 0.94,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:27/120",
+          "observed:git_cochange:4/8",
           "regex_ref:modes/analyst/mode.py",
           "regex_ref:modes/manager/mode.py",
           "regex_ref:modes/manager/runner_service.py",
+          "regex_ref:modes/manager/services/git_reconcile_service.py",
           "regex_ref:modes/sdk/runtime/tooling/loader.py",
           "regex_ref:modes/sdk/runtime/tooling/mcp_plugin.py",
-          "regex_ref:modes/sdk/runtime/tooling/registry.py",
-          "lang_specific:modes/analyst/mode.py"
+          "regex_ref:modes/sdk/runtime/tooling/registry.py"
         ]
       },
       {
         "target": "app",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:19/120",
+          "observed:git_cochange:4/8",
+          "regex_ref:modes/admin/action_specs.py",
+          "regex_ref:modes/admin/baseline.py",
           "regex_ref:modes/admin/chat_service.py",
           "regex_ref:modes/admin/mode.py",
           "regex_ref:modes/admin/monitor.py",
-          "regex_ref:modes/admin/state_store.py",
-          "regex_ref:modes/agent/mode.py",
-          "regex_ref:modes/agent/runner_service.py",
-          "regex_ref:modes/agent/ui.py"
+          "regex_ref:modes/admin/runner_service.py",
+          "regex_ref:modes/admin/scanner.py"
         ]
       },
       {
@@ -2002,7 +2652,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:5/120",
+          "observed:git_cochange:2/8",
           "lang_specific:modes/sdk/orchestrator_runner.py"
         ]
       },
@@ -2010,48 +2660,47 @@
         "target": "config.py",
         "score": 0.9,
         "levels": [
-          "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
           "lang_specific:modes/sdk/orchestrator_runner.py",
           "lang_specific:modes/sdk/runtime/agent_core.py",
           "lang_specific:modes/sdk/runtime/ask_user_generation.py",
           "lang_specific:modes/sdk/runtime/dispatcher.py",
           "lang_specific:modes/sdk/runtime/heuristics.py",
           "lang_specific:modes/sdk/runtime/mcp/manager.py",
-          "lang_specific:modes/sdk/runtime/memory_policy.py"
+          "lang_specific:modes/sdk/runtime/memory_policy.py",
+          "lang_specific:modes/sdk/runtime/openai_client.py"
         ]
       },
       {
         "target": "config_example.yaml",
-        "score": 0.7,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "desktop",
-        "score": 0.85,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:11/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "miniapp",
-        "score": 0.83,
+        "score": 0.89,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:6/120"
+          "observed:git_cochange:3/8"
         ]
       },
       {
@@ -2074,7 +2723,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:8/120",
+          "observed:git_cochange:3/8",
           "lang_specific:modes/admin/mode.py",
           "lang_specific:modes/agent/mode.py",
           "lang_specific:modes/agent/ui.py",
@@ -2093,7 +2742,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:4/120",
+          "observed:git_cochange:2/8",
           "regex_ref:modes/agent/mode.py",
           "regex_ref:modes/agent/ui.py",
           "regex_ref:modes/analyst/mode.py",
@@ -2107,9 +2756,11 @@
         "target": "summary.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "lang_specific:modes/admin/mode.py",
           "lang_specific:modes/admin/ui.py",
           "lang_specific:modes/sdk/orchestrator_runner.py",
@@ -2123,7 +2774,7 @@
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:84/120"
+          "observed:git_cochange:4/8"
         ]
       },
       {
@@ -2135,35 +2786,17 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:8/120",
+          "observed:git_cochange:2/8",
           "regex_ref:modes/admin/notifier.py",
           "regex_ref:modes/admin/ui.py",
+          "regex_ref:modes/sdd/mode.py",
           "lang_specific:modes/admin/notifier.py",
-          "lang_specific:modes/admin/ui.py"
+          "lang_specific:modes/admin/ui.py",
+          "lang_specific:modes/sdd/mode.py"
         ]
       },
       {
         "target": "utils",
-        "score": 0.9,
-        "levels": [
-          "L1",
-          "L2"
-        ],
-        "evidence": [
-          "regex_ref:modes/admin/config_store.py",
-          "regex_ref:modes/agent/mode.py",
-          "regex_ref:modes/analyst/draft_service.py",
-          "regex_ref:modes/analyst/mode.py",
-          "regex_ref:modes/analyst/run_directory.py",
-          "regex_ref:modes/analyst/state_store.py",
-          "regex_ref:modes/codebase_mapper/runtime.py",
-          "regex_ref:modes/manager/mode.py"
-        ]
-      }
-    ],
-    "app": [
-      {
-        "target": "agent",
         "score": 0.9,
         "levels": [
           "L0",
@@ -2171,7 +2804,28 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:6/120",
+          "observed:git_cochange:2/8",
+          "regex_ref:modes/admin/config_store.py",
+          "regex_ref:modes/agent/mode.py",
+          "regex_ref:modes/analyst/draft_service.py",
+          "regex_ref:modes/analyst/mode.py",
+          "regex_ref:modes/analyst/run_directory.py",
+          "regex_ref:modes/analyst/state_store.py",
+          "regex_ref:modes/codebase_mapper/runtime.py"
+        ]
+      }
+    ],
+    "app": [
+      {
+        "target": "agent",
+        "score": 0.95,
+        "levels": [
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:5/8",
           "regex_ref:app/services/lifecycle_service.py",
           "lang_specific:app/services/lifecycle_service.py"
         ]
@@ -2184,7 +2838,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:5/120",
+          "observed:git_cochange:2/8",
           "lang_specific:app/services/session_thread_manager.py",
           "lang_specific:app/services/thread_mode_capability_checker.py"
         ]
@@ -2197,7 +2851,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:3/120",
+          "observed:git_cochange:2/8",
           "lang_specific:app/bootstrap.py",
           "lang_specific:app/config_runtime/adapter.py",
           "lang_specific:app/config_runtime/serialization.py",
@@ -2209,66 +2863,82 @@
       },
       {
         "target": "config_example.yaml",
-        "score": 0.83,
+        "score": 0.95,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:6/120"
+          "observed:git_cochange:4/8"
         ]
       },
       {
         "target": "desktop",
-        "score": 0.85,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:11/120"
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "i18n",
+        "score": 0.9,
+        "levels": [
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "regex_ref:app/services/config_service.py",
+          "regex_ref:app/services/i18n_service.py",
+          "lang_specific:app/services/config_service.py",
+          "lang_specific:app/services/i18n_service.py"
         ]
       },
       {
         "target": "miniapp",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:6/120",
+          "observed:git_cochange:4/8",
+          "regex_ref:app/security/auth.py",
           "regex_ref:app/security/facade.py",
+          "lang_specific:app/security/auth.py",
           "lang_specific:app/security/facade.py"
         ]
       },
       {
         "target": "modes",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:19/120",
+          "observed:git_cochange:4/8",
           "regex_ref:app/bootstrap.py",
           "regex_ref:app/mode_dependencies.py",
           "regex_ref:app/security/audit.py",
+          "regex_ref:app/services/admin_config_service.py",
           "regex_ref:app/services/advanced_orchestrator_service.py",
           "regex_ref:app/services/artifact_intent_service.py",
-          "regex_ref:app/services/claude_jsonl_monitor.py",
-          "regex_ref:app/services/cli_json_stream.py"
+          "regex_ref:app/services/claude_jsonl_monitor.py"
         ]
       },
       {
         "target": "session.py",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:7/120",
+          "observed:git_cochange:4/8",
           "lang_specific:app/bootstrap.py",
           "lang_specific:app/mode_dependencies.py",
           "lang_specific:app/services/app_runtime_service.py",
@@ -2287,7 +2957,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:7/120",
+          "observed:git_cochange:2/8",
           "regex_ref:app/services/access_policy_service.py",
           "regex_ref:app/services/advanced_orchestrator_service.py",
           "regex_ref:app/services/input_dispatch_service.py",
@@ -2298,13 +2968,27 @@
         ]
       },
       {
+        "target": "setup_bot.sh",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
         "target": "summary.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
-          "lang_specific:app/services/git_ops_service.py"
+          "observed:git_cochange:2/8",
+          "lang_specific:app/services/cli_limits_service.py",
+          "lang_specific:app/services/git_ops_service.py",
+          "lang_specific:app/services/run_utils.py"
         ]
       },
       {
@@ -2314,7 +2998,7 @@
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:30/120"
+          "observed:git_cochange:7/8"
         ]
       },
       {
@@ -2326,10 +3010,8 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:8/120",
-          "regex_ref:app/services/input_dispatch_service.py",
+          "observed:git_cochange:2/8",
           "regex_ref:app/services/telegram_transport.py",
-          "lang_specific:app/services/input_dispatch_service.py",
           "lang_specific:app/services/telegram_transport.py"
         ]
       },
@@ -2337,32 +3019,33 @@
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:3/8",
           "regex_ref:app/services/assistant_preview_service.py",
           "regex_ref:app/services/dirs_ui.py",
           "regex_ref:app/services/git_ops_service.py",
           "regex_ref:app/services/lint_evolution/paths.py",
           "regex_ref:app/services/project_prompts_service.py",
           "regex_ref:app/services/run_artifact_store.py",
-          "regex_ref:app/services/sandbox_service.py",
-          "regex_ref:app/services/session_run_service.py"
+          "regex_ref:app/services/sandbox_service.py"
         ]
       }
     ],
     "agent": [
       {
         "target": "app",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:6/120",
+          "observed:git_cochange:5/8",
           "regex_ref:agent/cli_routing.py",
           "regex_ref:agent/manager_core.py",
           "regex_ref:agent/plugins/ssh_exec.py",
@@ -2376,9 +3059,11 @@
         "target": "bot.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "lang_specific:agent/manager_core.py",
           "lang_specific:agent/plugins/ask_user.py",
           "lang_specific:agent/plugins/manage_message.py",
@@ -2399,25 +3084,45 @@
         ]
       },
       {
-        "target": "desktop",
-        "score": 0.79,
+        "target": "config_example.yaml",
+        "score": 0.89,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:4/120"
+          "observed:git_cochange:3/8"
+        ]
+      },
+      {
+        "target": "desktop",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "miniapp",
+        "score": 0.95,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8"
         ]
       },
       {
         "target": "modes",
-        "score": 0.94,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:27/120",
+          "observed:git_cochange:4/8",
           "regex_ref:agent/cli_routing.py",
           "regex_ref:agent/manager_core.py",
           "regex_ref:agent/plugins/admin_escalate.py",
@@ -2429,13 +3134,13 @@
       },
       {
         "target": "session.py",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:3/120",
+          "observed:git_cochange:4/8",
           "lang_specific:agent/cli_routing.py",
           "lang_specific:agent/manager_core.py",
           "lang_specific:agent/plugins/use_cli.py"
@@ -2445,10 +3150,12 @@
         "target": "sessions",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:agent/manager_core.py",
           "regex_ref:agent/plugins/ssh_exec.py",
           "lang_specific:agent/manager_core.py",
@@ -2456,23 +3163,55 @@
         ]
       },
       {
-        "target": "tests",
-        "score": 0.94,
+        "target": "setup_bot.sh",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:28/120"
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "summary.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.95,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:5/8"
+        ]
+      },
+      {
+        "target": "tg",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:agent/manager_core.py",
           "regex_ref:agent/plugins/use_cli.py",
           "regex_ref:agent/tooling/helpers.py",
@@ -2492,7 +3231,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:4/120",
+          "observed:git_cochange:2/8",
           "regex_ref:desktop/services/application_facade.py",
           "lang_specific:desktop/services/application_facade.py"
         ]
@@ -2506,61 +3245,45 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:11/120",
+          "observed:git_cochange:2/8",
           "regex_ref:desktop/main.py",
           "regex_ref:desktop/services/application_facade.py",
+          "regex_ref:desktop/services/desktop_admin_facade.py",
           "regex_ref:desktop/services/desktop_git_service.py",
           "regex_ref:desktop/services/desktop_identity_provider.py",
-          "regex_ref:desktop/services/theme_service.py",
-          "regex_ref:desktop/widgets/admin_panel.py",
-          "regex_ref:desktop/widgets/config_editor.py"
+          "regex_ref:desktop/services/pending_input_ui.py",
+          "regex_ref:desktop/services/theme_service.py"
         ]
       },
       {
         "target": "bot.py",
-        "score": 0.62,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:2/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "config.py",
         "score": 0.9,
         "levels": [
-          "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
           "lang_specific:desktop/widgets/config_editor.py",
           "lang_specific:desktop/widgets/session_settings.py"
         ]
       },
       {
-        "target": "config_example.yaml",
-        "score": 0.7,
+        "target": "miniapp",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
-        ]
-      },
-      {
-        "target": "miniapp",
-        "score": 0.9,
-        "levels": [
-          "L0",
-          "L1",
-          "L2"
-        ],
-        "evidence": [
-          "observed:git_cochange:8/120",
-          "regex_ref:desktop/services/application_facade.py",
-          "lang_specific:desktop/services/application_facade.py"
+          "observed:git_cochange:2/8"
         ]
       },
       {
@@ -2572,7 +3295,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:11/120",
+          "observed:git_cochange:2/8",
           "regex_ref:desktop/main.py",
           "regex_ref:desktop/main_window.py",
           "regex_ref:desktop/services/application_facade.py",
@@ -2590,14 +3313,14 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:4/120",
+          "observed:git_cochange:2/8",
           "lang_specific:desktop/main.py",
           "lang_specific:desktop/main_window.py",
           "lang_specific:desktop/services/application_facade.py",
           "lang_specific:desktop/services/desktop_identity_provider.py",
           "lang_specific:desktop/widgets/admin_panel.py",
-          "lang_specific:desktop/widgets/git_panel.py",
-          "lang_specific:desktop/widgets/mode_panel.py"
+          "lang_specific:desktop/widgets/files_panel.py",
+          "lang_specific:desktop/widgets/git_panel.py"
         ]
       },
       {
@@ -2609,7 +3332,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:3/120",
+          "observed:git_cochange:2/8",
           "regex_ref:desktop/main_window.py",
           "regex_ref:desktop/services/application_facade.py",
           "regex_ref:desktop/services/desktop_git_service.py",
@@ -2623,9 +3346,11 @@
         "target": "summary.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "lang_specific:desktop/services/application_facade.py",
           "lang_specific:desktop/widgets/admin_panel.py",
           "lang_specific:desktop/widgets/git_panel.py"
@@ -2633,40 +3358,215 @@
       },
       {
         "target": "tests",
-        "score": 0.89,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:17/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "tg",
-        "score": 0.84,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:7/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:desktop/main_window.py",
           "regex_ref:desktop/services/application_facade.py",
           "regex_ref:desktop/services/desktop_identity_provider.py",
           "regex_ref:desktop/widgets/admin_chat_section.py",
           "regex_ref:desktop/widgets/admin_panel.py",
           "regex_ref:desktop/widgets/chat_view.py",
-          "regex_ref:desktop/widgets/config_editor.py",
-          "regex_ref:desktop/widgets/git_panel.py"
+          "regex_ref:desktop/widgets/config_editor.py"
+        ]
+      }
+    ],
+    "miniapp": [
+      {
+        "target": "agent",
+        "score": 0.95,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8"
+        ]
+      },
+      {
+        "target": "app",
+        "score": 0.95,
+        "levels": [
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8",
+          "regex_ref:miniapp/routes.py",
+          "regex_ref:miniapp/routes_admin.py",
+          "regex_ref:miniapp/routes_config.py",
+          "regex_ref:miniapp/routes_scheduler.py",
+          "regex_ref:miniapp/routes_ssh.py",
+          "regex_ref:miniapp/server.py",
+          "regex_ref:miniapp/services/config_service.py"
+        ]
+      },
+      {
+        "target": "bot.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "config.py",
+        "score": 0.9,
+        "levels": [
+          "L2"
+        ],
+        "evidence": [
+          "lang_specific:miniapp/routes_ssh.py",
+          "lang_specific:miniapp/services/config_service.py"
+        ]
+      },
+      {
+        "target": "config_example.yaml",
+        "score": 0.89,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:3/8"
+        ]
+      },
+      {
+        "target": "desktop",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "modes",
+        "score": 0.9,
+        "levels": [
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:3/8",
+          "regex_ref:miniapp/auth.py",
+          "regex_ref:miniapp/routes.py",
+          "lang_specific:miniapp/auth.py",
+          "lang_specific:miniapp/routes.py"
+        ]
+      },
+      {
+        "target": "session.py",
+        "score": 0.95,
+        "levels": [
+          "L0",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8",
+          "lang_specific:miniapp/routes.py",
+          "lang_specific:miniapp/services/logs_service.py"
+        ]
+      },
+      {
+        "target": "sessions",
+        "score": 0.9,
+        "levels": [
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8",
+          "regex_ref:miniapp/routes.py",
+          "lang_specific:miniapp/routes.py",
+          "lang_specific:miniapp/services/logs_service.py"
+        ]
+      },
+      {
+        "target": "setup_bot.sh",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "summary.py",
+        "score": 0.9,
+        "levels": [
+          "L0",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8",
+          "lang_specific:miniapp/routes.py"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.95,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8"
+        ]
+      },
+      {
+        "target": "tg",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "utils",
+        "score": 0.9,
+        "levels": [
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8",
+          "regex_ref:miniapp/routes.py",
+          "regex_ref:miniapp/services/logs_service.py",
+          "lang_specific:miniapp/routes.py",
+          "lang_specific:miniapp/services/logs_service.py"
         ]
       }
     ],
@@ -2675,10 +3575,12 @@
         "target": "agent",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:tg/callback_actions/protocol.py",
           "regex_ref:tg/wiring.py",
           "lang_specific:tg/callback_actions/protocol.py",
@@ -2694,66 +3596,46 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:8/120",
+          "observed:git_cochange:2/8",
           "regex_ref:tg/callback_actions/dirs.py",
+          "regex_ref:tg/callback_actions/files.py",
           "regex_ref:tg/callback_actions/session.py",
           "regex_ref:tg/callbacks.py",
-          "regex_ref:tg/handlers.py",
-          "regex_ref:tg/message_processor.py",
-          "lang_specific:tg/callback_actions/dirs.py",
-          "lang_specific:tg/callback_actions/session.py"
+          "regex_ref:tg/file_upload_handler.py",
+          "regex_ref:tg/files_service_adapter.py",
+          "regex_ref:tg/handlers.py"
         ]
       },
       {
         "target": "bot.py",
-        "score": 0.79,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:4/120"
-        ]
-      },
-      {
-        "target": "config.py",
         "score": 0.9,
         "levels": [
           "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
-          "lang_specific:tg/handlers.py"
-        ]
-      },
-      {
-        "target": "config_example.yaml",
-        "score": 0.7,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8",
+          "lang_specific:tg/file_upload_handler.py"
         ]
       },
       {
         "target": "desktop",
-        "score": 0.84,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:7/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "miniapp",
-        "score": 0.7,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
@@ -2765,7 +3647,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:8/120",
+          "observed:git_cochange:2/8",
           "regex_ref:tg/callback_actions/session.py",
           "regex_ref:tg/callbacks.py",
           "regex_ref:tg/handlers.py",
@@ -2783,10 +3665,11 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:4/120",
+          "observed:git_cochange:2/8",
           "lang_specific:tg/callback_actions/__init__.py",
           "lang_specific:tg/callback_actions/session.py",
           "lang_specific:tg/callbacks.py",
+          "lang_specific:tg/files_service_adapter.py",
           "lang_specific:tg/handlers.py"
         ]
       },
@@ -2799,7 +3682,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:6/120",
+          "observed:git_cochange:2/8",
           "regex_ref:tg/callback_actions/session.py",
           "regex_ref:tg/callbacks.py",
           "regex_ref:tg/handlers.py",
@@ -2809,175 +3692,54 @@
         ]
       },
       {
-        "target": "tests",
-        "score": 0.88,
+        "target": "summary.py",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:15/120"
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:tg/callback_actions/dirs.py",
-          "regex_ref:tg/callback_actions/files.py",
           "regex_ref:tg/handlers.py",
           "lang_specific:tg/callback_actions/dirs.py",
-          "lang_specific:tg/callback_actions/files.py",
           "lang_specific:tg/handlers.py"
-        ]
-      }
-    ],
-    "miniapp": [
-      {
-        "target": "app",
-        "score": 0.9,
-        "levels": [
-          "L0",
-          "L1",
-          "L2"
-        ],
-        "evidence": [
-          "observed:git_cochange:6/120",
-          "regex_ref:miniapp/routes.py",
-          "regex_ref:miniapp/server.py",
-          "regex_ref:miniapp/services/config_service.py",
-          "regex_ref:miniapp/services/files_service.py",
-          "regex_ref:miniapp/services/logs_service.py",
-          "lang_specific:miniapp/routes.py",
-          "lang_specific:miniapp/server.py"
-        ]
-      },
-      {
-        "target": "config.py",
-        "score": 0.9,
-        "levels": [
-          "L0",
-          "L2"
-        ],
-        "evidence": [
-          "observed:git_cochange:2/120",
-          "lang_specific:miniapp/routes.py",
-          "lang_specific:miniapp/services/config_service.py"
-        ]
-      },
-      {
-        "target": "config_example.yaml",
-        "score": 0.83,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:5/120"
-        ]
-      },
-      {
-        "target": "desktop",
-        "score": 0.84,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:8/120"
-        ]
-      },
-      {
-        "target": "modes",
-        "score": 0.9,
-        "levels": [
-          "L0",
-          "L1",
-          "L2"
-        ],
-        "evidence": [
-          "observed:git_cochange:6/120",
-          "regex_ref:miniapp/auth.py",
-          "regex_ref:miniapp/routes.py",
-          "lang_specific:miniapp/auth.py",
-          "lang_specific:miniapp/routes.py"
-        ]
-      },
-      {
-        "target": "session.py",
-        "score": 0.9,
-        "levels": [
-          "L2"
-        ],
-        "evidence": [
-          "lang_specific:miniapp/routes.py",
-          "lang_specific:miniapp/services/files_service.py",
-          "lang_specific:miniapp/services/logs_service.py"
-        ]
-      },
-      {
-        "target": "sessions",
-        "score": 0.9,
-        "levels": [
-          "L1",
-          "L2"
-        ],
-        "evidence": [
-          "regex_ref:miniapp/routes.py",
-          "regex_ref:miniapp/services/files_service.py",
-          "lang_specific:miniapp/routes.py",
-          "lang_specific:miniapp/services/files_service.py",
-          "lang_specific:miniapp/services/logs_service.py"
-        ]
-      },
-      {
-        "target": "summary.py",
-        "score": 0.9,
-        "levels": [
-          "L2"
-        ],
-        "evidence": [
-          "lang_specific:miniapp/routes.py"
-        ]
-      },
-      {
-        "target": "tests",
-        "score": 0.85,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:10/120"
-        ]
-      },
-      {
-        "target": "tg",
-        "score": 0.7,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:3/120"
-        ]
-      },
-      {
-        "target": "utils",
-        "score": 0.9,
-        "levels": [
-          "L1",
-          "L2"
-        ],
-        "evidence": [
-          "regex_ref:miniapp/routes.py",
-          "regex_ref:miniapp/services/logs_service.py",
-          "lang_specific:miniapp/routes.py",
-          "lang_specific:miniapp/services/logs_service.py"
         ]
       }
     ],
     "sessions": [
       {
+        "target": "agent",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
         "target": "app",
         "score": 0.9,
         "levels": [
@@ -2986,7 +3748,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:7/120",
+          "observed:git_cochange:2/8",
           "regex_ref:sessions/session_management.py",
           "regex_ref:sessions/session_run_service.py",
           "regex_ref:sessions/session_status.py",
@@ -2997,13 +3759,33 @@
         ]
       },
       {
-        "target": "desktop",
-        "score": 0.7,
+        "target": "bot.py",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "desktop",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "miniapp",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
         ]
       },
       {
@@ -3015,7 +3797,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:4/120",
+          "observed:git_cochange:2/8",
           "regex_ref:sessions/session_ui.py",
           "lang_specific:sessions/session_ui.py"
         ]
@@ -3028,7 +3810,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
+          "observed:git_cochange:2/8",
           "lang_specific:sessions/session_management.py",
           "lang_specific:sessions/session_run_service.py",
           "lang_specific:sessions/session_state_access.py",
@@ -3039,87 +3821,232 @@
         "target": "summary.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "lang_specific:sessions/session_management.py"
         ]
       },
       {
         "target": "tests",
-        "score": 0.86,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:12/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "tg",
-        "score": 0.83,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:6/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:sessions/session_management.py",
           "regex_ref:sessions/session_output_service.py",
           "regex_ref:sessions/session_run_service.py",
           "regex_ref:sessions/session_status.py",
           "lang_specific:sessions/session_management.py",
           "lang_specific:sessions/session_output_service.py",
-          "lang_specific:sessions/session_run_service.py",
-          "lang_specific:sessions/session_status.py"
+          "lang_specific:sessions/session_run_service.py"
         ]
       }
     ],
     "utils": [
       {
-        "target": "sessions",
+        "target": "agent",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "app",
+        "score": 0.89,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:3/8"
+        ]
+      },
+      {
+        "target": "bot.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "config.py",
+        "score": 0.9,
+        "levels": [
+          "L0",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8",
+          "lang_specific:utils/lang.py"
+        ]
+      },
+      {
+        "target": "config_example.yaml",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "desktop",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "i18n",
         "score": 0.9,
         "levels": [
           "L1",
           "L2"
         ],
         "evidence": [
+          "regex_ref:utils/lang.py",
+          "lang_specific:utils/lang.py"
+        ]
+      },
+      {
+        "target": "miniapp",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "modes",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "session.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "sessions",
+        "score": 0.9,
+        "levels": [
+          "L0",
+          "L1",
+          "L2"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:utils/paths.py",
           "lang_specific:utils/paths.py"
+        ]
+      },
+      {
+        "target": "summary.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.89,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:3/8"
         ]
       },
       {
         "target": "tg",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:utils/html_renderer.py",
           "lang_specific:utils/html_renderer.py"
         ]
       }
     ],
-    "SESSION.json": [],
+    "i18n": [
+      {
+        "target": "config.py",
+        "score": 0.9,
+        "levels": [
+          "L2"
+        ],
+        "evidence": [
+          "lang_specific:i18n/resolver.py"
+        ]
+      }
+    ],
+    "locales": [],
     "bot.py": [
       {
         "target": "agent",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3133,7 +4060,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:5/120",
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3142,42 +4069,32 @@
         "target": "config.py",
         "score": 0.9,
         "levels": [
-          "L0",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
           "lang_specific:bot.py"
         ]
       },
       {
-        "target": "config_example.yaml",
-        "score": 0.62,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:2/120"
-        ]
-      },
-      {
         "target": "desktop",
-        "score": 0.62,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:2/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "miniapp",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3191,7 +4108,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:5/120",
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3204,7 +4121,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
+          "observed:git_cochange:2/8",
           "lang_specific:bot.py"
         ]
       },
@@ -3212,10 +4129,12 @@
         "target": "sessions",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3224,20 +4143,22 @@
         "target": "summary.py",
         "score": 0.9,
         "levels": [
+          "L0",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "lang_specific:bot.py"
         ]
       },
       {
         "target": "tests",
-        "score": 0.85,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:10/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
@@ -3249,7 +4170,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:4/120",
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3258,10 +4179,12 @@
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:bot.py",
           "lang_specific:bot.py"
         ]
@@ -3278,208 +4201,173 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:3/120",
+          "observed:git_cochange:2/8",
           "regex_ref:config.py",
           "lang_specific:config.py"
         ]
       },
       {
-        "target": "bot.py",
-        "score": 0.62,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:2/120"
-        ]
-      },
-      {
         "target": "config_example.yaml",
-        "score": 0.7,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
-        ]
-      },
-      {
-        "target": "desktop",
-        "score": 0.62,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:2/120"
-        ]
-      },
-      {
-        "target": "miniapp",
-        "score": 0.62,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:2/120"
-        ]
-      },
-      {
-        "target": "modes",
-        "score": 0.62,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:2/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "tests",
-        "score": 0.7,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
-        "target": "tg",
-        "score": 0.62,
+        "target": "utils",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:2/120"
+          "observed:git_cochange:2/8"
         ]
       }
     ],
     "config_example.yaml": [
       {
-        "target": "app",
-        "score": 0.83,
+        "target": "agent",
+        "score": 0.89,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:6/120"
+          "observed:git_cochange:3/8"
         ]
       },
       {
-        "target": "bot.py",
-        "score": 0.62,
+        "target": "app",
+        "score": 0.95,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:2/120"
+          "observed:git_cochange:4/8"
         ]
       },
       {
         "target": "config.py",
-        "score": 0.7,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
-        ]
-      },
-      {
-        "target": "desktop",
-        "score": 0.7,
-        "levels": [
-          "L0"
-        ],
-        "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "miniapp",
-        "score": 0.83,
+        "score": 0.89,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:5/120"
+          "observed:git_cochange:3/8"
         ]
       },
       {
         "target": "modes",
-        "score": 0.7,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "session.py",
+        "score": 0.89,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:3/8"
+        ]
+      },
+      {
+        "target": "setup_bot.sh",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "tests",
-        "score": 0.83,
+        "score": 0.95,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:6/120"
+          "observed:git_cochange:4/8"
         ]
       },
       {
-        "target": "tg",
-        "score": 0.7,
+        "target": "utils",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:2/8"
         ]
       }
     ],
     "conftest.py": [],
-    "fix-permissions.sh": [],
-    "full_ui.yaml": [],
     "gen_init_data.py": [],
-    "miniapp.pid": [],
-    "mkdocs.yml": [],
     "parse_status.py": [],
-    "playwright_config.json": [],
     "pytest.ini": [],
     "requirements.txt": [],
     "scripts": [],
     "session.py": [
       {
         "target": "agent",
-        "score": 0.7,
+        "score": 0.95,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:3/120"
+          "observed:git_cochange:4/8"
         ]
       },
       {
         "target": "app",
-        "score": 0.9,
+        "score": 0.95,
         "levels": [
           "L0",
           "L1",
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:7/120",
+          "observed:git_cochange:4/8",
           "regex_ref:session.py",
           "lang_specific:session.py"
         ]
       },
       {
         "target": "bot.py",
-        "score": 0.62,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:2/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
@@ -3493,13 +4381,33 @@
         ]
       },
       {
-        "target": "desktop",
-        "score": 0.79,
+        "target": "config_example.yaml",
+        "score": 0.89,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:4/120"
+          "observed:git_cochange:3/8"
+        ]
+      },
+      {
+        "target": "desktop",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "miniapp",
+        "score": 0.95,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8"
         ]
       },
       {
@@ -3511,7 +4419,7 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:8/120",
+          "observed:git_cochange:3/8",
           "regex_ref:session.py",
           "lang_specific:session.py"
         ]
@@ -3525,45 +4433,128 @@
           "L2"
         ],
         "evidence": [
-          "observed:git_cochange:2/120",
+          "observed:git_cochange:2/8",
           "regex_ref:session.py",
           "lang_specific:session.py"
         ]
       },
       {
-        "target": "tests",
-        "score": 0.85,
+        "target": "setup_bot.sh",
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:10/120"
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "summary.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.95,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:4/8"
         ]
       },
       {
         "target": "tg",
-        "score": 0.79,
+        "score": 0.76,
         "levels": [
           "L0"
         ],
         "evidence": [
-          "observed:git_cochange:4/120"
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:session.py",
           "lang_specific:session.py"
         ]
       }
     ],
-    "setup_bot.sh": [],
+    "setup_bot.sh": [
+      {
+        "target": "agent",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "app",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "config_example.yaml",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "miniapp",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "session.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      }
+    ],
     "skills-lock.json": [],
     "start_miniapp.py": [
       {
@@ -3601,6 +4592,36 @@
     ],
     "summary.py": [
       {
+        "target": "agent",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "app",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "bot.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
         "target": "config.py",
         "score": 0.9,
         "levels": [
@@ -3611,25 +4632,89 @@
         ]
       },
       {
+        "target": "desktop",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "miniapp",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
         "target": "modes",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:summary.py",
           "lang_specific:summary.py"
+        ]
+      },
+      {
+        "target": "session.py",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "sessions",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tests",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
+        ]
+      },
+      {
+        "target": "tg",
+        "score": 0.76,
+        "levels": [
+          "L0"
+        ],
+        "evidence": [
+          "observed:git_cochange:2/8"
         ]
       },
       {
         "target": "utils",
         "score": 0.9,
         "levels": [
+          "L0",
           "L1",
           "L2"
         ],
         "evidence": [
+          "observed:git_cochange:2/8",
           "regex_ref:summary.py",
           "lang_specific:summary.py"
         ]

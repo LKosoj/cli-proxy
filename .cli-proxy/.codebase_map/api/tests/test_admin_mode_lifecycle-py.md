@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_mode_lifecycle.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `def test_admin_on_enable_activates_runtime_and_marks_session_enabled(tmp_path)` (line 70)

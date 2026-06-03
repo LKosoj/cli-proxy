@@ -1,9 +1,9 @@
 # API Spec: `app/config_runtime/serialization.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Symbols
-- `def serialize_validated_settings(settings)` (line 73)
+- `def serialize_validated_settings(settings)` (line 74)
   - *Canonical typed-config contract.*
-- `def serialize_app_config(config)` (line 99)
-- `def dump_app_config_yaml(config)` (line 108)
+- `def serialize_app_config(config)` (line 100)
+- `def dump_app_config_yaml(config)` (line 109)

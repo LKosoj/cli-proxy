@@ -13,7 +13,9 @@ from modes.sdk.services.callback_data import (
 )
 from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled, set_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
-from tg.handlers import format_session_state
+from tg.handlers import build_lang_menu, format_session_state
+from i18n import t, SUPPORTED_LANGS
+from i18n.resolver import resolve_language
 
 
 class SessionActionsMixin:
@@ -642,5 +644,42 @@ class SessionActionsMixin:
         await query.answer(f"Удалённое управление {status}")
 
         text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
+        await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        return True
+
+    async def _cb_lang_menu(self, *, data: str, chat_id: int, query, context) -> bool:
+        """Show the language selection menu."""
+        from_user = getattr(query, "from_user", None)
+        user_id = getattr(from_user, "id", None)
+        config = self.bot_app.config
+        current_lang = resolve_language(user_id, None, config)
+        text, keyboard = build_lang_menu(current_lang, back_callback="sess_active")
+        await self._edit_msg(context, query, text=text, reply_markup=keyboard, md2=False)
+        return True
+
+    async def _cb_lang_set(self, *, data: str, chat_id: int, query, context) -> bool:
+        """Handle language selection: persist and redraw session menu."""
+        code = str(data).split(":", 1)[1].strip() if ":" in str(data) else ""
+        if code not in SUPPORTED_LANGS:
+            await query.answer(t("msg.lang.invalid", "ru"), show_alert=True)
+            return True
+        from_user = getattr(query, "from_user", None)
+        user_id = getattr(from_user, "id", None)
+        if user_id is None:
+            return True
+        config_service = getattr(self.bot_app, "config_service", None)
+        if config_service is not None:
+            await config_service.set_user_language(int(user_id), code)
+        _native_names: dict[str, str] = {
+            "ru": "Русский",
+            "en": "English",
+            "zh": "中文",
+            "de": "Deutsch",
+        }
+        await query.answer(t("msg.lang.changed", code, lang=_native_names.get(code, code)))
+        _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
+        text, keyboard = self.bot_app.handlers.build_sessions_active_overview(
+            owner_chat_id, session=session, lang=code
+        )
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         return True

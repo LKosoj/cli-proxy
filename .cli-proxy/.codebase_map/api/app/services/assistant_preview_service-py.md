@@ -1,6 +1,6 @@
 # API Spec: `app/services/assistant_preview_service.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Symbols
 - `def assistant_preview_enabled(config)` (line 14)

@@ -18,7 +18,9 @@ from modes.sdk.runtime.tooling.change_filter import (
     format_git_log_name_status,
 )
 from config import AppConfig
+from i18n.language_names import LANGUAGE_NAMES
 from session import Session, session_scoped_key
+from utils.lang import resolve_user_lang
 from utils.paths import cli_proxy_artifact_path
 from utils.text import strip_ansi
 from app.services.redaction import redact_text, redact_value
@@ -3376,9 +3378,17 @@ class ManagerOrchestrator:
                 user_msg,
             )
 
+        _lang = resolve_user_lang(self._config, chat_id=chat_id)
+        _lang_name = LANGUAGE_NAMES.get(_lang, "Russian")
+        commit_system_raw = self._manager_prompt(workdir, "commit_message_system")
+        try:
+            commit_system = commit_system_raw.format(response_language=_lang_name)
+        except (KeyError, ValueError):
+            _log.warning("commit_message_system format failed; using raw template")
+            commit_system = commit_system_raw
         raw = await chat_completion(
             self._config,
-            self._manager_prompt(workdir, "commit_message_system"),
+            commit_system,
             user_msg[:8000],
         )
 

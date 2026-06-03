@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_prereqs.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `def test_manifest_required_has_bash_awk_ss()` (line 20)

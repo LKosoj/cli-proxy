@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_runbooks.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `def test_load_runbooks_empty_returns_empty(tmp_path)` (line 42)

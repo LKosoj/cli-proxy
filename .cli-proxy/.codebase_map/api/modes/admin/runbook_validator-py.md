@@ -1,6 +1,6 @@
 # API Spec: `modes/admin/runbook_validator.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
 ### `class RunbookValidatorError(RuntimeError)` (line 39)

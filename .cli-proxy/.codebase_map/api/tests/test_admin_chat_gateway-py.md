@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_chat_gateway.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:28Z
 
 ## Symbols
 - `async def test_answer_happy_path(tmp_path)` (line 66)

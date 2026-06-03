@@ -1,48 +1,59 @@
 # Node: summary.py
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`/srv/git_projects/cli-proxy/summary.py` centralizes OpenAI-backed text summaries and git commit message suggestions. It prepares long CLI output for Telegram/session previews, strips CLI preambles, normalizes text, reuses cached AsyncOpenAI clients, and parses structured commit-message JSON.
+`summary.py` — модуль уровня Core: резюмирование длинных текстов и генерация git-commit сообщений через OpenAI-совместимый API. Используется для сжатия вывода CLI-агентов перед отправкой в Telegram и для предложения commit-сообщений в git-операциях.
 
 ## Scope
 - Source glob: `summary.py`
-- File: `/srv/git_projects/cli-proxy/summary.py`
-- Includes: `summarize_text()`, `summarize_text_with_reason()`, `suggest_commit_message_async()`, `suggest_commit_message_detailed_async()`, sync commit-message wrappers, OpenAI config lookup/cache helpers, tail digest extraction, and commit-message JSON validation.
-- Excludes: context-window compression in `/srv/git_projects/cli-proxy/modes/sdk/runtime/context_summarizer.py`, Telegram output orchestration in `/srv/git_projects/cli-proxy/sessions/session_output_service.py`, and git UI flows in `/srv/git_projects/cli-proxy/app/services/git_ops_service.py` or `/srv/git_projects/cli-proxy/desktop/widgets/git_panel.py`.
+- Estimated files: 1
+- Единственный файл: `summary.py` (480 строк).
 
 ## Instructions for agent
-- Read `/srv/git_projects/cli-proxy/summary.py` before changing this area.
-- For summary behavior, also inspect `/srv/git_projects/cli-proxy/config.py`, `/srv/git_projects/cli-proxy/utils/text.py`, and the caller path that sends the summary (`/srv/git_projects/cli-proxy/bot.py` or `/srv/git_projects/cli-proxy/sessions/session_output_service.py`).
-- For commit-message behavior, also inspect `/srv/git_projects/cli-proxy/modes/sdk/runtime/json_normalizer.py`, `/srv/git_projects/cli-proxy/app/services/git_ops_service.py`, and `/srv/git_projects/cli-proxy/desktop/widgets/git_panel.py`.
-- Keep OpenAI runtime behavior on `config.defaults.openai_*` with environment fallback only as implemented in `/srv/git_projects/cli-proxy/summary.py`; do not introduce separate OpenAI config paths.
-- Validate Python edits with targeted tests such as `/srv/git_projects/cli-proxy/tests/test_summary_uses_big_model.py`, `/srv/git_projects/cli-proxy/tests/test_summary_commit_message_language.py`, and the nearest changed caller tests.
+- Публичные функции (см. `summary.py`):
+  - `async summarize_text(text, max_chars=3000, config=None, *, language="ru")` — резюме; для текстов < 3000 символов возвращает очищенный текст без вызова API.
+  - `async summarize_text_with_reason(...)` — то же, но возвращает `(summary, reason)` с типизированной обработкой ошибок OpenAI (`summary.py:237`).
+  - `async suggest_commit_message_async(...)` — однострочное commit-сообщение (`summary.py:354`).
+  - `async suggest_commit_message_detailed_async(...)` — `(summary, body)` через JSON-схему `_COMMIT_MESSAGE_RESPONSE_SCHEMA`, до `_COMMIT_MESSAGE_ATTEMPTS` (5) попыток (`summary.py:375`).
+  - Синхронные обёртки `suggest_commit_message`/`suggest_commit_message_detailed` возвращают `None`, если уже есть запущенный event loop (`summary.py:461`).
+- Модель берётся через `resolve_openai_config(config, model_key="openai_big_model", env_priority=False)` — это «big model», не основная.
+- Клиенты `AsyncOpenAI` кэшируются по `(api_key, base_url)` в `_openai_clients` — не создавать новый клиент на каждый вызов.
+- Промпты резюме многоязычны (`ru/en/zh/de`); `_tail_digest` использует русскоязычные маркеры результата (см. TODO `T2-tail-digest`, `summary.py:272`) — для других языков хвостовой дайджест почти не срабатывает.
+- Прямой запуск API минимизировать: для коротких входов и при отсутствии конфигурации функции возвращают раньше без сетевого вызова.
 
 ## Source of truth
-- `/srv/git_projects/cli-proxy/summary.py` - runtime behavior for summary generation, OpenAI client reuse, OpenAI config fallback, tail digest, and commit-message generation.
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/api/summary-py.md` - generated public symbol inventory only; verify behavior in source.
-- `/srv/git_projects/cli-proxy/config.py` - `AppConfig`/`defaults.openai_api_key`, `defaults.openai_big_model`, and `defaults.openai_base_url` consumed by `summary.py`.
-- `/srv/git_projects/cli-proxy/modes/sdk/runtime/openai_client.py` - AsyncOpenAI client factory used by `summary.py`.
-- `/srv/git_projects/cli-proxy/modes/sdk/runtime/json_normalizer.py` - structured JSON parsing/validation used for detailed commit messages.
-- `/srv/git_projects/cli-proxy/utils/text.py` - text normalization used before summarization.
+- `summary.py`
+- Технические интерфейсы: `.cli-proxy/.codebase_map/api/summary-py.md`
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [summary.py](../api/summary-py.md)
 
 ## When to update
-- Any change to `/srv/git_projects/cli-proxy/summary.py`.
-- Any change to OpenAI defaults or fallback semantics in `/srv/git_projects/cli-proxy/config.py`, `/srv/git_projects/cli-proxy/config.yaml`, or `/srv/git_projects/cli-proxy/config_example.yaml`.
-- Any change to `/srv/git_projects/cli-proxy/modes/sdk/runtime/openai_client.py`, `/srv/git_projects/cli-proxy/modes/sdk/runtime/json_normalizer.py`, or `/srv/git_projects/cli-proxy/utils/text.py` that changes behavior consumed by `summary.py`.
-- Any change in `/srv/git_projects/cli-proxy/bot.py`, `/srv/git_projects/cli-proxy/sessions/session_management.py`, `/srv/git_projects/cli-proxy/sessions/session_output_service.py`, `/srv/git_projects/cli-proxy/app/services/git_ops_service.py`, `/srv/git_projects/cli-proxy/desktop/widgets/git_panel.py`, or `/srv/git_projects/cli-proxy/modes/sdk/runtime/context_summarizer.py` that changes how these functions are called.
-- Any targeted test change that adds, removes, or materially changes coverage for summary generation, OpenAI config selection, OpenAI retries, or commit-message JSON parsing.
+- Любой коммит, затрагивающий `summary.py`.
+- Изменение `modes/sdk/runtime/openai_client.py` (`create_async_openai_client`, `resolve_openai_config`) — прямая import-зависимость.
+- Изменение `modes/sdk/runtime/json_normalizer.py` (`parse_normalize_validate`) — валидация commit-JSON.
+- Изменение `config.py` (`AppConfig`, ключ `openai_big_model`) — источник модели/ключей.
+- Изменение `utils/text.py` (`normalize_text`) — предобработка текста.
+- Изменение `i18n/language_names.py` (`LANGUAGE_NAMES`) — ленивая зависимость в commit-функциях.
+- Изменение потребителей: `bot.py`, `sessions/session_management.py`, `app/services/git_ops_service.py`, `desktop/widgets/git_panel.py`, `modes/sdk/runtime/context_summarizer.py` (импортирует `_get_openai_config`/`_get_openai_client`).
+- Любое изменение поведения резюмирования или формата commit-сообщений.
 
 ## Related nodes
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/config-py.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/config-example-yaml.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/bot-py.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/sessions.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/app.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/desktop.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/modes.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/utils.md`
-- `/srv/git_projects/cli-proxy/.cli-proxy/.codebase_map/nodes/tests.md`
+- `nodes/modes.md` — `modes/sdk/runtime/*` (OpenAI-клиент, JSON-нормализатор, context_summarizer): import-зависимость.
+- `nodes/config-py.md` — `AppConfig`, ключ `openai_big_model`.
+- `nodes/utils.md` — `utils/text.normalize_text`.
+- `nodes/i18n.md` — `i18n/language_names.LANGUAGE_NAMES` (ленивый импорт).
+- `nodes/bot-py.md` — потребитель `summarize_text_with_reason`.
+- `nodes/sessions.md` — `sessions/session_management.py` потребитель `summarize_text_with_reason`.
+- `nodes/app.md` — `app/services/git_ops_service.py` потребитель `suggest_commit_message_detailed_async`.
+- `nodes/desktop.md` — `desktop/widgets/git_panel.py` потребитель `suggest_commit_message_detailed_async`.
+- `nodes/tests.md` — `tests/test_summary_*`, `tests/test_openai_client_retries.py`, `tests/test_context_summarizer.py`.
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-05-04
+- 2026-06-03

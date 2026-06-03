@@ -1,61 +1,87 @@
 # Node: miniapp
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Purpose
-`miniapp/**` is the aiohttp Telegram MiniApp surface for CLI Proxy. It mounts on the shared HTTP ingress, authenticates Telegram WebApp init data, serves the browser UI, and exposes HTTP/WebSocket APIs for config editing, files, logs, status, runs, scheduler, admin chat/admin autonomy, SSH hosts, and session remote-control settings.
+Транспортный слой: aiohttp-веб-интерфейс администратора/оператора, открываемый как Telegram Mini App. Бизнес-логики не содержит — делегирует в `app/services/*`, SDK-сервисы и mode-плагины. Сервер `miniapp/server.py` (`MiniAppServer`) монтируется на общий ingress (`app/services/shared_http_ingress.py`) под `config.miniapp.base_path` (по умолчанию `/cli-proxy`); создаётся в `bot.py:280`, запускается/останавливается из `app/services/lifecycle_service.py:36`/`:99`. Standalone-запуск для разработки — `start_miniapp.py` (форсирует `config.miniapp.enabled=True`, отдаёт на `http://127.0.0.1:8088/cli-proxy/`).
 
 ## Scope
 - Source glob: `miniapp/**`
-- Current files: 19 under `miniapp/**` as of last review.
-- Mount/server: `miniapp/server.py`
-- Route/API surface: `miniapp/routes.py`, extracted route modules such as `miniapp/routes_ssh.py`
-- Telegram MiniApp auth helper: `miniapp/auth.py`
-- Backend services: `miniapp/services/config_service.py`, `miniapp/services/files_service.py`, `miniapp/services/logs_service.py`
-- Frontend shell and client logic: `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css`
-- MiniApp local launcher: `start_miniapp.py`
-- Targeted coverage starts at `tests/test_miniapp*.py`, `tests/smoke/test_miniapp_server_smoke.py`, `tests/test_miniapp_app_js.py`, `tests/test_miniapp_config_tab_js.py`, `tests/test_logs_config_local_only.py`
+- Estimated files: 19
+- Подкаталоги: `miniapp/services/` (бекенд-сервисы UI: config draft, файлы, логи), `miniapp/static/` (SPA на vanilla JS: `index.html`, `app.js`, `styles.css`).
 
 ## Instructions for agent
-- Start with `.cli-proxy/.codebase_map/INDEX.md`, then this node, then the task-specific files under `miniapp/**`.
-- Before claiming MiniApp runtime behavior, verify the exact method/function in source and cite concrete `path:line`.
-- For route/API behavior, inspect `miniapp/routes.py`; `MiniAppRoutes.register()` is the route table.
-- For config editor changes, keep `config.yaml`, `config_example.yaml`, `config.py`, `app/config_runtime/**`, `miniapp/services/config_service.py`, `miniapp/static/app.js`, `desktop/widgets/config_editor.py`, `README.md`, and `README_EN.MD` synchronized.
-- For MiniApp UI changes, use the `playwright-cli` skill as required by repository instructions, and run the closest JS/Python targeted tests for the changed surface.
-- Do not kill the process on port `8088`.
+- Это транспортный слой: бизнес-логику не размещать здесь; маршрутизировать через `app/services/*`, SDK-сервисы и mode-плагины (`modes/`). Доступ к `BotApp` — только как к контейнеру сервисов.
+- Доступ fail-closed: каждый хендлер начинается с `_require_access`/`_require_admin` (`miniapp/routes.py`). Поток: `_extract_init_data` (header `X-Telegram-Init-Data`) → `bot_app.security.authenticate(strategy="telegram_init_data")` → rate limit `miniapp.ingress` → `authorize(scope="miniapp")`; админ-эндпоинты дополнительно `scope="miniapp.admin"`. Подпись initData проверяется в `miniapp/auth.py` (`verify_telegram_init_data`, HMAC-SHA256).
+- WebSocket-эндпоинты (`/api/status/ws`, логи) аутентифицируются короткоживущими HMAC-тикетами (`_issue_ws_ticket`/`_consume_ws_ticket`, TTL 60с), а не initData напрямую.
+- Новые эндпоинты добавлять как `routes_<area>.py`: dataclass `<Area>RouteServices` + `register_<area>_routes(app, ctx, services)`, общие зависимости через `MiniAppRouteContext` (`miniapp/route_context.py`); регистрировать в `MiniAppRoutes.register` (`miniapp/routes.py:4522`).
+- Синхронизировать функциональность с ботом (`tg/`) и Desktop (`desktop/`) — общий контракт сервисов (требование `CLAUDE.md`).
+- Новые опции конфигурации добавлять и в `config.yaml`, и в `config_example.yaml`; секреты в ответах редактировать (см. `miniapp/services/config_service.py`).
+- Для локального тестирования auth-пути генерировать валидный `initData` через `gen_init_data.py` (та же схема HMAC `WebAppData`/SHA256, что и `miniapp/auth.py:verify_telegram_init_data`) и передавать в заголовке `X-Telegram-Init-Data`.
+- Читать только файлы под задачу (`miniapp/routes.py` ~4600 строк, `miniapp/static/app.js` ~7200 строк — точечно через Grep); изменения держать минимальными и проверять `pytest -q tests/test_miniapp_routes_integration.py tests/test_shared_http_ingress.py`.
 
 ## Source of truth
-- `miniapp/server.py` - shared-ingress mounting, base-path normalization, runtime enable guard, request body limit.
-- `miniapp/routes.py` - MiniApp auth gate, route registration, WebSocket ticketing, status/log streams, files/config/runs/scheduler/admin/session APIs, static file serving.
-- `miniapp/routes_ssh.py` - SSH host CRUD, connection test, key generation, and secret routes.
-- `miniapp/auth.py` - Telegram WebApp initData signature validation helper used by the security facade.
-- `miniapp/services/config_service.py` - MiniApp config schema/view/validate/diff/save logic, runtime reload/restart-required/secret metadata, and backend secret redaction sentinel handling.
-- `miniapp/services/files_service.py` - session-scoped local file operations, path validation, binary/size checks, revision conflict handling.
-- `miniapp/services/logs_service.py` - log type resolution, session filters, log parsing, and access checks.
-- `miniapp/static/index.html` - tab/layout DOM for Config, Files, Logs, Status, Scheduler, Settings, Admin, and editor views.
-- `miniapp/static/app.js` - Telegram WebApp client bootstrap, API calls, state, rendering, polling, WebSocket handling, UI actions, and config-editor secret sentinel/password/clear handling.
-- `miniapp/static/styles.css` - MiniApp styling, including config-editor secret input row layout.
-- `start_miniapp.py` - standalone local startup helper for MiniApp on shared ingress.
-- `tests/test_miniapp*.py`, `tests/smoke/test_miniapp_server_smoke.py` - primary MiniApp route/service/UI regression coverage.
+- `miniapp/server.py` — `MiniAppServer`, монтаж на shared ingress, `_runtime_guard` (gate по `enabled`/`base_path`), `start`/`stop`.
+- `miniapp/auth.py` — `verify_telegram_init_data`, `TelegramMiniAppUser`, `MiniAppAuthError`.
+- `miniapp/routes.py` — `MiniAppRoutes`: композиция submodule-роутов, гварды доступа, WS-тикеты, сериализация runs/sessions; `register()` на строке 4522.
+- `miniapp/route_context.py` — `MiniAppRouteContext` (общие зависимости route-модулей).
+- `miniapp/routes_config.py` — config view/draft/validate/save (`ConfigRouteServices`).
+- `miniapp/routes_admin.py` — админ-конфиг и операции (`AdminRouteServices`).
+- `miniapp/routes_scheduler.py` — планировщик задач (`SchedulerRouteServices`).
+- `miniapp/routes_logs.py` — чтение/стрим логов, WS (`LogsRouteServices`).
+- `miniapp/routes_ssh.py` — SSH-хосты/секреты (`SshRouteServices`).
+- `miniapp/routes_json.py` — парсинг/валидация JSON-тел (`JsonRouteServices`).
+- `miniapp/routes_foundation.py` — шаблон route-модуля (`FoundationRouteServices`).
+- `miniapp/services/config_service.py` — валидация/диф/редактирование секретов config-черновика.
+- `miniapp/services/files_service.py` — compat-реэкспорт `app/services/session_files_service.py`.
+- `miniapp/services/logs_service.py` — чтение и парсинг логов сессий.
+- `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css` — SPA на vanilla JS; вкладки: config, files, logs, status, scheduler, settings, admin. Внешние зависимости с CDN: Telegram WebApp JS SDK (`telegram.org/js/telegram-web-app.js`) и Ace editor `1.43.6` (jsdelivr).
+- `start_miniapp.py` — standalone dev-лаунчер.
+
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [miniapp/auth.py](../api/miniapp/auth-py.md)
+- [miniapp/route_context.py](../api/miniapp/route_context-py.md)
+- [miniapp/routes.py](../api/miniapp/routes-py.md)
+- [miniapp/routes_admin.py](../api/miniapp/routes_admin-py.md)
+- [miniapp/routes_config.py](../api/miniapp/routes_config-py.md)
+- [miniapp/routes_foundation.py](../api/miniapp/routes_foundation-py.md)
+- [miniapp/routes_json.py](../api/miniapp/routes_json-py.md)
+- [miniapp/routes_logs.py](../api/miniapp/routes_logs-py.md)
+- [miniapp/routes_scheduler.py](../api/miniapp/routes_scheduler-py.md)
+- [miniapp/routes_ssh.py](../api/miniapp/routes_ssh-py.md)
+- [miniapp/server.py](../api/miniapp/server-py.md)
 
 ## When to update
-- Any change under `miniapp/**` or `start_miniapp.py`.
-- Any MiniApp-visible config contract change in `config.py`, `config.yaml`, `config_example.yaml`, `app/config_runtime/**`, `app/services/app_runtime_service.py`, `desktop/widgets/config_editor.py`, `miniapp/services/config_service.py`, or `miniapp/static/app.js`.
-- Any change in `app/security/**`, `app/services/shared_http_ingress.py`, or `app/services/actor_identity.py` that changes MiniApp auth, authorization, rate limiting, actor IDs, or ingress mounting.
-- Any change in `app/services/scheduler_service.py`, `app/services/remote_control_service.py`, `app/services/run_artifact_store.py`, `app/services/runtime_progress_service.py`, `app/services/ssh_config_loader.py`, or `app/services/remote_shell_service.py` that changes contracts consumed by `miniapp/routes.py`.
-- Any change in `modes/**`, `sessions/**`, or `session.py` that changes mode launch, callbacks, session IDs, active mode/status state, run artifacts, or remote-control state exposed by MiniApp.
-- Any Desktop/Bot parity change affecting config, files, logs, scheduler, admin, runs, SSH, or remote-control behavior.
-- Any targeted MiniApp test or smoke-test change under `tests/test_miniapp*.py`, `tests/test_logs_config_local_only.py`, or `tests/smoke/test_miniapp_server_smoke.py`.
+- Any commit touching `miniapp/**`.
+- Any commit touching `agent/**` because this node has import/call dependency on it.
+- Any commit touching `app/**` because this node has import/call dependency on it.
+- Any commit touching `bot.py` because this node has import/call dependency on it.
+- Any commit touching `config.py` because this node has import/call dependency on it.
+- Any commit touching `config_example.yaml` because this node has import/call dependency on it.
+- Any architecture or behavior change affecting this area.
 
 ## Related nodes
-- `nodes/app.md` - shared ingress, security facade, actor identity, runtime config reload, scheduler, SSH/remote-control, run artifacts, progress/status services used by MiniApp.
-- `nodes/config-py.md` - legacy config dataclasses and MiniApp config fields.
-- `nodes/config-example-yaml.md` - sample MiniApp config keys that must stay synchronized with runtime config and UI schema.
-- `nodes/desktop.md` - Desktop parity for config editor, files, logs, scheduler, admin, runs, SSH, and remote-control flows.
-- `nodes/modes.md` - mode launch/status/callback contracts rendered or invoked by MiniApp.
-- `nodes/session-py.md` - `Session`, `SessionManager`, and `session_runtime_uid` contracts used by MiniApp session selection and access checks.
-- `nodes/sessions.md` - active mode, orchestrator, SSH/remote-control, and session status accessors consumed by MiniApp routes.
-- `nodes/tests.md` - targeted MiniApp route, service, JS, UI, and smoke coverage.
+- `nodes/agent.md`
+- `nodes/app.md`
+- `nodes/bot-py.md`
+- `nodes/config-py.md`
+- `nodes/config-example-yaml.md`
+- `nodes/desktop.md`
+- `nodes/modes.md`
+- `nodes/session-py.md`
+- `agent` confidence=0.95 via L0
+- `app` confidence=0.95 via L0/L1/L2
+- `bot.py` confidence=0.76 via L0
+- `config.py` confidence=0.90 via L2
+- `config_example.yaml` confidence=0.89 via L0
+- `desktop` confidence=0.76 via L0
+- `modes` confidence=0.90 via L0/L1/L2
+- `session.py` confidence=0.95 via L0/L2
+
+## Owner
+- project-maintainers
 
 ## Last reviewed
-- 2026-06-02
+- 2026-06-03T02:37:00Z

@@ -1,43 +1,43 @@
 # API Spec: `config.py`
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
 ### `class TelegramConfig` (line 12)
 
-### `class ToolConfig` (line 41)
+### `class ToolConfig` (line 45)
 
-### `class DefaultsConfig` (line 61)
+### `class DefaultsConfig` (line 66)
 
-### `class MCPConfig` (line 147)
+### `class MCPConfig` (line 165)
 
-### `class MCPClientServerConfig` (line 155)
+### `class MCPClientServerConfig` (line 173)
 *Configuration for connecting to external MCP servers (client-side).*
 
-### `class PresetConfig` (line 173)
+### `class PresetConfig` (line 191)
 
-### `class MiniAppConfig` (line 179)
+### `class MiniAppConfig` (line 197)
 
-### `class ThreadModeConfig` (line 190)
+### `class ThreadModeConfig` (line 208)
 
-### `class WebhooksConfig` (line 199)
+### `class WebhooksConfig` (line 217)
 
-### `class SchedulerConfig` (line 209)
+### `class SchedulerConfig` (line 227)
 
-### `class SecurityRateLimitPolicyConfig` (line 219)
+### `class SecurityRateLimitPolicyConfig` (line 237)
 
-### `class SecurityRateLimitsConfig` (line 227)
+### `class SecurityRateLimitsConfig` (line 245)
 
-### `class SecurityConfig` (line 236)
+### `class SecurityConfig` (line 254)
 
-### `class LintEvolutionConfig` (line 241)
+### `class LintEvolutionConfig` (line 259)
 
-### `class SSHHostConfig` (line 255)
+### `class SSHHostConfig` (line 273)
 *Configuration for a single remote SSH host within a project.*
 
-### `class AppConfig` (line 275)
+### `class AppConfig` (line 293)
 
 ## Symbols
-- `def load_config(path)` (line 291)
-- `def app_config_to_dict(config)` (line 305)
-- `def save_config(config)` (line 311)
+- `def load_config(path)` (line 309)
+- `def app_config_to_dict(config)` (line 323)
+- `def save_config(config)` (line 329)

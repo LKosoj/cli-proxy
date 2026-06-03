@@ -1,17 +1,17 @@
 # API Spec: `modes/admin/monitor.py`
 
-Generated: 2026-04-27T22:43:22Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Classes
-### `class AdminMonitorError(RuntimeError)` (line 27)
+### `class AdminMonitorError(RuntimeError)` (line 28)
 *Raised when monitor input is invalid.*
 
-### `class AdminServerPollSpec` (line 32)
+### `class AdminServerPollSpec` (line 33)
 
-### `class AdminServerSnapshot` (line 40)
+### `class AdminServerSnapshot` (line 41)
 
-### `class AdminMonitorSnapshot` (line 54)
+### `class AdminMonitorSnapshot` (line 55)
 
-### `class AdminMonitor` (line 62)
-- `def __init__()` (line 63)
-- `async def collect_snapshot()` (line 72)
+### `class AdminMonitor` (line 63)
+- `def __init__()` (line 64)
+- `async def collect_snapshot()` (line 75)

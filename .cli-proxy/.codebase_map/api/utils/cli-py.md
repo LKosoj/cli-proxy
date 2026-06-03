@@ -1,6 +1,6 @@
 # API Spec: `utils/cli.py`
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Symbols
 - `def build_command(cmd_template, prompt, resume, image)` (line 9)

@@ -1,6 +1,6 @@
 # API Spec: `sessions/scoped_key.py`
 
-Generated: 2026-04-27T22:43:23Z
+Generated: 2026-06-03T02:24:29Z
 
 ## Symbols
 - `def sanitize_scoped_key_token(value)` (line 8)

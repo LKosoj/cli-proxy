@@ -20,6 +20,8 @@ from typing import Any, Dict, List
 from modes.sdk.runtime.openai_client import create_async_openai_client
 from agent.plugins.base import ToolPlugin
 from modes.sdk.runtime.tooling.spec import ToolSpec
+from i18n.language_names import LANGUAGE_NAMES
+from utils.lang import resolve_user_lang
 
 logger = logging.getLogger(__name__)
 
@@ -145,19 +147,21 @@ METHOD_PRESETS: Dict[str, List[str]] = {
     "problem_solving": ["reverse_brainstorming", "scamper"],
 }
 
-# Системный промпт для синтеза
-SYNTHESIS_SYSTEM_PROMPT = (
-    "Вы — эксперт по синтезу идей и стратегическому мышлению.\n"
-    "Ваша задача — создать наиболее ценный и практичный итоговый отчёт "
-    "из результатов множественных методологий мозгового штурма.\n\n"
-    "Принципы синтеза:\n"
-    "- Объединяйте схожие идеи\n"
-    "- Выделяйте уникальные инсайты\n"
-    "- Приоритизируйте практичность\n"
-    "- Структурируйте по категориям\n"
-    "- Создавайте действенные рекомендации\n\n"
-    "Формат: чёткий, структурированный, профессиональный на русском языке."
-)
+
+def _synthesis_system_prompt(language_name: str = "Russian") -> str:
+    """Return synthesis system prompt for the given language."""
+    return (
+        "You are an expert in synthesizing ideas and strategic thinking.\n"
+        "Your task is to create the most valuable and practical final report "
+        "from the results of multiple brainstorming methodologies.\n\n"
+        "Synthesis principles:\n"
+        "- Combine similar ideas\n"
+        "- Highlight unique insights\n"
+        "- Prioritize practicality\n"
+        "- Structure by categories\n"
+        "- Create actionable recommendations\n\n"
+        f"Format: clear, structured, professional in {language_name}."
+    )
 
 
 class BrainstormTool(ToolPlugin):
@@ -310,13 +314,15 @@ class BrainstormTool(ToolPlugin):
     # Synthesis
     # -----------------------------------------------------------------
 
-    async def _synthesize(self, topic: str, results: List[Dict[str, Any]]) -> str:
+    async def _synthesize(self, topic: str, results: List[Dict[str, Any]], *, chat_id: int = None) -> str:
         """Combine all method results into a single report using the big model."""
         successful = [r for r in results if r["success"]]
         if not successful:
             return "Не удалось получить результаты ни от одной методологии."
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lang = resolve_user_lang(self.config, chat_id=chat_id)
+        language_name = LANGUAGE_NAMES.get(lang, "Russian")
 
         parts = [f"Тема мозгового штурма: {topic}\n\n"
                  "Ниже представлены результаты мозгового штурма по различным методологиям.\n"
@@ -351,7 +357,7 @@ class BrainstormTool(ToolPlugin):
         )
 
         synthesis_prompt = "".join(parts)
-        system = SYNTHESIS_SYSTEM_PROMPT + f"\n\n*Текущие дата и время*: {now_str}"
+        system = _synthesis_system_prompt(language_name) + f"\n\n*Текущие дата и время*: {now_str}"
         model = self._get_model("big")
 
         logger.info("🎨 Synthesis with model=%s, prompt_len=%d", model, len(synthesis_prompt))
@@ -408,6 +414,7 @@ class BrainstormTool(ToolPlugin):
         topic = (args.get("topic") or "").strip()
         if not topic:
             return {"success": False, "error": "Topic is required"}
+        _chat_id = (ctx.get("dest") or {}).get("chat_id")
 
         methods_arg = (args.get("methods") or "all").strip()
         parallel = args.get("parallel", True)
@@ -483,7 +490,7 @@ class BrainstormTool(ToolPlugin):
 
         # Synthesize
         logger.info("🎨 Starting synthesis...")
-        report = await self._synthesize(topic, results_list)
+        report = await self._synthesize(topic, results_list, chat_id=_chat_id)
 
         # Build metadata header
         meta_lines = [

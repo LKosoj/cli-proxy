@@ -56,6 +56,8 @@ class CallbackHandler(CallbackActionsMixin):
             (("eq", "agent_cancel"), self._cb_agent_cancel),
             (("prefix", "state_pick:"), self._cb_state_pick),
             (("prefix", "state_page:"), self._cb_state_page),
+            (("eq", "lang_menu"), self._cb_lang_menu),
+            (("prefix", "lang_set:"), self._cb_lang_set),
         ]
         self._post_callback_handlers = [
             (("prefix", "close_pick:"), self._cb_close_pick),

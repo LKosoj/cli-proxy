@@ -804,6 +804,7 @@ DECISION_SYSTEM = """Ты — арбитр проекта. Принимаешь 
 """
 
 
+# dead code — source of truth is modes/manager/system_prompts.yaml
 COMMIT_MESSAGE_SYSTEM = """Ты генерируешь сообщение git commit для завершённой задачи разработки.
 
 Верни ответ строго в формате:

@@ -21,7 +21,7 @@ async def maybe_persist_user_language(
 
     Idempotent: no-op if user_id already in user_languages.
     Skips unknown language codes silently.
-    Retries up to 3 times on revision mismatch.
+    Retry-on-revision-mismatch is delegated to ConfigService.set_user_language.
     Never raises — logs on error.
     """
     from i18n.resolver import map_telegram_language_code
@@ -35,21 +35,14 @@ async def maybe_persist_user_language(
         return  # unsupported/missing code — fallback will handle at runtime
 
     try:
-        for _attempt in range(3):
-            result = await config_service.set_user_language(user_id, lang, max_retries=1)
-            if result.ok:
-                return
-            if result.errors and "revision mismatch" in result.errors:
-                continue  # retry
+        # set_user_language retries internally on revision mismatch (re-reading
+        # the config between attempts), so a single call is sufficient here.
+        result = await config_service.set_user_language(user_id, lang)
+        if not result.ok:
             logger.warning(
                 "maybe_persist_user_language failed user_id=%d lang=%s errors=%s",
                 user_id, lang, result.errors,
             )
-            return
-        logger.warning(
-            "maybe_persist_user_language gave up after 3 retries user_id=%d lang=%s",
-            user_id, lang,
-        )
     except Exception:
         logger.exception(
             "maybe_persist_user_language unexpected error user_id=%d", user_id

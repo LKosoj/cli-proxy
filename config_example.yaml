@@ -187,6 +187,18 @@ defaults:
     - "непонятно"
     # Важно: не используйте слишком общие слова типа "какой/сколько/когда",
     # иначе уточнение будет срабатывать почти на любой вопрос.
+  # Per-language clarification keywords (overrides clarification_keywords for matching language).
+  clarification_keywords_by_lang:
+    ru:
+      - "уточни"
+      - "уточните"
+      - "не ясно"
+      - "непонятно"
+    en:
+      - "clarify"
+      - "unclear"
+      - "not clear"
+      - "please clarify"
 
   cli_routing:
     analytics:
