@@ -4,6 +4,7 @@ import os
 import time
 from typing import Optional
 
+from i18n import t
 from sessions.conversation_scope import ConversationScope
 from utils.text import build_preview, strip_ansi
 from utils.lang import resolve_user_lang
@@ -206,18 +207,29 @@ class SessionOutputService:
                 return
 
             if send_header:
+                try:
+                    header_lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+                except Exception:
+                    header_lang = "ru"
                 delivery_tail = (
-                    f"Сначала отправлю вывод во вложении (HTML, последние {self._html_render_tail_chars} символов), затем пришлю summary."
+                    t("run.output_delivery_with_summary", header_lang, n=self._html_render_tail_chars)
                     if send_summary
-                    else f"Отправлю вывод во вложении (HTML, последние {self._html_render_tail_chars} символов)."
+                    else t("run.output_delivery_only", header_lang, n=self._html_render_tail_chars)
                 )
-                header = header_override or (
-                    f"[{session.id}|{session.name or session.tool.name}] "
-                    f"Сессия: {session.id} | Инструмент: {session.tool.name}\n"
-                    f"Каталог: {session.workdir}\n"
-                    f"Длина вывода: {len(output)} символов | Очередь: {len(session.queue)}\n"
-                    f"Resume: {'есть' if session.resume_token else 'нет'}\n"
-                    f"{delivery_tail}"
+                resume_txt = (
+                    t("session_status.yes", header_lang) if session.resume_token else t("session_status.no", header_lang)
+                )
+                header = header_override or t(
+                    "run.output_header",
+                    header_lang,
+                    sid=session.id,
+                    name=session.name or session.tool.name,
+                    tool=session.tool.name,
+                    workdir=session.workdir,
+                    length=len(output),
+                    queue=len(session.queue),
+                    resume=resume_txt,
+                    delivery=delivery_tail,
                 )
                 if chat_id is not None:
                     await self.bot_app._send_message(context, text=header, **reply_kwargs)
@@ -248,6 +260,7 @@ class SessionOutputService:
                 )
 
             async def _summarize() -> tuple[Optional[str], Optional[str]]:
+                lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
                 try:
                     text_for_summary = output[-self._summary_tail_chars:] if len(output) > self._summary_tail_chars else output
                     summarize_fn = self._resolve_summarize_fn()
@@ -255,17 +268,17 @@ class SessionOutputService:
                         summarize_fn(
                             text_for_summary,
                             config=self.bot_app.config,
-                            language=resolve_user_lang(self.bot_app.config, chat_id=chat_id),
+                            language=lang,
                         ),
                         timeout=self._summary_timeout_s,
                     )
                     return s, err
                 except asyncio.TimeoutError:
                     _so_log.warning("[send_output] summarize timed out after %ss", self._summary_timeout_s)
-                    return None, f"таймаут суммаризации ({int(self._summary_timeout_s)}с)"
+                    return None, t("run.summary_error_timeout", lang, sec=int(self._summary_timeout_s))
                 except Exception:
                     _so_log.exception("[send_output] summarize exception")
-                    return None, "неизвестная ошибка"
+                    return None, t("run.summary_error_unknown", lang)
 
             html_task = asyncio.create_task(_render_html_to_file())
             summary_send_task = None
@@ -275,6 +288,7 @@ class SessionOutputService:
                 html_sent = asyncio.Event()
 
                 async def _send_summary_when_ready() -> None:
+                    lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
                     summary, summary_error = await summary_task
                     try:
                         text_for_preview = output[-self._summary_tail_chars:] if len(output) > self._summary_tail_chars else output
@@ -294,9 +308,9 @@ class SessionOutputService:
                         await self.bot_app._send_message(context, text=preview, md2=True, **reply_kwargs)
                         return
 
-                    suffix = f" (summary недоступна: {summary_error})" if summary_error else ""
+                    suffix = t("run.summary_unavailable", lang, err=summary_error) if summary_error else ""
                     if not html_sent.is_set():
-                        suffix = (suffix + "\nHTML ещё готовится.").strip()
+                        suffix = (suffix + t("run.html_pending", lang)).strip()
                     await self.bot_app._send_message(
                         context,
                         text=f"{preview}\n\n{suffix}".strip(),

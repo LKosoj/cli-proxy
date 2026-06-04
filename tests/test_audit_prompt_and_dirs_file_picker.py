@@ -26,6 +26,7 @@ def test_dirs_menu_includes_files_in_analyst_audit_mode(tmp_path) -> None:
     class _FakeBotApp:
         def __init__(self):
             ui_key = TelegramUiKey.from_parts(100, None)
+            self.config = None
             self.ui_state = ChatUiState()
             self.ui_state.dirs_root[ui_key] = str(base)
             self.ui_state.dirs_mode[ui_key] = encode_mode_dirs("analyst", "audit")

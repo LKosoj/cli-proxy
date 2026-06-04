@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QFrame
 )
 
+from i18n import t
 from utils.ui import ensure_async
 
 if TYPE_CHECKING:
@@ -115,9 +116,9 @@ DESKTOP_UNSUPPORTED_CONFIG_FIELDS = frozenset({
 class DiffDialog(QDialog):
     """Dialog to display unified diff before saving."""
 
-    def __init__(self, diff_text: str, parent=None):
+    def __init__(self, diff_text: str, lang: str = "ru", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Review Changes")
+        self.setWindowTitle(t("desktop.cfgedit.review_changes", lang))
         self.setMinimumSize(800, 600)
 
         layout = QVBoxLayout(self)
@@ -161,6 +162,7 @@ class ConfigEditorWidget(QWidget):
         self._current_config: Optional[AppConfig] = None
         self._current_revision: Optional[str] = None
         self._widgets: Dict[str, Any] = {}
+        self._lang: str = "ru"
 
         self._setup_ui()
 
@@ -172,11 +174,11 @@ class ConfigEditorWidget(QWidget):
 
         # Bottom buttons
         btn_layout = QHBoxLayout()
-        self.save_btn = QPushButton("Save Configuration")
+        self.save_btn = QPushButton(t("desktop.cfgedit.save_config", self._lang))
         self.save_btn.setObjectName("save_btn")
         self.save_btn.clicked.connect(self._on_save_clicked)
 
-        self.reload_btn = QPushButton("Reload")
+        self.reload_btn = QPushButton(t("desktop.btn.reload", self._lang))
         self.reload_btn.setObjectName("reload_btn")
         self.reload_btn.clicked.connect(self.load_config)
 
@@ -196,7 +198,7 @@ class ConfigEditorWidget(QWidget):
                 self.loadFinished.emit()
             except Exception as e:
                 self.logger.exception("Failed to load config")
-                QMessageBox.critical(self, "Error", f"Failed to load config: {e}")
+                QMessageBox.critical(self, t("common.error", self._lang), t("desktop.cfgedit.load_error", self._lang, error=str(e)))
                 self.loadFinished.emit()
 
         ensure_async(_load(), parent=self)
@@ -209,11 +211,12 @@ class ConfigEditorWidget(QWidget):
         self.tabs.clear()
         self._widgets = {}
 
-        self.tabs.addTab(self._create_telegram_tab(), "Telegram")
-        self.tabs.addTab(self._create_defaults_tab(), "Defaults")
-        self.tabs.addTab(self._create_tools_tab(), "Tools")
-        self.tabs.addTab(self._create_mcp_tab(), "MCP")
-        self.tabs.addTab(self._create_miniapp_tab(), "MiniApp")
+        lang = self._lang
+        self.tabs.addTab(self._create_telegram_tab(lang), "Telegram")
+        self.tabs.addTab(self._create_defaults_tab(lang), t("desktop.cfgedit.tab.defaults", lang))
+        self.tabs.addTab(self._create_tools_tab(lang), t("desktop.cfgedit.tab.tools", lang))
+        self.tabs.addTab(self._create_mcp_tab(lang), "MCP")
+        self.tabs.addTab(self._create_miniapp_tab(lang), "MiniApp")
 
     def _create_scroll_area(self, widget: QWidget) -> QScrollArea:
         scroll = QScrollArea()
@@ -222,111 +225,122 @@ class ConfigEditorWidget(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         return scroll
 
-    def _create_telegram_tab(self) -> QWidget:
+    def _create_telegram_tab(self, lang: str) -> QWidget:
         container = QWidget()
         layout = QFormLayout(container)
 
         cfg = self._current_config.telegram
 
-        self._widgets["telegram.token"] = self._add_line_edit(layout, "Bot Token", cfg.token, is_secret=True)
-        self._widgets["telegram.whitelist_chat_ids"] = self._add_list_edit(layout, "Whitelist IDs", cfg.whitelist_chat_ids)
-        self._widgets["telegram.admlist_chat_ids"] = self._add_list_edit(layout, "Admin IDs", cfg.admlist_chat_ids)
+        self._widgets["telegram.token"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.bot_token", lang), cfg.token, is_secret=True)
+        self._widgets["telegram.whitelist_chat_ids"] = self._add_list_edit(
+            layout, t("desktop.cfgedit.whitelist_ids", lang), cfg.whitelist_chat_ids)
+        self._widgets["telegram.admlist_chat_ids"] = self._add_list_edit(
+            layout, t("desktop.cfgedit.admin_ids", lang), cfg.admlist_chat_ids)
 
-        layout.addRow(QLabel("<br/><b>Network Settings</b>"), QLabel(""))
-        self._widgets["telegram.connect_timeout_sec"] = self._add_double_spin(layout, "Connect Timeout (s)", cfg.connect_timeout_sec)
-        self._widgets["telegram.read_timeout_sec"] = self._add_double_spin(layout, "Read Timeout (s)", cfg.read_timeout_sec)
+        layout.addRow(QLabel(f"<br/><b>{t('desktop.cfgedit.network_settings', lang)}</b>"), QLabel(""))
+        self._widgets["telegram.connect_timeout_sec"] = self._add_double_spin(
+            layout, t("desktop.cfgedit.connect_timeout", lang), cfg.connect_timeout_sec)
+        self._widgets["telegram.read_timeout_sec"] = self._add_double_spin(
+            layout, t("desktop.cfgedit.read_timeout", lang), cfg.read_timeout_sec)
 
         return self._create_scroll_area(container)
 
-    def _create_defaults_tab(self) -> QWidget:
+    def _create_defaults_tab(self, lang: str) -> QWidget:
         container = QWidget()
         layout = QFormLayout(container)
 
         cfg = self._current_config.defaults
 
-        self._widgets["defaults.workdir"] = self._add_line_edit(layout, "Default Workdir", cfg.workdir)
-        self._widgets["defaults.idle_timeout_sec"] = self._add_spin(layout, "Idle Timeout (s)", cfg.idle_timeout_sec, 0, 3600)
+        self._widgets["defaults.workdir"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.default_workdir", lang), cfg.workdir)
+        self._widgets["defaults.idle_timeout_sec"] = self._add_spin(
+            layout, t("desktop.cfgedit.idle_timeout", lang), cfg.idle_timeout_sec, 0, 3600)
         self._widgets["defaults.pending_input_confirmation_enabled"] = self._add_check(
             layout,
-            "Pending Input Confirmation",
+            t("desktop.cfgedit.pending_input_confirmation", lang),
             getattr(cfg, "pending_input_confirmation_enabled", True),
         )
         self._widgets["defaults.cli_json_stream_archive_enabled"] = self._add_check(
             layout,
-            "Archive CLI JSON Streams",
+            t("desktop.cfgedit.archive_cli_json", lang),
             getattr(cfg, "cli_json_stream_archive_enabled", False),
         )
         self._widgets["defaults.assistant_preview_enabled"] = self._add_check(
             layout,
-            "Assistant Live Preview",
+            t("desktop.cfgedit.assistant_preview", lang),
             getattr(cfg, "assistant_preview_enabled", False),
         )
-        layout.addRow(QLabel("<br/><b>Memory Learning</b>"), QLabel(""))
+        layout.addRow(QLabel(f"<br/><b>{t('desktop.cfgedit.memory_learning', lang)}</b>"), QLabel(""))
         self._widgets["defaults.memory_events_enabled"] = self._add_check(
             layout,
-            "Memory Events",
+            t("desktop.cfgedit.memory_events", lang),
             getattr(cfg, "memory_events_enabled", False),
         )
         self._widgets["defaults.memory_native_cli_hooks_enabled"] = self._add_check(
             layout,
-            "Native CLI Memory Hooks",
+            t("desktop.cfgedit.memory_native_hooks", lang),
             getattr(cfg, "memory_native_cli_hooks_enabled", False),
         )
         self._widgets["defaults.memory_outcomes_enabled"] = self._add_check(
             layout,
-            "Memory Outcomes",
+            t("desktop.cfgedit.memory_outcomes", lang),
             getattr(cfg, "memory_outcomes_enabled", False),
         )
         self._widgets["defaults.memory_dreaming_enabled"] = self._add_check(
             layout,
-            "Memory Dreaming",
+            t("desktop.cfgedit.memory_dreaming", lang),
             getattr(cfg, "memory_dreaming_enabled", False),
         )
         self._widgets["defaults.memory_events_retention_days"] = self._add_spin(
             layout,
-            "Memory Events Retention (days)",
+            t("desktop.cfgedit.memory_retention_days", lang),
             getattr(cfg, "memory_events_retention_days", 30),
             1,
             3650,
         )
         self._widgets["defaults.memory_events_max_payload_chars"] = self._add_spin(
             layout,
-            "Memory Event Payload Limit",
+            t("desktop.cfgedit.memory_payload_limit", lang),
             getattr(cfg, "memory_events_max_payload_chars", 6000),
             1,
             100000,
         )
         self._widgets["defaults.memory_events_redaction_enabled"] = self._add_check(
             layout,
-            "Memory Event Redaction",
+            t("desktop.cfgedit.memory_redaction", lang),
             getattr(cfg, "memory_events_redaction_enabled", True),
         )
         self._widgets["defaults.memory_dreaming_batch_size"] = self._add_spin(
             layout,
-            "Memory Dreaming Batch Size",
+            t("desktop.cfgedit.memory_dreaming_batch", lang),
             getattr(cfg, "memory_dreaming_batch_size", 20),
             1,
             1000,
         )
 
-        layout.addRow(QLabel("<br/><b>API Keys & Providers</b>"), QLabel(""))
-        self._widgets["defaults.openai_api_key"] = self._add_line_edit(layout, "OpenAI API Key", cfg.openai_api_key, is_secret=True)
-        self._widgets["defaults.openai_model"] = self._add_line_edit(layout, "OpenAI Model", cfg.openai_model)
-        self._widgets["defaults.zai_api_key"] = self._add_line_edit(layout, "ZAI API Key", cfg.zai_api_key, is_secret=True)
-        self._widgets["defaults.github_token"] = self._add_line_edit(layout, "GitHub Token", cfg.github_token, is_secret=True)
+        layout.addRow(QLabel(f"<br/><b>{t('desktop.cfgedit.api_keys', lang)}</b>"), QLabel(""))
+        self._widgets["defaults.openai_api_key"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.openai_api_key", lang), cfg.openai_api_key, is_secret=True)
+        self._widgets["defaults.openai_model"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.openai_model", lang), cfg.openai_model)
+        self._widgets["defaults.zai_api_key"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.zai_api_key", lang), cfg.zai_api_key, is_secret=True)
+        self._widgets["defaults.github_token"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.github_token", lang), cfg.github_token, is_secret=True)
         self._widgets["defaults.gemini_oauth_client_secret"] = self._add_line_edit(
             layout,
-            "Gemini OAuth Client Secret",
+            t("desktop.cfgedit.gemini_secret", lang),
             getattr(cfg, "gemini_oauth_client_secret", None),
             is_secret=True,
         )
 
-        layout.addRow(QLabel("<br/><b>Logs</b>"), QLabel(""))
-        self._widgets["defaults.log_path"] = self._add_line_edit(layout, "Log Path", cfg.log_path)
+        layout.addRow(QLabel(f"<br/><b>{t('desktop.nav.logs', lang)}</b>"), QLabel(""))
+        self._widgets["defaults.log_path"] = self._add_line_edit(layout, t("desktop.cfgedit.log_path", lang), cfg.log_path)
 
         return self._create_scroll_area(container)
 
-    def _create_tools_tab(self) -> QWidget:
+    def _create_tools_tab(self, lang: str) -> QWidget:
         container = QWidget()
         layout = QHBoxLayout(container)
 
@@ -336,7 +350,7 @@ class ConfigEditorWidget(QWidget):
         for name, tool_cfg in self._current_config.tools.items():
             item = QListWidgetItem(name)
             self.tool_list.addItem(item)
-            self.tool_stack.addWidget(self._create_tool_form(name, tool_cfg))
+            self.tool_stack.addWidget(self._create_tool_form(name, tool_cfg, lang))
 
         self.tool_list.currentRowChanged.connect(self.tool_stack.setCurrentIndex)
         if self.tool_list.count() > 0:
@@ -347,36 +361,40 @@ class ConfigEditorWidget(QWidget):
 
         return container
 
-    def _create_tool_form(self, name: str, cfg: ToolConfig) -> QWidget:
+    def _create_tool_form(self, name: str, cfg: ToolConfig, lang: str = "ru") -> QWidget:
         container = QWidget()
         layout = QFormLayout(container)
 
         prefix = f"tools.{name}."
-        self._widgets[f"{prefix}enabled"] = self._add_check(layout, "Enabled", cfg.enabled)
-        self._widgets[f"{prefix}mode"] = self._add_line_edit(layout, "Mode", cfg.mode)
-        self._widgets[f"{prefix}cmd"] = self._add_list_edit(layout, "Command", cfg.cmd)
-        self._widgets[f"{prefix}headless_cmd"] = self._add_list_edit(layout, "Headless Command", cfg.headless_cmd or [])
-        self._widgets[f"{prefix}prompt_regex"] = self._add_line_edit(layout, "Prompt Regex", cfg.prompt_regex or "")
+        self._widgets[f"{prefix}enabled"] = self._add_check(layout, t("desktop.admin.label.monitor_enabled", lang), cfg.enabled)
+        self._widgets[f"{prefix}mode"] = self._add_line_edit(layout, t("desktop.cfgedit.tool_mode", lang), cfg.mode)
+        self._widgets[f"{prefix}cmd"] = self._add_list_edit(layout, t("desktop.cfgedit.command", lang), cfg.cmd)
+        self._widgets[f"{prefix}headless_cmd"] = self._add_list_edit(
+            layout, t("desktop.cfgedit.headless_command", lang), cfg.headless_cmd or [])
+        self._widgets[f"{prefix}prompt_regex"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.prompt_regex", lang), cfg.prompt_regex or "")
 
         return self._create_scroll_area(container)
 
-    def _create_mcp_tab(self) -> QWidget:
+    def _create_mcp_tab(self, lang: str) -> QWidget:
         container = QWidget()
         v_layout = QVBoxLayout(container)
 
-        mcp_group = QGroupBox("MCP Server Settings")
+        mcp_group = QGroupBox(t("desktop.cfgedit.mcp_server_settings", lang))
         mcp_layout = QFormLayout(mcp_group)
         cfg = self._current_config.mcp
-        self._widgets["mcp.enabled"] = self._add_check(mcp_layout, "Enabled", cfg.enabled)
-        self._widgets["mcp.host"] = self._add_line_edit(mcp_layout, "Host", cfg.host)
-        self._widgets["mcp.port"] = self._add_spin(mcp_layout, "Port", cfg.port, 1, 65535)
+        self._widgets["mcp.enabled"] = self._add_check(mcp_layout, t("desktop.admin.label.monitor_enabled", lang), cfg.enabled)
+        self._widgets["mcp.host"] = self._add_line_edit(mcp_layout, t("desktop.cfgedit.host", lang), cfg.host)
+        self._widgets["mcp.port"] = self._add_spin(mcp_layout, t("desktop.cfgedit.port", lang), cfg.port, 1, 65535)
         v_layout.addWidget(mcp_group)
 
-        clients_group = QGroupBox("MCP Clients (Active)")
+        clients_group = QGroupBox(t("desktop.cfgedit.mcp_clients_active", lang))
         clients_layout = QVBoxLayout(clients_group)
         self.mcp_clients_list = QListWidget()
+        enabled_str = t("desktop.admin.label.monitor_enabled", lang)
+        disabled_str = t("desktop.cfgedit.client_disabled", lang)
         for client in self._current_config.mcp_clients:
-            status = "Enabled" if client.enabled else "Disabled"
+            status = enabled_str if client.enabled else disabled_str
             self.mcp_clients_list.addItem(f"{client.name} [{status}] ({client.transport})")
         clients_layout.addWidget(self.mcp_clients_list)
         v_layout.addWidget(clients_group)
@@ -384,15 +402,15 @@ class ConfigEditorWidget(QWidget):
         v_layout.addStretch()
         return self._create_scroll_area(container)
 
-    def _create_miniapp_tab(self) -> QWidget:
+    def _create_miniapp_tab(self, lang: str) -> QWidget:
         container = QWidget()
         layout = QFormLayout(container)
         cfg = self._current_config.miniapp
 
-        self._widgets["miniapp.enabled"] = self._add_check(layout, "Enabled", cfg.enabled)
-        self._widgets["miniapp.bind_host"] = self._add_line_edit(layout, "Bind Host", cfg.bind_host)
-        self._widgets["miniapp.bind_port"] = self._add_spin(layout, "Bind Port", cfg.bind_port, 1, 65535)
-        self._widgets["miniapp.public_url"] = self._add_line_edit(layout, "Public URL", cfg.public_url)
+        self._widgets["miniapp.enabled"] = self._add_check(layout, t("desktop.admin.label.monitor_enabled", lang), cfg.enabled)
+        self._widgets["miniapp.bind_host"] = self._add_line_edit(layout, t("desktop.cfgedit.bind_host", lang), cfg.bind_host)
+        self._widgets["miniapp.bind_port"] = self._add_spin(layout, t("desktop.cfgedit.bind_port", lang), cfg.bind_port, 1, 65535)
+        self._widgets["miniapp.public_url"] = self._add_line_edit(layout, t("desktop.cfgedit.public_url", lang), cfg.public_url)
 
         return self._create_scroll_area(container)
 
@@ -521,7 +539,7 @@ class ConfigEditorWidget(QWidget):
             return new_cfg
         except Exception as e:
             self.logger.exception("Failed to collect config from UI")
-            QMessageBox.critical(self, "Error", f"Failed to collect config: {e}")
+            QMessageBox.critical(self, t("common.error", self._lang), t("desktop.cfgedit.collect_error", self._lang, error=str(e)))
             # Возвращаем None для индикации ошибки сбора данных вызывающему методу _on_save_clicked,
             # чтобы предотвратить попытку сохранения поврежденных данных.
             return None
@@ -542,19 +560,20 @@ class ConfigEditorWidget(QWidget):
 
     def _validate(self) -> bool:
         """Validate input fields."""
+        lang = self._lang
         errors = []
 
         token = self._widgets["telegram.token"].text().strip()
         if not token:
-            errors.append("Telegram token is required.")
+            errors.append(t("desktop.cfgedit.err_token_required", lang))
 
         workdir = self._widgets["defaults.workdir"].text().strip()
         if not workdir:
-            errors.append("Default workdir is required.")
+            errors.append(t("desktop.cfgedit.err_workdir_required", lang))
 
         if self._widgets["mcp.enabled"].isChecked():
             if not self._widgets["mcp.host"].text().strip():
-                errors.append("MCP host is required when MCP is enabled.")
+                errors.append(t("desktop.cfgedit.err_mcp_host_required", lang))
 
         # Warning for env vars
         for key, widget in self._widgets.items():
@@ -566,36 +585,39 @@ class ConfigEditorWidget(QWidget):
                     self.logger.debug("Config editor preserves env-placeholder text field=%s", key)
 
         if errors:
-            QMessageBox.warning(self, "Validation Error", "\n".join(errors))
+            QMessageBox.warning(self, t("desktop.cfgedit.validation_error", lang), "\n".join(errors))
             return False
 
         return True
 
     def _save_result_message(self, result: ConfigDraftSaveResult) -> tuple[str, str]:
+        lang = self._lang
         if not result.ok:
-            lines = ["Configuration was not saved."]
+            lines = [t("desktop.cfgedit.msg_not_saved", lang)]
             if result.errors:
                 lines.append("")
-                lines.append("Errors:")
+                lines.append(t("desktop.cfgedit.msg_errors", lang) + ":")
                 lines.extend(f"- {error}" for error in result.errors)
-            return "Save Failed", "\n".join(lines)
+            return t("desktop.cfgedit.save_failed", lang), "\n".join(lines)
 
-        lines = [f"Changed: {'yes' if result.changed else 'no'}"]
+        yes_str = t("common.yes", lang)
+        no_str = t("common.no", lang)
+        lines = [t("desktop.cfgedit.msg_changed", lang, value=yes_str if result.changed else no_str)]
         if result.backup_path:
-            lines.append(f"Backup created: {result.backup_path}")
+            lines.append(t("desktop.cfgedit.msg_backup", lang, path=result.backup_path))
         if result.restart_required:
-            lines.append("Restart required: " + ", ".join(result.restart_required))
+            lines.append(t("desktop.cfgedit.msg_restart_required", lang) + ": " + ", ".join(result.restart_required))
         else:
-            lines.append("Restart required: none")
+            lines.append(t("desktop.cfgedit.msg_restart_none", lang))
         if result.reloadable:
-            lines.append("Reloadable: " + ", ".join(result.reloadable))
+            lines.append(t("desktop.cfgedit.msg_reloadable", lang) + ": " + ", ".join(result.reloadable))
         else:
-            lines.append("Reloadable: none")
+            lines.append(t("desktop.cfgedit.msg_reloadable_none", lang))
         if not result.changed:
-            lines.insert(0, "Configuration is already up to date.")
-            return "No Changes", "\n".join(lines)
-        lines.insert(0, "Configuration saved.")
-        return "Success", "\n".join(lines)
+            lines.insert(0, t("desktop.cfgedit.msg_up_to_date", lang))
+            return t("desktop.cfgedit.no_changes", lang), "\n".join(lines)
+        lines.insert(0, t("desktop.cfgedit.msg_saved", lang))
+        return t("desktop.cfgedit.success", lang), "\n".join(lines)
 
     @Slot()
     def _on_save_clicked(self):
@@ -611,7 +633,7 @@ class ConfigEditorWidget(QWidget):
                 diff = await self.config_service.diff_against_disk(new_cfg)
 
                 if diff.strip():
-                    dialog = DiffDialog(diff, self)
+                    dialog = DiffDialog(diff, self._lang, self)
                     if dialog.exec() != QDialog.Accepted:
                         return
 
@@ -629,8 +651,15 @@ class ConfigEditorWidget(QWidget):
                     QMessageBox.warning(self, title, message)
             except Exception as e:
                 self.logger.exception("Failed to save config")
-                QMessageBox.critical(self, "Error", f"Failed to save config: {e}")
+                QMessageBox.critical(self, t("common.error", self._lang), t("desktop.cfgedit.save_error", self._lang, error=str(e)))
             finally:
                 self.saveFinished.emit()
 
         ensure_async(_save(), parent=self)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self._lang = lang
+        self.save_btn.setText(t("desktop.cfgedit.save_config", lang))
+        self.reload_btn.setText(t("desktop.btn.reload", lang))
+        if self._current_config:
+            self._update_ui()

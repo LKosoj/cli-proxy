@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
+from i18n import t
+
 
 @dataclass(frozen=True, slots=True)
 class CommandPaletteItem:
@@ -37,7 +39,6 @@ class CommandPaletteDialog(QDialog):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setModal(True)
-        self.setWindowTitle("Command Palette")
         self.setMinimumWidth(560)
         self.setObjectName("command_palette")
 
@@ -45,18 +46,18 @@ class CommandPaletteDialog(QDialog):
         self._filtered_ids: List[str] = []
         self._recent_ids: List[str] = []
         self._setup_ui()
+        self.retranslate_ui("ru")
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
 
-        hint = QLabel("Type to search commands, Enter to run")
-        hint.setObjectName("command_palette_hint")
-        root.addWidget(hint)
+        self.hint_label = QLabel()
+        self.hint_label.setObjectName("command_palette_hint")
+        root.addWidget(self.hint_label)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search commands...")
         self.search_input.textChanged.connect(self._apply_filter)
         self.search_input.returnPressed.connect(self._trigger_selected)
         root.addWidget(self.search_input)
@@ -67,10 +68,19 @@ class CommandPaletteDialog(QDialog):
 
         footer = QHBoxLayout()
         footer.setSpacing(8)
-        footer.addWidget(QLabel("Esc: close"))
+        self.footer_esc_label = QLabel()
+        footer.addWidget(self.footer_esc_label)
         footer.addStretch(1)
-        footer.addWidget(QLabel("Ctrl+K: reopen"))
+        self.footer_reopen_label = QLabel()
+        footer.addWidget(self.footer_reopen_label)
         root.addLayout(footer)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.setWindowTitle(t("desktop.palette.title", lang))
+        self.hint_label.setText(t("desktop.palette.hint", lang))
+        self.search_input.setPlaceholderText(t("desktop.palette.search_placeholder", lang))
+        self.footer_esc_label.setText(t("desktop.palette.footer_esc", lang))
+        self.footer_reopen_label.setText(t("desktop.palette.footer_reopen", lang))
 
     def set_commands(self, items: Iterable[CommandPaletteItem]) -> None:
         self._items = list(items)
@@ -126,13 +136,18 @@ class CommandPaletteDialog(QDialog):
                 continue
             visible_items.append(item)
 
-        section_order = ["Navigation", "Panels", "Session", "Git", "Other"]
+        # Sections keep the order in which they first appear in the source command
+        # list, so ordering stays correct regardless of the localized section name.
+        section_order: List[str] = []
+        for item in self._items:
+            if item.section not in section_order:
+                section_order.append(item.section)
         by_section: dict[str, List[CommandPaletteItem]] = {}
         for item in visible_items:
             by_section.setdefault(item.section, []).append(item)
 
         ordered_sections = [name for name in section_order if name in by_section]
-        ordered_sections.extend(sorted(name for name in by_section if name not in section_order))
+        ordered_sections.extend(name for name in by_section if name not in ordered_sections)
 
         for section in ordered_sections:
             header = QListWidgetItem(section)

@@ -12,6 +12,8 @@ from app.services.input_dispatch_models import (
     PENDING_ACTION_QUEUE_CONFIRM,
     PendingInputDecision,
 )
+from i18n import t
+from utils.lang import resolve_user_lang
 
 logger = logging.getLogger(__name__)
 
@@ -33,30 +35,32 @@ def _reply_kwargs(dest: Optional[dict], *, fallback_chat_id=None) -> dict:
     return kwargs
 
 
-def build_pending_input_reply_markup(decision: PendingInputDecision) -> InlineKeyboardMarkup | None:
+def build_pending_input_reply_markup(
+    decision: PendingInputDecision, lang: str = "ru"
+) -> InlineKeyboardMarkup | None:
     action = str(decision.action or "").strip()
     if action == PENDING_ACTION_CONFIRM:
         return InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("✅ Взять в работу", callback_data="take_pending_input")],
-                [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
+                [InlineKeyboardButton(t("btn.input.take", lang), callback_data="take_pending_input")],
+                [InlineKeyboardButton(t("btn.input.discard", lang), callback_data="discard_input")],
             ]
         )
     if action == PENDING_ACTION_QUEUE_CHOICE:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("➕ Добавить к текущему", callback_data="queue_append_pending"),
-                    InlineKeyboardButton("🆕 Новая очередь", callback_data="queue_input"),
+                    InlineKeyboardButton(t("btn.input.queue_append", lang), callback_data="queue_append_pending"),
+                    InlineKeyboardButton(t("btn.input.queue_new", lang), callback_data="queue_input"),
                 ],
-                [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
+                [InlineKeyboardButton(t("btn.input.discard", lang), callback_data="discard_input")],
             ]
         )
     if action == PENDING_ACTION_QUEUE_CONFIRM:
         return InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("🆕 Поставить в очередь", callback_data="queue_input")],
-                [InlineKeyboardButton("❌ Отмена ввода", callback_data="discard_input")],
+                [InlineKeyboardButton(t("btn.input.queue_confirm", lang), callback_data="queue_input")],
+                [InlineKeyboardButton(t("btn.input.discard", lang), callback_data="discard_input")],
             ]
         )
     if action == PENDING_ACTION_ORCHESTRATOR_TRANSITION:
@@ -69,11 +73,11 @@ def build_pending_input_reply_markup(decision: PendingInputDecision) -> InlineKe
             [
                 [
                     InlineKeyboardButton(
-                        "✅ Перейти",
+                        t("btn.input.orch_apply", lang),
                         callback_data=f"orch_transition:apply:{session_uid}:{target_mode_id}",
                     ),
                     InlineKeyboardButton(
-                        "⛔ Отменить",
+                        t("btn.input.orch_cancel", lang),
                         callback_data=f"orch_transition:cancel:{session_uid}",
                     ),
                 ]
@@ -94,11 +98,14 @@ class TelegramPendingInputUiAdapter:
         dest: Optional[dict],
         fallback_chat_id: Any,
     ) -> Any:
+        reply_kwargs = _reply_kwargs(dest, fallback_chat_id=fallback_chat_id)
+        chat_id = reply_kwargs.get("chat_id")
+        lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
         return await self.bot_app._send_message(
             context,
             text=str(decision.text or ""),
-            reply_markup=build_pending_input_reply_markup(decision),
-            **_reply_kwargs(dest, fallback_chat_id=fallback_chat_id),
+            reply_markup=build_pending_input_reply_markup(decision, lang),
+            **reply_kwargs,
         )
 
     async def send_text(
@@ -150,6 +157,10 @@ class TelegramPendingInputUiAdapter:
         chat_token = reply_kwargs.get("chat_id")
         if chat_token is None:
             return False
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_token)
+        except Exception:
+            lang = "ru"
         clearer = getattr(self.bot_app, "_clear_message_reply_markup", None)
         if callable(clearer):
             try:
@@ -171,7 +182,7 @@ class TelegramPendingInputUiAdapter:
                 context,
                 chat_id=chat_token,
                 message_id=int(message_id),
-                text=str(stale_text or "Сообщение обновлено."),
+                text=str(stale_text or t("msg.input.prompt_retired", lang)),
                 reply_markup=None,
             )
             return True

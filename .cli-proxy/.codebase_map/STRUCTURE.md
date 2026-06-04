@@ -31,7 +31,7 @@
 | `app/` | 153 | Shared application services, config runtime, security, events, bootstrap |
 | `modes/` | 220 | Mode plugins, SDK, runtime executor/dispatcher, validation/tooling |
 | `agent/` | 61 | CLI routing, manager core, tool plugins, Telegram plugin wiring |
-| `tests/` | 539 | Unit/integration/smoke coverage |
+| `tests/` | 540 | Unit/integration/smoke coverage |
 | `desktop/` | 32 | PySide6 Desktop UI, facade, widgets, desktop services |
 | `tg/` | 17 | Telegram commands, callbacks, message processing, markdown/entities |
 | `miniapp/` | 19 | aiohttp MiniApp backend and static frontend |

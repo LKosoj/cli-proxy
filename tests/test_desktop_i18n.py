@@ -326,6 +326,7 @@ def test_main_window_retranslate_all_calls_widget_retranslate():
         session_manager=child1,
         session_settings_panel=child2,
         session_settings_page=child2,
+        settings_page=child2,
         git_panel=child2,
         chat_view=child2,
         files_page=child2,
@@ -339,6 +340,7 @@ def test_main_window_retranslate_all_calls_widget_retranslate():
         mode_menu=child2,
         context_task_queue=child2,
         context_run_operations=child2,
+        command_palette=child2,
         toggle_sessions_btn=MagicMock(),
         toggle_git_btn=MagicMock(),
         toggle_tasks_btn=MagicMock(),
@@ -370,9 +372,10 @@ def test_main_window_retranslate_all_does_not_raise_on_widget_error():
     good_widget.retranslate_ui = MagicMock()
 
     for attr in ("session_manager", "session_settings_panel", "session_settings_page",
-                 "git_panel", "chat_view", "files_page", "log_viewer", "status_page",
+                 "settings_page", "git_panel", "chat_view", "files_page", "log_viewer", "status_page",
                  "scheduler_page", "reports_page", "plugins_page", "task_progress",
-                 "mode_panel", "mode_menu", "context_task_queue", "context_run_operations"):
+                 "mode_panel", "mode_menu", "context_task_queue", "context_run_operations",
+                 "command_palette"):
         setattr(w, attr, bad_widget if attr == "session_manager" else good_widget)
 
     w.toggle_sessions_btn = MagicMock()

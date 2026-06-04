@@ -93,6 +93,10 @@ def test_session_mode_callback_send_output_preserves_message_thread_id() -> None
         _send_message=_send_message,
         _edit_message=(lambda *_args, **_kwargs: asyncio.sleep(0, result=True)),
         send_output=_send_output,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
         manager=types.SimpleNamespace(active=(lambda _chat_id: session)),
         mode_registry=registry,
         mode_registry_service=ModeRegistryService(registry),

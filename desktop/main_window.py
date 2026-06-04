@@ -89,6 +89,9 @@ class MainWindow(QMainWindow):
         # Подписка на уведомления фасада
         self._facade_unsubscribe = self.facade.subscribe(self._on_facade_notification)
 
+        # Начальная локализация всех виджетов под язык интерфейса (default_language != "ru")
+        self._retranslate_all(self.facade.ui_language)
+
     def _setup_ui(self):
         """Инициализация каркаса UI."""
         central_widget = QWidget()
@@ -107,28 +110,29 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(8, 10, 8, 10)
         sidebar_layout.setSpacing(6)
 
+        lang = self.facade.ui_language
         self.nav_chat = QPushButton("")
-        self.nav_chat.setToolTip("Chat")
+        self.nav_chat.setToolTip(t("desktop.nav.chat", lang))
         self.nav_config = QPushButton("")
-        self.nav_config.setToolTip("Config")
+        self.nav_config.setToolTip(t("desktop.nav.settings", lang))
         self.nav_files = QPushButton("")
-        self.nav_files.setToolTip("Files")
+        self.nav_files.setToolTip(t("desktop.nav.files", lang))
         self.nav_reports = QPushButton("")
-        self.nav_reports.setToolTip("Reports")
+        self.nav_reports.setToolTip(t("desktop.nav.reports", lang))
         self.nav_logs = QPushButton("")
-        self.nav_logs.setToolTip("Logs")
+        self.nav_logs.setToolTip(t("desktop.nav.logs", lang))
         self.nav_status = QPushButton("")
-        self.nav_status.setToolTip("Status")
+        self.nav_status.setToolTip(t("desktop.nav.status", lang))
         self.nav_scheduler = QPushButton("")
-        self.nav_scheduler.setToolTip("Scheduler")
+        self.nav_scheduler.setToolTip(t("desktop.nav.scheduler", lang))
         self.nav_session_settings = QPushButton("")
-        self.nav_session_settings.setToolTip("Settings")
+        self.nav_session_settings.setToolTip(t("desktop.nav.session_settings", lang))
         self.nav_plugins = QPushButton("")
-        self.nav_plugins.setToolTip("Plugins")
+        self.nav_plugins.setToolTip(t("desktop.nav.plugins", lang))
         admin_tab_enabled = self._is_admin_tab_enabled()
         if admin_tab_enabled:
             self.nav_admin = QPushButton("")
-            self.nav_admin.setToolTip("Admin")
+            self.nav_admin.setToolTip(t("desktop.nav.admin", lang))
 
         self._nav_buttons = {
             "chat": self.nav_chat,
@@ -177,7 +181,7 @@ class MainWindow(QMainWindow):
         top_context_layout.setSpacing(6)
 
         self.toggle_sessions_btn = QToolButton()
-        self.toggle_sessions_btn.setText("Sessions")
+        self.toggle_sessions_btn.setText(t("desktop.btn.sessions", lang))
         self.toggle_sessions_btn.setObjectName("top_context_button")
         self.toggle_sessions_btn.setCheckable(True)
         self.toggle_sessions_btn.setChecked(True)
@@ -187,7 +191,7 @@ class MainWindow(QMainWindow):
         top_context_layout.addWidget(self.toggle_sessions_btn)
 
         self.toggle_git_btn = QToolButton()
-        self.toggle_git_btn.setText("Git")
+        self.toggle_git_btn.setText(t("desktop.btn.git", lang))
         self.toggle_git_btn.setObjectName("top_context_button")
         self.toggle_git_btn.setCheckable(True)
         self.toggle_git_btn.setMinimumHeight(30)
@@ -196,7 +200,7 @@ class MainWindow(QMainWindow):
         top_context_layout.addWidget(self.toggle_git_btn)
 
         self.toggle_tasks_btn = QToolButton()
-        self.toggle_tasks_btn.setText("Tasks")
+        self.toggle_tasks_btn.setText(t("desktop.btn.tasks", lang))
         self.toggle_tasks_btn.setObjectName("top_context_button")
         self.toggle_tasks_btn.setCheckable(True)
         self.toggle_tasks_btn.setMinimumHeight(30)
@@ -205,7 +209,7 @@ class MainWindow(QMainWindow):
         top_context_layout.addWidget(self.toggle_tasks_btn)
 
         self.toggle_runs_btn = QToolButton()
-        self.toggle_runs_btn.setText("Runs")
+        self.toggle_runs_btn.setText(t("desktop.btn.runs", lang))
         self.toggle_runs_btn.setObjectName("top_context_button")
         self.toggle_runs_btn.setCheckable(True)
         self.toggle_runs_btn.setMinimumHeight(30)
@@ -214,7 +218,7 @@ class MainWindow(QMainWindow):
         top_context_layout.addWidget(self.toggle_runs_btn)
 
         self.toggle_session_settings_btn = QToolButton()
-        self.toggle_session_settings_btn.setText("Session")
+        self.toggle_session_settings_btn.setText(t("desktop.btn.session", lang))
         self.toggle_session_settings_btn.setObjectName("top_context_button")
         self.toggle_session_settings_btn.setCheckable(True)
         self.toggle_session_settings_btn.setMinimumHeight(30)
@@ -223,7 +227,7 @@ class MainWindow(QMainWindow):
         top_context_layout.addWidget(self.toggle_session_settings_btn)
 
         self.open_palette_btn = QToolButton()
-        self.open_palette_btn.setText("Cmd")
+        self.open_palette_btn.setText(t("desktop.btn.cmd", lang))
         self.open_palette_btn.setObjectName("top_context_button")
         self.open_palette_btn.setMinimumHeight(30)
         self.open_palette_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
@@ -353,7 +357,7 @@ class MainWindow(QMainWindow):
 
         # Статус-бар
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(t("desktop.status.ready", lang))
 
         # Палитра команд
         self.command_palette = CommandPaletteDialog(self)
@@ -755,10 +759,10 @@ class MainWindow(QMainWindow):
         if event == "ui:analyst_progress":
             if session_uid != self._active_session_uid:
                 return
-            phase = str(payload.get("phase") or "Анализ")
+            phase = str(payload.get("phase") or t("desktop.main.analyst_phase_default", self.facade.ui_language))
             elapsed = int(payload.get("elapsed_seconds") or 0)
             mins, secs = divmod(elapsed, 60)
-            text = f"🧠 Аналитик: {phase}\n⏱ {mins}:{secs:02d}"
+            text = t("desktop.main.analyst_progress", self.facade.ui_language, phase=phase, mins=mins, secs=f"{secs:02d}")
             if self.chat_view._progress_message_id is None:
                 self.chat_view.append_progress_message("agent", text)
             else:
@@ -775,7 +779,7 @@ class MainWindow(QMainWindow):
             if session_uid != self._active_session_uid:
                 return
             raw_tasks = payload.get("tasks") if isinstance(payload.get("tasks"), list) else []
-            text = format_manage_tasks_progress(raw_tasks)
+            text = format_manage_tasks_progress(raw_tasks, lang=self.facade.ui_language)
             if not text:
                 self.chat_view.clear_progress_message()
             elif self.chat_view._progress_message_id is None:
@@ -859,7 +863,8 @@ class MainWindow(QMainWindow):
             except Exception:
                 allow_files = False
 
-            caption = "Выберите файл" if allow_files else "Выберите папку"
+            _lang = self.facade.ui_language
+            caption = t("desktop.main.select_file", _lang) if allow_files else t("desktop.main.select_folder", _lang)
             try:
                 if allow_files:
                     path, _filter = QFileDialog.getOpenFileName(self, caption, root or "")
@@ -979,71 +984,119 @@ class MainWindow(QMainWindow):
             )
 
     def _refresh_command_palette(self) -> None:
+        lang = self.facade.ui_language
+        nav = t("desktop.palette.section.navigation", lang)
+        panels = t("desktop.palette.section.panels", lang)
+        session_section = t("desktop.palette.section.session", lang)
+        git_section = t("desktop.palette.section.git", lang)
         commands = [
-            CommandPaletteItem("tab:chat", "Open Chat", "Main workspace", ("chat", "workspace"), "Navigation", "Ctrl+1"),
-            CommandPaletteItem("tab:settings", "Open Config", "Configuration editor", ("settings", "config"), "Navigation", "Ctrl+2"),
-            CommandPaletteItem("tab:files", "Open Files", "Session file browser and editor", ("files", "editor"), "Navigation", "Ctrl+3"),
-            CommandPaletteItem("tab:logs", "Open Logs", "Task queue and logs", ("logs", "tasks"), "Navigation", "Ctrl+4"),
-            CommandPaletteItem("tab:status", "Open Status", "Session status, queue, and runs", ("status", "runs"), "Navigation", "Ctrl+5"),
-            CommandPaletteItem("tab:scheduler", "Open Scheduler", "Scheduled jobs", ("scheduler", "jobs"), "Navigation", "Ctrl+6"),
+            CommandPaletteItem(
+                "tab:chat",
+                t("desktop.palette.cmd.open_chat.title", lang),
+                t("desktop.palette.cmd.open_chat.subtitle", lang),
+                ("chat", "workspace"), nav, "Ctrl+1",
+            ),
+            CommandPaletteItem(
+                "tab:settings",
+                t("desktop.palette.cmd.open_config.title", lang),
+                t("desktop.palette.cmd.open_config.subtitle", lang),
+                ("settings", "config"), nav, "Ctrl+2",
+            ),
+            CommandPaletteItem(
+                "tab:files",
+                t("desktop.palette.cmd.open_files.title", lang),
+                t("desktop.palette.cmd.open_files.subtitle", lang),
+                ("files", "editor"), nav, "Ctrl+3",
+            ),
+            CommandPaletteItem(
+                "tab:logs",
+                t("desktop.palette.cmd.open_logs.title", lang),
+                t("desktop.palette.cmd.open_logs.subtitle", lang),
+                ("logs", "tasks"), nav, "Ctrl+4",
+            ),
+            CommandPaletteItem(
+                "tab:status",
+                t("desktop.palette.cmd.open_status.title", lang),
+                t("desktop.palette.cmd.open_status.subtitle", lang),
+                ("status", "runs"), nav, "Ctrl+5",
+            ),
+            CommandPaletteItem(
+                "tab:scheduler",
+                t("desktop.palette.cmd.open_scheduler.title", lang),
+                t("desktop.palette.cmd.open_scheduler.subtitle", lang),
+                ("scheduler", "jobs"), nav, "Ctrl+6",
+            ),
             CommandPaletteItem(
                 "tab:session_settings",
-                "Open Settings",
-                "Session and SSH settings",
-                ("settings", "session", "ssh"),
-                "Navigation",
-                "Ctrl+7",
+                t("desktop.palette.cmd.open_session_settings.title", lang),
+                t("desktop.palette.cmd.open_session_settings.subtitle", lang),
+                ("settings", "session", "ssh"), nav, "Ctrl+7",
             ),
-            CommandPaletteItem("tab:reports", "Open Reports", "Reports viewer", ("reports", "viewer"), "Navigation", "Ctrl+8"),
-            CommandPaletteItem("tab:plugins", "Open Plugins", "Plugin management", ("plugins",), "Navigation", "Ctrl+9"),
+            CommandPaletteItem(
+                "tab:reports",
+                t("desktop.palette.cmd.open_reports.title", lang),
+                t("desktop.palette.cmd.open_reports.subtitle", lang),
+                ("reports", "viewer"), nav, "Ctrl+8",
+            ),
+            CommandPaletteItem(
+                "tab:plugins",
+                t("desktop.palette.cmd.open_plugins.title", lang),
+                t("desktop.palette.cmd.open_plugins.subtitle", lang),
+                ("plugins",), nav, "Ctrl+9",
+            ),
         ]
         if self.admin_page is not None:
             commands.append(
-                CommandPaletteItem("tab:admin", "Open Admin", "Admin panel", ("admin",), "Navigation", "")
+                CommandPaletteItem(
+                    "tab:admin",
+                    t("desktop.palette.cmd.open_admin.title", lang),
+                    t("desktop.palette.cmd.open_admin.subtitle", lang),
+                    ("admin",), nav, "",
+                )
             )
         commands.extend(
             [
                 CommandPaletteItem(
                     "panel:sessions",
-                    "Toggle Sessions Panel",
-                    "Show/hide left panel",
-                    ("sidebar", "sessions"),
-                    "Panels",
-                    "Ctrl+B",
+                    t("desktop.palette.cmd.toggle_sessions.title", lang),
+                    t("desktop.palette.cmd.toggle_sessions.subtitle", lang),
+                    ("sidebar", "sessions"), panels, "Ctrl+B",
                 ),
-                CommandPaletteItem("panel:git", "Open Git Panel", "Show git operations", ("git", "status", "commit"), "Panels", "Ctrl+G"),
-                CommandPaletteItem("panel:tasks", "Open Tasks Panel", "Show active tasks", ("tasks", "queue"), "Panels", ""),
+                CommandPaletteItem(
+                    "panel:git",
+                    t("desktop.palette.cmd.open_git_panel.title", lang),
+                    t("desktop.palette.cmd.open_git_panel.subtitle", lang),
+                    ("git", "status", "commit"), panels, "Ctrl+G",
+                ),
+                CommandPaletteItem(
+                    "panel:tasks",
+                    t("desktop.palette.cmd.open_tasks_panel.title", lang),
+                    t("desktop.palette.cmd.open_tasks_panel.subtitle", lang),
+                    ("tasks", "queue"), panels, "",
+                ),
                 CommandPaletteItem(
                     "panel:runs",
-                    "Open Runs Panel",
-                    "Show run recovery controls",
-                    ("runs", "doctor", "recover", "resume"),
-                    "Panels",
-                    "",
+                    t("desktop.palette.cmd.open_runs_panel.title", lang),
+                    t("desktop.palette.cmd.open_runs_panel.subtitle", lang),
+                    ("runs", "doctor", "recover", "resume"), panels, "",
                 ),
                 CommandPaletteItem(
                     "session:new",
-                    "New Session",
-                    "Create session from selected CLI",
-                    ("session", "new"),
-                    "Session",
-                    "",
+                    t("desktop.palette.cmd.new_session.title", lang),
+                    t("desktop.palette.cmd.new_session.subtitle", lang),
+                    ("session", "new"), session_section, "",
                 ),
                 CommandPaletteItem(
                     "session:limits",
-                    "Show CLI Limits",
-                    "Show limits/usage for active desktop CLI",
-                    ("limits", "quota", "tokens", "usage"),
-                    "Session",
-                    "",
+                    t("desktop.palette.cmd.show_cli_limits.title", lang),
+                    t("desktop.palette.cmd.show_cli_limits.subtitle", lang),
+                    ("limits", "quota", "tokens", "usage"), session_section, "",
                 ),
                 CommandPaletteItem(
                     "git:refresh",
-                    "Refresh Git",
-                    "Refresh git status/history",
-                    ("git", "refresh"),
-                    "Git",
-                    "",
+                    t("desktop.palette.cmd.refresh_git.title", lang),
+                    t("desktop.palette.cmd.refresh_git.subtitle", lang),
+                    ("git", "refresh"), git_section, "",
                 ),
             ]
         )
@@ -1222,6 +1275,7 @@ class MainWindow(QMainWindow):
             self.session_manager,
             self.session_settings_panel,
             self.session_settings_page,
+            self.settings_page,
             self.git_panel,
             self.chat_view,
             self.files_page,
@@ -1235,6 +1289,7 @@ class MainWindow(QMainWindow):
             self.mode_menu,
             self.context_task_queue,
             self.context_run_operations,
+            self.command_palette,
         ]
         if self.admin_page is not None:
             widgets.append(self.admin_page)

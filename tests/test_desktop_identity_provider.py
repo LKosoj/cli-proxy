@@ -187,7 +187,9 @@ def test_session_manager_transfer_offer_reads_notification_payload(monkeypatch) 
         calls.append((session_uid, source_cli))
         return True
 
-    fake_self = SimpleNamespace(facade=SimpleNamespace(confirm_session_transfer=_confirm_session_transfer))
+    fake_self = SimpleNamespace(
+        facade=SimpleNamespace(confirm_session_transfer=_confirm_session_transfer, ui_language="ru")
+    )
 
     monkeypatch.setattr(
         session_manager_mod.QMessageBox,

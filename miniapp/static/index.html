@@ -29,7 +29,7 @@
       <div class="toolbar">
         <button id="cfgRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
         <button id="cfgValidate" data-i18n-key="miniapp.btn.validate">Проверить</button>
-        <button id="cfgDiff">Preview diff</button>
+        <button id="cfgDiff" data-i18n-key="miniapp.cfg.preview_diff">Preview diff</button>
         <button id="cfgSave" disabled data-i18n-key="miniapp.btn.save">Сохранить</button>
       </div>
       <div id="cfgRestartBanner" class="banner hidden" data-i18n-key="miniapp.cfg.restart_banner">Требуется перезапуск для части изменений</div>
@@ -41,8 +41,8 @@
     </section>
 
     <section id="tab-files" class="tab">
-      <div id="filesExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
-      <div id="filesRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Remote FS</div>
+      <div id="filesExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
+      <div id="filesRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.banner.remote_fs">Remote FS</div>
       <div class="toolbar">
         <label for="filesSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="filesSession"></select>
@@ -59,15 +59,15 @@
     </section>
 
     <section id="tab-editor" class="tab">
-      <div id="editorExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
-      <div id="editorRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Remote FS</div>
+      <div id="editorExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
+      <div id="editorRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.banner.remote_fs">Remote FS</div>
       <div class="toolbar">
         <span id="editorPath" data-i18n-key="miniapp.editor.no_file">Файл не выбран</span>
         <button id="editorClose" data-i18n-key="miniapp.btn.close">Закрыть</button>
         <button id="editorReload" data-i18n-key="miniapp.btn.reload">Обновить</button>
         <button id="editorDownload" data-i18n-key="miniapp.btn.download">Скачать</button>
         <button id="editorSave" data-i18n-key="miniapp.btn.save">Сохранить</button>
-        <button id="editorForceSave" style="display: none; background-color: var(--danger);">Force Save</button>
+        <button id="editorForceSave" style="display: none; background-color: var(--danger);" data-i18n-key="miniapp.editor.force_save_btn">Force Save</button>
         <button id="editorUndo" data-i18n-key="miniapp.btn.undo">Отменить</button>
       </div>
       <div id="editorMeta"></div>
@@ -111,11 +111,11 @@
     </section>
 
     <section id="tab-status" class="tab">
-      <div id="statusExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;">Execution Target: Local</div>
+      <div id="statusExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
       <div class="toolbar status-toolbar">
-        <label for="statusSession">Сессия</label>
+        <label for="statusSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="statusSession"></select>
-        <button id="statusApply">Применить</button>
+        <button id="statusApply" data-i18n-key="miniapp.btn.apply">Применить</button>
       </div>
       
       <div class="status-dashboard">
@@ -155,10 +155,10 @@
               <div class="kv-list">
                 <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_mode">Режим (Mode):</span> <span class="kv-val" id="stMode">-</span></div>
                 <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_tool">Инструмент:</span> <span class="kv-val" id="stTool">-</span></div>
-                <div class="kv-row"><span class="kv-key">CLI / Профиль:</span> <span class="kv-val" id="stCli">-</span></div>
-                <div class="kv-row"><span class="kv-key">Work type:</span> <span class="kv-val" id="stWorkType">-</span></div>
-                <div class="kv-row"><span class="kv-key">Resume Token:</span> <span class="kv-val" id="stResumeToken">-</span></div>
-                <div class="kv-row"><span class="kv-key">Проект:</span> <span class="kv-val" id="stProjectRoot">-</span></div>
+                <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_cli">CLI / Профиль:</span> <span class="kv-val" id="stCli">-</span></div>
+                <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_work_type">Work type:</span> <span class="kv-val" id="stWorkType">-</span></div>
+                <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_resume_token">Resume Token:</span> <span class="kv-val" id="stResumeToken">-</span></div>
+                <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_project">Проект:</span> <span class="kv-val" id="stProjectRoot">-</span></div>
               </div>
             </div>
           </details>
@@ -174,7 +174,7 @@
           </details>
 
           <details class="status-card-details hidden" id="stWebmasterCard">
-            <summary>Статус Вебмастера</summary>
+            <summary data-i18n-key="miniapp.status.webmaster">Статус Вебмастера</summary>
             <div class="status-card-body pre-wrap" id="statusWebmasterModeText"></div>
           </details>
 
@@ -184,32 +184,32 @@
           </details>
 
           <details class="status-card-details hidden" id="stRuntimeCard">
-            <summary>Runtime Progress</summary>
+            <summary data-i18n-key="miniapp.status.runtime_progress">Runtime Progress</summary>
             <div class="status-card-body pre-wrap" id="statusRuntimeText"></div>
           </details>
 
           <details class="status-card-details hidden" id="statusQueueDetails">
-            <summary>Очередь (Queue: <span id="stQueueLen">0</span>)</summary>
+            <summary><span data-i18n-key="miniapp.status.queue_prefix">Очередь (Queue:</span> <span id="stQueueLen">0</span>)</summary>
             <div class="status-card-body pre-wrap" id="stQueueText"></div>
           </details>
 
           <details class="status-card-details" id="statusSummaryDetails">
-            <summary>State Summary</summary>
+            <summary data-i18n-key="miniapp.status.state_summary">State Summary</summary>
             <div class="status-card-body pre-wrap" id="statusSummaryText"></div>
           </details>
 
           <details class="status-card-details" id="statusLastTickDetails">
-            <summary>Last Tick Value (<span id="stTickCount">0</span>)</summary>
+            <summary><span data-i18n-key="miniapp.status.last_tick_prefix">Last Tick Value (</span><span id="stTickCount">0</span>)</summary>
             <div class="status-card-body pre-wrap" id="statusLastTickText"></div>
           </details>
 
           <details class="status-card-details" id="statusTicksDetails">
             <summary style="cursor: pointer;">
               <div style="display: flex; align-items: center; gap: 16px;">
-                <span>Все тики</span>
+                <span data-i18n-key="miniapp.status.all_ticks">Все тики</span>
                 <label style="font-size: 0.85em; font-weight: normal; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; padding: 0;" onclick="event.stopPropagation()">
                   <input type="checkbox" id="ticksAutoScroll" checked style="margin: 0;">
-                  <span>Автопрокрутка</span>
+                  <span data-i18n-key="miniapp.label.autoscroll">Автопрокрутка</span>
                 </label>
               </div>
             </summary>
@@ -219,34 +219,34 @@
           </details>
 
           <details class="status-card-details" id="statusExtraDetails">
-            <summary>Дополнительные параметры</summary>
+            <summary data-i18n-key="miniapp.status.extra_params">Дополнительные параметры</summary>
             <div class="status-card-body" id="statusExtraText"></div>
           </details>
 
           <details class="status-card-details" id="statusRunsDetails">
-            <summary>Run Operations</summary>
+            <summary data-i18n-key="miniapp.status.run_operations">Run Operations</summary>
             <div class="status-card-body">
               <div id="statusRunsMessage" class="status-empty" data-i18n-key="miniapp.runs.choose_session">Выберите сессию, чтобы просмотреть run artifacts.</div>
               <div id="statusRunsPanel" class="hidden">
                 <div id="statusRunsActionMessage" class="status-empty hidden"></div>
                 <div class="status-cards-grid" style="margin-top: 12px;">
                   <div class="status-card">
-                    <div class="status-card-header">Запуски</div>
+                    <div class="status-card-header" data-i18n-key="miniapp.status.runs_header">Запуски</div>
                     <div class="status-card-body">
                       <ul id="statusRunsList" class="tree"></ul>
                     </div>
                   </div>
                   <div class="status-card">
-                    <div class="status-card-header">Выбранный run</div>
+                    <div class="status-card-header" data-i18n-key="miniapp.status.selected_run">Выбранный run</div>
                     <div class="status-card-body">
                       <div id="statusRunDetailText" class="pre-wrap" data-i18n-key="miniapp.runs.select_run">Выберите запуск.</div>
                       <div id="statusRunSkillLog" class="pre-wrap" style="margin-top: 12px;"></div>
                       <div class="toolbar" style="margin-top: 12px;">
-                        <button id="statusRunDoctor" type="button">Doctor</button>
-                        <button id="statusRunRecover" type="button">Recover</button>
-                        <button id="statusRunResume" type="button">Resume</button>
-                        <button id="statusRunApplyRecommendation" type="button">Apply Recommendation</button>
-                        <button id="statusRunPromote" type="button">Promote Skills</button>
+                        <button id="statusRunDoctor" type="button" data-i18n-key="miniapp.runs.btn_doctor">Doctor</button>
+                        <button id="statusRunRecover" type="button" data-i18n-key="miniapp.runs.btn_recover">Recover</button>
+                        <button id="statusRunResume" type="button" data-i18n-key="miniapp.runs.btn_resume">Resume</button>
+                        <button id="statusRunApplyRecommendation" type="button" data-i18n-key="miniapp.runs.btn_apply_rec">Apply Recommendation</button>
+                        <button id="statusRunPromote" type="button" data-i18n-key="miniapp.runs.btn_promote">Promote Skills</button>
                     </div>
                     </div>
                   </div>
@@ -257,7 +257,7 @@
         </div>
 
         <details class="status-card-details status-raw">
-          <summary>Показать JSON (диагностика)</summary>
+          <summary data-i18n-key="miniapp.status.show_json">Показать JSON (диагностика)</summary>
           <div class="status-card-body">
             <pre id="statusJson"></pre>
           </div>
@@ -269,9 +269,9 @@
       <div class="toolbar status-toolbar">
         <label for="schedulerProject" data-i18n-key="miniapp.label.project">Проект</label>
         <select id="schedulerProject"></select>
-        <label for="schedulerSession">Telegram session_uid</label>
+        <label for="schedulerSession" data-i18n-key="miniapp.scheduler.session_label">Telegram session_uid</label>
         <select id="schedulerSession"></select>
-        <button id="schedulerRefresh">Обновить</button>
+        <button id="schedulerRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
       </div>
       <div id="schedulerStatus" class="status-empty" data-i18n-key="miniapp.scheduler.choose_project">Выберите проект для управления расписанием.</div>
       <div id="schedulerPanel" class="hidden">
@@ -288,11 +288,11 @@
                 <input id="schedulerCron" type="text" placeholder="*/15 * * * *" />
               </div>
               <div class="field">
-                <label for="schedulerTargetMode">Target mode</label>
+                <label for="schedulerTargetMode" data-i18n-key="miniapp.scheduler.target_mode">Target mode</label>
                 <select id="schedulerTargetMode"></select>
               </div>
               <div class="field">
-                <label for="schedulerEnabled">Enabled</label>
+                <label for="schedulerEnabled" data-i18n-key="miniapp.scheduler.enabled">Enabled</label>
                 <input id="schedulerEnabled" type="checkbox" checked />
               </div>
               <div class="field">
@@ -302,7 +302,7 @@
               <div class="toolbar">
                 <button id="schedulerSave" data-i18n-key="miniapp.btn.create">Создать</button>
                 <button id="schedulerDelete" data-i18n-key="miniapp.btn.delete">Удалить</button>
-                <button id="schedulerRunNow">Run now</button>
+                <button id="schedulerRunNow" data-i18n-key="miniapp.scheduler.run_now">Run now</button>
                 <button id="schedulerReset" data-i18n-key="miniapp.btn.reset">Сбросить</button>
               </div>
             </div>
@@ -322,7 +322,7 @@
       <div class="toolbar status-toolbar">
         <label for="settingsSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="settingsSession"></select>
-        <button id="settingsApply">Применить</button>
+        <button id="settingsApply" data-i18n-key="miniapp.btn.apply">Применить</button>
       </div>
       <div id="settingsEmpty" class="status-empty" data-i18n-key="miniapp.settings.empty">Загрузка или сессия не выбрана...</div>
       <div id="settingsPanel" class="hidden">
@@ -330,7 +330,7 @@
           <div class="status-card">
             <div class="status-card-header" data-i18n-key="miniapp.settings.session_params">Параметры сессии</div>
             <div class="status-card-body">
-              <div id="settingsExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center;">Execution Target: Local</div>
+              <div id="settingsExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
               <div class="field">
                 <label for="settingsActiveMode" data-i18n-key="miniapp.label.active_mode">Active Mode</label>
                 <select id="settingsActiveMode"></select>
@@ -339,17 +339,17 @@
               <div class="field">
                 <label for="settingsSshEnabled" data-i18n-key="miniapp.label.ssh_remote">SSH Remote</label>
                 <input type="checkbox" id="settingsSshEnabled" />
-                <small id="settingsSshNote">Включает/выключает удаленное выполнение команд через SSH.</small>
+                <small id="settingsSshNote" data-i18n-key="miniapp.settings.ssh_note">Включает/выключает удаленное выполнение команд через SSH.</small>
               </div>
               <div class="field" style="margin-top: 12px;">
-                <label for="settingsRemoteControlEnabled">Remote Control</label>
+                <label for="settingsRemoteControlEnabled" data-i18n-key="miniapp.settings.remote_control_label">Remote Control</label>
                 <input type="checkbox" id="settingsRemoteControlEnabled" />
-                <small>Переводит сессию в строгий remote-only режим (без fallback на local).</small>
+                <small data-i18n-key="miniapp.settings.remote_control_note">Переводит сессию в строгий remote-only режим (без fallback на local).</small>
               </div>
               <div class="field" id="settingsRemoteControlHostField" style="margin-top: 12px; display: none;">
-                <label for="settingsRemoteControlHost">Target Host</label>
+                <label for="settingsRemoteControlHost" data-i18n-key="miniapp.settings.target_host">Target Host</label>
                 <select id="settingsRemoteControlHost" style="width: 200px;"></select>
-                <button id="settingsRemoteControlRecheck" class="btn-sm" style="margin-left: 8px;">Recheck</button>
+                <button id="settingsRemoteControlRecheck" class="btn-sm" style="margin-left: 8px;" data-i18n-key="miniapp.settings.recheck">Recheck</button>
               </div>
               <div id="settingsRemoteControlError" style="color: var(--danger); margin-top: 8px; font-size: 0.9em; display: none;"></div>
               <div class="toolbar" style="margin-top: 16px;">
@@ -360,8 +360,8 @@
 
           <div id="settingsSshHostsCard" class="status-card hidden">
             <div class="status-card-header flex-header">
-              <span>SSH-хосты проекта</span>
-              <button id="sshHostAdd" class="btn-sm">Добавить хост</button>
+              <span data-i18n-key="miniapp.settings.ssh_hosts_title">SSH-хосты проекта</span>
+              <button id="sshHostAdd" class="btn-sm" data-i18n-key="miniapp.settings.ssh_host_add">Добавить хост</button>
             </div>
             <div class="status-card-body">
               <div id="sshHostsEmpty" class="status-empty" data-i18n-key="miniapp.ssh.no_hosts">Хосты не настроены.</div>
@@ -381,7 +381,7 @@
               </div>
 
               <div id="sshHostForm" class="hidden" style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
-                <h4 id="sshHostFormTitle" style="margin-top: 0;">Добавить хост</h4>
+                <h4 id="sshHostFormTitle" style="margin-top: 0;" data-i18n-key="miniapp.settings.ssh_host_add">Добавить хост</h4>
                 <input type="hidden" id="sshHostAliasOriginal" />
                 <div class="field">
                   <label for="sshHostAlias">Alias</label>
@@ -408,23 +408,23 @@
                 </div>
                 <div id="sshHostKeyFields">
                   <div class="field">
-                    <label for="sshHostKeyFile">Key File Path</label>
+                    <label for="sshHostKeyFile" data-i18n-key="miniapp.settings.ssh_key_file">Key File Path</label>
                     <input type="text" id="sshHostKeyFile" placeholder=".cli-proxy/ssh_keys/id_rsa" />
                   </div>
                   <div class="field">
-                    <label for="sshHostKeyPassEnv">Passphrase Env</label>
+                    <label for="sshHostKeyPassEnv" data-i18n-key="miniapp.settings.ssh_passphrase_env">Passphrase Env</label>
                     <input type="text" id="sshHostKeyPassEnv" placeholder="SSH_KEY_PASSPHRASE" />
                   </div>
                 </div>
                 <div id="sshHostPasswordFields" class="hidden">
                   <div class="field">
-                    <label for="sshHostPasswordEnv">Password Env</label>
+                    <label for="sshHostPasswordEnv" data-i18n-key="miniapp.settings.ssh_password_env">Password Env</label>
                     <input type="text" id="sshHostPasswordEnv" placeholder="SSH_PASSWORD" />
                   </div>
                   <div class="field">
-                    <label for="sshHostPassword">Password (Value)</label>
+                    <label for="sshHostPassword" data-i18n-key="miniapp.settings.ssh_password_value">Password (Value)</label>
                     <input type="password" id="sshHostPassword" />
-                    <small>Если указано, будет сохранено в секреты проекта.</small>
+                    <small data-i18n-key="miniapp.settings.ssh_password_note">Если указано, будет сохранено в секреты проекта.</small>
                   </div>
                 </div>
                 <div class="field">
@@ -433,29 +433,29 @@
                 </div>
                 <div id="sshHostSudoFields" class="hidden">
                   <div class="field">
-                    <label for="sshHostSudoPassEnv">Sudo Pass Env</label>
+                    <label for="sshHostSudoPassEnv" data-i18n-key="miniapp.settings.ssh_sudo_pass_env">Sudo Pass Env</label>
                     <input type="text" id="sshHostSudoPassEnv" placeholder="SSH_SUDO_PASSWORD" />
                   </div>
                   <div class="field">
-                    <label for="sshHostSudoPassword">Sudo Password</label>
+                    <label for="sshHostSudoPassword" data-i18n-key="miniapp.settings.ssh_sudo_password">Sudo Password</label>
                     <input type="password" id="sshHostSudoPassword" />
                   </div>
                 </div>
                 <div class="field">
-                  <label for="sshHostRoles">Roles</label>
+                  <label for="sshHostRoles" data-i18n-key="miniapp.settings.ssh_roles">Roles</label>
                   <input type="text" id="sshHostRoles" placeholder="web,db (через запятую)" />
                 </div>
                 <div class="field">
-                  <label for="sshHostDesc">Description</label>
+                  <label for="sshHostDesc" data-i18n-key="miniapp.settings.ssh_desc">Description</label>
                   <input type="text" id="sshHostDesc" />
                 </div>
                 <div class="field">
-                  <label for="sshHostRemoteProjectRoot">Remote Project Root</label>
+                  <label for="sshHostRemoteProjectRoot" data-i18n-key="miniapp.settings.ssh_remote_root">Remote Project Root</label>
                   <input type="text" id="sshHostRemoteProjectRoot" placeholder="/absolute/path/to/project" />
-                  <small>Обязателен для Remote Control и remote file operations.</small>
+                  <small data-i18n-key="miniapp.settings.ssh_remote_root_note">Обязателен для Remote Control и remote file operations.</small>
                 </div>
                 <div class="field">
-                  <label for="sshHostTimeout">Idle Timeout (s)</label>
+                  <label for="sshHostTimeout" data-i18n-key="miniapp.settings.ssh_timeout">Idle Timeout (s)</label>
                   <input type="number" id="sshHostTimeout" value="1200" />
                 </div>
                 <div class="toolbar" style="margin-top: 16px;">

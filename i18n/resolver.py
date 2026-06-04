@@ -35,7 +35,7 @@ def map_telegram_language_code(code: Optional[str]) -> Optional[str]:
 
     Returns None if no mapping exists. Case-insensitive.
     """
-    if not code:
+    if not code or not isinstance(code, str):
         return None
     normalized = code.strip().lower()
     if normalized in _TELEGRAM_CODE_MAP:
@@ -61,7 +61,8 @@ def resolve_language(
     """
     # Step 1: explicit per-user preference
     if user_id is not None:
-        saved = config.telegram.user_languages.get(user_id)
+        user_languages = getattr(getattr(config, "telegram", None), "user_languages", None) or {}
+        saved = user_languages.get(user_id)
         if saved and saved in SUPPORTED_LANGS:
             return saved
 
@@ -71,7 +72,7 @@ def resolve_language(
         return detected
 
     # Step 3: app-level default
-    default = getattr(config.defaults, "default_language", FALLBACK_LANG)
+    default = getattr(getattr(config, "defaults", None), "default_language", FALLBACK_LANG)
     if default and default in SUPPORTED_LANGS:
         return default
 

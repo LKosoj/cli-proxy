@@ -1120,7 +1120,9 @@ class ManagerOrchestrator:
     async def run(self, session: Session, user_text: str, bot, context, dest: dict) -> str:
         chat_id = dest.get("chat_id")
         try:
-            _MANAGER_ACTIVE_LANG.set(resolve_user_lang(self._config, chat_id=chat_id))
+            _MANAGER_ACTIVE_LANG.set(
+                resolve_user_lang(self._config, user_id=dest.get("user_id"), chat_id=chat_id)
+            )
         except Exception:
             _MANAGER_ACTIVE_LANG.set("ru")
         workdir = session.workdir
@@ -3389,7 +3391,7 @@ class ManagerOrchestrator:
                 user_msg,
             )
 
-        _lang = resolve_user_lang(self._config, chat_id=chat_id)
+        _lang = resolve_user_lang(self._config, user_id=dest.get("user_id"), chat_id=chat_id)
         _lang_name = LANGUAGE_NAMES.get(_lang, "Russian")
         commit_system_raw = self._manager_prompt(workdir, "commit_message_system")
         try:

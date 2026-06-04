@@ -59,7 +59,9 @@
       "reset": "Reset",
       "save_changes": "Save changes",
       "clear": "Clear",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "load": "Load",
+      "send": "Send"
     },
     "label": {
       "session": "Session",
@@ -73,19 +75,101 @@
       "actions": "Actions",
       "choose_session": "Select session",
       "choose_project": "Select project",
-      "choose_session_uid": "Select session_uid"
+      "choose_session_uid": "Select session_uid",
+      "status": "Status",
+      "optional": "optional"
     },
     "cfg": {
-      "restart_banner": "Restart required for some changes"
+      "restart_banner": "Restart required for some changes",
+      "preview_diff": "Preview diff",
+      "subtab_general": "General",
+      "subtab_paths": "Paths and storage",
+      "subtab_apikeys": "API keys",
+      "subtab_orchestration": "Orchestration",
+      "subtab_skills": "Skills",
+      "subtab_runtime": "Runtime and LLM",
+      "add_tool": "Add tool",
+      "remove_tool": "Remove tool",
+      "no_tools": "No tools, add with the \"Add tool\" button.",
+      "add_mcp_client": "Add mcp_client",
+      "remove_mcp_client": "Remove mcp_client",
+      "list_empty": "The list is empty.",
+      "add_preset": "Add preset",
+      "remove_preset": "Remove preset",
+      "reset_section": "Reset section",
+      "err_draft_not_loaded": "Config draft not loaded",
+      "err_telegram_token": "telegram.token is required",
+      "err_defaults_workdir": "defaults.workdir is required",
+      "err_miniapp_base_path": "miniapp.base_path is required",
+      "err_miniapp_bind_host": "miniapp.bind_host is required",
+      "err_miniapp_bind_port": "miniapp.bind_port must be a number > 0",
+      "err_tool_bad_struct": "invalid structure",
+      "err_tool_mode": "must be headless or interactive",
+      "err_tool_cmd_empty": "must not be empty",
+      "err_mcp_port": "mcp.port must be a number",
+      "err_thread_mode": "thread_mode.mode must be private or group",
+      "err_thread_topics_chat_id": "thread_mode.topics_chat_id is required for mode=group",
+      "err_webhooks_path": "webhooks.path is required",
+      "err_webhooks_path_slash": "webhooks.path must start with /",
+      "err_webhooks_timeout": "webhooks.request_timeout_sec must be > 0",
+      "err_webhooks_max_payload": "webhooks.max_payload_bytes must be > 0",
+      "err_scheduler_timezone": "scheduler.timezone is required",
+      "err_must_be_positive": "must be > 0",
+      "err_scheduler_misfire": "scheduler.misfire_grace_sec must be >= 0",
+      "err_rate_limit_backend": "security.rate_limits.backend must be sqlite",
+      "err_rate_limit_policy": "security.rate_limits.default or security.rate_limits.policies is required when enabled=true",
+      "err_must_be_nonneg": "must be >= 0",
+      "err_lint_canary_max": "lint_evolution.canary_max_schema_fields_per_180d must be an integer >= 0",
+      "err_field_required": "is required",
+      "err_transport": "must be stdio or http",
+      "err_cmd_empty_stdio": "must not be empty for transport=stdio",
+      "err_url_required_http": "is required for transport=http",
+      "local_validation": "Local validation",
+      "server_validation": "Server validation",
+      "validation_passed": "Validation passed",
+      "no_changes": "No changes",
+      "changed_sections": "Changed sections",
+      "secret_changed_confirm": "Secret fields changed or cleared: {paths}. Continue saving?",
+      "err_must_be_json_object": "must be a JSON object",
+      "prompt_tool_name": "Tool name (key in tools)",
+      "err_tool_exists": "A tool with this name already exists",
+      "confirm_delete_tool": "Delete tool '{name}'?",
+      "diff_changed": "Changed",
+      "diff_none": "none",
+      "diff_no_live": "no live changes",
+      "diff_restart": "Requires restart",
+      "save_confirm": "Save config.yaml and apply hot-reload?",
+      "restart_required_for": "Restart required to apply:",
+      "and_more": "and more",
+      "reload_error": "Hot-reload did not apply changes.",
+      "reload_live_only": "Hot-reload applied only live changes.",
+      "reload_restart_hint": "To apply restart-only fields ({fields}), restart the process.",
+      "reload_ok": "Changes applied via hot-reload without restart."
     },
     "editor": {
       "no_file": "No file selected",
       "conflict_title": "Version conflict detected!",
-      "conflict_desc": "The file has been modified on the server since it was last opened."
+      "conflict_desc": "The file has been modified on the server since it was last opened.",
+      "force_save_btn": "Force Save"
     },
     "logs": {
       "only_new": "New only",
-      "prev_N": "{n} previous"
+      "prev_N": "{n} previous",
+      "preparing": "Preparing file...",
+      "download_started": "Download started",
+      "ws_connecting": "Connecting to log stream...",
+      "ws_connected": "Log stream connected",
+      "ws_error": "Log stream error",
+      "ws_conn_error": "WebSocket connection error",
+      "ws_disconnected": "Log stream disconnected",
+      "ws_disconnected_error": "Log stream disconnected with error",
+      "ws_disconnected_reconnect": "Log stream disconnected, reconnecting in",
+      "err_ws_token": "Error getting ws-token:",
+      "err_reopen": "Please reopen MiniApp.",
+      "err_no_ws_token": "ws-token not received",
+      "all_sessions": "All sessions",
+      "my_sessions": "All my sessions",
+      "load_error_prefix": "Log load error:"
     },
     "status": {
       "empty": "Loading or no session selected...",
@@ -102,12 +186,56 @@
       "manager_plan": "Manager Plan",
       "analyst": "Analyst Status",
       "agent": "Agent Status",
-      "session_unavailable": "Session not selected or unavailable"
+      "session_unavailable": "Session not selected or unavailable",
+      "webmaster": "Webmaster Status",
+      "runtime_progress": "Runtime Progress",
+      "queue_prefix": "Queue (",
+      "state_summary": "State Summary",
+      "last_tick_prefix": "Last Tick Value (",
+      "all_ticks": "All ticks",
+      "extra_params": "Extra parameters",
+      "run_operations": "Run Operations",
+      "runs_header": "Runs",
+      "selected_run": "Selected run",
+      "show_json": "Show JSON (diagnostics)",
+      "kv_cli": "CLI / Profile:",
+      "kv_work_type": "Work type:",
+      "kv_resume_token": "Resume Token:",
+      "kv_project": "Project:",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "busy": "Busy",
+      "on": "on",
+      "bool_yes": "yes",
+      "bool_no": "no",
+      "git_conflict": "Conflict:",
+      "git_busy": "Busy",
+      "ws_connecting": "Connecting to status stream...",
+      "ws_connected_waiting": "Status stream connected, waiting for data...",
+      "ws_error": "Status stream error",
+      "ws_conn_error": "Status websocket connection error",
+      "ws_disconnected": "Status stream disconnected",
+      "ws_disconnected_error": "Status stream disconnected with error",
+      "ws_disconnected_reconnect": "Status stream disconnected, reconnecting in",
+      "err_ws_token": "Error getting status ws-token:",
+      "err_no_ws_token": "status ws-token not received",
+      "git_unavailable": "git unavailable for this target"
     },
     "runs": {
       "select_hint": "Select a run in the table.",
       "select_run": "Select a run.",
-      "choose_session": "Select a session to view run artifacts."
+      "choose_session": "Select a session to view run artifacts.",
+      "btn_doctor": "Doctor",
+      "btn_recover": "Recover",
+      "btn_resume": "Resume",
+      "btn_apply_rec": "Apply Recommendation",
+      "btn_promote": "Promote Skills",
+      "no_runs": "No runs yet.",
+      "no_injections": "Skills: no injections",
+      "err_detail": "Run detail error:",
+      "err_load_artifacts": "Error loading run artifacts:",
+      "select_run_first": "Select a run first.",
+      "err_action": "Run action error:"
     },
     "settings": {
       "empty": "Loading or no session selected...",
@@ -116,25 +244,253 @@
       "mode_hint": "Select the session mode or Direct CLI to disable the active mode.",
       "lang_title": "Language",
       "lang_label": "Interface language",
-      "lang_save": "Save language"
+      "lang_save": "Save language",
+      "exec_target_local": "Execution Target: Local",
+      "recheck": "Recheck",
+      "remote_control_label": "Remote Control",
+      "remote_control_note": "Switches the session to strict remote-only mode (no local fallback).",
+      "ssh_note": "Enables/disables remote command execution via SSH.",
+      "target_host": "Target Host",
+      "ssh_hosts_title": "Project SSH hosts",
+      "ssh_host_add": "Add host",
+      "ssh_key_file": "Key File Path",
+      "ssh_passphrase_env": "Passphrase Env",
+      "ssh_password_env": "Password Env",
+      "ssh_password_value": "Password (Value)",
+      "ssh_password_note": "If provided, will be saved to project secrets.",
+      "ssh_sudo_pass_env": "Sudo Pass Env",
+      "ssh_sudo_password": "Sudo Password",
+      "ssh_roles": "Roles",
+      "ssh_desc": "Description",
+      "ssh_remote_root": "Remote Project Root",
+      "ssh_remote_root_note": "Required for Remote Control and remote file operations.",
+      "ssh_timeout": "Idle Timeout (s)",
+      "rc_error_no_root": "SSH host exists, but remote_project_root is required for Remote Control.",
+      "saved": "Settings saved",
+      "preflight_ok": "Preflight passed successfully",
+      "preflight_error_prefix": "Re-check error:",
+      "exec_target_remote": "Execution target: remote — {host}",
+      "no_eligible_hosts": "No eligible hosts"
     },
     "scheduler": {
       "choose_project": "Select a project to manage the schedule.",
-      "no_projects": "No projects available."
+      "no_projects": "No projects available.",
+      "session_label": "Telegram session_uid",
+      "target_mode": "Target mode",
+      "enabled": "Enabled",
+      "run_now": "Run now",
+      "no_jobs_for_project": "No jobs yet for project",
+      "select_project_first": "Select a project first.",
+      "selected_jobs": "Jobs selected",
+      "click_to_edit": "Click a job to edit.",
+      "err_no_project": "No project selected",
+      "err_no_session_uid": "Telegram session_uid not selected",
+      "err_no_cron": "Cron is required",
+      "err_no_target_mode": "Target mode is required",
+      "err_payload_not_object": "Payload must be a JSON object",
+      "err_invalid_json": "Invalid JSON in Payload:",
+      "err_save": "Scheduler save error:",
+      "no_job_selected": "No job selected",
+      "delete_job_confirm": "Delete job",
+      "err_delete": "Scheduler delete error:",
+      "job_dispatched": "Job dispatched for immediate event publication.",
+      "err_run_now": "Scheduler run_now error:"
     },
     "admin": {
       "choose_session": "Select a session for the Admin panel.",
-      "choose_skill": "Select pending skill install"
+      "choose_skill": "Select pending skill install",
+      "state_title": "Admin state",
+      "subtab": {
+        "overview": "Overview",
+        "monitoring": "Monitoring",
+        "operations": "Operations",
+        "config": "Config",
+        "chat": "Chat",
+        "data": "Data"
+      },
+      "pending_actions": "Awaiting actions",
+      "manual_confirms": "manual confirms",
+      "recent_events": "Recent events",
+      "incidents": "incidents",
+      "admin_actions": "admin actions",
+      "current_pending": "Current pending / mute",
+      "event_history": "Event history / overrides",
+      "refresh_runs": "Refresh runs",
+      "show_details": "Show details",
+      "add_server": "Add server",
+      "enabled": "Enabled",
+      "monitor_hint": "SSH hosts are configured in the Settings tab. Here only server → action is selected.",
+      "add_action": "Add action",
+      "th_argv": "argv (one entry per line)",
+      "config_placeholder": "Click «Load» to view the resulting YAML.",
+      "chat_placeholder": "Ask admin (Enter = send)",
+      "memory_placeholder": "Notes for the agent (free text).",
+      "no_runs": "No runs for this session.",
+      "status_unavailable": "Admin status unavailable",
+      "analyzer_no_action": "Analyzer has not published a detailed action yet.",
+      "disabled_hint": "Admin mode is disabled for the selected session. Click Enable to activate it, Disable is unavailable until enabled, or run Rescan.",
+      "disabled_hint_static": "Admin mode is disabled for the selected session. Enable it or update the state via Rescan.",
+      "no_pending": "no pending",
+      "err_timeout": "Admin status request timed out. Please retry.",
+      "err_timeout_stale": "Admin status request timed out. Showing last known data.",
+      "err_access": "No access to Admin status for the selected session.",
+      "err_access_stale": "No access to Admin status for the selected session. Showing last known data.",
+      "err_server": "Admin status server is temporarily unavailable.",
+      "err_server_stale": "Admin status server is temporarily unavailable. Showing last known data.",
+      "err_load": "Error loading Admin status: {detail}",
+      "err_load_stale": "Error loading Admin status: {detail}. Showing last known data.",
+      "err_action": "Admin action error:",
+      "err_action_stale": "Admin action error: {detail}. Showing last known data.",
+      "err_load_runs": "Error loading runs:",
+      "readiness_hint_ok": "Pipeline is ready for the next monitor cycle.",
+      "readiness_hint_failure": "Pipeline has a failure state. Check Analyzer and Executor.",
+      "readiness_hint_live": "Monitor cycle is active; data is coming from the current pipeline run.",
+      "readiness_hint_disabled": "Pipeline is disabled and not performing monitor checks.",
+      "err_load_messages": "Error loading messages:",
+      "err_load_pending": "Error loading pending:",
+      "err_load_memory": "Error loading memory:",
+      "chat_sending": "Sending…",
+      "chat_intent": "Intent:",
+      "err_chat_send": "Send error:",
+      "err_approve": "Approve error:",
+      "err_approve_req": "Approve request error:",
+      "err_reject": "Reject error:",
+      "err_reject_req": "Reject request error:",
+      "memory_saved": "Memory saved",
+      "err_memory": "Memory error:",
+      "loaded_prefix": "Loaded: ",
+      "pending_approvals": "Pending approvals ({n}):",
+      "approve": "Approve",
+      "reject": "Reject",
+      "th_server_ssh": "server (from SSH hosts)"
     },
     "mode": {
       "direct_cli": "Direct CLI"
     },
     "error": {
       "auth": "Authorization error",
-      "access_denied": "Access denied"
+      "access_denied": "Access denied",
+      "load_prefix": "Load error:",
+      "generic_prefix": "Error:",
+      "save": "Save error",
+      "init": "Initialization error"
     },
     "ssh": {
-      "no_hosts": "No hosts configured."
+      "no_hosts": "No hosts configured.",
+      "toggle_hint": "Enables/disables remote command execution via SSH.",
+      "no_config": "SSH Remote is enabled, but ssh.yaml is missing from .cli-proxy/.",
+      "enabled_no_hosts": "SSH Remote is enabled. Add hosts to ssh.yaml or via the form below.",
+      "edit_prefix": "Edit",
+      "add_host": "Add host",
+      "no_workdir_save": "Could not determine project directory to save SSH host.",
+      "host_saved": "Host saved",
+      "err_save_host": "Host save error:",
+      "delete_confirm": "Delete host",
+      "no_workdir_delete": "Could not determine project directory to delete SSH host.",
+      "err_delete": "Delete error:",
+      "no_workdir_test": "Could not determine project directory for SSH test.",
+      "test_ok": "Success:",
+      "err_request": "Request error:",
+      "keygen_confirm": "Generate a new key for",
+      "keygen_warn": "This will overwrite the existing key path in the config.",
+      "no_workdir_keygen": "Could not determine project directory for key generation.",
+      "keygen_success": "Key generated and written to config.",
+      "keygen_add_hint": "Add this public key to ~/.ssh/authorized_keys on the server:",
+      "err_keygen": "Key generation error:",
+      "alias_required": "Alias is required"
+    },
+    "banner": {
+      "remote_fs": "Remote FS"
+    },
+    "files": {
+      "path_remote": "Current path (Remote: {root}):",
+      "path_local": "Current path:",
+      "saved": "File saved",
+      "save_error_prefix": "Save error:",
+      "download_error_prefix": "Download error:",
+      "reset_confirm": "Discard unsaved changes and reload file from disk?",
+      "prompt_filename": "File name",
+      "prompt_dirname": "Folder name",
+      "delete_confirm": "Delete {path}?"
+    },
+    "autonomy": {
+      "no_servers": "No servers. Add them to the admin config.",
+      "no_open_drifts": "no open drifts",
+      "no_session": "No session selected.",
+      "rescan_all_started": "Rescan all started…",
+      "rescan_all_done": "Rescan all completed.",
+      "err_rescan_all": "Rescan all error:",
+      "maintenance_started": "Daily maintenance started…",
+      "maintenance_done": "Daily maintenance done (servers: {count}).",
+      "err_maintenance": "Maintenance error:",
+      "loading_server": "Loading {server}…",
+      "empty": "(empty)",
+      "no_facts": "No facts.",
+      "no_notes": "No notes.",
+      "no_runbooks": "No matching runbooks.",
+      "no_drift": "No drift.",
+      "baseline_accepted": "Baseline accepted for {server}.",
+      "proposal_discarded": "Proposal discarded for {server}.",
+      "err_accept": "Accept error:",
+      "err_discard": "Discard error:",
+      "no_drifts_filtered": "No matching drifts.",
+      "err_ack": "Ack error:",
+      "err_save_fact": "Save fact error:",
+      "err_delete_fact": "Delete fact error:",
+      "err_add_fact": "Add fact error:",
+      "err_append_note": "Append note error:",
+      "err_compact": "Compact error:",
+      "new_note_placeholder": "New note…",
+      "no_runbooks_server": "No runbooks for this server.",
+      "open": "Open",
+      "err_no_server_id": "Specify at least one server_id",
+      "err_confidence_range": "Confidence must be a number in [0.0, 1.0]",
+      "builder_sources_title": "1. Script source (admin.runbook_sources)",
+      "builder_params_title": "2. Runbook parameters",
+      "builder_build_title": "3. Build and validate",
+      "err_enter_dir": "Enter a directory.",
+      "scanning": "Scanning…",
+      "no_scripts": "No scripts found.",
+      "bytes": "bytes",
+      "err_title_required": "Title is required.",
+      "err_dev_server_required": "Dev server_id is required.",
+      "err_select_script": "Select at least one script.",
+      "building_runbook": "Building runbook…",
+      "runbook_built_prefix": "Runbook built",
+      "runbook_built_suffix": "Click Validate to check.",
+      "manual_actions": "Manual actions",
+      "history_empty": "History is empty.",
+      "refresh_list": "Refresh list",
+      "select_check_id": "Select a check_id to view history.",
+      "select_check_id_short": "Select a check_id.",
+      "no_snapshots": "No snapshots.",
+      "prereqs_hint": "Click «Check prereqs» to start checking.",
+      "requesting": "Requesting…",
+      "building_bootstrap": "Building bootstrap runbook…",
+      "runbook_not_created": "Runbook not created. Reason:",
+      "runbook_created_prefix": "Runbook created",
+      "path_label": "Path:",
+      "no_diff": "(no differences)",
+      "err_rescan": "Rescan error:",
+      "checksum_mismatch": "SHA1 does not match the value recorded in the runbook — the script may have been modified. Execution stopped.",
+      "statuses_label": "Statuses",
+      "section_title": "Autonomy: servers / baseline / drift / memory",
+      "rescan_all": "Rescan all",
+      "daily_maintenance": "Run daily maintenance",
+      "validate": "Validate",
+      "promote_ellipsis": "Promote…",
+      "run_first_step_dry": "Run first step (dry)",
+      "validating": "Validating…",
+      "running_dry_run": "Running dry-run…",
+      "validation_label": "Validation:",
+      "errors_label": "Errors:",
+      "warnings_label": "Warnings:",
+      "promote_runbook_title": "Promote runbook",
+      "promote_add_servers": "Add servers (comma-separated):",
+      "promote_confidence": "Confidence (0.0–1.0, optional):",
+      "run_validation_first": "run validation first",
+      "promote": "Promote",
+      "promoting": "Promoting…"
     }
   },
   "btn": {
@@ -151,7 +507,8 @@
       "state": "💾 State",
       "close": "🚫 Close",
       "reset": "♻️ Reset",
-      "lang": "🌐 Language"
+      "lang": "🌐 Language",
+      "close_menu": "❌ Close menu"
     },
     "cli": {
       "unavailable": "No CLI available"
@@ -167,6 +524,25 @@
     "ssh": {
       "on": "🔗✅ SSH: on",
       "off": "🔗⬜ SSH: off"
+    },
+    "input": {
+      "queue_new": "🆕 New queue",
+      "queue_confirm": "🆕 Queue",
+      "orch_apply": "✅ Apply",
+      "queue_append": "➕ Append to current",
+      "orch_cancel": "⛔ Cancel",
+      "take": "✅ Take",
+      "discard": "❌ Discard"
+    },
+    "files": {
+      "up": "⬅️ Up",
+      "delete_dir": "🗑 Delete this folder",
+      "confirm_yes": "✅ Yes",
+      "save_here": "💾 Save here (2 min)"
+    },
+    "orch_transition": {
+      "apply": "✅ Pass forward",
+      "cancel": "⛔ Stop process"
     }
   },
   "msg": {
@@ -192,7 +568,43 @@
       "cancelled": "Cancelled.",
       "ssh_unavailable": "SSH is not configured for this project",
       "ssh_enabled": "Remote control enabled",
-      "ssh_disabled": "Remote control disabled"
+      "ssh_disabled": "Remote control disabled",
+      "access_not_configured": "Access is not configured. Please contact the administrator.",
+      "choose_close": "Choose a session to close:",
+      "cli_active": "Active CLI: {cli_name}",
+      "cli_switch_notice_no_prev": "The active CLI is unavailable in this session. Switching to {target}.",
+      "cli_switch_notice_with_prev": "CLI {previous} is unavailable or disabled in this session. Switching to {target}.",
+      "closed_and_removed": "Session closed and removed from state.",
+      "create_session_first": "Create a session first.",
+      "created_cwd": "New session {id} created and selected.",
+      "headless_read_failed": "⚠️ CLI exited, but the bot could not read the output correctly (stdout not closed).",
+      "help_no_data": "help returned no data.",
+      "interrupt_failed_diag": "Failed to fully interrupt the session. Additional diagnostics needed.",
+      "interrupt_partial_runtime": "Interrupt sent, but part of the runtime is still finishing the stop.",
+      "interrupt_sent": "Interrupt sent.",
+      "interrupt_work_done": "Current work interrupted. Session released.",
+      "menu_closed": "Menu closed.",
+      "none": "No active sessions.",
+      "open_topic_first": "First open the relevant topic or select a session via /sessions.",
+      "orch_off": "off",
+      "orch_on": "on",
+      "orch_toggled": "Advanced orchestrator {status}.",
+      "queue_cleared": "Queue cleared.",
+      "queue_count": "{n} messages in queue.",
+      "queue_empty": "Queue is empty.",
+      "rename_cancelled": "Rename cancelled.",
+      "rename_empty": "Session name is empty.",
+      "rename_prompt": "Enter a new name for {session_id} (or '-' to cancel).",
+      "renamed": "Session name updated.",
+      "reset_done": "Session reset.",
+      "resume_current": "Current resume token: {token}",
+      "resume_prompt": "Current resume: {current}\nEnter a new resume (or '-' to cancel).",
+      "resume_saved": "Resume token saved.",
+      "resume_token_cancelled": "Resume change cancelled.",
+      "resume_token_updated": "Resume updated.",
+      "state_header": "Session: {session_id}\nTool: {tool}\nWorkdir: {workdir}\nResume: {resume}\nSummary: ",
+      "state_not_found_hint": "State not found (use /state <session_id> or /state <tool> <workdir>)",
+      "use_existing_topics": "Use the topics of existing sessions."
     },
     "error": {
       "session_not_found": "Session not found.",
@@ -219,7 +631,19 @@
       "queue_failed": "Failed to queue input. Please try again.",
       "queue_append_failed": "Failed to update queued message. Please try again.",
       "unknown_tool": "Unknown tool.",
-      "session_closed_stale": "Session is already closed."
+      "session_closed_stale": "Session is already closed.",
+      "config_service_unavailable": "ConfigService unavailable: prompt_regex not saved.",
+      "dir_not_found": "Directory not found.",
+      "limits_fetch_failed": "Failed to fetch limits.",
+      "limits_unavailable": "Limits are unavailable.",
+      "mode_unavailable_named": "Mode `{mode_id}` is unavailable.",
+      "mode_unavailable_user_named": "Mode `{mode_id}` is unavailable for your user.",
+      "orch_unavailable_user": "Orchestrator is unavailable for your user.",
+      "session_no_context": "Session for the current context not found.",
+      "session_unavailable": "Session is unavailable.",
+      "state_read_error": "State read error: {e}",
+      "tool_not_found": "Tool not found.",
+      "tool_not_selected": "First select a tool via /sessions."
     },
     "input": {
       "no_pending": "No pending input.",
@@ -231,7 +655,12 @@
       "interrupted": "Current generation interrupted. Input discarded.",
       "interrupted_freed": "Current generation interrupted. Session freed. Input discarded.",
       "interrupted_partial": "Current generation interrupted, but part of the runtime is still stopping. Input discarded.",
-      "interrupt_failed": "Failed to fully interrupt the session. Input discarded."
+      "interrupt_failed": "Failed to fully interrupt the session. Input discarded.",
+      "custom_accepted": "Your answer accepted.",
+      "custom_cancelled": "OK, custom answer input cancelled.",
+      "forward_must_be_command": "A forwarded message must be a command.",
+      "prompt_retired": "Message updated.",
+      "question_stale": "The question is stale."
     },
     "transfer": {
       "offer": "CLI switched: {src} → {dst}.\nTransfer context from the previous session ({src})?",
@@ -247,6 +676,131 @@
       "choose": "Choose language:",
       "changed": "Language changed: {lang}",
       "invalid": "Unknown language code."
+    },
+    "ask": {
+      "answer_already_received": "Answer already received.",
+      "choice_selected": "Selected: {answer}",
+      "enter_custom": "Enter your own answer in a single message.",
+      "invalid_choice": "Invalid choice.",
+      "invalid_format": "Invalid format.",
+      "wrong_chat": "The question belongs to a different chat.",
+      "wrong_thread": "The question belongs to a different thread."
+    },
+    "cmd": {
+      "already_handled": "Command already handled.",
+      "approved_continue": "Approved. Continuing step execution...",
+      "approved_execute": "Approved. Executing command...",
+      "denied": "Denied.",
+      "denied_continue": "Command denied. Continuing without it.",
+      "empty_output": "(empty output)"
+    },
+    "dirs": {
+      "cannot_leave_root": "Cannot go above the root directory.",
+      "choose_dir": "Choose a directory:",
+      "send_git_clone_url": "Send the git clone URL.",
+      "send_new_dir_name": "Send the name of the new directory or a path relative to the current one. Enter '-' to cancel.",
+      "send_path": "Send the directory path as a message.",
+      "tool_selected": "Tool {tool} selected. Choose a directory.",
+      "btn_up": "⬆️ Up",
+      "btn_prev": "◀️ Back",
+      "btn_next": "▶️ Next",
+      "btn_use_current": "✅ Use this directory",
+      "btn_create": "📁 Create directory",
+      "btn_git_clone": "📦 git clone",
+      "btn_enter": "✏️ Enter path",
+      "btn_cancel": "❌ Cancel",
+      "choose_file_or_dir": "Select a file or folder:"
+    },
+    "files": {
+      "already_at_root": "Already at the root directory.",
+      "already_exists": "An item with this name already exists.",
+      "base_dir_unavailable": "Base directory is unavailable.",
+      "cannot_delete_root": "Cannot delete the root directory.",
+      "delete_cancelled": "Deletion cancelled.",
+      "delete_confirm": "Delete {name}? Confirm:",
+      "delete_error": "Delete error: {error}",
+      "delete_folder_confirm": "Delete folder {name} recursively? Confirm:",
+      "deleted": "Deleted.",
+      "dir_create_cancelled": "Directory creation cancelled.",
+      "dir_create_failed": "Failed to create directory: {e}",
+      "dir_created": "Directory created: {path}",
+      "dir_exists": "Directory already exists.",
+      "dir_name_empty": "Directory name is empty.",
+      "dir_page": "Directory: {base}\nPage {page}/{total}",
+      "dir_unavailable": "Directory is unavailable.",
+      "download_failed": "Download failed: {e}",
+      "enter_new_name": "Enter a new name (without path). Timeout 2 minutes.",
+      "escapes_workdir": "Path escapes the working directory.",
+      "file_not_found": "File not found.",
+      "file_too_large": "File is too large to send.",
+      "folder_not_found": "Folder not found.",
+      "image_download_failed": "Image download failed: {e}",
+      "image_too_large": "Image is too large (max {n} MB).",
+      "item_not_found": "Item not found.",
+      "name_no_path": "Name must not contain a path.",
+      "name_unchanged": "Name is unchanged.",
+      "new_name_empty": "New name is empty.",
+      "no_pending_delete": "No pending deletion.",
+      "operation_cancelled": "Operation cancelled.",
+      "path_must_be_inside": "Path must be inside the current directory.",
+      "rename_cancelled": "Rename cancelled.",
+      "rename_failed": "Rename failed: {e}",
+      "rename_not_found": "Item to rename not found.",
+      "rename_timeout": "Rename mode cancelled: no new name was entered within 2 minutes.",
+      "renamed": "Renamed: {name}",
+      "save_failed": "Save failed: {e}",
+      "saved": "File saved: {path}",
+      "send_error": "File send error. Check the bot logs.",
+      "sending_file": "Sending file: {filename}",
+      "unsupported_doc_type": "Unsupported document type.",
+      "upload_dir_outside_root": "Target directory is outside the working directory. File save mode disabled.",
+      "upload_dir_unavailable": "Target directory is no longer available. File save mode disabled.",
+      "upload_expired": "File save mode has already expired. Press the save button again.",
+      "upload_pending": "\n⏳ Awaiting file: {remaining} sec.",
+      "upload_pending_other_dir": "\n⏳ File upload pending in another directory: {remaining} sec.",
+      "upload_timeout": "File save mode reset: no file was sent within 2 minutes."
+    },
+    "git": {
+      "clone_done": "Cloning complete.",
+      "clone_error": "git clone error:\\n{output}",
+      "clone_launch_error": "Failed to launch git clone: {e}",
+      "clone_starting": "Starting git clone...",
+      "operations_menu": "Git operations:"
+    },
+    "lint": {
+      "autopause_not_active": "Lint Evolution L{level}: pause was not active — no changes.",
+      "autopause_resumed": "Lint Evolution L{level}: autopause lifted.",
+      "error": "Error: {exc}",
+      "gate_error": "Lint gate error: {exc}",
+      "level_not_int": "level must be an integer 1/2/3.",
+      "level_out_of_range": "level must be 1, 2, or 3.",
+      "more_findings": "  … {n} more",
+      "no_active_rules": "Lint Evolution: no active rules — nothing to apply."
+    },
+    "preset": {
+      "choose": "Choose a preset:",
+      "not_found": "Preset not found.",
+      "sending_task": "Sending task: {code}"
+    },
+    "selfupdate": {
+      "confirmed": "Selfupdate confirmed: service `{service_name}` restarted and the bot is back online.",
+      "deps_failed": "git pull completed, but dependency update failed.",
+      "no_repo": "git pull error: repository not found at `{repo_root}`.",
+      "no_venv": "git pull completed, but `.venv` not found. Restart cancelled.",
+      "pull_error": "git pull error: {e}",
+      "pull_failed": "git pull failed.",
+      "pulling": "Running git pull...",
+      "restart_failed": "git pull succeeded, but failed to restart service `{service_name}`.",
+      "restart_failed_no_invoke": "git pull succeeded, but failed to trigger a restart of service `{service_name}`.",
+      "restart_status": "\n\nsystemctl restart returned code {restart_rc}, current state: {restart_state}.",
+      "restart_unconfirmed": "git pull succeeded. Restart command for service `{service_name}` sent, but the state could not be confirmed immediately.",
+      "startup_delay": "\nStartup delay: {delay_sec}s.",
+      "success": "git pull succeeded. Service restart launched.",
+      "updating_deps": "Changes detected in `{req_file}`. Updating dependencies in .venv..."
+    },
+    "setprompt": {
+      "saved": "prompt_regex saved.",
+      "not_saved": "prompt_regex not saved."
     }
   },
   "cmd": {
@@ -275,7 +829,8 @@
       "desc": "Lint Evolution: L1/L2/L3 level status, autopause, schema-version."
     },
     "lint_autopause_resume": {
-      "desc": "Lint Evolution: remove autopause from a level (1, 2 or 3)."
+      "desc": "Lint Evolution: remove autopause from a level (1, 2 or 3).",
+      "usage": "Usage: /lint_autopause_resume <level: 1|2|3>"
     },
     "lint_schema_history": {
       "desc": "Lint Evolution: current schema version, field list, pending proposals."
@@ -293,7 +848,8 @@
       "desc": "Show available tools."
     },
     "newpath": {
-      "desc": "Set path for a new session after selecting a tool."
+      "desc": "Set path for a new session after selecting a tool.",
+      "usage": "Usage: /newpath <path>"
     },
     "close": {
       "desc": "Close session (via menu)."
@@ -311,10 +867,12 @@
       "desc": "Clear the current context session queue."
     },
     "rename": {
-      "desc": "Rename session."
+      "desc": "Rename session.",
+      "usage": "Usage: /rename <name> or /rename <id> <name>"
     },
     "cwd": {
-      "desc": "Create a new session in another directory."
+      "desc": "Create a new session in another directory.",
+      "usage": "Usage: /cwd <path>"
     },
     "dirs": {
       "desc": "Browse directories (menu)."
@@ -326,10 +884,12 @@
       "desc": "Browse state (menu)."
     },
     "setprompt": {
-      "desc": "Set prompt_regex for a tool."
+      "desc": "Set prompt_regex for a tool.",
+      "usage": "Usage: /setprompt <tool> <regex>"
     },
     "send": {
-      "desc": "Send text directly to CLI."
+      "desc": "Send text directly to CLI.",
+      "usage": "Usage: /send <text>"
     },
     "mode": {
       "desc": "Mode menu: {label}."
@@ -416,13 +976,31 @@
       "msg": {
         "select_commit": "Please select a commit to view diff.",
         "success": "Operation completed successfully.",
-        "error": "Operation failed."
+        "error": "Operation failed.",
+        "not_a_repo": "Not a git repository or git error (code {code}):\n{output}",
+        "show_failed": "Git show failed with code {code}:\n{output}",
+        "system_error_title": "Git System Error",
+        "unexpected_error": "An unexpected error occurred:\n{error}",
+        "fetching_status": "Fetching git status...",
+        "generate_msg_failed": "Failed to generate message. Enter it manually or configure openai_api_key in config.yaml.",
+        "generate_msg_failed_check": "Failed to generate message. Check the openai_api_key settings in config.yaml."
       },
       "dialog": {
         "create_branch_title": "Create Branch",
         "create_branch_prompt": "Enter new branch name:",
         "switch_branch_title": "Switch Branch",
-        "switch_branch_prompt": "Enter branch name to switch to:"
+        "switch_branch_prompt": "Enter branch name to switch to:",
+        "diff_title": "Diff for commit {hash}"
+      },
+      "history": {
+        "col_date": "Date",
+        "col_author": "Author",
+        "col_commit": "Commit",
+        "col_message": "Message"
+      },
+      "group": {
+        "other_ops": "Other Operations",
+        "remote_ops": "Remote Operations"
       }
     },
     "log": {
@@ -441,6 +1019,10 @@
       "btn": {
         "apply_filters": "Apply Filters",
         "refresh_tasks": "Refresh Tasks"
+      },
+      "group": {
+        "module_filters": "Module Filters",
+        "level_filters": "Log Level Filters"
       }
     },
     "session": {
@@ -467,10 +1049,25 @@
       "saved": "Saved.",
       "create_error": "Failed to create path: {error}",
       "delete_error": "Failed to delete path: {error}",
-      "exec_target_local": "Execution Target: Local"
+      "exec_target_local": "Execution Target: Local",
+      "new_dir_title": "New directory",
+      "exec_target_remote": "Execution Target: Remote ({host}: {root})",
+      "revision_conflict": "Revision conflict. Current revision: {revision}.",
+      "name_label": "Name:",
+      "delete_confirm": "Delete '{path}'?",
+      "path_prefix": "Path: {path}"
     },
     "chat": {
-      "input_placeholder": "Type your message... (Ctrl+Enter to send)"
+      "input_placeholder": "Type your message... (Ctrl+Enter to send)",
+      "prefix_you": "You:",
+      "prefix_agent": "Agent:",
+      "select_files": "Select Files",
+      "all_files": "All Files (*)",
+      "ask_hint": "or type your own answer below (Ctrl+Enter)",
+      "status_ready": "Ready",
+      "btn_stop": "Stop",
+      "status_thinking": "Thinking...",
+      "status_waiting_answer": "Waiting for answer..."
     },
     "status": {
       "ready": "Ready"
@@ -531,7 +1128,171 @@
         "config_title": "Admin config (YAML, read-only)",
         "config_placeholder": "Click \"Reload config\" to view the resulting YAML.",
         "disabled_title": "Admin disabled",
-        "disabled_hint": "Enable admin for this session or rescan its environment."
+        "disabled_hint": "Enable admin for this session or rescan its environment.",
+        "optional": "optional",
+        "optional2": "optional",
+        "interval_sec": "interval_sec:"
+      },
+      "autonomy": {
+        "btn": {
+          "accept_proposed": "Accept proposed",
+          "daily_maintenance": "Daily maintenance",
+          "rescan_selected": "Rescan selected",
+          "open_details": "Open details",
+          "append_note": "Append note",
+          "refresh_list": "Refresh list",
+          "ack": "Ack",
+          "build_bootstrap": "Build bootstrap runbook",
+          "close": "Close",
+          "rescan_all": "Rescan all",
+          "add_fact": "Add fact",
+          "check_prereqs": "Check prereqs",
+          "compact_memory": "Compact memory",
+          "discard_proposed": "Discard proposed",
+          "browse": "Browse…",
+          "show_all": "Show all"
+        },
+        "msg": {
+          "promoting": "Promoting…",
+          "baseline_discard_error": "Discard error.",
+          "running_step": "{mode}-run {step} on {server}…",
+          "live_run_confirm": "Run LIVE execution of step '{step}' on {server}?",
+          "bootstrap_done": "Created runbook {rb_id}. Path: {path}",
+          "drift_not_changed": "Drift not changed.",
+          "title_required": "Title is required.",
+          "validating": "Validating…",
+          "specify_server_id": "Specify at least one server_id.",
+          "validate_error": "Validation error.",
+          "no_steps": "The runbook has no steps.",
+          "build_done": "Built runbook {rb_id}\npath: {path}\nservers: {servers}\nClick Validate to check.",
+          "generic_error": "Error.",
+          "scan_done": "Found files: {count}. Select the needed ones from the list.",
+          "bootstrap_no_runbook": "Runbook not created. Reason: {reason}",
+          "building": "Building runbook…",
+          "rescan_all_result": "Servers: {count}, drifts: {drifts}, alarm: {alarm}",
+          "dry_run_question": "Run in DRY-RUN mode?\n(No — run for real on the server)",
+          "rescan_all_error": "Rescan all error.",
+          "baseline_accept_error": "Accept error.",
+          "dev_server_required": "Dev server_id is required.",
+          "no_proposed_baseline": "(no proposed baseline)",
+          "scan_error": "Scan error.",
+          "no_data": "No data.",
+          "maintenance_done": "Done. Servers processed: {count}.",
+          "run_step_error": "Execution error.",
+          "update_fact_error": "Failed to update fact.",
+          "maintenance_error": "Maintenance error.",
+          "append_note_error": "Failed to append note.",
+          "promote_error": "Promote error.",
+          "rescan_error": "Rescan error.",
+          "delete_fact_error": "Failed to delete fact.",
+          "select_server": "Select a server.",
+          "rescan_result": "Rescan {sid}: drifts_written={drifts_written}, alarm={alarm}, warn={warn}",
+          "scanning": "Scanning…",
+          "compact_error": "Compact error.",
+          "steps_no_names": "Steps have no names.",
+          "nothing_to_discard": "Nothing to discard.",
+          "build_error": "Build error.",
+          "select_script": "Select at least one script.",
+          "runbook_not_found": "Runbook {rb_id} not found.",
+          "ack_error": "Ack error.",
+          "prereqs_check_error": "Check error.",
+          "specify_dir": "Specify a directory."
+        },
+        "dialog": {
+          "edit_fact_title": "Edit fact",
+          "fact_key_prompt": "Key:",
+          "run_validation_label": "Run validation first",
+          "select_step_title": "Select step",
+          "scripts_dir_title": "Scripts directory",
+          "delete_fact_prompt": "Delete {key}?",
+          "fact_value_prompt": "Value for {key}:",
+          "new_fact_title": "New fact",
+          "confidence_no_change": "— (no change)",
+          "select_step_prompt": "Step to execute:",
+          "delete_fact_title": "Delete fact"
+        },
+        "label": {
+          "notes": "Notes:",
+          "proposed_baseline": "Proposed baseline:",
+          "facts": "Facts:",
+          "result": "Result:",
+          "current_baseline": "Current baseline:"
+        },
+        "col": {
+          "alarm": "Alarm",
+          "host": "Host",
+          "label": "Label",
+          "last_scan": "Last Scan",
+          "warn": "Warn",
+          "baseline": "Baseline",
+          "transport": "Transport",
+          "memory": "Memory",
+          "server_id": "Server ID",
+          "status": "Status"
+        },
+        "memory_title": "Memory",
+        "details_title": "Details",
+        "run_step_title": "Run step",
+        "builder": {
+          "src_group": "1. Script source (admin.runbook_sources)",
+          "file_item": "{name}  ({size} bytes · sha1:{sha1}…)",
+          "meta_group": "2. Runbook parameters"
+        },
+        "servers_not_loaded": "Servers not loaded.",
+        "drifts_title": "Drifts",
+        "placeholder": {
+          "add_note": "Add a note...",
+          "comma_separated": "comma separated"
+        },
+        "rescan_title": "Rescan",
+        "servers_summary": "Servers: {count} | statuses: {statuses} | drifts: {totals}",
+        "bootstrap_title": "Bootstrap",
+        "validate_title": "Validate",
+        "baseline_title": "Baseline",
+        "group_title": "Autonomy",
+        "maintenance_title": "Daily maintenance",
+        "rescan_all_title": "Rescan all",
+        "detail_title": "Autonomy — {server_id}",
+        "promote_title": "Promote"
+      },
+      "col": {
+        "description": "description",
+        "argv_per_line": "argv (one per line)",
+        "timeout_sec": "timeout_sec",
+        "server_alias": "server (alias)",
+        "status": "status",
+        "started_at": "started_at",
+        "risk_level": "risk_level",
+        "action_id": "action_id",
+        "run_id": "run_id",
+        "phase": "phase"
+      },
+      "msg": {
+        "select_run_row": "Select a row in the runs table.",
+        "config_api_unavailable": "Config API unavailable.",
+        "no_runs": "No runs for this session.",
+        "run_not_found": "Run {run_id} not found.",
+        "error_fmt": "Error: {error}",
+        "monitor_api_unavailable": "Monitor API unavailable.",
+        "artifact_store_unavailable": "Artifact store unavailable.",
+        "run_detail_hint": "Select a run and click «View run details».",
+        "config_load_error": "Failed to load config.",
+        "session_state": "Session: {uid}",
+        "autonomy_api_unavailable": "Autonomy API unavailable.",
+        "runs_loaded": "Loaded runs: {count}",
+        "save_error": "Save error.",
+        "ssh_api_unavailable": "SSH actions API unavailable.",
+        "saved": "Saved.",
+        "run_id_undefined": "run_id is not defined.",
+        "inventory_load_error": "Failed to load inventory.",
+        "config_loaded": "Loaded: {path}",
+        "runs_load_error": "Failed to load runs.",
+        "run_detail_load_error": "Failed to load run details.",
+        "config_unavailable": "Config unavailable.",
+        "load_error": "Load error.",
+        "select_skill_install": "Select pending skill install",
+        "no_session": "No session selected.",
+        "api_unavailable": "API unavailable."
       }
     },
     "msg": {
@@ -546,6 +1307,485 @@
       "answer_accepted": "Accepted answer: {answer}",
       "question_closed": "Question is already closed.",
       "select_session_first": "Please select a desktop session first."
+    },
+    "remotebanner": {
+      "remote_fs": "Remote FS · {host} · {root}"
+    },
+    "runops": {
+      "btn_doctor": "Doctor",
+      "btn_recover": "Recover",
+      "btn_resume": "Resume",
+      "btn_promote_skills": "Promote Skills",
+      "btn_rerun": "Rerun",
+      "btn_validate": "Validate",
+      "btn_repair": "Repair",
+      "btn_apply_recommendation": "Apply Recommendation",
+      "no_injections": "no injections",
+      "no_session": "No session selected",
+      "summary": "Active runs: {active} · Total: {total}",
+      "skills_prefix": "Skills: ",
+      "no_runs": "No runs",
+      "no_recovery_meta": "No recovery metadata",
+      "action_failed": "Operation failed.",
+      "load_error": "Failed to load runs",
+      "action_unavailable": "Run operation not available in facade."
+    },
+    "adminchat": {
+      "status_error": "Error: {error}",
+      "status_autopilot_executed": "Autopilot executed ({kind})",
+      "status_autopilot_blocked": "Autopilot blocked: {reason}",
+      "status_approving": "Approving {id}…",
+      "status_memory_saved": "Memory saved",
+      "btn_approve": "Approve",
+      "status_pending_unavailable": "Pending items unavailable: {error}",
+      "memory_title": "Memory",
+      "status_executed": "Executed ({kind})",
+      "btn_reload": "Reload",
+      "status_intent": "Intent: {intent_type}",
+      "btn_reject": "Reject",
+      "status_messages_unavailable": "Messages unavailable: {error}",
+      "status_reject_fail": "Reject failed: {error}",
+      "status_select_pending": "Select a pending item",
+      "status_rejected": "Rejected {id}",
+      "status_load_memory_error": "Error loading memory: {error}",
+      "status_unexpected_response": "Unexpected service response",
+      "status_unexpected_approve": "Unexpected approve response",
+      "btn_send": "Send",
+      "status_answer_accepted": "Answer accepted",
+      "status_sending": "Sending…",
+      "status_send_error": "Send error: {error}",
+      "btn_save": "Save",
+      "status_memory_error": "Memory error: {error}",
+      "messages_placeholder": "Message history will appear here.",
+      "status_reject_error": "Reject error: {error}",
+      "status_select_session": "Select session",
+      "title": "Admin chat",
+      "status_approve_error": "Approve error: {error}",
+      "status_approve_error_result": "Approve error: {error}",
+      "pending_label": "Pending approvals ({count}):",
+      "input_placeholder": "Ask admin (Enter = send)",
+      "memory_notes_placeholder": "Notes for the agent (free text).",
+      "status_load_messages_error": "Error loading messages: {error}",
+      "status_load_pending_error": "Error loading pending: {error}",
+      "status_save_error_msg": "Save error: {error}"
+    },
+    "report": {
+      "sysinfo": {
+        "title": "System Information",
+        "active_session": "Active Session",
+        "label": "Label",
+        "col_property": "Property",
+        "col_value": "Value",
+        "row_name": "Name",
+        "row_tool": "Tool",
+        "row_active_cli": "Active CLI",
+        "row_workdir": "Workdir",
+        "row_resume_token": "Resume Token",
+        "row_active_mode": "Active Mode",
+        "row_tokens_used": "Tokens Used",
+        "row_busy": "Busy",
+        "summary": "Session Summary"
+      },
+      "btn": {
+        "sys_info": "System Info",
+        "refresh": "Refresh History",
+        "gen_md": "Generate MD",
+        "gen_pdf": "Generate PDF"
+      },
+      "msg": {
+        "saved_md": "Report saved as MD: {filename}",
+        "success_title": "Success",
+        "gen_error": "Failed to generate report: {error}",
+        "file_not_found": "File not found.",
+        "saved_pdf": "Report saved as PDF: {filename}",
+        "read_error": "Error reading file: {error}",
+        "no_plan": "No active plan found for this session."
+      },
+      "tooltip": {
+        "pdf_unavailable": "PDF support not available (missing QtPrintSupport)"
+      }
+    },
+    "palette": {
+      "cmd": {
+        "open_tasks_panel": {
+          "subtitle": "Show active tasks",
+          "title": "Open Tasks Panel"
+        },
+        "open_status": {
+          "title": "Open Status",
+          "subtitle": "Session status, queue, and runs"
+        },
+        "open_files": {
+          "subtitle": "Session file browser and editor",
+          "title": "Open Files"
+        },
+        "refresh_git": {
+          "subtitle": "Refresh git status/history",
+          "title": "Refresh Git"
+        },
+        "show_cli_limits": {
+          "subtitle": "Show limits/usage for active desktop CLI",
+          "title": "Show CLI Limits"
+        },
+        "open_reports": {
+          "title": "Open Reports",
+          "subtitle": "Reports viewer"
+        },
+        "open_scheduler": {
+          "subtitle": "Scheduled jobs",
+          "title": "Open Scheduler"
+        },
+        "open_chat": {
+          "subtitle": "Main workspace",
+          "title": "Open Chat"
+        },
+        "toggle_sessions": {
+          "title": "Toggle Sessions Panel",
+          "subtitle": "Show/hide left panel"
+        },
+        "open_plugins": {
+          "title": "Open Plugins",
+          "subtitle": "Plugin management"
+        },
+        "open_config": {
+          "subtitle": "Configuration editor",
+          "title": "Open Config"
+        },
+        "new_session": {
+          "subtitle": "Create session from selected CLI",
+          "title": "New Session"
+        },
+        "open_logs": {
+          "subtitle": "Task queue and logs",
+          "title": "Open Logs"
+        },
+        "open_session_settings": {
+          "title": "Open Settings",
+          "subtitle": "Session and SSH settings"
+        },
+        "open_runs_panel": {
+          "title": "Open Runs Panel",
+          "subtitle": "Show run recovery controls"
+        },
+        "open_git_panel": {
+          "subtitle": "Show git operations",
+          "title": "Open Git Panel"
+        },
+        "open_admin": {
+          "subtitle": "Admin panel",
+          "title": "Open Admin"
+        }
+      },
+      "hint": "Type to search commands, Enter to run",
+      "section": {
+        "navigation": "Navigation",
+        "git": "Git",
+        "panels": "Panels",
+        "session": "Session"
+      },
+      "footer_reopen": "Ctrl+K: reopen",
+      "title": "Command Palette",
+      "footer_esc": "Esc: close",
+      "search_placeholder": "Search commands..."
+    },
+    "scheduler": {
+      "run_now": "Run now",
+      "err_load_scope": "Failed to load scheduler scope: {error}",
+      "target_mode_label": "Target mode:",
+      "job_deleted": "Job deleted.",
+      "session_uid_label": "Session UID:",
+      "cron_label": "Cron:",
+      "job_already_removed": "Job was already removed.",
+      "no_job_selected": "No job selected",
+      "job_triggered": "Job triggered: {job_id}",
+      "name_label": "Name:",
+      "err_delete": "Failed to delete scheduler job: {error}",
+      "err_mode_required": "Target mode is required.",
+      "err_pause": "Failed to pause scheduler job: {error}",
+      "err_trigger": "Failed to trigger scheduler job: {error}",
+      "err_project_required": "Project is required.",
+      "err_load_projects": "Failed to load projects: {error}",
+      "jobs_group": "Jobs",
+      "pause": "Pause",
+      "err_save": "Failed to save scheduler job: {error}",
+      "err_session_required": "Notification session_uid is required.",
+      "payload_label": "Payload (JSON):",
+      "job_meta": "Job: {job_id}\nNext run: {next_run}\nLast fired: {last_fired}\nStatus: {last_status}\nRun count: {run_count}\nLast error: {last_error}",
+      "resume": "Resume",
+      "title": "Scheduler Jobs",
+      "err_payload_not_object": "Payload must be a JSON object.",
+      "job_paused": "Job paused: {job_id}",
+      "job_created": "Job created: {job_id}",
+      "err_payload_invalid_json": "Invalid JSON in payload: {error}",
+      "job_on": "on",
+      "job_resumed": "Job resumed: {job_id}",
+      "job_updated": "Job updated: {job_id}",
+      "editor_group": "Job Editor",
+      "err_resume": "Failed to resume scheduler job: {error}",
+      "project_label": "Project:",
+      "no_sessions": "Project has no open desktop sessions for notification target.",
+      "no_projects": "No owned projects available."
+    },
+    "modepanel": {
+      "label": {
+        "mode": "Mode:"
+      },
+      "btn": {
+        "menu": "Menu"
+      },
+      "tooltip": {
+        "status_history": "Status history"
+      },
+      "msg": {
+        "no_history": "No history"
+      }
+    },
+    "ssh": {
+      "keygen_result_title": "Public Key Generated",
+      "duplicate_alias_title": "Duplicate Alias",
+      "keygen_fail_msg": "Key generation failed: {error}",
+      "label_auth": "Auth:",
+      "confirm_delete_msg": "Are you sure you want to delete host '{alias}'?",
+      "error_title": "Error",
+      "label_host": "Host:",
+      "test_exception_msg": "Test failed: {error}",
+      "pwd_keep_existing": "Leave empty to keep existing secret",
+      "confirm_delete_title": "Confirm Delete",
+      "label_passphrase_env": "Passphrase Env:",
+      "group_key": "Key Settings",
+      "test_result_title": "Test Result",
+      "label_port": "Port:",
+      "test_fail_msg": "Failed: {message}",
+      "label_description": "Description:",
+      "label_user": "User:",
+      "empty_hint": "Select a host or click Add",
+      "host_saved_msg": "Host '{alias}' saved successfully.",
+      "duplicate_alias_msg": "Host '{alias}' already exists",
+      "validation_error_title": "Validation Error",
+      "confirm_keygen_msg": "Generate a new key for '{alias}'? This will overwrite existing key file if already specified.",
+      "remote_root_placeholder": "/absolute/path/to/project (optional)",
+      "test_ok_msg": "Success!\n\n{info}",
+      "dialog_add_title": "Add SSH Host",
+      "dialog_add_prompt": "Enter host alias (e.g. staging):",
+      "group_sudo": "Sudo Settings",
+      "keygen_close_btn": "Close",
+      "validation_host_user_required": "Host and User are required.",
+      "label_value": "Value:",
+      "keygen_copy_hint": "Copy this public key to ~/.ssh/authorized_keys on the server:",
+      "label_sudo_pass_env": "Sudo Pass Env:",
+      "invalid_alias_title": "Invalid Alias",
+      "success_title": "Success",
+      "group_password": "Password Settings",
+      "validation_remote_root_msg": "Remote Project Root must be an absolute path (starting with /).",
+      "confirm_keygen_title": "Confirm Keygen",
+      "label_idle_timeout": "Idle Timeout (s):",
+      "label_roles": "Roles:",
+      "label_password_env": "Password Env:",
+      "label_remote_root": "Remote Project Root:",
+      "enable_sudo": "Enable Sudo",
+      "invalid_alias_msg": "Alias must be alphanumeric with - or _",
+      "label_key_file": "Key File:"
+    },
+    "main": {
+      "select_file": "Select File",
+      "select_folder": "Select Folder",
+      "analyst_progress": "🧠 Analyst: {phase}\n⏱ {mins}:{secs}",
+      "analyst_phase_default": "Analysis"
+    },
+    "cfgedit": {
+      "whitelist_ids": "Whitelist IDs",
+      "memory_outcomes": "Memory Outcomes",
+      "prompt_regex": "Prompt Regex",
+      "memory_native_hooks": "Native CLI Memory Hooks",
+      "msg_backup": "Backup created: {path}",
+      "gemini_secret": "Gemini OAuth Client Secret",
+      "memory_events": "Memory Events",
+      "pending_input_confirmation": "Pending Input Confirmation",
+      "msg_changed": "Changed: {value}",
+      "log_path": "Log Path",
+      "review_changes": "Review Changes",
+      "memory_learning": "Memory Learning",
+      "memory_retention_days": "Memory Events Retention (days)",
+      "archive_cli_json": "Archive CLI JSON Streams",
+      "err_token_required": "Telegram token is required.",
+      "bot_token": "Bot Token",
+      "bind_host": "Bind Host",
+      "network_settings": "Network Settings",
+      "err_workdir_required": "Default workdir is required.",
+      "msg_saved": "Configuration saved.",
+      "connect_timeout": "Connect Timeout (s)",
+      "memory_dreaming_batch": "Memory Dreaming Batch Size",
+      "err_mcp_host_required": "MCP host is required when MCP is enabled.",
+      "read_timeout": "Read Timeout (s)",
+      "tab": {
+        "tools": "Tools",
+        "defaults": "Defaults"
+      },
+      "msg_restart_required": "Restart required",
+      "host": "Host",
+      "idle_timeout": "Idle Timeout (s)",
+      "api_keys": "API Keys & Providers",
+      "mcp_server_settings": "MCP Server Settings",
+      "mcp_clients_active": "MCP Clients (Active)",
+      "port": "Port",
+      "msg_not_saved": "Configuration was not saved.",
+      "save_failed": "Save Failed",
+      "client_disabled": "Disabled",
+      "msg_up_to_date": "Configuration is already up to date.",
+      "headless_command": "Headless Command",
+      "msg_restart_none": "Restart required: none",
+      "memory_redaction": "Memory Event Redaction",
+      "zai_api_key": "ZAI API Key",
+      "openai_model": "OpenAI Model",
+      "openai_api_key": "OpenAI API Key",
+      "save_error": "Failed to save config: {error}",
+      "memory_dreaming": "Memory Dreaming",
+      "assistant_preview": "Assistant Live Preview",
+      "public_url": "Public URL",
+      "validation_error": "Validation Error",
+      "load_error": "Failed to load config: {error}",
+      "memory_payload_limit": "Memory Event Payload Limit",
+      "success": "Success",
+      "collect_error": "Failed to collect config: {error}",
+      "default_workdir": "Default Workdir",
+      "github_token": "GitHub Token",
+      "bind_port": "Bind Port",
+      "save_config": "Save Configuration",
+      "msg_reloadable": "Reloadable",
+      "command": "Command",
+      "msg_reloadable_none": "Reloadable: none",
+      "no_changes": "No Changes",
+      "admin_ids": "Admin IDs",
+      "msg_errors": "Errors",
+      "tool_mode": "Mode"
+    },
+    "sessmgr": {
+      "transfer_msg": "CLI switched: {source} → {target}.\nTransfer context from previous session ({source})?",
+      "transfer_title": "Session Context Transfer",
+      "transfer_fail_msg": "Failed to extract context from the previous session.",
+      "invalid_dir_title": "Invalid directory",
+      "invalid_dir_msg": "Selected directory must be inside work_dir:\n{root}",
+      "select_workdir": "Select Work Directory",
+      "transfer_fail_title": "Context Transfer",
+      "rename": "Rename",
+      "reset": "Reset",
+      "resume_token": "Resume Token"
+    },
+    "statuspanel": {
+      "mode": "Mode",
+      "queue": "Queue",
+      "progress": "Progress"
+    },
+    "sesssettings": {
+      "no_hosts": "(No hosts configured in .cli-proxy/ssh.yaml)",
+      "rc_root_required": "SSH host exists but remote_project_root must be set for Remote Control.",
+      "no_eligible_hosts": "No eligible hosts",
+      "hosts_count": "({n} hosts configured)",
+      "preflight_failed": "Preflight failed: {error}",
+      "effective_local": "local",
+      "rc_error": "Error: {error}",
+      "exec_target_remote": "Execution Target: Remote · {host} · {root}",
+      "preflight_passed": "Preflight passed.",
+      "recheck": "Recheck",
+      "recheck_failed": "Recheck failed: {error}"
+    },
+    "taskprogress": {
+      "cancel_tooltip": "Cancel task",
+      "title": "Task Progress"
+    },
+    "pluginmenu": {
+      "msg": {
+        "no_plugins": "No plugins available",
+        "no_actions": "No actions available",
+        "load_error": "Error loading plugins: {error}"
+      },
+      "btn": {
+        "refresh": "Refresh Plugins"
+      },
+      "title": "Plugins"
+    },
+    "taskqueue": {
+      "no_active_tasks": "No active tasks",
+      "title": "Task Queue",
+      "active_tasks_count": "Active tasks: {count}"
+    },
+    "managetasks": {
+      "remaining": "... {count} more",
+      "header": "Execution Plan",
+      "closed_count": "Closed: {closed}/{total}"
+    },
+    "modemenu": {
+      "title": "Mode Menu"
     }
+  },
+  "session_status": {
+    "resume": "Resume",
+    "active_session": "Active session",
+    "session": "Session",
+    "busy": "busy",
+    "free": "free",
+    "git_busy": "git: busy",
+    "git_free": "git: free",
+    "conflict": "conflict",
+    "conflict_yes": "yes",
+    "status": "Status",
+    "in_progress": "In progress",
+    "project": "Project",
+    "last_output": "Last output",
+    "last_tick": "Last tick",
+    "ticks": "Ticks",
+    "queue": "Queue",
+    "yes": "yes",
+    "no": "no",
+    "orchestrator": "Orchestrator",
+    "on": "on",
+    "off": "off",
+    "ssh_on": "SSH: on",
+    "ssh_off": "SSH: off",
+    "modes_none": "Modes: none",
+    "none": "none",
+    "sec": "s",
+    "ago": "{v} ago",
+    "mode_label": "Mode",
+    "enabled": "enabled",
+    "disabled": "disabled",
+    "stage": "Stage",
+    "stage_running": "processing the task",
+    "stage_queued": "waiting for a queued task",
+    "stage_idle": "waiting for a new request",
+    "stage_manager_idle": "no active plan",
+    "stage_agent_running": "executing the task",
+    "stage_draining": "finishing processing",
+    "manager_title": "🏗 Manager Status",
+    "webmaster_title": "🌐 Webmaster Status",
+    "task": "Task",
+    "task_active": "active",
+    "quiet_mode": "Quiet mode",
+    "plan_header": "Plan",
+    "plan_not_found": "Plan: not found.",
+    "truncated": "(Truncated due to Telegram limit. The rest was sent as HTML output.)",
+    "wm_task_kind": "Task type",
+    "wm_prompt_version": "Prompt version",
+    "wm_last_class": "Last classification",
+    "plugins_ui": "UI plugins",
+    "plugins_available": "available"
+  },
+  "agent": {
+    "cli_language_directive": "Respond in English. Also write any files, code comments, and artifacts you create in English."
+  },
+  "run": {
+    "cli_abnormal": "The CLI for session {details} terminated abnormally.",
+    "exec_error": "Execution error: {e}",
+    "mode_interrupted": "Mode {mode_id} was interrupted.",
+    "mode_error": "Mode {mode_id} error: {e}",
+    "output_delivery_with_summary": "First I will send the output as an attachment (HTML, last {n} characters), then a summary.",
+    "output_delivery_only": "I will send the output as an attachment (HTML, last {n} characters).",
+    "output_header": "[{sid}|{name}] Session: {sid} | Tool: {tool}\nDirectory: {workdir}\nOutput length: {length} characters | Queue: {queue}\nResume: {resume}\n{delivery}",
+    "orch_transition_ready": "The result of the current mode is ready.\n",
+    "orch_transition_return_warning": "\n\n⚠️ A return to the previous mode in the chain is proposed. Check the confidence and confirm manually.",
+    "summary_unavailable": " (summary unavailable: {err})",
+    "html_pending": "\nHTML is still being prepared.",
+    "summary_error_timeout": "summarization timeout ({sec}s)",
+    "summary_error_unknown": "unknown error"
   }
 }

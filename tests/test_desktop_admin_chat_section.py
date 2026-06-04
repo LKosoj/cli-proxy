@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from desktop.widgets.admin_chat_section import AdminChatSection
+from i18n import t
 
 
 def _make_facade(
@@ -65,6 +66,7 @@ def _make_facade(
         post_admin_chat_message=post,
         approve_admin_chat_pending=approve,
         logger=logging.getLogger("test_admin_chat_section"),
+        ui_language="ru",
     )
     facade._calls = calls
     return facade
@@ -98,7 +100,7 @@ def test_renders_messages_and_pending(qtbot) -> None:
     assert "user: hi" in text
     assert "assistant: hello!" in text
     assert section.pending_list.count() == 1
-    assert section.pending_label.text() == "Pending approvals (1):"
+    assert section.pending_label.text() == t("desktop.adminchat.pending_label", "ru", count=1)
     assert section.memory_edit.toPlainText() == "note"
 
 
@@ -269,7 +271,7 @@ def test_handle_send_result_auto_exec_status(qtbot) -> None:
         "exec_result": {"target_kind": "local", "exit_code": 0},
         "intent": {"type": "propose_action"},
     })
-    assert "Autopilot executed" in section.status_label.text()
+    assert t("desktop.adminchat.status_autopilot_executed", "ru", kind="local") in section.status_label.text()
     assert "exit=0" in section.status_label.text()
 
 
@@ -287,5 +289,8 @@ def test_handle_send_result_blocked_status(qtbot) -> None:
         "autopilot_blocked": "action 'x' not in auto_exec_actions",
         "intent": {"type": "propose_action"},
     })
-    assert "Autopilot blocked" in section.status_label.text()
+    assert t(
+        "desktop.adminchat.status_autopilot_blocked", "ru",
+        reason="action 'x' not in auto_exec_actions",
+    ) in section.status_label.text()
     assert "action 'x'" in section.status_label.text()

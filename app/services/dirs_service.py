@@ -8,7 +8,9 @@ from typing import Any, Optional
 
 from app.services.dirs_ui import build_dirs_keyboard, prepare_dirs
 from app.services.telegram_ui_scope import TelegramUiKey
+from i18n import t
 from modes.sdk import decode_mode_dirs
+from utils.lang import resolve_user_lang
 
 
 @dataclass
@@ -104,6 +106,7 @@ class DirsService:
             await self.bot_app._send_message(context, text=err, **ui_key.reply_kwargs())
             return
 
+        lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
         keyboard = build_dirs_keyboard(
             self.bot_app.ui_state.dirs_menu,
             self.bot_app.ui_state.dirs_base,
@@ -112,10 +115,11 @@ class DirsService:
             ui_key,
             base,
             0,
+            lang=lang,
         )
         await self.bot_app._send_message(
             context,
-            text="Выберите файл или папку:" if include_files else "Выберите каталог:",
+            text=t("msg.dirs.choose_file_or_dir", lang) if include_files else t("msg.dirs.choose_dir", lang),
             reply_markup=keyboard,
             **ui_key.reply_kwargs(),
         )

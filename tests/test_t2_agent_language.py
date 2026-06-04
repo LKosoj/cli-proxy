@@ -57,10 +57,16 @@ def _make_agent_core_config(user_languages: dict | None = None, default_language
 
 
 def _call_load_system_prompt(user_id: int, config):
-    """Call _load_system_prompt via ReActAgent with a synthetic cwd."""
+    """Call _load_system_prompt via ReActAgent.
+
+    Language must resolve from the real chat owner (chat_id == telegram user_id in
+    private chats), NOT from the cwd path. cwd is the project root in production, so
+    its last segment is unrelated to the telegram id — passing it as a synthetic
+    user_id would only validate the old (buggy) behavior.
+    """
     from modes.sdk.runtime.agent_core import ReActAgent
 
-    cwd = f"/workspace/{user_id}"
+    cwd = "/srv/projects/some-repo"
     system_txt = os.path.join(os.path.dirname(__file__), "..", "modes", "sdk", "runtime", "system.txt")
     system_txt = os.path.normpath(system_txt)
     if not os.path.exists(system_txt):
@@ -78,7 +84,7 @@ def _call_load_system_prompt(user_id: int, config):
     with patch("modes.sdk.runtime.agent_core.SYSTEM_PROMPT_PATH", system_txt):
         with patch("modes.sdk.runtime.agent_core.get_memory_for_prompt", return_value=""):
             with patch("modes.sdk.runtime.agent_core.get_chat_history", return_value=""):
-                prompt = agent._load_system_prompt(cwd, chat_id=None, allowed_tools=None)
+                prompt = agent._load_system_prompt(cwd, chat_id=user_id, allowed_tools=None)
     return prompt
 
 

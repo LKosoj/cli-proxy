@@ -76,15 +76,16 @@ def build_lang_menu(
     return t("msg.lang.choose", current_lang), InlineKeyboardMarkup(rows)
 
 
-def format_session_state(st: SessionState, updated_at_str: str) -> str:
+def format_session_state(st: SessionState, updated_at_str: str, lang: str = "ru") -> str:
     """Форматирует объект SessionState в читаемую строку для отображения в Telegram."""
+    no = t("session_status.no", lang)
     return "\n".join([
-        f"Session: {st.session_id or 'нет'}",
+        f"Session: {st.session_id or no}",
         f"Tool: {st.tool}",
         f"Workdir: {st.workdir}",
-        f"Resume: {st.resume_token or 'нет'}",
-        f"Name: {st.name or 'нет'}",
-        f"Summary: {st.summary or 'нет'}",
+        f"Resume: {st.resume_token or no}",
+        f"Name: {st.name or no}",
+        f"Summary: {st.summary or no}",
         f"Updated: {updated_at_str}",
     ])
 
@@ -278,9 +279,13 @@ class BotHandlers:
         service_name = str(marker.get("service_name") or self._bot_service_name())
         requested_at = float(marker.get("requested_at") or 0.0)
         delay_sec = max(0, int(time.time() - requested_at)) if requested_at > 0 else None
-        text = f"Selfupdate подтверждён: сервис {service_name} перезапущен и бот снова в сети."
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        text = t("msg.selfupdate.confirmed", lang, service_name=service_name)
         if delay_sec is not None:
-            text += f"\nЗадержка запуска: {delay_sec}с."
+            text += t("msg.selfupdate.startup_delay", lang, delay_sec=delay_sec)
         try:
             send_kwargs = {"chat_id": chat_id, "text": text}
             message_thread_id = marker.get("message_thread_id")
@@ -565,7 +570,9 @@ class BotHandlers:
         except Exception as e:
             logging.exception("cancel mode tasks session=%s failed: %s", session_id, e)
 
-    def _active_session_status_text(self, s: Session, *, chat_id: Optional[int] = None) -> str:
+    def _active_session_status_text(
+        self, s: Session, *, chat_id: Optional[int] = None, lang: Optional[str] = None
+    ) -> str:
         access_policy = getattr(self.bot_app, "access_policy_service", None)
         show_orchestrator = True
         if chat_id is not None:
@@ -577,12 +584,17 @@ class BotHandlers:
                     show_orchestrator = False
             else:
                 show_orchestrator = False
+        if lang is None:
+            try:
+                lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+            except Exception:
+                lang = "ru"
         return build_session_status_text(
             s,
             mode_registry=getattr(self.bot_app, "mode_registry_service", None),
             mode_items=self._registered_modes(chat_id=chat_id) if chat_id is not None else None,
             show_orchestrator=show_orchestrator,
-            title_prefix="Активная сессия",
+            lang=lang,
         )
 
     def _registered_modes(self, *, chat_id: Optional[int] = None) -> list[tuple[str, str]]:
@@ -625,13 +637,13 @@ class BotHandlers:
         tool_name: Optional[str] = None,
         force_new: bool = False,
         back_callback: Optional[str] = "sess_active",
-        back_text: str = "⬅️ Назад",
         include_cancel: bool = False,
+        lang: str = "ru",
     ) -> tuple[str, InlineKeyboardMarkup]:
         projects = self.bot_app.user_projects(owner_chat_id)
         if not projects:
-            rows = [[InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")]]
-            return "Проекты не настроены. Обратитесь к администратору.", InlineKeyboardMarkup(rows)
+            rows = [[InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")]]
+            return t("msg.session.no_projects", lang), InlineKeyboardMarkup(rows)
 
         callback_prefix = "user_project_pick_new" if force_new else "user_project_pick"
         token = str(session_uid or "").strip()
@@ -656,12 +668,12 @@ class BotHandlers:
             for idx, path in enumerate(projects)
         ]
         if include_cancel:
-            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="sess_close_menu")])
+            rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")])
         elif back_callback:
-            rows.append([InlineKeyboardButton(back_text, callback_data=back_callback)])
+            rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data=back_callback)])
         if tool:
-            return f"Выбран инструмент {tool}. Выберите проект.", InlineKeyboardMarkup(rows)
-        return "Выберите проект:", InlineKeyboardMarkup(rows)
+            return t("msg.session.project_choose_tool", lang, tool=tool), InlineKeyboardMarkup(rows)
+        return t("msg.session.project_choose", lang), InlineKeyboardMarkup(rows)
 
     def _resolve_overview_session(
         self,
@@ -685,20 +697,16 @@ class BotHandlers:
             return resolver(reply_chat_id=int(chat_id), owner_chat_id=int(chat_id))
         return None
 
-    @staticmethod
-    def _orchestrator_button(session: Session) -> InlineKeyboardButton:
+    def _orchestrator_button(self, session: Session, lang: str = "ru") -> InlineKeyboardButton:
         enabled = bool(is_orchestrator_enabled(session, False))
-        prefix = "🧠✅" if enabled else "🧠⬜"
-        text = f"{prefix} Оркестратор: {'вкл' if enabled else 'выкл'}"
+        text = t("btn.orch.on", lang) if enabled else t("btn.orch.off", lang)
         return InlineKeyboardButton(text, callback_data=f"sess_orch_toggle:{session.id}")
 
-    @staticmethod
-    def _ssh_remote_button(session: Session) -> Optional[InlineKeyboardButton]:
+    def _ssh_remote_button(self, session: Session, lang: str = "ru") -> Optional[InlineKeyboardButton]:
         if not ssh_remote_available(session.workdir):
             return None
         enabled = is_ssh_remote_enabled(session)
-        prefix = "🔗✅" if enabled else "🔗⬜"
-        label = f"{prefix} SSH: {'вкл' if enabled else 'выкл'}"
+        label = t("btn.ssh.on", lang) if enabled else t("btn.ssh.off", lang)
         explicit_uid = session_runtime_uid(session)
         callback_data = f"sess_ssh_toggle:{explicit_uid}" if explicit_uid else f"sess_ssh_toggle:{session.id}"
         return InlineKeyboardButton(label, callback_data=callback_data)
@@ -794,12 +802,12 @@ class BotHandlers:
         for idx in range(0, len(overview_buttons), 2):
             keyboard_rows.append(overview_buttons[idx:idx + 2])
 
-        ssh_btn = self._ssh_remote_button(s)
+        ssh_btn = self._ssh_remote_button(s, lang)
         if ssh_btn and visibility.allows("ssh"):
             keyboard_rows.append([ssh_btn])
 
         if visibility.allows("orchestrator"):
-            keyboard_rows.append([self._orchestrator_button(s)])
+            keyboard_rows.append([self._orchestrator_button(s, lang)])
         if visibility.allows("mode_selector"):
             keyboard_rows.extend(
                 self._build_mode_buttons_rows(
@@ -819,7 +827,7 @@ class BotHandlers:
         keyboard_rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")])
 
         keyboard = InlineKeyboardMarkup(keyboard_rows)
-        return self._active_session_status_text(s, chat_id=chat_id), keyboard
+        return self._active_session_status_text(s, chat_id=chat_id, lang=lang), keyboard
 
     async def show_new_session_menu(
         self,
@@ -827,8 +835,13 @@ class BotHandlers:
         context: ContextTypes.DEFAULT_TYPE,
         edit_message: Optional[object] = None,
         reply_kwargs: Optional[dict] = None,
-        lang: str = "ru",
+        lang: Optional[str] = None,
     ) -> None:
+        if lang is None:
+            try:
+                lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+            except Exception:
+                lang = "ru"
         tools = list(sorted(self.bot_app._available_tools()))
         if not tools:
             text = t("msg.session.no_tools", lang, expected=self.bot_app._expected_tools())
@@ -874,19 +887,20 @@ class BotHandlers:
         chat_id = update.effective_chat.id
         if not await self._ensure_allowed(chat_id, context, update=update, allow_outside_topic=True):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         reply_kwargs = self._reply_kwargs(update)
         tools = sorted(self.bot_app._available_tools())
         if not tools:
             await self.bot_app._send_message(
                 context,
-                text=(
-                    "CLI не найдены. Сначала установите нужные инструменты. "
-                    f"Ожидаемые: {self.bot_app._expected_tools()}"
-                ),
+                text=t("msg.session.no_tools", lang, expected=self.bot_app._expected_tools()),
                 **reply_kwargs,
             )
             return
-        await self.bot_app._send_message(context, text=f"Доступные инструменты: {', '.join(tools)}", **reply_kwargs)
+        await self.bot_app._send_message(context, text=t("msg.session.available_tools", lang, tools=", ".join(tools)), **reply_kwargs)
 
     async def cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ui_chat_id = update.effective_chat.id
@@ -895,6 +909,10 @@ class BotHandlers:
             return
         if not await self._require_admin(owner_chat_id, context, scope="new_projects", update=update):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
         args = context.args
         if len(args) < 2:
             await self.show_new_session_menu(ui_chat_id, context, reply_kwargs=self._reply_kwargs(update))
@@ -910,12 +928,12 @@ class BotHandlers:
         )
         if err:
             if err == "Инструмент не найден.":
-                err = "Неизвестный инструмент."
+                err = t("msg.error.unknown_tool", lang)
             await self.bot_app._send_message(context, text=err, **self._reply_kwargs(update))
             return
         await self.bot_app._send_message(
             context,
-            text=f"Сессия {session.id} создана и выбрана.",
+            text=t("msg.session.created", lang, id=session.id),
             **self._reply_kwargs(update, session),
         )
 
@@ -932,8 +950,12 @@ class BotHandlers:
             allow_outside_topic=True,
         ):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
         if not context.args:
-            await self.bot_app._send_message(context, text="Использование: /newpath <path>", **self._reply_kwargs(update))
+            await self.bot_app._send_message(context, text=t("cmd.newpath.usage", lang), **self._reply_kwargs(update))
             return
         path = " ".join(context.args)
         route = self.bot_app.resolve_telegram_inbound_route(update)
@@ -949,7 +971,7 @@ class BotHandlers:
         )
         if err:
             if err == "Инструмент не выбран.":
-                err = "Сначала выберите инструмент через /sessions."
+                err = t("msg.error.tool_not_selected", lang)
             await self.bot_app._send_message(context, text=err, **self._reply_kwargs(update))
             return
         if int(getattr(session, "chat_id", 0) or 0) != owner_chat_id:
@@ -960,7 +982,7 @@ class BotHandlers:
             )
         await self.bot_app._send_message(
             context,
-            text=f"Сессия {session.id} создана и выбрана.",
+            text=t("msg.session.created", lang, id=session.id),
             **self._reply_kwargs(update, session),
         )
 
@@ -987,32 +1009,36 @@ class BotHandlers:
         if not await self._require_admin(chat_id, context, scope="new_projects", update=update):
             return
         owner_chat_id = self._owner_chat_id(update)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
         route = self.bot_app.resolve_telegram_inbound_route(update)
         ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
         if not context.args:
             items = list(self.bot_app.manager.sessions_for_chat(owner_chat_id).keys())
             if not items:
-                await self.bot_app._send_message(context, text="Сессий нет.", **self._reply_kwargs(update))
+                await self.bot_app._send_message(context, text=t("msg.session.none", lang), **self._reply_kwargs(update))
                 return
             self.bot_app.ui_state.close_menu[ui_key] = items
             rows = [
                 [InlineKeyboardButton(sid, callback_data=f"close_pick:{i}")]
                 for i, sid in enumerate(items)
             ]
-            rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+            rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="agent_cancel")])
             keyboard = InlineKeyboardMarkup(rows)
             await self.bot_app._send_message(
                 context,
-                text="Выберите сессию для закрытия:",
+                text=t("msg.session.choose_close", lang),
                 reply_markup=keyboard,
                 **self._reply_kwargs(update),
             )
             return
         ok = await self.bot_app.close_session_with_cleanup(context.args[0], owner_chat_id, context)
         if ok:
-            await self.bot_app._send_message(context, text="Сессия закрыта.", **self._reply_kwargs(update))
+            await self.bot_app._send_message(context, text=t("msg.session.closed", lang), **self._reply_kwargs(update))
         else:
-            await self.bot_app._send_message(context, text="Сессия не найдена.", **self._reply_kwargs(update))
+            await self.bot_app._send_message(context, text=t("msg.error.session_not_found", lang), **self._reply_kwargs(update))
 
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1021,7 +1047,11 @@ class BotHandlers:
         s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
         if not s:
             return
-        await self.bot_app._send_message(context, text=self._active_session_status_text(s), **self._reply_kwargs(update, s))
+        await self.bot_app._send_message(
+            context,
+            text=self._active_session_status_text(s, chat_id=chat_id),
+            **self._reply_kwargs(update, s),
+        )
 
     async def cmd_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         route = await self.bot_app.ensure_telegram_inbound_authorized(
@@ -1033,10 +1063,14 @@ class BotHandlers:
             return
         manager = getattr(self.bot_app, "manager", None)
         service = getattr(self.bot_app, "cli_limits_service", None)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
+        except Exception:
+            lang = "ru"
         if manager is None or not hasattr(manager, "sessions_for_chat") or service is None:
             await self.bot_app._send_message(
                 context,
-                text="Сервис лимитов недоступен.",
+                text=t("msg.error.limits_unavailable", lang),
                 **route.reply_kwargs(),
             )
             return
@@ -1063,7 +1097,7 @@ class BotHandlers:
             )
         except Exception:
             logging.getLogger(__name__).exception("limits command failed owner_chat_id=%s", route.owner_chat_id)
-            text = "Не удалось собрать лимиты CLI."
+            text = t("msg.error.limits_fetch_failed", lang)
         await self.bot_app._send_message(context, text=text, **route.reply_kwargs())
 
     async def cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mode_id: str) -> None:
@@ -1076,9 +1110,13 @@ class BotHandlers:
                 owner_chat_id=int(route.owner_chat_id),
             )
             if not session:
+                try:
+                    lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
+                except Exception:
+                    lang = "ru"
                 await self.bot_app._send_message(
                     context,
-                    text="Сначала откройте нужный topic или выберите сессию через /sessions.",
+                    text=t("msg.session.open_topic_first", lang),
                     **route.reply_kwargs(),
                 )
                 return
@@ -1101,6 +1139,10 @@ class BotHandlers:
         s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
         if not s:
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         reply_kwargs = self._reply_kwargs(update, s)
         svc = getattr(self.bot_app, "mode_registry_service", None)
         plugin = svc.get(mode_id) if svc else None
@@ -1109,15 +1151,17 @@ class BotHandlers:
         policy_chat_id = int(route.owner_chat_id)
         is_mode_allowed = policy.is_mode_allowed_for_chat(policy_chat_id, mode_id) if policy else True
         if not is_mode_allowed:
-            await self.bot_app._send_message(context, text=f"Режим `{mode_id}` недоступен для вашего пользователя.", **reply_kwargs)
+            await self.bot_app._send_message(
+                context, text=t("msg.error.mode_unavailable_user_named", lang, mode_id=mode_id), **reply_kwargs
+            )
             return
         if plugin is None or not hasattr(plugin, "build_menu"):
-            await self.bot_app._send_message(context, text=f"Режим `{mode_id}` недоступен.", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.error.mode_unavailable_named", lang, mode_id=mode_id), **reply_kwargs)
             return
 
         if mode_id == "admin":
             if not hasattr(plugin, "handle_input"):
-                await self.bot_app._send_message(context, text=f"Режим `{mode_id}` недоступен.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.error.mode_unavailable_named", lang, mode_id=mode_id), **reply_kwargs)
                 return
             payload_args = [str(x) for x in (command_args or []) if str(x).strip()]
             command_text = "/admin"
@@ -1167,11 +1211,12 @@ class BotHandlers:
             access_policy=getattr(self.bot_app, "access_policy_service", None),
             user_id=getattr(getattr(update, "effective_user", None), "id", None),
         )
+        back_text = t("btn.session.back", lang)
         text, keyboard = call_mode_build_menu(
             plugin,
             s,
             back_callback=build_session_overview_callback_data(s),
-            back_text="⬅️ Назад",
+            back_text=back_text,
             menu_visibility=menu_visibility,
         )
         await self.bot_app._send_message(context, text=text, reply_markup=keyboard, **reply_kwargs)
@@ -1184,8 +1229,12 @@ class BotHandlers:
         if not s:
             return
         reply_kwargs = self._reply_kwargs(update, s)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         interrupt_runtime = getattr(getattr(self.bot_app, "session_management", None), "interrupt_session_runtime", None)
-        message_text = "Прерывание отправлено."
+        message_text = t("msg.session.interrupt_sent", lang)
         if callable(interrupt_runtime):
             report = await interrupt_runtime(
                 s,
@@ -1196,7 +1245,7 @@ class BotHandlers:
             )
             formatter = getattr(self.bot_app.session_management, "format_interrupt_user_message", None)
             if callable(formatter):
-                message_text = str(formatter(report) or message_text)
+                message_text = str(formatter(report, lang=lang) or message_text)
         else:
             s.interrupt()
             try:
@@ -1212,10 +1261,14 @@ class BotHandlers:
         s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
         if not s:
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         if not s.queue:
-            await self.bot_app._send_message(context, text="Очередь пуста.", **self._reply_kwargs(update, s))
+            await self.bot_app._send_message(context, text=t("msg.session.queue_empty", lang), **self._reply_kwargs(update, s))
             return
-        await self.bot_app._send_message(context, text=f"В очереди {len(s.queue)} сообщений.", **self._reply_kwargs(update, s))
+        await self.bot_app._send_message(context, text=t("msg.session.queue_count", lang, n=len(s.queue)), **self._reply_kwargs(update, s))
 
     async def cmd_clearqueue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1224,9 +1277,13 @@ class BotHandlers:
         s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
         if not s:
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         s.queue.clear()
         await self._persist_session_async(chat_id, s.id)
-        await self.bot_app._send_message(context, text="Очередь очищена.", **self._reply_kwargs(update, s))
+        await self.bot_app._send_message(context, text=t("msg.session.queue_cleared", lang), **self._reply_kwargs(update, s))
 
     async def cmd_rename(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1234,10 +1291,14 @@ class BotHandlers:
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
         owner_chat_id = int(route.owner_chat_id)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
         if not context.args:
             await self.bot_app._send_message(
                 context,
-                text="Использование: /rename <name> или /rename <id> <name>",
+                text=t("cmd.rename.usage", lang),
                 **self._reply_kwargs(update, route.session),
             )
             return
@@ -1255,14 +1316,14 @@ class BotHandlers:
         if not session:
             await self.bot_app._send_message(
                 context,
-                text="Сессия не определена для текущего scope.",
+                text=t("msg.error.session_no_scope", lang),
                 **self._reply_kwargs(update),
             )
             return
         if not self._is_session_visible_for_chat(owner_chat_id, session):
             await self.bot_app._send_message(
                 context,
-                text="Сессия недоступна.",
+                text=t("msg.error.session_unavailable", lang),
                 **self._reply_kwargs(update),
             )
             return
@@ -1278,7 +1339,7 @@ class BotHandlers:
                 )
             except Exception as e:
                 logging.exception("session topic rename failed: %s", e)
-        await self.bot_app._send_message(context, text="Имя сессии обновлено.", **self._reply_kwargs(update, session))
+        await self.bot_app._send_message(context, text=t("msg.session.renamed", lang), **self._reply_kwargs(update, session))
 
     async def cmd_dirs(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1286,9 +1347,13 @@ class BotHandlers:
             return
         if not await self._require_admin(chat_id, context, scope="new_projects", update=update):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         path = " ".join(context.args) if context.args else self.bot_app.config.defaults.workdir
         if not os.path.isdir(path):
-            await self.bot_app._send_message(context, text="Каталог не существует.", **self._reply_kwargs(update))
+            await self.bot_app._send_message(context, text=t("msg.error.dir_not_found", lang), **self._reply_kwargs(update))
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
         await self.bot_app.dirs_service.start_flow(
@@ -1312,12 +1377,16 @@ class BotHandlers:
             allow_outside_topic=True,
         ):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
         if not context.args:
-            await self.bot_app._send_message(context, text="Использование: /cwd <path>", **self._reply_kwargs(update))
+            await self.bot_app._send_message(context, text=t("cmd.cwd.usage", lang), **self._reply_kwargs(update))
             return
         path = " ".join(context.args)
         if not os.path.isdir(path):
-            await self.bot_app._send_message(context, text="Каталог не существует.", **self._reply_kwargs(update))
+            await self.bot_app._send_message(context, text=t("msg.error.dir_not_found", lang), **self._reply_kwargs(update))
             return
         s = await self._require_scope_session(
             ui_chat_id,
@@ -1341,7 +1410,7 @@ class BotHandlers:
             return
         await self.bot_app._send_message(
             context,
-            text=f"Новая сессия {session.id} создана и выбрана.",
+            text=t("msg.session.created_cwd", lang, id=session.id),
             **self._reply_kwargs(update, session),
         )
 
@@ -1366,10 +1435,14 @@ class BotHandlers:
             message_thread_id=route.message_thread_id,
         ):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         reply_kwargs = self._reply_kwargs(update)
         await self.bot_app._send_message(
             context,
-            text="Git-операции:",
+            text=t("msg.git.operations_menu", lang),
             reply_markup=self.bot_app.git.build_git_keyboard(),
             **reply_kwargs,
         )
@@ -1386,29 +1459,33 @@ class BotHandlers:
             allow_outside_topic=True,
         ):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         reply_kwargs = self._reply_kwargs(update)
 
         repo_root = self._project_root()
         if not os.path.isdir(os.path.join(repo_root, ".git")):
             await self.bot_app._send_message(
                 context,
-                text=f"Ошибка git pull: репозиторий не найден в `{repo_root}`.",
+                text=t("msg.selfupdate.no_repo", lang, repo_root=repo_root),
                 md2=True,
                 **reply_kwargs,
             )
             return
 
-        await self.bot_app._send_message(context, text="Запускаю git pull...", md2=True, **reply_kwargs)
+        await self.bot_app._send_message(context, text=t("msg.selfupdate.pulling", lang), md2=True, **reply_kwargs)
         try:
             rc, output = await self._run_subprocess("git", "pull", "--ff-only", cwd=repo_root)
         except Exception as e:
             logging.exception("selfupdate git pull failed: %s", e)
-            await self.bot_app._send_message(context, text=f"Ошибка git pull: {e}", md2=True, **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.selfupdate.pull_error", lang, e=e), md2=True, **reply_kwargs)
             return
 
         pull_out = self._trim_output(output)
         if rc != 0:
-            text = "Ошибка git pull."
+            text = t("msg.selfupdate.pull_failed", lang)
             if pull_out:
                 text += f"\n\n{pull_out}"
             await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
@@ -1431,14 +1508,14 @@ class BotHandlers:
                 if not venv_python:
                     await self.bot_app._send_message(
                         context,
-                        text="git pull выполнен, но `.venv` не найден. Перезапуск отменен.",
+                        text=t("msg.selfupdate.no_venv", lang),
                         md2=True,
                         **reply_kwargs,
                     )
                     return
                 await self.bot_app._send_message(
                     context,
-                    text=f"Обнаружены изменения в `{req_file}`. Обновляю зависимости в .venv...",
+                    text=t("msg.selfupdate.updating_deps", lang, req_file=req_file),
                     md2=True,
                     **reply_kwargs,
                 )
@@ -1453,7 +1530,7 @@ class BotHandlers:
                 )
                 if dep_rc != 0:
                     dep_out = self._trim_output(dep_output)
-                    text = "git pull выполнен, но обновление зависимостей завершилось ошибкой."
+                    text = t("msg.selfupdate.deps_failed", lang)
                     if dep_out:
                         text += f"\n\n{dep_out}"
                     await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
@@ -1492,7 +1569,7 @@ class BotHandlers:
         if not restart_invoked:
             self._clear_selfupdate_marker()
             restart_out = self._trim_output(restart_output)
-            text = f"git pull выполнен успешно, но не удалось запустить перезапуск сервиса `{service_name}`."
+            text = t("msg.selfupdate.restart_failed_no_invoke", lang, service_name=service_name)
             if restart_out:
                 text += f"\n\n{restart_out}"
             await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
@@ -1522,24 +1599,21 @@ class BotHandlers:
                 logging.exception("selfupdate service state check failed: %s", e)
 
         if restart_confirmed:
-            text = "git pull выполнен успешно. Перезапуск сервиса запущен."
+            text = t("msg.selfupdate.success", lang)
             await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
             return
 
         if restart_state:
             restart_out = self._trim_output(restart_output)
-            text = (
-                f"git pull выполнен успешно. Команда перезапуска сервиса `{service_name}` отправлена, "
-                "но состояние не удалось подтвердить мгновенно."
-            )
-            text += f"\n\nsystemctl restart вернул код {restart_rc}, текущее состояние: {restart_state}."
+            text = t("msg.selfupdate.restart_unconfirmed", lang, service_name=service_name)
+            text += t("msg.selfupdate.restart_status", lang, restart_rc=restart_rc, restart_state=restart_state)
             if restart_out:
                 text += f"\n\n{restart_out}"
             await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
             return
 
         restart_out = self._trim_output(restart_output)
-        text = f"git pull выполнен успешно, но не удалось перезапустить сервис `{service_name}`."
+        text = t("msg.selfupdate.restart_failed", lang, service_name=service_name)
         if restart_out:
             text += f"\n\n{restart_out}"
         await self.bot_app._send_message(context, text=text, md2=True, **reply_kwargs)
@@ -1550,10 +1624,14 @@ class BotHandlers:
             return
         if not await self._require_admin(chat_id, context, scope="generic", update=update):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         reply_kwargs = self._reply_kwargs(update)
         args = context.args
         if len(args) < 2:
-            await self.bot_app._send_message(context, text="Использование: /setprompt <tool> <regex>", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("cmd.setprompt.usage", lang), **reply_kwargs)
             return
         tool_name = args[0]
         regex = " ".join(args[1:])
@@ -1562,7 +1640,7 @@ class BotHandlers:
         if config_service is None:
             await self.bot_app._send_message(
                 context,
-                text="ConfigService недоступен: prompt_regex не сохранен.",
+                text=t("msg.error.config_service_unavailable", lang),
                 **reply_kwargs,
             )
             return
@@ -1570,7 +1648,7 @@ class BotHandlers:
         current_config = await config_service.load()
         tool = current_config.tools.get(tool_name)
         if not tool:
-            await self.bot_app._send_message(context, text="Инструмент не найден.", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.error.tool_not_found", lang), **reply_kwargs)
             return
         expected_revision = await config_service.current_revision(current_config)
         draft_config = copy.deepcopy(current_config)
@@ -1586,9 +1664,10 @@ class BotHandlers:
             if callable(reload_runtime_config):
                 reload_result = await reload_runtime_config()
 
+        success_prefix = t("msg.setprompt.saved", lang) if result.ok else t("msg.setprompt.not_saved", lang)
         text = self._config_save_summary(
             result,
-            success_prefix="prompt_regex сохранен." if result.ok else "prompt_regex не сохранен.",
+            success_prefix=success_prefix,
             reload_result=reload_result,
         )
         await self.bot_app._send_message(context, text=text, **reply_kwargs)
@@ -1627,14 +1706,20 @@ class BotHandlers:
         s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
         if not s:
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         if not context.args:
-            token = s.resume_token or "нет"
-            await self.bot_app._send_message(context, text=f"Текущий resume: {token}", **self._reply_kwargs(update, s))
+            token = s.resume_token or t("session_status.no", lang)
+            await self.bot_app._send_message(
+                context, text=t("msg.session.resume_current", lang, token=token), **self._reply_kwargs(update, s)
+            )
             return
         token = " ".join(context.args).strip()
         s.resume_token = token
         await self._persist_session_async(chat_id, s.id)
-        await self.bot_app._send_message(context, text="Resume сохранен.", **self._reply_kwargs(update, s))
+        await self.bot_app._send_message(context, text=t("msg.session.resume_saved", lang), **self._reply_kwargs(update, s))
 
     async def cmd_state(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1642,6 +1727,10 @@ class BotHandlers:
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
         owner_chat_id = int(route.owner_chat_id)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
         s = route.session or self.bot_app.resolve_telegram_scope_session(
             reply_chat_id=int(route.reply_chat_id),
             message_thread_id=route.message_thread_id,
@@ -1651,7 +1740,7 @@ class BotHandlers:
         if repo is None:
             await self.bot_app._send_message(
                 context,
-                text="Состояние недоступно: state_path не настроен.",
+                text=t("msg.session.state_path_missing", lang),
                 **self._reply_kwargs(update, s),
             )
             return
@@ -1671,7 +1760,7 @@ class BotHandlers:
                 elif s0 is not None:
                     await self.bot_app._send_message(
                         context,
-                        text="Сессия недоступна.",
+                        text=t("msg.error.session_unavailable", lang),
                         **self._reply_kwargs(update, s),
                     )
                     return
@@ -1683,17 +1772,17 @@ class BotHandlers:
             if not st:
                 await self.bot_app._send_message(
                     context,
-                    text="Состояние не найдено (используйте /state <session_id> или /state <tool> <workdir>)",
+                    text=t("msg.session.state_not_found_hint", lang),
                     **self._reply_kwargs(update, s),
                 )
                 return
-            text = format_session_state(st, self.bot_app._format_ts(st.updated_at))
+            text = format_session_state(st, self.bot_app._format_ts(st.updated_at), lang)
             await self.bot_app._send_message(context, text=text, **self._reply_kwargs(update, s))
             return
         if not s:
             await self.bot_app._send_message(
                 context,
-                text="Сессия не определена для текущего scope.",
+                text=t("msg.error.session_no_scope", lang),
                 **self._reply_kwargs(update),
             )
             return
@@ -1701,10 +1790,10 @@ class BotHandlers:
             data = repo.load_state(chat_id=owner_chat_id)
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
-            await self.bot_app._send_message(context, text=f"Ошибка чтения состояния: {e}", **self._reply_kwargs(update, s))
+            await self.bot_app._send_message(context, text=t("msg.error.state_read_error", lang, e=e), **self._reply_kwargs(update, s))
             return
         if not data:
-            await self.bot_app._send_message(context, text="Состояние не найдено.", **self._reply_kwargs(update, s))
+            await self.bot_app._send_message(context, text=t("msg.session.state_not_found", lang), **self._reply_kwargs(update, s))
             return
         keys = list(data.keys())
         route = self.bot_app.resolve_telegram_inbound_route(update)
@@ -1713,7 +1802,7 @@ class BotHandlers:
         self.bot_app.ui_state.state_menu_page[ui_key] = 0
         keyboard = self.bot_app._build_state_keyboard(ui_key)
         await self.bot_app._send_message(context,
-                                         text="Выберите запись состояния:",
+                                         text=t("msg.session.state_choose", lang),
                                          reply_markup=keyboard,
                                          **self._reply_kwargs(update, s),
                                          )
@@ -1723,7 +1812,11 @@ class BotHandlers:
         if not await self._ensure_allowed(chat_id, context, update=update):
             return
         if not context.args:
-            await self.bot_app._send_message(context, text="Использование: /send <текст>", **self._reply_kwargs(update))
+            try:
+                lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+            except Exception:
+                lang = "ru"
+            await self.bot_app._send_message(context, text=t("cmd.send.usage", lang), **self._reply_kwargs(update))
             return
         _route, session = await self.bot_app.ensure_telegram_inbound_session(update, context, auto_create=True)
         if not session:
@@ -1800,6 +1893,10 @@ class BotHandlers:
         _route, session = await self.bot_app.ensure_telegram_inbound_session(update, context, auto_create=True)
         if not session:
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         base = session.workdir
         owner_chat_id = int(getattr(session, "chat_id", None) or chat_id)
         try:
@@ -1812,7 +1909,9 @@ class BotHandlers:
                 )
             )
         except FilesServiceError:
-            await self.bot_app._send_message(context, text="Рабочий каталог недоступен.", **self._reply_kwargs(update, session))
+            await self.bot_app._send_message(
+                context, text=t("msg.session.workdir_unavailable", lang), **self._reply_kwargs(update, session)
+            )
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
         ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
@@ -1849,6 +1948,11 @@ class BotHandlers:
         edit_message: Optional[object],
         message_thread_id: Optional[int] = None,
     ) -> None:
+        owner_chat_id_for_lang = int(getattr(session, "chat_id", None) or chat_id)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id_for_lang)
+        except Exception:
+            lang = "ru"
         if edit_message and getattr(edit_message, "message", None):
             ui_key = self.bot_app.telegram_ui_key_from_query(edit_message) or self.bot_app.telegram_ui_key(
                 chat_id,
@@ -1936,7 +2040,7 @@ class BotHandlers:
                 ]
             )
         nav_row = []
-        nav_row.append(InlineKeyboardButton("⬅️ вверх", callback_data="file_nav:up"))
+        nav_row.append(InlineKeyboardButton(t("btn.files.up", lang), callback_data="file_nav:up"))
         if page > 0:
             nav_row.append(InlineKeyboardButton("◀️", callback_data="file_nav:prev"))
         if page < total_pages - 1:
@@ -1944,19 +2048,19 @@ class BotHandlers:
         if nav_row:
             rows.append(nav_row)
         if current_rel_path not in ("", "."):
-            rows.append([InlineKeyboardButton("🗑 Удалить эту папку", callback_data="file_del_current")])
-        rows.append([InlineKeyboardButton("💾 Сохранить сюда (2 мин)", callback_data="file_save_here")])
-        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="file_nav:cancel")])
-        text = f"Каталог: {base}\nСтраница {page + 1}/{total_pages}"
+            rows.append([InlineKeyboardButton(t("btn.files.delete_dir", lang), callback_data="file_del_current")])
+        rows.append([InlineKeyboardButton(t("btn.files.save_here", lang), callback_data="file_save_here")])
+        rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="file_nav:cancel")])
+        text = t("msg.files.dir_page", lang, base=base, page=page + 1, total=total_pages)
         pending_upload = self.bot_app.ui_state.files_pending_upload.get(ui_key)
         if pending_upload:
             expires_at = float(pending_upload.get("expires_at", 0.0))
             remaining = max(0, int(expires_at - time.time()))
             pending_dir = os.path.abspath(str(pending_upload.get("dir") or ""))
             if pending_dir == os.path.abspath(base):
-                text += f"\n⏳ Ожидание файла: {remaining} сек."
+                text += t("msg.files.upload_pending", lang, remaining=remaining)
             else:
-                text += f"\n⏳ Ожидание файла включено в другом каталоге: {remaining} сек."
+                text += t("msg.files.upload_pending_other_dir", lang, remaining=remaining)
         keyboard = InlineKeyboardMarkup(rows)
         if edit_message:
             if getattr(edit_message, "message", None):
@@ -1980,14 +2084,18 @@ class BotHandlers:
         chat_id = update.effective_chat.id
         if not await self._ensure_allowed(chat_id, context, update=update):
             return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
         presets = self.bot_app._preset_commands()
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton(k, callback_data=f"preset_run:{k}")] for k in presets.keys()]
-            + [[InlineKeyboardButton("❌ Отмена", callback_data="preset_run:cancel")]]
+            + [[InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="preset_run:cancel")]]
         )
         await self.bot_app._send_message(
             context,
-            text="Выберите шаблон:",
+            text=t("msg.preset.choose", lang),
             reply_markup=keyboard,
             **self._reply_kwargs(update),
         )
@@ -2080,10 +2188,15 @@ class BotHandlers:
         from app.services.lint_evolution import autopause as _ap
 
         args = list(getattr(context, "args", None) or [])
+        chat_id_lint = int(getattr(getattr(update, "effective_chat", None), "id", 0) or 0)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id_lint)
+        except Exception:
+            lang = "ru"
         if not args:
             await self.bot_app._send_message(
                 context,
-                text="Использование: /lint_autopause_resume <level: 1|2|3>",
+                text=t("cmd.lint_autopause_resume.usage", lang),
                 **self._reply_kwargs(update),
             )
             return
@@ -2091,12 +2204,12 @@ class BotHandlers:
             level = int(args[0])
         except (TypeError, ValueError):
             await self.bot_app._send_message(
-                context, text="level должен быть целым числом 1/2/3.", **self._reply_kwargs(update)
+                context, text=t("msg.lint.level_not_int", lang), **self._reply_kwargs(update)
             )
             return
         if level not in (1, 2, 3):
             await self.bot_app._send_message(
-                context, text="level должен быть 1, 2 или 3.", **self._reply_kwargs(update)
+                context, text=t("msg.lint.level_out_of_range", lang), **self._reply_kwargs(update)
             )
             return
 
@@ -2105,13 +2218,13 @@ class BotHandlers:
             resumed = _ap.resume(workdir, level)
         except ValueError as exc:
             await self.bot_app._send_message(
-                context, text=f"Ошибка: {exc}", **self._reply_kwargs(update)
+                context, text=t("msg.lint.error", lang, exc=exc), **self._reply_kwargs(update)
             )
             return
         if resumed:
-            text = f"Lint Evolution L{level}: autopause снят."
+            text = t("msg.lint.autopause_resumed", lang, level=level)
         else:
-            text = f"Lint Evolution L{level}: пауза не была активна — изменений нет."
+            text = t("msg.lint.autopause_not_active", lang, level=level)
         await self.bot_app._send_message(context, text=text, **self._reply_kwargs(update))
 
     async def cmd_lint_schema_history(
@@ -2152,13 +2265,18 @@ class BotHandlers:
         from app.services.lint_evolution import rules_store as _rs
         from app.services.lint_evolution.gate_service import LintGateService
 
+        chat_id_gate = int(getattr(getattr(update, "effective_chat", None), "id", 0) or 0)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id_gate)
+        except Exception:
+            lang = "ru"
         workdir = self._lint_evolution_workdir(update)
         project_root = _Path(workdir)
         active = [r for r in _rs.load_rules(workdir) if r.state == "active"]
         if not active:
             await self.bot_app._send_message(
                 context,
-                text="Lint Evolution: активных правил нет — нечего применять.",
+                text=t("msg.lint.no_active_rules", lang),
                 **self._reply_kwargs(update),
             )
             return
@@ -2170,7 +2288,7 @@ class BotHandlers:
         except Exception as exc:
             logging.exception("lint_gate_dry_run failed: %s", exc)
             await self.bot_app._send_message(
-                context, text=f"Ошибка lint-gate: {exc}", **self._reply_kwargs(update)
+                context, text=t("msg.lint.gate_error", lang, exc=exc), **self._reply_kwargs(update)
             )
             return
 
@@ -2186,7 +2304,7 @@ class BotHandlers:
                 rel = _Path(f.file)
             lines.append(f"  · {f.rule_id} {rel}:{f.line}")
         if len(result.findings) > 10:
-            lines.append(f"  … ещё {len(result.findings) - 10}")
+            lines.append(t("msg.lint.more_findings", lang, n=len(result.findings) - 10))
         await self.bot_app._send_message(
             context, text="\n".join(lines), **self._reply_kwargs(update)
         )

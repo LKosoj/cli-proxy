@@ -75,6 +75,10 @@ class _FakePendingInputUi:
 class _FakeBotApp:
     def __init__(self, session) -> None:
         self.manager = _FakeManager(session)
+        self.config = types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        )
         self.mode_registry = ModeRegistry()
         self.mode_registry_service = ModeRegistryService(self.mode_registry)
         self.mode_dialogs = DialogService()

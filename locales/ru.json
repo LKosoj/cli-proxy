@@ -59,7 +59,9 @@
       "reset": "Сбросить",
       "save_changes": "Сохранить изменения",
       "clear": "Очистить",
-      "cancel": "Отмена"
+      "cancel": "Отмена",
+      "load": "Загрузить",
+      "send": "Отправить"
     },
     "label": {
       "session": "Сессия",
@@ -73,19 +75,101 @@
       "actions": "Действия",
       "choose_session": "Выберите сессию",
       "choose_project": "Выберите проект",
-      "choose_session_uid": "Выберите session_uid"
+      "choose_session_uid": "Выберите session_uid",
+      "status": "Статус",
+      "optional": "опционально"
     },
     "cfg": {
-      "restart_banner": "Требуется перезапуск для части изменений"
+      "restart_banner": "Требуется перезапуск для части изменений",
+      "preview_diff": "Предпросмотр diff",
+      "subtab_general": "Общие",
+      "subtab_paths": "Пути и хранение",
+      "subtab_apikeys": "API-ключи",
+      "subtab_orchestration": "Оркестрация",
+      "subtab_skills": "Навыки",
+      "subtab_runtime": "Runtime и LLM",
+      "add_tool": "Добавить tool",
+      "remove_tool": "Удалить tool",
+      "no_tools": "Нет инструментов, добавьте кнопку \"Добавить tool\".",
+      "add_mcp_client": "Добавить mcp_client",
+      "remove_mcp_client": "Удалить mcp_client",
+      "list_empty": "Список пуст.",
+      "add_preset": "Добавить preset",
+      "remove_preset": "Удалить preset",
+      "reset_section": "Сбросить секцию",
+      "err_draft_not_loaded": "Черновик конфига не загружен",
+      "err_telegram_token": "telegram.token обязателен",
+      "err_defaults_workdir": "defaults.workdir обязателен",
+      "err_miniapp_base_path": "miniapp.base_path обязателен",
+      "err_miniapp_bind_host": "miniapp.bind_host обязателен",
+      "err_miniapp_bind_port": "miniapp.bind_port должен быть числом > 0",
+      "err_tool_bad_struct": "неверная структура",
+      "err_tool_mode": "должен быть headless или interactive",
+      "err_tool_cmd_empty": "не должен быть пустым",
+      "err_mcp_port": "mcp.port должен быть числом",
+      "err_thread_mode": "thread_mode.mode должен быть private или group",
+      "err_thread_topics_chat_id": "thread_mode.topics_chat_id обязателен для mode=group",
+      "err_webhooks_path": "webhooks.path обязателен",
+      "err_webhooks_path_slash": "webhooks.path должен начинаться с /",
+      "err_webhooks_timeout": "webhooks.request_timeout_sec должен быть > 0",
+      "err_webhooks_max_payload": "webhooks.max_payload_bytes должен быть > 0",
+      "err_scheduler_timezone": "scheduler.timezone обязателен",
+      "err_must_be_positive": "должен быть > 0",
+      "err_scheduler_misfire": "scheduler.misfire_grace_sec должен быть >= 0",
+      "err_rate_limit_backend": "security.rate_limits.backend должен быть sqlite",
+      "err_rate_limit_policy": "security.rate_limits.default или security.rate_limits.policies обязателен при enabled=true",
+      "err_must_be_nonneg": "должен быть >= 0",
+      "err_lint_canary_max": "lint_evolution.canary_max_schema_fields_per_180d должен быть целым >= 0",
+      "err_field_required": "обязателен",
+      "err_transport": "должен быть stdio или http",
+      "err_cmd_empty_stdio": "не должен быть пустым для transport=stdio",
+      "err_url_required_http": "обязателен для transport=http",
+      "local_validation": "Локальная валидация",
+      "server_validation": "Серверная валидация",
+      "validation_passed": "Валидация пройдена",
+      "no_changes": "Изменений нет",
+      "changed_sections": "Изменены секции",
+      "secret_changed_confirm": "Изменены или очищены secret-поля: {paths}. Продолжить сохранение?",
+      "err_must_be_json_object": "должен быть JSON-объектом",
+      "prompt_tool_name": "Имя инструмента (ключ в tools)",
+      "err_tool_exists": "Инструмент с таким именем уже есть",
+      "confirm_delete_tool": "Удалить tool '{name}'?",
+      "diff_changed": "Изменено",
+      "diff_none": "нет",
+      "diff_no_live": "нет live-изменений",
+      "diff_restart": "Требует перезапуска",
+      "save_confirm": "Сохранить config.yaml и применить hot-reload?",
+      "restart_required_for": "Требуется перезапуск для применения:",
+      "and_more": "и ещё",
+      "reload_error": "Hot-reload не применил изменения.",
+      "reload_live_only": "Hot-reload применил только live-изменения.",
+      "reload_restart_hint": "Чтобы задействовать restart-only поля ({fields}), перезапустите процесс.",
+      "reload_ok": "Изменения применены hot-reload без перезапуска."
     },
     "editor": {
       "no_file": "Файл не выбран",
       "conflict_title": "Обнаружен конфликт версий!",
-      "conflict_desc": "Файл был изменён на сервере с момента последнего открытия."
+      "conflict_desc": "Файл был изменён на сервере с момента последнего открытия.",
+      "force_save_btn": "Принудительно сохранить"
     },
     "logs": {
       "only_new": "Только новые",
-      "prev_N": "{n} предыдущих"
+      "prev_N": "{n} предыдущих",
+      "preparing": "Подготовка файла...",
+      "download_started": "Скачивание запущено",
+      "ws_connecting": "Подключение к потоку логов...",
+      "ws_connected": "Поток логов подключен",
+      "ws_error": "Ошибка потока логов",
+      "ws_conn_error": "Ошибка websocket-подключения",
+      "ws_disconnected": "Поток логов отключен",
+      "ws_disconnected_error": "Поток логов отключен с ошибкой",
+      "ws_disconnected_reconnect": "Поток логов отключен, переподключение через",
+      "err_ws_token": "Ошибка получения ws-токена:",
+      "err_reopen": "Откройте MiniApp заново.",
+      "err_no_ws_token": "ws-токен не получен",
+      "all_sessions": "Все сессии",
+      "my_sessions": "Все мои сессии",
+      "load_error_prefix": "Ошибка загрузки логов:"
     },
     "status": {
       "empty": "Загрузка или сессия не выбрана...",
@@ -102,12 +186,56 @@
       "manager_plan": "План Менеджера",
       "analyst": "Статус Аналитика",
       "agent": "Статус Агента",
-      "session_unavailable": "Сессия не выбрана или недоступна"
+      "session_unavailable": "Сессия не выбрана или недоступна",
+      "webmaster": "Статус Вебмастера",
+      "runtime_progress": "Прогресс выполнения",
+      "queue_prefix": "Очередь (Queue:",
+      "state_summary": "Сводка состояния",
+      "last_tick_prefix": "Значение последнего тика (",
+      "all_ticks": "Все тики",
+      "extra_params": "Дополнительные параметры",
+      "run_operations": "Операции запуска",
+      "runs_header": "Запуски",
+      "selected_run": "Выбранный run",
+      "show_json": "Показать JSON (диагностика)",
+      "kv_cli": "CLI / Профиль:",
+      "kv_work_type": "Тип работы:",
+      "kv_resume_token": "Токен возобновления:",
+      "kv_project": "Проект:",
+      "saving": "Сохранение…",
+      "saved": "Сохранено.",
+      "busy": "Работает",
+      "on": "вкл",
+      "bool_yes": "да",
+      "bool_no": "нет",
+      "git_conflict": "Конфликт:",
+      "git_busy": "Занят",
+      "ws_connecting": "Подключение к потоку статуса...",
+      "ws_connected_waiting": "Поток статуса подключен, ожидание данных...",
+      "ws_error": "Ошибка потока статуса",
+      "ws_conn_error": "Ошибка websocket-подключения статуса",
+      "ws_disconnected": "Поток статуса отключен",
+      "ws_disconnected_error": "Поток статуса отключен с ошибкой",
+      "ws_disconnected_reconnect": "Поток статуса отключен, переподключение через",
+      "err_ws_token": "Ошибка получения status ws-токена:",
+      "err_no_ws_token": "status ws-токен не получен",
+      "git_unavailable": "git недоступен для этой цели"
     },
     "runs": {
       "select_hint": "Выберите run в таблице.",
       "select_run": "Выберите запуск.",
-      "choose_session": "Выберите сессию, чтобы просмотреть run artifacts."
+      "choose_session": "Выберите сессию, чтобы просмотреть run artifacts.",
+      "btn_doctor": "Диагностика",
+      "btn_recover": "Восстановить",
+      "btn_resume": "Возобновить",
+      "btn_apply_rec": "Применить рекомендацию",
+      "btn_promote": "Применить навыки",
+      "no_runs": "Запусков пока нет.",
+      "no_injections": "Skills: нет инъекций",
+      "err_detail": "Ошибка run detail:",
+      "err_load_artifacts": "Ошибка загрузки run artifacts:",
+      "select_run_first": "Сначала выберите запуск.",
+      "err_action": "Ошибка run action:"
     },
     "settings": {
       "empty": "Загрузка или сессия не выбрана...",
@@ -116,25 +244,253 @@
       "mode_hint": "Выберите режим сессии или Прямой CLI, чтобы выключить активный режим.",
       "lang_title": "Язык",
       "lang_label": "Язык интерфейса",
-      "lang_save": "Сохранить язык"
+      "lang_save": "Сохранить язык",
+      "exec_target_local": "Цель выполнения: локально",
+      "recheck": "Перепроверить",
+      "remote_control_label": "Удалённое управление",
+      "remote_control_note": "Переводит сессию в строгий remote-only режим (без fallback на local).",
+      "ssh_note": "Включает/выключает удаленное выполнение команд через SSH.",
+      "target_host": "Целевой хост",
+      "ssh_hosts_title": "SSH-хосты проекта",
+      "ssh_host_add": "Добавить хост",
+      "ssh_key_file": "Путь к файлу ключа",
+      "ssh_passphrase_env": "Env с парольной фразой",
+      "ssh_password_env": "Env с паролем",
+      "ssh_password_value": "Пароль (значение)",
+      "ssh_password_note": "Если указано, будет сохранено в секреты проекта.",
+      "ssh_sudo_pass_env": "Env с паролем sudo",
+      "ssh_sudo_password": "Пароль sudo",
+      "ssh_roles": "Роли",
+      "ssh_desc": "Описание",
+      "ssh_remote_root": "Корень удалённого проекта",
+      "ssh_remote_root_note": "Обязателен для Remote Control и remote file operations.",
+      "ssh_timeout": "Таймаут простоя (с)",
+      "rc_error_no_root": "SSH host существует, но для Remote Control нужно заполнить remote_project_root.",
+      "saved": "Настройки сохранены",
+      "preflight_ok": "Preflight пройден успешно",
+      "preflight_error_prefix": "Ошибка перепроверки:",
+      "exec_target_remote": "Цель выполнения: удалённо — {host}",
+      "no_eligible_hosts": "Нет подходящих хостов"
     },
     "scheduler": {
       "choose_project": "Выберите проект для управления расписанием.",
-      "no_projects": "Нет доступных проектов."
+      "no_projects": "Нет доступных проектов.",
+      "session_label": "Telegram session_uid",
+      "target_mode": "Целевой режим",
+      "enabled": "Включено",
+      "run_now": "Запустить сейчас",
+      "no_jobs_for_project": "Для проекта",
+      "select_project_first": "Сначала выберите проект.",
+      "selected_jobs": "Выбрано jobs",
+      "click_to_edit": "Нажмите на job для редактирования.",
+      "err_no_project": "Проект не выбран",
+      "err_no_session_uid": "Telegram session_uid не выбран",
+      "err_no_cron": "Cron обязателен",
+      "err_no_target_mode": "Target mode обязателен",
+      "err_payload_not_object": "Payload должен быть JSON-объектом",
+      "err_invalid_json": "Некорректный JSON в Payload:",
+      "err_save": "Ошибка scheduler save:",
+      "no_job_selected": "Job не выбрана",
+      "delete_job_confirm": "Удалить job",
+      "err_delete": "Ошибка scheduler delete:",
+      "job_dispatched": "Job отправлена на немедленную публикацию события.",
+      "err_run_now": "Ошибка scheduler run_now:"
     },
     "admin": {
       "choose_session": "Выберите сессию для Admin-панели.",
-      "choose_skill": "Выберите pending skill install"
+      "choose_skill": "Выберите pending skill install",
+      "state_title": "Состояние админа",
+      "subtab": {
+        "overview": "Обзор",
+        "monitoring": "Мониторинг",
+        "operations": "Операции",
+        "config": "Конфиг",
+        "chat": "Чат",
+        "data": "Данные"
+      },
+      "pending_actions": "Ожидает действий",
+      "manual_confirms": "ручные подтверждения",
+      "recent_events": "Последние события",
+      "incidents": "инциденты",
+      "admin_actions": "действия Admin",
+      "current_pending": "Текущие ожидания / mute",
+      "event_history": "История событий / overrides",
+      "refresh_runs": "Обновить runs",
+      "show_details": "Показать детали",
+      "add_server": "Добавить сервер",
+      "enabled": "Включён",
+      "monitor_hint": "SSH-хосты редактируются на вкладке «Настройки». Здесь выбирается только server → action.",
+      "add_action": "Добавить действие",
+      "th_argv": "argv (по одному пункту на строке)",
+      "config_placeholder": "Нажмите «Загрузить» для просмотра итогового YAML.",
+      "chat_placeholder": "Спросите админа (Enter = отправить)",
+      "memory_placeholder": "Заметки для агента (свободный текст).",
+      "no_runs": "Нет runs для этой сессии.",
+      "status_unavailable": "Admin status недоступен",
+      "analyzer_no_action": "Analyzer ещё не публиковал подробное действие.",
+      "disabled_hint": "Для выбранной сессии Admin-режим выключен. Нажмите Enable, чтобы включить режим, Disable недоступен до включения, либо запустите Rescan.",
+      "disabled_hint_static": "Для выбранной сессии Admin-режим выключен. Включите его или обновите состояние через Rescan.",
+      "no_pending": "нет ожидания",
+      "err_timeout": "Таймаут запроса Admin status. Повторите попытку.",
+      "err_timeout_stale": "Таймаут запроса Admin status. Показаны последние известные данные.",
+      "err_access": "Нет доступа к Admin status для выбранной сессии.",
+      "err_access_stale": "Нет доступа к Admin status для выбранной сессии. Показаны последние известные данные.",
+      "err_server": "Сервер Admin status временно недоступен.",
+      "err_server_stale": "Сервер Admin status временно недоступен. Показаны последние известные данные.",
+      "err_load": "Ошибка загрузки Admin-статуса: {detail}",
+      "err_load_stale": "Ошибка загрузки Admin-статуса: {detail}. Показаны последние известные данные.",
+      "err_action": "Ошибка admin action:",
+      "err_action_stale": "Ошибка admin action: {detail}. Показаны последние известные данные.",
+      "err_load_runs": "Ошибка загрузки runs:",
+      "readiness_hint_ok": "Pipeline готов к следующему monitor-cycle.",
+      "readiness_hint_failure": "В пайплайне есть failure-state. Проверьте Analyzer и Executor.",
+      "readiness_hint_live": "Monitor-cycle активен, данные приходят из текущего pipeline-run.",
+      "readiness_hint_disabled": "Пайплайн выключен и не выполняет monitor-checks.",
+      "err_load_messages": "Ошибка загрузки сообщений:",
+      "err_load_pending": "Ошибка загрузки pending:",
+      "err_load_memory": "Ошибка загрузки memory:",
+      "chat_sending": "Отправка…",
+      "chat_intent": "Намерение:",
+      "err_chat_send": "Ошибка отправки:",
+      "err_approve": "Approve ошибка:",
+      "err_approve_req": "Ошибка approve:",
+      "err_reject": "Reject ошибка:",
+      "err_reject_req": "Ошибка reject:",
+      "memory_saved": "Memory сохранён",
+      "err_memory": "Memory ошибка:",
+      "loaded_prefix": "Загружено: ",
+      "pending_approvals": "Подтверждения ({n}):",
+      "approve": "Одобрить",
+      "reject": "Отклонить",
+      "th_server_ssh": "сервер (из SSH-хостов)"
     },
     "mode": {
       "direct_cli": "Прямой CLI"
     },
     "error": {
       "auth": "Ошибка авторизации",
-      "access_denied": "Доступ запрещен"
+      "access_denied": "Доступ запрещен",
+      "load_prefix": "Ошибка загрузки:",
+      "generic_prefix": "Ошибка:",
+      "save": "Ошибка сохранения",
+      "init": "Ошибка инициализации"
     },
     "ssh": {
-      "no_hosts": "Хосты не настроены."
+      "no_hosts": "Хосты не настроены.",
+      "toggle_hint": "Включает/выключает удаленное выполнение команд через SSH.",
+      "no_config": "SSH Remote включён, но ssh.yaml отсутствует в .cli-proxy/.",
+      "enabled_no_hosts": "SSH Remote включён. Добавьте hosts в ssh.yaml или через форму ниже.",
+      "edit_prefix": "Редактировать",
+      "add_host": "Добавить хост",
+      "no_workdir_save": "Не удалось определить каталог проекта для сохранения SSH host.",
+      "host_saved": "Хост сохранен",
+      "err_save_host": "Ошибка сохранения хоста:",
+      "delete_confirm": "Удалить хост",
+      "no_workdir_delete": "Не удалось определить каталог проекта для удаления SSH host.",
+      "err_delete": "Ошибка удаления:",
+      "no_workdir_test": "Не удалось определить каталог проекта для SSH-проверки.",
+      "test_ok": "Успешно:",
+      "err_request": "Ошибка запроса:",
+      "keygen_confirm": "Сгенерировать новый ключ для",
+      "keygen_warn": "Это перезапишет существующий в конфиге путь к ключу.",
+      "no_workdir_keygen": "Не удалось определить каталог проекта для генерации ключа.",
+      "keygen_success": "Ключ сгенерирован и прописан в конфиг.",
+      "keygen_add_hint": "Добавьте этот публичный ключ в ~/.ssh/authorized_keys на сервере:",
+      "err_keygen": "Ошибка генерации ключа:",
+      "alias_required": "Требуется псевдоним (alias)"
+    },
+    "banner": {
+      "remote_fs": "Удалённая ФС"
+    },
+    "files": {
+      "path_remote": "Текущий путь (Remote: {root}):",
+      "path_local": "Текущий путь:",
+      "saved": "Файл сохранён",
+      "save_error_prefix": "Ошибка сохранения:",
+      "download_error_prefix": "Ошибка скачивания:",
+      "reset_confirm": "Сбросить несохраненные изменения и перезагрузить файл с диска?",
+      "prompt_filename": "Имя файла",
+      "prompt_dirname": "Имя папки",
+      "delete_confirm": "Удалить {path}?"
+    },
+    "autonomy": {
+      "no_servers": "Нет серверов. Добавьте их в admin-конфиг.",
+      "no_open_drifts": "нет открытых drift",
+      "no_session": "Сессия не выбрана.",
+      "rescan_all_started": "Rescan all запущен…",
+      "rescan_all_done": "Rescan all завершён.",
+      "err_rescan_all": "Ошибка rescan all:",
+      "maintenance_started": "Daily maintenance запущен…",
+      "maintenance_done": "Daily maintenance готов (серверов: {count}).",
+      "err_maintenance": "Ошибка maintenance:",
+      "loading_server": "Загрузка {server}…",
+      "empty": "(пусто)",
+      "no_facts": "Нет facts.",
+      "no_notes": "Нет notes.",
+      "no_runbooks": "Нет совпадающих runbooks.",
+      "no_drift": "Нет drift.",
+      "baseline_accepted": "Baseline accepted для {server}.",
+      "proposal_discarded": "Proposal discarded для {server}.",
+      "err_accept": "Ошибка accept:",
+      "err_discard": "Ошибка discard:",
+      "no_drifts_filtered": "Нет подходящих drift.",
+      "err_ack": "Ошибка ack:",
+      "err_save_fact": "Ошибка save fact:",
+      "err_delete_fact": "Ошибка delete fact:",
+      "err_add_fact": "Ошибка add fact:",
+      "err_append_note": "Ошибка append note:",
+      "err_compact": "Ошибка compact:",
+      "new_note_placeholder": "Новая заметка…",
+      "no_runbooks_server": "Нет runbooks для этого сервера.",
+      "open": "Открыть",
+      "err_no_server_id": "Укажите хотя бы один server_id",
+      "err_confidence_range": "Confidence должен быть числом в [0.0, 1.0]",
+      "builder_sources_title": "1. Источник скриптов (admin.runbook_sources)",
+      "builder_params_title": "2. Параметры runbook",
+      "builder_build_title": "3. Собрать и проверить",
+      "err_enter_dir": "Введите каталог.",
+      "scanning": "Сканируем…",
+      "no_scripts": "Скрипты не найдены.",
+      "bytes": "байт",
+      "err_title_required": "Title обязателен.",
+      "err_dev_server_required": "Dev server_id обязателен.",
+      "err_select_script": "Выберите хотя бы один скрипт.",
+      "building_runbook": "Собираем runbook…",
+      "runbook_built_prefix": "Собран runbook",
+      "runbook_built_suffix": "Нажмите Validate, чтобы проверить.",
+      "manual_actions": "Ручные действия",
+      "history_empty": "История пуста.",
+      "refresh_list": "Обновить список",
+      "select_check_id": "Выберите check_id для просмотра истории.",
+      "select_check_id_short": "Выберите check_id.",
+      "no_snapshots": "Нет snapshots.",
+      "prereqs_hint": "Нажмите «Check prereqs» для запуска проверки.",
+      "requesting": "Запрос…",
+      "building_bootstrap": "Сборка bootstrap-runbook…",
+      "runbook_not_created": "Runbook не создан. Причина:",
+      "runbook_created_prefix": "Создан runbook",
+      "path_label": "Путь:",
+      "no_diff": "(нет различий)",
+      "err_rescan": "Ошибка rescan:",
+      "checksum_mismatch": "SHA1 расходится с зафиксированным в runbook — скрипт мог быть изменён. Выполнение остановлено.",
+      "statuses_label": "Статусы",
+      "section_title": "Автономность: серверы / baseline / drift / память",
+      "rescan_all": "Пересканировать всё",
+      "daily_maintenance": "Ежедневное обслуживание",
+      "validate": "Проверить",
+      "promote_ellipsis": "Применить…",
+      "run_first_step_dry": "Первый шаг (dry-run)",
+      "validating": "Проверка…",
+      "running_dry_run": "Dry-run…",
+      "validation_label": "Проверка:",
+      "errors_label": "Ошибки:",
+      "warnings_label": "Предупреждения:",
+      "promote_runbook_title": "Применить сценарий",
+      "promote_add_servers": "Добавить серверы (через запятую):",
+      "promote_confidence": "Уверенность (0.0–1.0, опц.):",
+      "run_validation_first": "сначала запустите проверку",
+      "promote": "Применить",
+      "promoting": "Применение…"
     }
   },
   "btn": {
@@ -151,7 +507,8 @@
       "state": "💾 State",
       "close": "🚫 Close",
       "reset": "♻️ Reset",
-      "lang": "🌐 Язык"
+      "lang": "🌐 Язык",
+      "close_menu": "❌ Закрыть меню"
     },
     "cli": {
       "unavailable": "CLI недоступны"
@@ -167,6 +524,25 @@
     "ssh": {
       "on": "🔗✅ SSH: вкл",
       "off": "🔗⬜ SSH: выкл"
+    },
+    "input": {
+      "queue_new": "🆕 Новая очередь",
+      "queue_confirm": "🆕 Поставить в очередь",
+      "orch_apply": "✅ Перейти",
+      "queue_append": "➕ Добавить к текущему",
+      "orch_cancel": "⛔ Отменить",
+      "take": "✅ Взять в работу",
+      "discard": "❌ Отмена ввода"
+    },
+    "files": {
+      "up": "⬅️ вверх",
+      "delete_dir": "🗑 Удалить эту папку",
+      "confirm_yes": "✅ Да",
+      "save_here": "💾 Сохранить сюда (2 мин)"
+    },
+    "orch_transition": {
+      "apply": "✅ Передать дальше",
+      "cancel": "⛔ Остановить процесс"
     }
   },
   "msg": {
@@ -192,7 +568,43 @@
       "cancelled": "Отменено.",
       "ssh_unavailable": "SSH не настроен для этого проекта",
       "ssh_enabled": "Удалённое управление включено",
-      "ssh_disabled": "Удалённое управление выключено"
+      "ssh_disabled": "Удалённое управление выключено",
+      "access_not_configured": "Доступ не настроен. Обратитесь к администратору.",
+      "choose_close": "Выберите сессию для закрытия:",
+      "cli_active": "Активный CLI: {cli_name}",
+      "cli_switch_notice_no_prev": "Активный CLI в этой сессии недоступен. Переключаю на {target}.",
+      "cli_switch_notice_with_prev": "CLI {previous} в этой сессии недоступен или выключен. Переключаю на {target}.",
+      "closed_and_removed": "Сессия закрыта и удалена из состояния.",
+      "create_session_first": "Сначала создайте сессию.",
+      "created_cwd": "Новая сессия {id} создана и выбрана.",
+      "headless_read_failed": "⚠️ CLI завершился, но бот не смог корректно дочитать вывод (stdout не закрыт).",
+      "help_no_data": "help не вернул данных.",
+      "interrupt_failed_diag": "Не удалось полностью прервать сессию. Нужна дополнительная диагностика.",
+      "interrupt_partial_runtime": "Прерывание отправлено, но часть runtime еще завершает остановку.",
+      "interrupt_sent": "Прерывание отправлено.",
+      "interrupt_work_done": "Текущая работа прервана. Сессия освобождена.",
+      "menu_closed": "Меню закрыто.",
+      "none": "Сессий нет.",
+      "open_topic_first": "Сначала откройте нужный topic или выберите сессию через /sessions.",
+      "orch_off": "выключен",
+      "orch_on": "включен",
+      "orch_toggled": "Продвинутый оркестратор {status}.",
+      "queue_cleared": "Очередь очищена.",
+      "queue_count": "В очереди {n} сообщений.",
+      "queue_empty": "Очередь пуста.",
+      "rename_cancelled": "Переименование отменено.",
+      "rename_empty": "Имя сессии пустое.",
+      "rename_prompt": "Введите новое имя для {session_id} (или '-' для отмены).",
+      "renamed": "Имя сессии обновлено.",
+      "reset_done": "Сессия сброшена.",
+      "resume_current": "Текущий resume: {token}",
+      "resume_prompt": "Текущий resume: {current}\nВведите новый resume (или '-' для отмены).",
+      "resume_saved": "Resume сохранен.",
+      "resume_token_cancelled": "Изменение resume отменено.",
+      "resume_token_updated": "Resume обновлен.",
+      "state_header": "Session: {session_id}\nИнструмент: {tool}\nКаталог: {workdir}\nResume: {resume}\nSummary: ",
+      "state_not_found_hint": "Состояние не найдено (используйте /state <session_id> или /state <tool> <workdir>)",
+      "use_existing_topics": "Используйте топики существующих сессий."
     },
     "error": {
       "session_not_found": "Сессия не найдена.",
@@ -219,7 +631,19 @@
       "queue_failed": "Не удалось поставить ввод в очередь. Попробуйте еще раз.",
       "queue_append_failed": "Не удалось обновить сообщение в очереди. Попробуйте еще раз.",
       "unknown_tool": "Неизвестный инструмент.",
-      "session_closed_stale": "Сессия уже закрыта."
+      "session_closed_stale": "Сессия уже закрыта.",
+      "config_service_unavailable": "ConfigService недоступен: prompt_regex не сохранен.",
+      "dir_not_found": "Каталог не существует.",
+      "limits_fetch_failed": "Не удалось собрать лимиты CLI.",
+      "limits_unavailable": "Сервис лимитов недоступен.",
+      "mode_unavailable_named": "Режим `{mode_id}` недоступен.",
+      "mode_unavailable_user_named": "Режим `{mode_id}` недоступен для вашего пользователя.",
+      "orch_unavailable_user": "Оркестратор недоступен для вашего пользователя.",
+      "session_no_context": "Сессия для текущего контекста не найдена.",
+      "session_unavailable": "Сессия недоступна.",
+      "state_read_error": "Ошибка чтения состояния: {e}",
+      "tool_not_found": "Инструмент не найден.",
+      "tool_not_selected": "Сначала выберите инструмент через /sessions."
     },
     "input": {
       "no_pending": "Нет ожидающего ввода.",
@@ -231,7 +655,12 @@
       "interrupted": "Текущая генерация прервана. Ввод отброшен.",
       "interrupted_freed": "Текущая генерация прервана. Сессия освобождена. Ввод отброшен.",
       "interrupted_partial": "Текущая генерация прервана, но часть runtime еще завершает остановку. Ввод отброшен.",
-      "interrupt_failed": "Не удалось полностью прервать сессию. Ввод отброшен."
+      "interrupt_failed": "Не удалось полностью прервать сессию. Ввод отброшен.",
+      "custom_accepted": "Принял ваш вариант ответа.",
+      "custom_cancelled": "Ок, ввод своего варианта отменен.",
+      "forward_must_be_command": "После '>' должна идти /команда.",
+      "prompt_retired": "Сообщение обновлено.",
+      "question_stale": "Вопрос устарел."
     },
     "transfer": {
       "offer": "CLI переключён: {src} → {dst}.\nПеренести контекст предыдущей сессии ({src})?",
@@ -247,6 +676,131 @@
       "choose": "Выберите язык:",
       "changed": "Язык изменён: {lang}",
       "invalid": "Неизвестный код языка."
+    },
+    "ask": {
+      "answer_already_received": "Ответ уже получен.",
+      "choice_selected": "Вы выбрали: {answer}",
+      "enter_custom": "Введите свой вариант одним сообщением.",
+      "invalid_choice": "Некорректный выбор.",
+      "invalid_format": "Некорректный формат ответа.",
+      "wrong_chat": "Вопрос относится к другому чату.",
+      "wrong_thread": "Вопрос относится к другому треду."
+    },
+    "cmd": {
+      "already_handled": "Запрос уже обработан.",
+      "approved_continue": "Одобрено. Продолжаю выполнение шага...",
+      "approved_execute": "Одобрено. Выполняю команду...",
+      "denied": "Команда отклонена.",
+      "denied_continue": "Команда отклонена. Продолжаю без неё.",
+      "empty_output": "(пустой вывод)"
+    },
+    "dirs": {
+      "cannot_leave_root": "Нельзя выйти за пределы корневого каталога.",
+      "choose_dir": "Выберите каталог:",
+      "send_git_clone_url": "Отправьте ссылку для git clone.",
+      "send_new_dir_name": "Отправьте имя нового каталога или путь относительно текущего. Для отмены введите '-'.",
+      "send_path": "Отправьте путь к каталогу сообщением.",
+      "tool_selected": "Выбран инструмент {tool}. Выберите каталог.",
+      "btn_up": "⬆️ Вверх",
+      "btn_prev": "◀️ Назад",
+      "btn_next": "▶️ Далее",
+      "btn_use_current": "✅ Использовать этот каталог",
+      "btn_create": "📁 Создать каталог",
+      "btn_git_clone": "📦 git clone",
+      "btn_enter": "✏️ Ввести путь",
+      "btn_cancel": "❌ Отмена",
+      "choose_file_or_dir": "Выберите файл или папку:"
+    },
+    "files": {
+      "already_at_root": "Уже в корне рабочей директории.",
+      "already_exists": "Элемент с таким именем уже существует.",
+      "base_dir_unavailable": "Базовый каталог недоступен.",
+      "cannot_delete_root": "Нельзя удалить корневую рабочую директорию.",
+      "delete_cancelled": "Удаление отменено.",
+      "delete_confirm": "Удалить {name}? Подтвердите:",
+      "delete_error": "Ошибка удаления: {error}",
+      "delete_folder_confirm": "Удалить папку {name} рекурсивно? Подтвердите:",
+      "deleted": "Удалено.",
+      "dir_create_cancelled": "Создание каталога отменено.",
+      "dir_create_failed": "Не удалось создать каталог: {e}",
+      "dir_created": "Каталог создан: {path}",
+      "dir_exists": "Каталог уже существует.",
+      "dir_name_empty": "Имя каталога пустое.",
+      "dir_page": "Каталог: {base}\nСтраница {page}/{total}",
+      "dir_unavailable": "Каталог недоступен.",
+      "download_failed": "Не удалось скачать файл: {e}",
+      "enter_new_name": "Введите новое имя (без пути). Таймаут 2 минуты.",
+      "escapes_workdir": "Нельзя выйти за пределы рабочей директории.",
+      "file_not_found": "Файл не найден.",
+      "file_too_large": "Файл слишком большой для отправки.",
+      "folder_not_found": "Папка не найдена.",
+      "image_download_failed": "Не удалось скачать изображение: {e}",
+      "image_too_large": "Изображение слишком большое. Лимит {n} МБ.",
+      "item_not_found": "Элемент не найден.",
+      "name_no_path": "Укажите только имя без пути.",
+      "name_unchanged": "Имя не изменилось.",
+      "new_name_empty": "Новое имя пустое.",
+      "no_pending_delete": "Нет операции удаления.",
+      "operation_cancelled": "Операция отменена.",
+      "path_must_be_inside": "Путь должен быть внутри текущего каталога.",
+      "rename_cancelled": "Режим переименования отменен.",
+      "rename_failed": "Не удалось переименовать: {e}",
+      "rename_not_found": "Элемент для переименования не найден.",
+      "rename_timeout": "Режим переименования отменен: за 2 минуты новое имя не введено.",
+      "renamed": "Переименовано: {name}",
+      "save_failed": "Не удалось сохранить файл: {e}",
+      "saved": "Файл сохранен: {path}",
+      "send_error": "Ошибка отправки файла. Проверьте логи бота.",
+      "sending_file": "Отправляю файл: {filename}",
+      "unsupported_doc_type": "Поддерживаются только .txt, .md, .rst, .log, .html и .htm.",
+      "upload_dir_outside_root": "Целевой каталог вне рабочей директории. Режим сохранения отключен.",
+      "upload_dir_unavailable": "Целевой каталог больше недоступен. Режим сохранения отключен.",
+      "upload_expired": "Режим сохранения файла уже истек. Нажмите кнопку сохранения снова.",
+      "upload_pending": "\n⏳ Ожидание файла: {remaining} сек.",
+      "upload_pending_other_dir": "\n⏳ Ожидание файла включено в другом каталоге: {remaining} сек.",
+      "upload_timeout": "Режим сохранения файла сброшен: за 2 минуты файл не был отправлен."
+    },
+    "git": {
+      "clone_done": "Клонирование завершено.",
+      "clone_error": "Ошибка git clone:\\n{output}",
+      "clone_launch_error": "Ошибка запуска git clone: {e}",
+      "clone_starting": "Запускаю git clone…",
+      "operations_menu": "Git-операции:"
+    },
+    "lint": {
+      "autopause_not_active": "Lint Evolution L{level}: пауза не была активна — изменений нет.",
+      "autopause_resumed": "Lint Evolution L{level}: autopause снят.",
+      "error": "Ошибка: {exc}",
+      "gate_error": "Ошибка lint-gate: {exc}",
+      "level_not_int": "level должен быть целым числом 1/2/3.",
+      "level_out_of_range": "level должен быть 1, 2 или 3.",
+      "more_findings": "  … ещё {n}",
+      "no_active_rules": "Lint Evolution: активных правил нет — нечего применять."
+    },
+    "preset": {
+      "choose": "Выберите шаблон:",
+      "not_found": "Шаблон не найден.",
+      "sending_task": "Отправляю задачу: {code}"
+    },
+    "selfupdate": {
+      "confirmed": "Selfupdate подтверждён: сервис {service_name} перезапущен и бот снова в сети.",
+      "deps_failed": "git pull выполнен, но обновление зависимостей завершилось ошибкой.",
+      "no_repo": "Ошибка git pull: репозиторий не найден в `{repo_root}`.",
+      "no_venv": "git pull выполнен, но `.venv` не найден. Перезапуск отменен.",
+      "pull_error": "Ошибка git pull: {e}",
+      "pull_failed": "Ошибка git pull.",
+      "pulling": "Запускаю git pull...",
+      "restart_failed": "git pull выполнен успешно, но не удалось перезапустить сервис `{service_name}`.",
+      "restart_failed_no_invoke": "git pull выполнен успешно, но не удалось запустить перезапуск сервиса `{service_name}`.",
+      "restart_status": "\n\nsystemctl restart вернул код {restart_rc}, текущее состояние: {restart_state}.",
+      "restart_unconfirmed": "git pull выполнен успешно. Команда перезапуска сервиса `{service_name}` отправлена, но состояние не удалось подтвердить мгновенно.",
+      "startup_delay": "\nЗадержка запуска: {delay_sec}с.",
+      "success": "git pull выполнен успешно. Перезапуск сервиса запущен.",
+      "updating_deps": "Обнаружены изменения в `{req_file}`. Обновляю зависимости в .venv..."
+    },
+    "setprompt": {
+      "saved": "prompt_regex сохранен.",
+      "not_saved": "prompt_regex не сохранен."
     }
   },
   "cmd": {
@@ -275,7 +829,8 @@
       "desc": "Lint Evolution: статус уровней L1/L2/L3, autopause, schema-version."
     },
     "lint_autopause_resume": {
-      "desc": "Lint Evolution: снять autopause c уровня (1, 2 или 3)."
+      "desc": "Lint Evolution: снять autopause c уровня (1, 2 или 3).",
+      "usage": "Использование: /lint_autopause_resume <level: 1|2|3>"
     },
     "lint_schema_history": {
       "desc": "Lint Evolution: текущая schema-версия, список полей, pending proposals."
@@ -293,7 +848,8 @@
       "desc": "Показать доступные инструменты."
     },
     "newpath": {
-      "desc": "Задать путь для новой сессии после выбора инструмента."
+      "desc": "Задать путь для новой сессии после выбора инструмента.",
+      "usage": "Использование: /newpath <path>"
     },
     "close": {
       "desc": "Закрыть сессию (через меню)."
@@ -311,10 +867,12 @@
       "desc": "Очистить очередь сессии текущего контекста."
     },
     "rename": {
-      "desc": "Переименовать сессию."
+      "desc": "Переименовать сессию.",
+      "usage": "Использование: /rename <name> или /rename <id> <name>"
     },
     "cwd": {
-      "desc": "Создать новую сессию в другом каталоге."
+      "desc": "Создать новую сессию в другом каталоге.",
+      "usage": "Использование: /cwd <path>"
     },
     "dirs": {
       "desc": "Просмотр каталогов (меню)."
@@ -326,10 +884,12 @@
       "desc": "Просмотр состояния (меню)."
     },
     "setprompt": {
-      "desc": "Установить prompt_regex для инструмента."
+      "desc": "Установить prompt_regex для инструмента.",
+      "usage": "Использование: /setprompt <tool> <regex>"
     },
     "send": {
-      "desc": "Отправить текст напрямую в CLI."
+      "desc": "Отправить текст напрямую в CLI.",
+      "usage": "Использование: /send <текст>"
     },
     "mode": {
       "desc": "Меню режима: {label}."
@@ -399,7 +959,7 @@
       },
       "select_session": "Выберите сессию для просмотра git-статуса...",
       "commit_message_label": "Сообщение коммита:",
-      "commit_placeholder": "Необязательно — LLM сгенерирует сообщение автоматически",
+      "commit_placeholder": "Optional — LLM сгенерирует сообщение автоматически",
       "btn": {
         "refresh_status": "Обновить статус",
         "refresh_history": "Обновить историю",
@@ -416,13 +976,31 @@
       "msg": {
         "select_commit": "Выберите коммит для просмотра diff.",
         "success": "Операция выполнена успешно.",
-        "error": "Операция завершилась с ошибкой."
+        "error": "Операция завершилась с ошибкой.",
+        "not_a_repo": "Не git-репозиторий или ошибка git (код {code}):\n{output}",
+        "show_failed": "git show завершился с ошибкой (код {code}):\n{output}",
+        "system_error_title": "Системная ошибка Git",
+        "unexpected_error": "Произошла непредвиденная ошибка:\n{error}",
+        "fetching_status": "Получение статуса git...",
+        "generate_msg_failed": "Не удалось сгенерировать сообщение. Введите его вручную или настройте openai_api_key в config.yaml.",
+        "generate_msg_failed_check": "Не удалось сгенерировать сообщение. Проверьте настройки openai_api_key в config.yaml."
       },
       "dialog": {
         "create_branch_title": "Создать ветку",
         "create_branch_prompt": "Введите имя новой ветки:",
         "switch_branch_title": "Переключить ветку",
-        "switch_branch_prompt": "Введите имя ветки для переключения:"
+        "switch_branch_prompt": "Введите имя ветки для переключения:",
+        "diff_title": "Diff коммита {hash}"
+      },
+      "history": {
+        "col_date": "Дата",
+        "col_author": "Автор",
+        "col_commit": "Коммит",
+        "col_message": "Сообщение"
+      },
+      "group": {
+        "other_ops": "Прочие операции",
+        "remote_ops": "Удалённые операции"
       }
     },
     "log": {
@@ -441,6 +1019,10 @@
       "btn": {
         "apply_filters": "Применить фильтры",
         "refresh_tasks": "Обновить задачи"
+      },
+      "group": {
+        "module_filters": "Фильтры по модулям",
+        "level_filters": "Фильтры по уровню лога"
       }
     },
     "session": {
@@ -467,10 +1049,25 @@
       "saved": "Сохранено.",
       "create_error": "Не удалось создать путь: {error}",
       "delete_error": "Не удалось удалить путь: {error}",
-      "exec_target_local": "Цель выполнения: Локально"
+      "exec_target_local": "Цель выполнения: Локально",
+      "new_dir_title": "Новый каталог",
+      "exec_target_remote": "Цель выполнения: Удалённо ({host}: {root})",
+      "revision_conflict": "Конфликт версий. Текущая версия: {revision}.",
+      "name_label": "Название:",
+      "delete_confirm": "Удалить '{path}'?",
+      "path_prefix": "Путь: {path}"
     },
     "chat": {
-      "input_placeholder": "Введите сообщение... (Ctrl+Enter для отправки)"
+      "input_placeholder": "Введите сообщение... (Ctrl+Enter для отправки)",
+      "prefix_you": "Вы:",
+      "prefix_agent": "Агент:",
+      "select_files": "Выбрать файлы",
+      "all_files": "Все файлы (*)",
+      "ask_hint": "или введите свой вариант ниже (Ctrl+Enter)",
+      "status_ready": "Готово",
+      "btn_stop": "Стоп",
+      "status_thinking": "Думаю...",
+      "status_waiting_answer": "Ожидание ответа..."
     },
     "status": {
       "ready": "Готово"
@@ -531,7 +1128,171 @@
         "config_title": "Конфиг Admin (YAML, только чтение)",
         "config_placeholder": "Нажмите «Перезагрузить конфиг» для просмотра итогового YAML.",
         "disabled_title": "Admin отключён",
-        "disabled_hint": "Включите admin для этой сессии или пересканируйте её окружение."
+        "disabled_hint": "Включите admin для этой сессии или пересканируйте её окружение.",
+        "optional": "необязательно",
+        "optional2": "опционально",
+        "interval_sec": "interval_sec:"
+      },
+      "autonomy": {
+        "btn": {
+          "accept_proposed": "Принять предложенное",
+          "daily_maintenance": "Ежедневное обслуживание",
+          "rescan_selected": "Rescan выбранный",
+          "open_details": "Открыть детали",
+          "append_note": "Добавить заметку",
+          "refresh_list": "Обновить список",
+          "ack": "Подтвердить",
+          "build_bootstrap": "Создать сценарий инициализации",
+          "close": "Закрыть",
+          "rescan_all": "Пересканировать всё",
+          "add_fact": "Добавить факт",
+          "check_prereqs": "Проверить предусловия",
+          "compact_memory": "Сжать память",
+          "discard_proposed": "Отклонить предложенное",
+          "browse": "Обзор…",
+          "show_all": "Показать все"
+        },
+        "msg": {
+          "promoting": "Применение…",
+          "baseline_discard_error": "Ошибка discard.",
+          "running_step": "{mode}-run {step} на {server}…",
+          "live_run_confirm": "Запустить LIVE выполнение шага '{step}' на {server}?",
+          "bootstrap_done": "Создан runbook {rb_id}. Путь: {path}",
+          "drift_not_changed": "Drift не изменён.",
+          "title_required": "Title обязателен.",
+          "validating": "Проверка…",
+          "specify_server_id": "Укажите хотя бы один server_id.",
+          "validate_error": "Ошибка validate.",
+          "no_steps": "У runbook нет шагов.",
+          "build_done": "Собран runbook {rb_id}\npath: {path}\nservers: {servers}\nНажмите Validate для проверки.",
+          "generic_error": "Ошибка.",
+          "scan_done": "Найдено файлов: {count}. Отметьте нужные в списке.",
+          "bootstrap_no_runbook": "Runbook не создан. Причина: {reason}",
+          "building": "Сборка runbook…",
+          "rescan_all_result": "Серверов: {count}, drifts: {drifts}, alarm: {alarm}",
+          "dry_run_question": "Выполнить в режиме DRY-RUN?\n(Нет — выполнить реально на сервере)",
+          "rescan_all_error": "Ошибка rescan_all.",
+          "baseline_accept_error": "Ошибка accept.",
+          "dev_server_required": "Dev server_id обязателен.",
+          "no_proposed_baseline": "(нет proposed baseline)",
+          "scan_error": "Ошибка сканирования.",
+          "no_data": "Нет данных.",
+          "maintenance_done": "Готово. Серверов обработано: {count}.",
+          "run_step_error": "Ошибка выполнения.",
+          "update_fact_error": "Ошибка обновления факта.",
+          "maintenance_error": "Ошибка maintenance.",
+          "append_note_error": "Ошибка добавления заметки.",
+          "promote_error": "Ошибка promote.",
+          "rescan_error": "Ошибка rescan.",
+          "delete_fact_error": "Ошибка удаления факта.",
+          "select_server": "Выберите сервер.",
+          "rescan_result": "Пересканирование {sid}: drifts_written={drifts_written}, alarm={alarm}, warn={warn}",
+          "scanning": "Сканируем…",
+          "compact_error": "Ошибка compact.",
+          "steps_no_names": "Шаги без имён.",
+          "nothing_to_discard": "Нечего отменять.",
+          "build_error": "Ошибка сборки.",
+          "select_script": "Выберите хотя бы один скрипт.",
+          "runbook_not_found": "Runbook {rb_id} не найден.",
+          "ack_error": "Ошибка ack.",
+          "prereqs_check_error": "Ошибка проверки.",
+          "specify_dir": "Укажите каталог."
+        },
+        "dialog": {
+          "edit_fact_title": "Редактировать факт",
+          "fact_key_prompt": "Ключ:",
+          "run_validation_label": "Сначала выполнить проверку",
+          "select_step_title": "Выбор шага",
+          "scripts_dir_title": "Каталог скриптов",
+          "delete_fact_prompt": "Удалить {key}?",
+          "fact_value_prompt": "Value для {key}:",
+          "new_fact_title": "Новый факт",
+          "confidence_no_change": "— (не менять)",
+          "select_step_prompt": "Шаг для выполнения:",
+          "delete_fact_title": "Удалить факт"
+        },
+        "label": {
+          "notes": "Заметки:",
+          "proposed_baseline": "Предлагаемая базовая линия:",
+          "facts": "Факты:",
+          "result": "Результат:",
+          "current_baseline": "Текущий baseline:"
+        },
+        "col": {
+          "alarm": "Тревоги",
+          "host": "Хост",
+          "label": "Метка",
+          "last_scan": "Последнее сканирование",
+          "warn": "Предупреждения",
+          "baseline": "Эталон",
+          "transport": "Транспорт",
+          "memory": "Память",
+          "server_id": "ID сервера",
+          "status": "Статус"
+        },
+        "memory_title": "Память",
+        "details_title": "Детали",
+        "run_step_title": "Выполнить шаг",
+        "builder": {
+          "src_group": "1. Источник скриптов (admin.runbook_sources)",
+          "file_item": "{name}  ({size} байт · sha1:{sha1}…)",
+          "meta_group": "2. Параметры runbook"
+        },
+        "servers_not_loaded": "Сервера не загружены.",
+        "drifts_title": "Расхождения",
+        "placeholder": {
+          "add_note": "Добавить заметку...",
+          "comma_separated": "через запятую"
+        },
+        "rescan_title": "Пересканировать",
+        "servers_summary": "Сервера: {count} | статусы: {statuses} | drifts: {totals}",
+        "bootstrap_title": "Инициализация",
+        "validate_title": "Проверить",
+        "baseline_title": "Базовая линия",
+        "group_title": "Автономия",
+        "maintenance_title": "Ежедневное обслуживание",
+        "rescan_all_title": "Пересканировать всё",
+        "detail_title": "Автономия — {server_id}",
+        "promote_title": "Применить"
+      },
+      "col": {
+        "description": "описание",
+        "argv_per_line": "argv (по строке)",
+        "timeout_sec": "timeout_sec",
+        "server_alias": "сервер (алиас)",
+        "status": "статус",
+        "started_at": "started_at",
+        "risk_level": "уровень риска",
+        "action_id": "action_id",
+        "run_id": "run_id",
+        "phase": "этап"
+      },
+      "msg": {
+        "select_run_row": "Выберите строку в таблице runs.",
+        "config_api_unavailable": "Config API недоступен.",
+        "no_runs": "Нет runs для этой сессии.",
+        "run_not_found": "Run {run_id} не найден.",
+        "error_fmt": "Ошибка: {error}",
+        "monitor_api_unavailable": "Monitor API недоступен.",
+        "artifact_store_unavailable": "Artifact store недоступен.",
+        "run_detail_hint": "Выберите run и нажмите «View run details».",
+        "config_load_error": "Ошибка загрузки config.",
+        "session_state": "Сессия: {uid}",
+        "autonomy_api_unavailable": "Autonomy API недоступен.",
+        "runs_loaded": "Загружено runs: {count}",
+        "save_error": "Ошибка сохранения.",
+        "ssh_api_unavailable": "SSH actions API недоступен.",
+        "saved": "Сохранено.",
+        "run_id_undefined": "run_id не определён.",
+        "inventory_load_error": "Ошибка загрузки inventory.",
+        "config_loaded": "Загружено: {path}",
+        "runs_load_error": "Ошибка загрузки runs.",
+        "run_detail_load_error": "Ошибка загрузки деталей run.",
+        "config_unavailable": "Config недоступен.",
+        "load_error": "Ошибка загрузки.",
+        "select_skill_install": "Выберите pending skill install",
+        "no_session": "Session не выбрана.",
+        "api_unavailable": "API недоступен."
       }
     },
     "msg": {
@@ -546,6 +1307,485 @@
       "answer_accepted": "Принял ответ: {answer}",
       "question_closed": "Вопрос уже закрыт.",
       "select_session_first": "Сначала выберите desktop-сессию."
+    },
+    "remotebanner": {
+      "remote_fs": "Удалённая ФС · {host} · {root}"
+    },
+    "runops": {
+      "btn_doctor": "Диагностика",
+      "btn_recover": "Восстановить",
+      "btn_resume": "Продолжить",
+      "btn_promote_skills": "Сохранить навыки",
+      "btn_rerun": "Повторить",
+      "btn_validate": "Проверить",
+      "btn_repair": "Исправить",
+      "btn_apply_recommendation": "Применить рекомендацию",
+      "no_injections": "нет инъекций",
+      "no_session": "Сессия не выбрана",
+      "summary": "Активных запусков: {active} · Всего: {total}",
+      "skills_prefix": "Skills: ",
+      "no_runs": "Запусков нет",
+      "no_recovery_meta": "Нет recovery-метаданных",
+      "action_failed": "Операция завершилась ошибкой.",
+      "load_error": "Не удалось загрузить список запусков",
+      "action_unavailable": "Run-операция недоступна в facade."
+    },
+    "adminchat": {
+      "status_error": "Ошибка: {error}",
+      "status_autopilot_executed": "Автопилот выполнил ({kind})",
+      "status_autopilot_blocked": "Автопилот заблокирован: {reason}",
+      "status_approving": "Подтверждение {id}…",
+      "status_memory_saved": "Memory сохранён",
+      "btn_approve": "Одобрить",
+      "status_pending_unavailable": "Pending недоступны: {error}",
+      "memory_title": "Memory",
+      "status_executed": "Выполнено ({kind})",
+      "btn_reload": "Перезагрузить",
+      "status_intent": "Намерение: {intent_type}",
+      "btn_reject": "Отклонить",
+      "status_messages_unavailable": "Сообщения недоступны: {error}",
+      "status_reject_fail": "Reject ошибка: {error}",
+      "status_select_pending": "Выберите pending-запись",
+      "status_rejected": "Отклонено {id}",
+      "status_load_memory_error": "Ошибка загрузки memory: {error}",
+      "status_unexpected_response": "Неожиданный ответ сервиса",
+      "status_unexpected_approve": "Неожиданный ответ approve",
+      "btn_send": "Отправить",
+      "status_answer_accepted": "Ответ принят",
+      "status_sending": "Отправка…",
+      "status_send_error": "Ошибка отправки: {error}",
+      "btn_save": "Сохранить",
+      "status_memory_error": "Memory ошибка: {error}",
+      "messages_placeholder": "История сообщений появится здесь.",
+      "status_reject_error": "Ошибка reject: {error}",
+      "status_select_session": "Выберите сессию",
+      "title": "Чат администратора",
+      "status_approve_error": "Ошибка approve: {error}",
+      "status_approve_error_result": "Approve ошибка: {error}",
+      "pending_label": "Ожидают одобрения ({count}):",
+      "input_placeholder": "Спросите админа (Enter = отправить)",
+      "memory_notes_placeholder": "Заметки для агента (свободный текст).",
+      "status_load_messages_error": "Ошибка загрузки сообщений: {error}",
+      "status_load_pending_error": "Ошибка загрузки pending: {error}",
+      "status_save_error_msg": "Ошибка сохранения: {error}"
+    },
+    "report": {
+      "sysinfo": {
+        "title": "Системная информация",
+        "active_session": "Активная сессия",
+        "label": "Метка",
+        "col_property": "Свойство",
+        "col_value": "Значение",
+        "row_name": "Имя",
+        "row_tool": "Инструмент",
+        "row_active_cli": "Активный CLI",
+        "row_workdir": "Рабочая директория",
+        "row_resume_token": "Токен продолжения",
+        "row_active_mode": "Активный режим",
+        "row_tokens_used": "Использовано токенов",
+        "row_busy": "Занята",
+        "summary": "Сводка сессии"
+      },
+      "btn": {
+        "sys_info": "Системная информация",
+        "refresh": "Обновить историю",
+        "gen_md": "Создать MD",
+        "gen_pdf": "Создать PDF"
+      },
+      "msg": {
+        "saved_md": "Отчёт сохранён как MD: {filename}",
+        "success_title": "Успех",
+        "gen_error": "Не удалось создать отчёт: {error}",
+        "file_not_found": "Файл не найден.",
+        "saved_pdf": "Отчёт сохранён как PDF: {filename}",
+        "read_error": "Ошибка чтения файла: {error}",
+        "no_plan": "Для этой сессии не найден активный план."
+      },
+      "tooltip": {
+        "pdf_unavailable": "PDF недоступен (отсутствует QtPrintSupport)"
+      }
+    },
+    "palette": {
+      "cmd": {
+        "open_tasks_panel": {
+          "subtitle": "Показать активные задачи",
+          "title": "Открыть панель задач"
+        },
+        "open_status": {
+          "title": "Открыть статус",
+          "subtitle": "Статус сессии, очередь и запуски"
+        },
+        "open_files": {
+          "subtitle": "Браузер и редактор файлов сессии",
+          "title": "Открыть файлы"
+        },
+        "refresh_git": {
+          "subtitle": "Обновить статус/историю Git",
+          "title": "Обновить Git"
+        },
+        "show_cli_limits": {
+          "subtitle": "Показать лимиты/использование активного CLI",
+          "title": "Показать лимиты CLI"
+        },
+        "open_reports": {
+          "title": "Открыть отчёты",
+          "subtitle": "Просмотр отчётов"
+        },
+        "open_scheduler": {
+          "subtitle": "Запланированные задания",
+          "title": "Открыть планировщик"
+        },
+        "open_chat": {
+          "subtitle": "Основное рабочее пространство",
+          "title": "Открыть чат"
+        },
+        "toggle_sessions": {
+          "title": "Переключить панель сессий",
+          "subtitle": "Показать/скрыть левую панель"
+        },
+        "open_plugins": {
+          "title": "Открыть плагины",
+          "subtitle": "Управление плагинами"
+        },
+        "open_config": {
+          "subtitle": "Редактор конфигурации",
+          "title": "Открыть конфигурацию"
+        },
+        "new_session": {
+          "subtitle": "Создать сессию из выбранного CLI",
+          "title": "Новая сессия"
+        },
+        "open_logs": {
+          "subtitle": "Очередь задач и логи",
+          "title": "Открыть логи"
+        },
+        "open_session_settings": {
+          "title": "Открыть настройки",
+          "subtitle": "Настройки сессии и SSH"
+        },
+        "open_runs_panel": {
+          "title": "Открыть панель запусков",
+          "subtitle": "Показать управление восстановлением запусков"
+        },
+        "open_git_panel": {
+          "subtitle": "Показать операции Git",
+          "title": "Открыть панель Git"
+        },
+        "open_admin": {
+          "subtitle": "Панель администрирования",
+          "title": "Открыть админ-панель"
+        }
+      },
+      "hint": "Введите для поиска команд, Enter для запуска",
+      "section": {
+        "navigation": "Навигация",
+        "git": "Git",
+        "panels": "Панели",
+        "session": "Сессия"
+      },
+      "footer_reopen": "Ctrl+K: открыть снова",
+      "title": "Палитра команд",
+      "footer_esc": "Esc: закрыть",
+      "search_placeholder": "Поиск команд..."
+    },
+    "scheduler": {
+      "run_now": "Запустить сейчас",
+      "err_load_scope": "Не удалось загрузить данные планировщика: {error}",
+      "target_mode_label": "Целевой режим:",
+      "job_deleted": "Задание удалено.",
+      "session_uid_label": "Session UID:",
+      "cron_label": "Cron:",
+      "job_already_removed": "Задание уже было удалено.",
+      "no_job_selected": "Задание не выбрано",
+      "job_triggered": "Задание запущено: {job_id}",
+      "name_label": "Название:",
+      "err_delete": "Не удалось удалить задание планировщика: {error}",
+      "err_mode_required": "Необходимо выбрать целевой режим.",
+      "err_pause": "Не удалось приостановить задание планировщика: {error}",
+      "err_trigger": "Не удалось запустить задание планировщика: {error}",
+      "err_project_required": "Необходимо выбрать проект.",
+      "err_load_projects": "Не удалось загрузить проекты: {error}",
+      "jobs_group": "Задания",
+      "pause": "Приостановить",
+      "err_save": "Не удалось сохранить задание планировщика: {error}",
+      "err_session_required": "Необходимо выбрать сессию для уведомлений.",
+      "payload_label": "Полезная нагрузка (JSON):",
+      "job_meta": "Задание: {job_id}\nСледующий запуск: {next_run}\nПоследний запуск: {last_fired}\nСтатус: {last_status}\nКол-во запусков: {run_count}\nПоследняя ошибка: {last_error}",
+      "resume": "Возобновить",
+      "title": "Задачи планировщика",
+      "err_payload_not_object": "Payload должен быть JSON-объектом.",
+      "job_paused": "Задание приостановлено: {job_id}",
+      "job_created": "Задание создано: {job_id}",
+      "err_payload_invalid_json": "Неверный JSON в payload: {error}",
+      "job_on": "вкл",
+      "job_resumed": "Задание возобновлено: {job_id}",
+      "job_updated": "Задание обновлено: {job_id}",
+      "editor_group": "Редактор задания",
+      "err_resume": "Не удалось возобновить задание планировщика: {error}",
+      "project_label": "Проект:",
+      "no_sessions": "У проекта нет открытых desktop-сессий для получения уведомлений.",
+      "no_projects": "Нет доступных собственных проектов."
+    },
+    "modepanel": {
+      "label": {
+        "mode": "Режим:"
+      },
+      "btn": {
+        "menu": "Меню"
+      },
+      "tooltip": {
+        "status_history": "История статусов"
+      },
+      "msg": {
+        "no_history": "Нет истории"
+      }
+    },
+    "ssh": {
+      "keygen_result_title": "Открытый ключ создан",
+      "duplicate_alias_title": "Дублирующийся псевдоним",
+      "keygen_fail_msg": "Создание ключа не удалось: {error}",
+      "label_auth": "Аутентификация:",
+      "confirm_delete_msg": "Вы уверены, что хотите удалить хост '{alias}'?",
+      "error_title": "Ошибка",
+      "label_host": "Хост:",
+      "test_exception_msg": "Проверка соединения не удалась: {error}",
+      "pwd_keep_existing": "Оставьте пустым, чтобы сохранить текущий секрет",
+      "confirm_delete_title": "Подтвердить удаление",
+      "label_passphrase_env": "Env-переменная ключевой фразы:",
+      "group_key": "Настройки ключа",
+      "test_result_title": "Результат проверки",
+      "label_port": "Порт:",
+      "test_fail_msg": "Ошибка: {message}",
+      "label_description": "Описание:",
+      "label_user": "Пользователь:",
+      "empty_hint": "Выберите хост или нажмите Add",
+      "host_saved_msg": "Хост '{alias}' успешно сохранён.",
+      "duplicate_alias_msg": "Хост '{alias}' уже существует",
+      "validation_error_title": "Ошибка валидации",
+      "confirm_keygen_msg": "Создать новый ключ для '{alias}'? Это перезапишет существующий файл ключа, если он уже указан.",
+      "remote_root_placeholder": "/абсолютный/путь/к/проекту (необязательно)",
+      "test_ok_msg": "Успешно!\n\n{info}",
+      "dialog_add_title": "Добавить SSH-хост",
+      "dialog_add_prompt": "Введите псевдоним хоста (например: staging):",
+      "group_sudo": "Настройки sudo",
+      "keygen_close_btn": "Закрыть",
+      "validation_host_user_required": "Хост и пользователь обязательны.",
+      "label_value": "Значение:",
+      "keygen_copy_hint": "Скопируйте этот открытый ключ в ~/.ssh/authorized_keys на сервере:",
+      "label_sudo_pass_env": "Env-переменная пароля sudo:",
+      "invalid_alias_title": "Неверный псевдоним",
+      "success_title": "Успешно",
+      "group_password": "Настройки пароля",
+      "validation_remote_root_msg": "Корневой путь на удалённом сервере должен быть абсолютным (начинаться с /).",
+      "confirm_keygen_title": "Подтвердить создание ключа",
+      "label_idle_timeout": "Таймаут простоя (с):",
+      "label_roles": "Роли:",
+      "label_password_env": "Env-переменная пароля:",
+      "label_remote_root": "Корневой путь на удалённом сервере:",
+      "enable_sudo": "Разрешить sudo",
+      "invalid_alias_msg": "Псевдоним должен содержать только буквы, цифры, - или _",
+      "label_key_file": "Файл ключа:"
+    },
+    "main": {
+      "select_file": "Выберите файл",
+      "select_folder": "Выберите папку",
+      "analyst_progress": "🧠 Аналитик: {phase}\n⏱ {mins}:{secs}",
+      "analyst_phase_default": "Анализ"
+    },
+    "cfgedit": {
+      "whitelist_ids": "Разрешённые ID",
+      "memory_outcomes": "Результаты памяти",
+      "prompt_regex": "Regex приглашения",
+      "memory_native_hooks": "Хуки памяти для CLI",
+      "msg_backup": "Создана резервная копия: {path}",
+      "gemini_secret": "Секрет Gemini OAuth",
+      "memory_events": "События памяти",
+      "pending_input_confirmation": "Подтверждение ожидающего ввода",
+      "msg_changed": "Изменена: {value}",
+      "log_path": "Путь к логам",
+      "review_changes": "Просмотр изменений",
+      "memory_learning": "Обучение памяти",
+      "memory_retention_days": "Хранение событий памяти (дней)",
+      "archive_cli_json": "Архивировать JSON-потоки CLI",
+      "err_token_required": "Токен Telegram обязателен.",
+      "bot_token": "Токен бота",
+      "bind_host": "Хост привязки",
+      "network_settings": "Сетевые настройки",
+      "err_workdir_required": "Рабочий каталог обязателен.",
+      "msg_saved": "Конфигурация сохранена.",
+      "connect_timeout": "Таймаут подключения (с)",
+      "memory_dreaming_batch": "Размер пакета мечтания",
+      "err_mcp_host_required": "Хост MCP обязателен при включённом MCP.",
+      "read_timeout": "Таймаут чтения (с)",
+      "tab": {
+        "tools": "Инструменты",
+        "defaults": "Параметры по умолчанию"
+      },
+      "msg_restart_required": "Требуется перезапуск",
+      "host": "Хост",
+      "idle_timeout": "Таймаут простоя (с)",
+      "api_keys": "API-ключи и провайдеры",
+      "mcp_server_settings": "Настройки MCP-сервера",
+      "mcp_clients_active": "MCP-клиенты (активные)",
+      "port": "Порт",
+      "msg_not_saved": "Конфигурация не была сохранена.",
+      "save_failed": "Ошибка сохранения",
+      "client_disabled": "Отключён",
+      "msg_up_to_date": "Конфигурация уже актуальна.",
+      "headless_command": "Headless-команда",
+      "msg_restart_none": "Перезапуск не требуется",
+      "memory_redaction": "Редактирование событий памяти",
+      "zai_api_key": "ZAI API-ключ",
+      "openai_model": "Модель OpenAI",
+      "openai_api_key": "OpenAI API-ключ",
+      "save_error": "Не удалось сохранить конфиг: {error}",
+      "memory_dreaming": "Режим мечтания памяти",
+      "assistant_preview": "Предпросмотр ответа ассистента",
+      "public_url": "Публичный URL",
+      "validation_error": "Ошибка валидации",
+      "load_error": "Не удалось загрузить конфиг: {error}",
+      "memory_payload_limit": "Лимит полезной нагрузки события",
+      "success": "Успешно",
+      "collect_error": "Не удалось собрать конфиг: {error}",
+      "default_workdir": "Рабочий каталог по умолчанию",
+      "github_token": "GitHub-токен",
+      "bind_port": "Порт привязки",
+      "save_config": "Сохранить конфигурацию",
+      "msg_reloadable": "Перезагружаемые",
+      "command": "Команда",
+      "msg_reloadable_none": "Перезагружаемые: нет",
+      "no_changes": "Нет изменений",
+      "admin_ids": "ID администраторов",
+      "msg_errors": "Ошибки",
+      "tool_mode": "Режим"
+    },
+    "sessmgr": {
+      "transfer_msg": "CLI переключён: {source} → {target}.\nПеренести контекст предыдущей сессии ({source})?",
+      "transfer_title": "Перенос контекста сессии",
+      "transfer_fail_msg": "Не удалось извлечь контекст из предыдущей сессии.",
+      "invalid_dir_title": "Неверная директория",
+      "invalid_dir_msg": "Выбранная директория должна находиться внутри work_dir:\n{root}",
+      "select_workdir": "Выберите рабочую директорию",
+      "transfer_fail_title": "Перенос контекста",
+      "rename": "Переименовать",
+      "reset": "Сбросить",
+      "resume_token": "Resume Token"
+    },
+    "statuspanel": {
+      "mode": "Режим",
+      "queue": "Очередь",
+      "progress": "Прогресс"
+    },
+    "sesssettings": {
+      "no_hosts": "(Нет хостов в .cli-proxy/ssh.yaml)",
+      "rc_root_required": "SSH host существует, но для Remote Control нужно заполнить remote_project_root.",
+      "no_eligible_hosts": "Нет подходящих хостов",
+      "hosts_count": "({n} хостов настроено)",
+      "preflight_failed": "Preflight не пройден: {error}",
+      "effective_local": "local",
+      "rc_error": "Ошибка: {error}",
+      "exec_target_remote": "Цель выполнения: Удалённо · {host} · {root}",
+      "preflight_passed": "Preflight пройден.",
+      "recheck": "Перепроверить",
+      "recheck_failed": "Ошибка перепроверки: {error}"
+    },
+    "taskprogress": {
+      "cancel_tooltip": "Отменить задачу",
+      "title": "Прогресс задачи"
+    },
+    "pluginmenu": {
+      "msg": {
+        "no_plugins": "Нет доступных плагинов",
+        "no_actions": "Нет доступных действий",
+        "load_error": "Ошибка загрузки плагинов: {error}"
+      },
+      "btn": {
+        "refresh": "Обновить плагины"
+      },
+      "title": "Плагины"
+    },
+    "taskqueue": {
+      "no_active_tasks": "Нет активных задач",
+      "title": "Очередь задач",
+      "active_tasks_count": "Активных задач: {count}"
+    },
+    "managetasks": {
+      "remaining": "... еще {count}",
+      "header": "План выполнения",
+      "closed_count": "Закрыто: {closed}/{total}"
+    },
+    "modemenu": {
+      "title": "Меню режима"
     }
+  },
+  "session_status": {
+    "resume": "Resume",
+    "active_session": "Активная сессия",
+    "session": "Сессия",
+    "busy": "занята",
+    "free": "свободна",
+    "git_busy": "git: занято",
+    "git_free": "git: свободно",
+    "conflict": "конфликт",
+    "conflict_yes": "да",
+    "status": "Статус",
+    "in_progress": "В работе",
+    "project": "Проект",
+    "last_output": "Последний вывод",
+    "last_tick": "Последний тик",
+    "ticks": "Тиков",
+    "queue": "Очередь",
+    "yes": "есть",
+    "no": "нет",
+    "orchestrator": "Оркестратор",
+    "on": "вкл",
+    "off": "выкл",
+    "ssh_on": "SSH: вкл",
+    "ssh_off": "SSH: выкл",
+    "modes_none": "Режимы: нет",
+    "none": "нет",
+    "sec": "с",
+    "ago": "{v} назад",
+    "mode_label": "Режим",
+    "enabled": "включен",
+    "disabled": "выключен",
+    "stage": "Стадия",
+    "stage_running": "обрабатывает задачу",
+    "stage_queued": "ждет задачи в очереди",
+    "stage_idle": "ожидает новый запрос",
+    "stage_manager_idle": "нет активного плана",
+    "stage_agent_running": "выполняет задачу",
+    "stage_draining": "завершает обработку",
+    "manager_title": "🏗 Статус Менеджера",
+    "webmaster_title": "🌐 Статус Вебмастера",
+    "task": "Задача",
+    "task_active": "активна",
+    "quiet_mode": "Тихий режим",
+    "plan_header": "План",
+    "plan_not_found": "План: не найден.",
+    "truncated": "(Обрезано по лимиту Telegram. Остальное отправлено HTML-выводом.)",
+    "wm_task_kind": "Тип задачи",
+    "wm_prompt_version": "Версия промпта",
+    "wm_last_class": "Последняя классификация",
+    "plugins_ui": "Плагины UI",
+    "plugins_available": "доступны"
+  },
+  "agent": {
+    "cli_language_directive": "Отвечай на русском языке. Все файлы, комментарии в коде и артефакты также создавай на русском."
+  },
+  "run": {
+    "cli_abnormal": "CLI для сессии {details} завершен не штатно.",
+    "exec_error": "Ошибка выполнения: {e}",
+    "mode_interrupted": "Режим {mode_id} прерван.",
+    "mode_error": "Ошибка режима {mode_id}: {e}",
+    "output_delivery_with_summary": "Сначала отправлю вывод во вложении (HTML, последние {n} символов), затем пришлю summary.",
+    "output_delivery_only": "Отправлю вывод во вложении (HTML, последние {n} символов).",
+    "output_header": "[{sid}|{name}] Сессия: {sid} | Инструмент: {tool}\nКаталог: {workdir}\nДлина вывода: {length} символов | Очередь: {queue}\nResume: {resume}\n{delivery}",
+    "orch_transition_ready": "Результат текущего режима готов.\n",
+    "orch_transition_return_warning": "\n\n⚠️ Предложен возврат в предыдущий режим цепочки. Проверьте уверенность и подтвердите вручную.",
+    "summary_unavailable": " (summary недоступна: {err})",
+    "html_pending": "\nHTML ещё готовится.",
+    "summary_error_timeout": "таймаут суммаризации ({sec}с)",
+    "summary_error_unknown": "неизвестная ошибка"
   }
 }

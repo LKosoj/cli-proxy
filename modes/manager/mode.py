@@ -46,6 +46,7 @@ from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.session_busy import is_session_busy
 from session import session_runtime_uid, session_scoped_key
 from sessions.session_state_access import get_active_mode
+from i18n import t
 from utils.lang import resolve_user_lang
 from utils.text import strip_ansi
 
@@ -1662,16 +1663,21 @@ class ManagerMode(BaseMode, RunArtifactsMixin):
             queue_len=ModeStatusService.get_session_queue_len(session),
             plan_status=str(getattr(plan, "status", "") or "").strip() if plan else "",
         )
+        try:
+            _lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
+        except Exception:
+            _lang = "ru"
         header = ModeStatusService.build_mode_status_text(
             session,
-            title="🏗 Статус Менеджера",
+            title=t("session_status.manager_title", _lang),
             stage=stage,
             enabled=enabled,
-            task_suffix=f"Задача: {'активна' if running else 'нет'}",
+            task_suffix=f"{t('session_status.task', _lang)}: "
+            f"{t('session_status.task_active', _lang) if running else t('session_status.none', _lang)}",
             extra_sections=[
                 (
-                    "Тихий режим",
-                    "вкл"
+                    t("session_status.quiet_mode", _lang),
+                    t("session_status.on", _lang)
                     if bool(
                         getattr(
                             getattr(session, "modes", None),
@@ -1679,16 +1685,17 @@ class ManagerMode(BaseMode, RunArtifactsMixin):
                             getattr(session, "manager_quiet_mode", False),
                         )
                     )
-                    else "выкл",
+                    else t("session_status.off", _lang),
                 ),
             ],
+            lang=_lang,
         )
         if status_full:
-            status_full = f"{header}\n\nПлан:\n{status_full}"
+            status_full = f"{header}\n\n{t('session_status.plan_header', _lang)}:\n{status_full}"
         else:
-            status_full = f"{header}\n\nПлан: не найден."
+            status_full = f"{header}\n\n{t('session_status.plan_not_found', _lang)}"
         limit = 3900
-        suffix = "\n\n(Обрезано по лимиту Telegram. Остальное отправлено HTML-выводом.)"
+        suffix = "\n\n" + t("session_status.truncated", _lang)
         status_display = status_full
         truncated = False
         if len(status_display) > limit:

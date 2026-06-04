@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from i18n import t
 from utils.ui import ensure_async
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ class TaskQueueWidget(QWidget):
         self._unsubscribe = self.facade.subscribe(self._on_facade_notification)
 
         self._setup_ui()
+        self.retranslate_ui(self.facade.ui_language)
         self.refresh()
 
     def _setup_ui(self) -> None:
@@ -48,11 +50,11 @@ class TaskQueueWidget(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
-        title = QLabel("Task Queue")
-        title.setObjectName("task_queue_title")
-        layout.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setObjectName("task_queue_title")
+        layout.addWidget(self.title_label)
 
-        self.summary_label = QLabel("Нет активных задач")
+        self.summary_label = QLabel()
         self.summary_label.setObjectName("task_queue_summary")
         layout.addWidget(self.summary_label)
 
@@ -78,12 +80,13 @@ class TaskQueueWidget(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
+        lang = self.facade.ui_language
         tasks = self.facade.list_active_tasks(session_uid=self._session_uid)
         if not tasks:
-            self.summary_label.setText("Нет активных задач")
+            self.summary_label.setText(t("desktop.taskqueue.no_active_tasks", lang))
             return
 
-        self.summary_label.setText(f"Активных задач: {len(tasks)}")
+        self.summary_label.setText(t("desktop.taskqueue.active_tasks_count", lang, count=len(tasks)))
         now = time.time()
         for rec in tasks:
             frame = QFrame()
@@ -114,7 +117,7 @@ class TaskQueueWidget(QWidget):
             priority_box.valueChanged.connect(partial(self._on_priority_changed, str(rec.task_id)))
             row.addWidget(priority_box)
 
-            cancel_btn = QPushButton("Отмена")
+            cancel_btn = QPushButton(t("common.cancel", lang))
             cancel_btn.clicked.connect(partial(self._on_cancel_clicked, str(rec.task_id)))
             row.addWidget(cancel_btn)
 
@@ -131,6 +134,11 @@ class TaskQueueWidget(QWidget):
             self.refresh()
 
         ensure_async(_cancel(), parent=self)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.title_label.setText(t("desktop.taskqueue.title", lang))
+        self.summary_label.setText(t("desktop.taskqueue.no_active_tasks", lang))
+        self.refresh()
 
     def _on_facade_notification(self, note: "AppNotification") -> None:
         if note.event in ("task:started", "task:completed", "task:failed", "task:cancelled", "task:updated"):

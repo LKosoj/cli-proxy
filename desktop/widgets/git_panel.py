@@ -60,7 +60,8 @@ class GitPanelWidget(QWidget):
         layout.addWidget(self.remote_banner)
 
         # Заголовок
-        self.git_title_label = QLabel("Enhanced Git Integration")
+        lang = self.facade.ui_language
+        self.git_title_label = QLabel(t("desktop.git.title", lang))
         self.git_title_label.setObjectName("git_title")
         layout.addWidget(self.git_title_label)
 
@@ -70,22 +71,22 @@ class GitPanelWidget(QWidget):
         # Вкладка статуса
         self.status_tab = QWidget()
         self._setup_status_tab()
-        self.tabs.addTab(self.status_tab, "Status")
+        self.tabs.addTab(self.status_tab, t("desktop.git.tab.status", lang))
 
         # Вкладка истории
         self.history_tab = QWidget()
         self._setup_history_tab()
-        self.tabs.addTab(self.history_tab, "History")
+        self.tabs.addTab(self.history_tab, t("desktop.git.tab.history", lang))
 
         # Вкладка коммитов
         self.commit_tab = QWidget()
         self._setup_commit_tab()
-        self.tabs.addTab(self.commit_tab, "Commit")
+        self.tabs.addTab(self.commit_tab, t("desktop.git.tab.commit", lang))
 
         # Вкладка операций
         self.operations_tab = QWidget()
         self._setup_operations_tab()
-        self.tabs.addTab(self.operations_tab, "Operations")
+        self.tabs.addTab(self.operations_tab, t("desktop.git.tab.operations", lang))
 
         layout.addWidget(self.tabs)
 
@@ -101,11 +102,12 @@ class GitPanelWidget(QWidget):
         # Поле вывода статуса
         self.status_display = QPlainTextEdit()
         self.status_display.setReadOnly(True)
-        self.status_display.setPlaceholderText("Select a session to see git status...")
+        lang = self.facade.ui_language
+        self.status_display.setPlaceholderText(t("desktop.git.select_session", lang))
         layout.addWidget(self.status_display)
 
         # Кнопка обновления статуса
-        self.refresh_btn = QPushButton("Refresh Status")
+        self.refresh_btn = QPushButton(t("desktop.git.btn.refresh_status", lang))
         self.refresh_btn.clicked.connect(self.refresh_status)
         layout.addWidget(self.refresh_btn)
 
@@ -117,17 +119,23 @@ class GitPanelWidget(QWidget):
 
         # Дерево истории коммитов
         self.history_tree = QTreeWidget()
-        self.history_tree.setHeaderLabels(["Commit", "Author", "Date", "Message"])
+        lang = self.facade.ui_language
+        self.history_tree.setHeaderLabels([
+            t("desktop.git.history.col_commit", lang),
+            t("desktop.git.history.col_author", lang),
+            t("desktop.git.history.col_date", lang),
+            t("desktop.git.history.col_message", lang),
+        ])
         self.history_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.history_tree)
 
         # Кнопки управления историей
         btn_layout = QHBoxLayout()
-        self.refresh_history_btn = QPushButton("Refresh History")
+        self.refresh_history_btn = QPushButton(t("desktop.git.btn.refresh_history", lang))
         self.refresh_history_btn.clicked.connect(self.refresh_history)
         btn_layout.addWidget(self.refresh_history_btn)
 
-        self.show_diff_btn = QPushButton("Show Diff")
+        self.show_diff_btn = QPushButton(t("desktop.git.btn.show_diff", lang))
         self.show_diff_btn.clicked.connect(self.show_commit_diff)
         btn_layout.addWidget(self.show_diff_btn)
 
@@ -141,19 +149,20 @@ class GitPanelWidget(QWidget):
 
         # Секция коммита
         commit_group_layout = QVBoxLayout()
-        self.commit_msg_label = QLabel("Commit Message:")
+        lang = self.facade.ui_language
+        self.commit_msg_label = QLabel(t("desktop.git.commit_message_label", lang))
         commit_group_layout.addWidget(self.commit_msg_label)
         self.commit_msg_input = QLineEdit()
-        self.commit_msg_input.setPlaceholderText("Optional — LLM сгенерирует сообщение автоматически")
+        self.commit_msg_input.setPlaceholderText(t("desktop.git.commit_placeholder", lang))
         commit_group_layout.addWidget(self.commit_msg_input)
 
-        self.commit_btn = QPushButton("Commit (Add All)")
+        self.commit_btn = QPushButton(t("desktop.git.btn.commit", lang))
         self.commit_btn.clicked.connect(self._on_commit_clicked)
         commit_group_layout.addWidget(self.commit_btn)
         layout.addLayout(commit_group_layout)
 
         # Кнопка для генерации сообщения
-        self.generate_msg_btn = QPushButton("Generate Message with AI")
+        self.generate_msg_btn = QPushButton(t("desktop.git.btn.generate_msg", lang))
         self.generate_msg_btn.clicked.connect(self._generate_commit_message_ui)
         layout.addWidget(self.generate_msg_btn)
 
@@ -164,44 +173,45 @@ class GitPanelWidget(QWidget):
         layout.setSpacing(10)
 
         # Группа удаленных операций
-        remote_group = QGroupBox("Remote Operations")
-        remote_layout = QHBoxLayout(remote_group)
+        lang = self.facade.ui_language
+        self.remote_ops_group = QGroupBox(t("desktop.git.group.remote_ops", lang))
+        remote_layout = QHBoxLayout(self.remote_ops_group)
 
-        self.pull_btn = QPushButton("Pull")
+        self.pull_btn = QPushButton(t("desktop.git.btn.pull", lang))
         self.pull_btn.clicked.connect(self._on_pull_clicked)
         remote_layout.addWidget(self.pull_btn)
 
-        self.push_btn = QPushButton("Push")
+        self.push_btn = QPushButton(t("desktop.git.btn.push", lang))
         self.push_btn.clicked.connect(self._on_push_clicked)
         remote_layout.addWidget(self.push_btn)
 
-        layout.addWidget(remote_group)
+        layout.addWidget(self.remote_ops_group)
 
         # Группа других операций
-        other_group = QGroupBox("Other Operations")
-        other_layout = QVBoxLayout(other_group)
+        self.other_ops_group = QGroupBox(t("desktop.git.group.other_ops", lang))
+        other_layout = QVBoxLayout(self.other_ops_group)
 
         stash_layout = QHBoxLayout()
-        self.stash_btn = QPushButton("Stash")
+        self.stash_btn = QPushButton(t("desktop.git.btn.stash", lang))
         self.stash_btn.clicked.connect(self._on_stash_clicked)
         stash_layout.addWidget(self.stash_btn)
 
-        self.stash_pop_btn = QPushButton("Stash Pop")
+        self.stash_pop_btn = QPushButton(t("desktop.git.btn.stash_pop", lang))
         self.stash_pop_btn.clicked.connect(self._on_stash_pop_clicked)
         stash_layout.addWidget(self.stash_pop_btn)
         other_layout.addLayout(stash_layout)
 
         branch_layout = QHBoxLayout()
-        self.branch_create_btn = QPushButton("Create Branch")
+        self.branch_create_btn = QPushButton(t("desktop.git.btn.create_branch", lang))
         self.branch_create_btn.clicked.connect(self._on_branch_create_clicked)
         branch_layout.addWidget(self.branch_create_btn)
 
-        self.branch_switch_btn = QPushButton("Switch Branch")
+        self.branch_switch_btn = QPushButton(t("desktop.git.btn.switch_branch", lang))
         self.branch_switch_btn.clicked.connect(self._on_branch_switch_clicked)
         branch_layout.addWidget(self.branch_switch_btn)
         other_layout.addLayout(branch_layout)
 
-        layout.addWidget(other_group)
+        layout.addWidget(self.other_ops_group)
 
         layout.addStretch()
 
@@ -241,7 +251,7 @@ class GitPanelWidget(QWidget):
         if not self._active_session:
             return
 
-        self.status_display.setPlainText("Fetching git status...")
+        self.status_display.setPlainText(t("desktop.git.msg.fetching_status", self.facade.ui_language))
 
         async def _do():
             try:
@@ -258,7 +268,9 @@ class GitPanelWidget(QWidget):
                         self._on_status_received(str(text or ""))
                     else:
                         self._is_git_repo = False
-                        self._on_status_received(f"Not a git repository or git error (code {code}):\n{text}")
+                        self._on_status_received(
+                            t("desktop.git.msg.not_a_repo", self.facade.ui_language, code=code, output=text)
+                        )
                         return
                 else:
                     self._is_git_repo = True
@@ -337,18 +349,19 @@ class GitPanelWidget(QWidget):
         commit_hash = selected_items[0].text(0)  # Первый столбец содержит хеш
 
         async def _do_show_diff():
+            lang = self.facade.ui_language
             try:
                 diff_res = await self.facade.git_service.show(self._active_session, commit_hash)
                 code, output = diff_res
                 if int(code) == 0:
                     # Показываем diff в новом окне или диалоге
                     diff_dialog = QMessageBox(self)
-                    diff_dialog.setWindowTitle(f"Diff for commit {commit_hash}")
+                    diff_dialog.setWindowTitle(t("desktop.git.dialog.diff_title", lang, hash=commit_hash))
                     diff_dialog.setText(output)
                     diff_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
                     diff_dialog.exec()
                 else:
-                    self._on_error(f"Git show failed with code {code}:\n{output}")
+                    self._on_error(t("desktop.git.msg.show_failed", lang, code=code, output=output))
             except Exception as e:
                 self._on_error(str(e))
 
@@ -366,10 +379,8 @@ class GitPanelWidget(QWidget):
                     commit_msg, commit_body = await self._generate_commit_message()
                     if not commit_msg:
                         self._set_busy(False)
-                        QTimer.singleShot(0, lambda: QMessageBox.warning(
-                            self, "Git",
-                            "Не удалось сгенерировать сообщение. Введите его вручную или настройте openai_api_key в config.yaml."
-                        ))
+                        _warn_msg = t("desktop.git.msg.generate_msg_failed", self.facade.ui_language)
+                        QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Git", _warn_msg))
                         return
                 res = await self.facade.git_service.commit(
                     self._active_session, commit_msg, body=commit_body
@@ -395,7 +406,7 @@ class GitPanelWidget(QWidget):
                 else:
                     QMessageBox.warning(
                         self, "Git",
-                        "Не удалось сгенерировать сообщение. Проверьте настройки openai_api_key в config.yaml."
+                        t("desktop.git.msg.generate_msg_failed_check", self.facade.ui_language)
                     )
             except Exception as e:
                 self._on_error(str(e))
@@ -545,7 +556,10 @@ class GitPanelWidget(QWidget):
     @Slot(str)
     def _on_error(self, error_msg: str):
         self.logger.error(f"Git operation error: {error_msg}")
-        QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Git System Error", f"An unexpected error occurred:\n{error_msg}"))
+        lang = self.facade.ui_language
+        title = t("desktop.git.msg.system_error_title", lang)
+        body = t("desktop.git.msg.unexpected_error", lang, error=error_msg)
+        QTimer.singleShot(0, lambda: QMessageBox.critical(self, title, body))
 
     def _set_busy(self, busy: bool):
         """Блокирует/разблокирует кнопки во время операций."""
@@ -568,6 +582,7 @@ class GitPanelWidget(QWidget):
             self.unsetCursor()
 
     def retranslate_ui(self, lang: str) -> None:
+        self.remote_banner.retranslate_ui(lang)
         self.git_title_label.setText(t("desktop.git.title", lang))
         self.tabs.setTabText(0, t("desktop.git.tab.status", lang))
         self.tabs.setTabText(1, t("desktop.git.tab.history", lang))
@@ -575,14 +590,22 @@ class GitPanelWidget(QWidget):
         self.tabs.setTabText(3, t("desktop.git.tab.operations", lang))
         self.status_display.setPlaceholderText(t("desktop.git.select_session", lang))
         self.refresh_btn.setText(t("desktop.git.btn.refresh_status", lang))
+        self.history_tree.setHeaderLabels([
+            t("desktop.git.history.col_commit", lang),
+            t("desktop.git.history.col_author", lang),
+            t("desktop.git.history.col_date", lang),
+            t("desktop.git.history.col_message", lang),
+        ])
         self.refresh_history_btn.setText(t("desktop.git.btn.refresh_history", lang))
         self.show_diff_btn.setText(t("desktop.git.btn.show_diff", lang))
         self.commit_msg_label.setText(t("desktop.git.commit_message_label", lang))
         self.commit_msg_input.setPlaceholderText(t("desktop.git.commit_placeholder", lang))
         self.commit_btn.setText(t("desktop.git.btn.commit", lang))
         self.generate_msg_btn.setText(t("desktop.git.btn.generate_msg", lang))
+        self.remote_ops_group.setTitle(t("desktop.git.group.remote_ops", lang))
         self.pull_btn.setText(t("desktop.git.btn.pull", lang))
         self.push_btn.setText(t("desktop.git.btn.push", lang))
+        self.other_ops_group.setTitle(t("desktop.git.group.other_ops", lang))
         self.stash_btn.setText(t("desktop.git.btn.stash", lang))
         self.stash_pop_btn.setText(t("desktop.git.btn.stash_pop", lang))
         self.branch_create_btn.setText(t("desktop.git.btn.create_branch", lang))

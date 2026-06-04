@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from i18n import t
 from modes.sdk.runtime.json_normalizer import loads_safe
 from utils.ui import ensure_async
 
@@ -52,30 +53,33 @@ class SchedulerPanelWidget(QWidget):
         self.refresh()
 
     def _build_ui(self) -> None:
+        lang = self.facade.ui_language
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        title = QLabel("Scheduler Jobs")
-        title.setObjectName("scheduler_panel_title")
-        layout.addWidget(title)
+        self.title_label = QLabel(t("desktop.scheduler.title", lang))
+        self.title_label.setObjectName("scheduler_panel_title")
+        layout.addWidget(self.title_label)
 
         controls_layout = QHBoxLayout()
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(8)
 
-        controls_layout.addWidget(QLabel("Project:"))
+        self.project_label = QLabel(t("desktop.scheduler.project_label", lang))
+        controls_layout.addWidget(self.project_label)
         self.project_selector = QComboBox()
         self.project_selector.setObjectName("scheduler_project_selector")
         self.project_selector.currentIndexChanged.connect(self._on_project_changed)
         controls_layout.addWidget(self.project_selector, 1)
 
-        controls_layout.addWidget(QLabel("Session UID:"))
+        self.session_label = QLabel(t("desktop.scheduler.session_uid_label", lang))
+        controls_layout.addWidget(self.session_label)
         self.session_selector = QComboBox()
         self.session_selector.setObjectName("scheduler_session_selector")
         controls_layout.addWidget(self.session_selector, 1)
 
-        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button = QPushButton(t("desktop.btn.refresh", lang))
         self.refresh_button.setObjectName("scheduler_refresh_button")
         self.refresh_button.clicked.connect(self.refresh)
         controls_layout.addWidget(self.refresh_button)
@@ -85,9 +89,9 @@ class SchedulerPanelWidget(QWidget):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(8)
 
-        jobs_box = QGroupBox("Jobs")
-        jobs_box.setObjectName("scheduler_jobs_box")
-        jobs_layout = QVBoxLayout(jobs_box)
+        self.jobs_box = QGroupBox(t("desktop.scheduler.jobs_group", lang))
+        self.jobs_box.setObjectName("scheduler_jobs_box")
+        jobs_layout = QVBoxLayout(self.jobs_box)
         jobs_layout.setContentsMargins(8, 8, 8, 8)
         jobs_layout.setSpacing(8)
 
@@ -95,11 +99,11 @@ class SchedulerPanelWidget(QWidget):
         self.jobs_list.setObjectName("scheduler_jobs_list")
         self.jobs_list.itemSelectionChanged.connect(self._on_job_selected)
         jobs_layout.addWidget(self.jobs_list, 1)
-        body_layout.addWidget(jobs_box, 1)
+        body_layout.addWidget(self.jobs_box, 1)
 
-        form_box = QGroupBox("Job Editor")
-        form_box.setObjectName("scheduler_editor_box")
-        form_layout = QVBoxLayout(form_box)
+        self.form_box = QGroupBox(t("desktop.scheduler.editor_group", lang))
+        self.form_box.setObjectName("scheduler_editor_box")
+        form_layout = QVBoxLayout(self.form_box)
         form_layout.setContentsMargins(8, 8, 8, 8)
         form_layout.setSpacing(8)
 
@@ -109,24 +113,27 @@ class SchedulerPanelWidget(QWidget):
 
         self.job_name_input = QLineEdit()
         self.job_name_input.setObjectName("scheduler_job_name_input")
-        fields.addRow("Name:", self.job_name_input)
+        self.job_name_row_label = QLabel(t("desktop.scheduler.name_label", lang))
+        fields.addRow(self.job_name_row_label, self.job_name_input)
 
         self.cron_input = QLineEdit()
         self.cron_input.setObjectName("scheduler_cron_input")
         self.cron_input.setPlaceholderText("*/5 * * * *")
-        fields.addRow("Cron:", self.cron_input)
+        self.cron_row_label = QLabel(t("desktop.scheduler.cron_label", lang))
+        fields.addRow(self.cron_row_label, self.cron_input)
 
         self.mode_selector = QComboBox()
         self.mode_selector.setObjectName("scheduler_mode_selector")
         self._reload_modes()
-        fields.addRow("Target mode:", self.mode_selector)
+        self.mode_row_label = QLabel(t("desktop.scheduler.target_mode_label", lang))
+        fields.addRow(self.mode_row_label, self.mode_selector)
 
-        self.enabled_checkbox = QCheckBox("Enabled")
+        self.enabled_checkbox = QCheckBox(t("desktop.admin.label.monitor_enabled", lang))
         self.enabled_checkbox.setObjectName("scheduler_enabled_checkbox")
         self.enabled_checkbox.setChecked(True)
         fields.addRow("", self.enabled_checkbox)
 
-        self.payload_label = QLabel("Payload (JSON):")
+        self.payload_label = QLabel(t("desktop.scheduler.payload_label", lang))
         self.payload_input = QTextEdit()
         self.payload_input.setObjectName("scheduler_payload_input")
         self.payload_input.setPlaceholderText('{"key": "value"}')
@@ -135,7 +142,7 @@ class SchedulerPanelWidget(QWidget):
 
         form_layout.addLayout(fields)
 
-        self.job_meta_label = QLabel("No job selected")
+        self.job_meta_label = QLabel(t("desktop.scheduler.no_job_selected", lang))
         self.job_meta_label.setObjectName("scheduler_job_meta")
         self.job_meta_label.setWordWrap(True)
         form_layout.addWidget(self.job_meta_label)
@@ -144,32 +151,32 @@ class SchedulerPanelWidget(QWidget):
         buttons_layout.setContentsMargins(0, 0, 0, 0)
         buttons_layout.setSpacing(8)
 
-        self.save_button = QPushButton("Save")
+        self.save_button = QPushButton(t("desktop.btn.save", lang))
         self.save_button.setObjectName("scheduler_save_button")
         self.save_button.clicked.connect(self._save_job)
         buttons_layout.addWidget(self.save_button)
 
-        self.delete_button = QPushButton("Delete")
+        self.delete_button = QPushButton(t("desktop.btn.delete", lang))
         self.delete_button.setObjectName("scheduler_delete_button")
         self.delete_button.clicked.connect(self._delete_job)
         buttons_layout.addWidget(self.delete_button)
 
-        self.run_now_button = QPushButton("Run now")
+        self.run_now_button = QPushButton(t("desktop.scheduler.run_now", lang))
         self.run_now_button.setObjectName("scheduler_run_now_button")
         self.run_now_button.clicked.connect(self._run_job_now)
         buttons_layout.addWidget(self.run_now_button)
 
-        self.pause_button = QPushButton("Pause")
+        self.pause_button = QPushButton(t("desktop.scheduler.pause", lang))
         self.pause_button.setObjectName("scheduler_pause_button")
         self.pause_button.clicked.connect(self._pause_job)
         buttons_layout.addWidget(self.pause_button)
 
-        self.resume_button = QPushButton("Resume")
+        self.resume_button = QPushButton(t("desktop.scheduler.resume", lang))
         self.resume_button.setObjectName("scheduler_resume_button")
         self.resume_button.clicked.connect(self._resume_job)
         buttons_layout.addWidget(self.resume_button)
 
-        self.reset_button = QPushButton("Reset")
+        self.reset_button = QPushButton(t("miniapp.btn.reset", lang))
         self.reset_button.setObjectName("scheduler_reset_button")
         self.reset_button.clicked.connect(self.reset_form)
         buttons_layout.addWidget(self.reset_button)
@@ -182,7 +189,7 @@ class SchedulerPanelWidget(QWidget):
         self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         form_layout.addWidget(self.status_label)
 
-        body_layout.addWidget(form_box, 1)
+        body_layout.addWidget(self.form_box, 1)
         layout.addLayout(body_layout)
 
     def set_context_session(self, session_uid: Optional[str]) -> None:
@@ -205,7 +212,7 @@ class SchedulerPanelWidget(QWidget):
             self._projects = []
             self._render_projects(selected_slug=None)
             self._render_scope(project_slug=None)
-            self.set_status(f"Failed to load projects: {exc}")
+            self.set_status(t("desktop.scheduler.err_load_projects", self.facade.ui_language, error=exc))
             return
 
         selected_slug = str(project_slug or self.current_project_slug() or "").strip() or None
@@ -265,7 +272,7 @@ class SchedulerPanelWidget(QWidget):
         self.jobs_list.clear()
         if not project_slug:
             self.reset_form()
-            self.set_status("No owned projects available.")
+            self.set_status(t("desktop.scheduler.no_projects", self.facade.ui_language))
             return
         try:
             targets = list(
@@ -274,7 +281,7 @@ class SchedulerPanelWidget(QWidget):
             jobs = list(self.facade.list_scheduler_jobs(project_slug=project_slug) or [])
         except Exception as exc:
             self.reset_form()
-            self.set_status(f"Failed to load scheduler scope: {exc}")
+            self.set_status(t("desktop.scheduler.err_load_scope", self.facade.ui_language, error=exc))
             return
 
         for item in targets:
@@ -297,7 +304,7 @@ class SchedulerPanelWidget(QWidget):
         self.reset_form()
         self._set_button_state()
         if not targets:
-            self.set_status("Project has no open desktop sessions for notification target.")
+            self.set_status(t("desktop.scheduler.no_sessions", self.facade.ui_language))
         else:
             self.set_status("")
 
@@ -312,24 +319,20 @@ class SchedulerPanelWidget(QWidget):
         self.resume_button.setEnabled(has_project and has_job)
 
     def _update_job_meta(self) -> None:
+        lang = self.facade.ui_language
         if not self._selected_job_id:
-            self.job_meta_label.setText("No job selected")
+            self.job_meta_label.setText(t("desktop.scheduler.no_job_selected", lang))
             self._set_button_state()
             return
         job = self._jobs_by_id.get(str(self._selected_job_id))
         if not job:
-            self.job_meta_label.setText("No job selected")
+            self.job_meta_label.setText(t("desktop.scheduler.no_job_selected", lang))
             self._set_button_state()
             return
         self.job_meta_label.setText(
-            (
-                "Job: {job_id}\n"
-                "Next run: {next_run}\n"
-                "Last fired: {last_fired}\n"
-                "Status: {last_status}\n"
-                "Run count: {run_count}\n"
-                "Last error: {last_error}"
-            ).format(
+            t(
+                "desktop.scheduler.job_meta",
+                lang,
                 job_id=str(job.get("job_id", "") or ""),
                 next_run=str(job.get("next_run_at", 0.0)),
                 last_fired=str(job.get("last_fired_at", 0.0)),
@@ -385,10 +388,11 @@ class SchedulerPanelWidget(QWidget):
         self._update_job_meta()
 
     def _job_label(self, job: Dict[str, Any]) -> str:
+        lang = self.facade.ui_language
         name = str(job.get("job_name", "") or job.get("job_id", "") or "").strip()
         cron = str(job.get("cron", "") or "").strip()
         mode = str(job.get("target_mode", "") or "").strip()
-        prefix = "on" if bool(job.get("enabled", False)) else "off"
+        prefix = t("desktop.scheduler.job_on", lang) if bool(job.get("enabled", False)) else t("miniapp.status.off", lang)
         status = str(job.get("last_status", "") or "").strip()
         status_part = f" | {status}" if status else ""
 
@@ -410,14 +414,15 @@ class SchedulerPanelWidget(QWidget):
         project_slug = self.current_project_slug()
         session_uid = self.session_selector.currentData()
         mode_id = self.mode_selector.currentData()
+        lang = self.facade.ui_language
         if not project_slug:
-            self.set_status("Project is required.")
+            self.set_status(t("desktop.scheduler.err_project_required", lang))
             return None
         if not session_uid:
-            self.set_status("Notification session_uid is required.")
+            self.set_status(t("desktop.scheduler.err_session_required", lang))
             return None
         if not mode_id:
-            self.set_status("Target mode is required.")
+            self.set_status(t("desktop.scheduler.err_mode_required", lang))
             return None
 
         # Parse and validate JSON payload
@@ -427,10 +432,10 @@ class SchedulerPanelWidget(QWidget):
             try:
                 payload = loads_safe(payload_text, strict_first=True)
                 if not isinstance(payload, dict):
-                    self.set_status("Payload must be a JSON object.")
+                    self.set_status(t("desktop.scheduler.err_payload_not_object", lang))
                     return None
             except json.JSONDecodeError as exc:
-                self.set_status(f"Invalid JSON in payload: {exc}")
+                self.set_status(t("desktop.scheduler.err_payload_invalid_json", lang, error=exc))
                 return None
 
         return {
@@ -447,6 +452,7 @@ class SchedulerPanelWidget(QWidget):
         payload = self._collect_form()
         if payload is None:
             return
+        lang = self.facade.ui_language
         try:
             if self._selected_job_id:
                 job = self.facade.update_scheduler_job(
@@ -459,7 +465,7 @@ class SchedulerPanelWidget(QWidget):
                     job_name=payload["job_name"],
                     payload=payload["payload"],
                 )
-                self.set_status(f"Job updated: {job['job_id']}")
+                self.set_status(t("desktop.scheduler.job_updated", lang, job_id=job['job_id']))
             else:
                 job = self.facade.create_scheduler_job(
                     project_slug=payload["project_slug"],
@@ -470,28 +476,32 @@ class SchedulerPanelWidget(QWidget):
                     job_name=payload["job_name"],
                     payload=payload["payload"],
                 )
-                self.set_status(f"Job created: {job['job_id']}")
+                self.set_status(t("desktop.scheduler.job_created", lang, job_id=job['job_id']))
             self.refresh(project_slug=payload["project_slug"])
             self._select_job(job_id=str(job.get("job_id", "") or ""))
         except Exception as exc:
             self.logger.exception("desktop scheduler save failed")
-            self.set_status(f"Failed to save scheduler job: {exc}")
+            self.set_status(t("desktop.scheduler.err_save", lang, error=exc))
 
     def _delete_job(self) -> None:
         project_slug = self.current_project_slug()
         job_id = str(self._selected_job_id or "").strip()
         if not project_slug or not job_id:
             return
+        lang = self.facade.ui_language
         try:
             deleted = self.facade.delete_scheduler_job(
                 project_slug=str(project_slug),
                 job_id=job_id,
             )
             self.refresh(project_slug=str(project_slug))
-            self.set_status("Job deleted." if deleted else "Job was already removed.")
+            self.set_status(
+                t("desktop.scheduler.job_deleted", lang) if deleted
+                else t("desktop.scheduler.job_already_removed", lang)
+            )
         except Exception as exc:
             self.logger.exception("desktop scheduler delete failed")
-            self.set_status(f"Failed to delete scheduler job: {exc}")
+            self.set_status(t("desktop.scheduler.err_delete", lang, error=exc))
 
     def _run_job_now(self) -> None:
         project_slug = self.current_project_slug()
@@ -500,6 +510,7 @@ class SchedulerPanelWidget(QWidget):
             return
 
         async def _runner() -> None:
+            lang = self.facade.ui_language
             try:
                 event = await self.facade.run_scheduler_job_now(
                     project_slug=str(project_slug),
@@ -507,10 +518,10 @@ class SchedulerPanelWidget(QWidget):
                 )
                 self.refresh(project_slug=str(project_slug))
                 self._select_job(job_id=job_id)
-                self.set_status(f"Job triggered: {event['job_id']}")
+                self.set_status(t("desktop.scheduler.job_triggered", lang, job_id=event['job_id']))
             except Exception as exc:
                 self.logger.exception("desktop scheduler run_now failed")
-                self.set_status(f"Failed to trigger scheduler job: {exc}")
+                self.set_status(t("desktop.scheduler.err_trigger", lang, error=exc))
 
         self._schedule_async(_runner)
 
@@ -519,28 +530,30 @@ class SchedulerPanelWidget(QWidget):
         job_id = str(self._selected_job_id or "").strip()
         if not project_slug or not job_id:
             return
+        lang = self.facade.ui_language
         try:
             job = self.facade.pause_scheduler_job(project_slug=str(project_slug), job_id=job_id)
             self.refresh(project_slug=str(project_slug))
             self._select_job(job_id=str(job.get("job_id", "") or ""))
-            self.set_status(f"Job paused: {job['job_id']}")
+            self.set_status(t("desktop.scheduler.job_paused", lang, job_id=job['job_id']))
         except Exception as exc:
             self.logger.exception("desktop scheduler pause failed")
-            self.set_status(f"Failed to pause scheduler job: {exc}")
+            self.set_status(t("desktop.scheduler.err_pause", lang, error=exc))
 
     def _resume_job(self) -> None:
         project_slug = self.current_project_slug()
         job_id = str(self._selected_job_id or "").strip()
         if not project_slug or not job_id:
             return
+        lang = self.facade.ui_language
         try:
             job = self.facade.resume_scheduler_job(project_slug=str(project_slug), job_id=job_id)
             self.refresh(project_slug=str(project_slug))
             self._select_job(job_id=str(job.get("job_id", "") or ""))
-            self.set_status(f"Job resumed: {job['job_id']}")
+            self.set_status(t("desktop.scheduler.job_resumed", lang, job_id=job['job_id']))
         except Exception as exc:
             self.logger.exception("desktop scheduler resume failed")
-            self.set_status(f"Failed to resume scheduler job: {exc}")
+            self.set_status(t("desktop.scheduler.err_resume", lang, error=exc))
 
     def _select_job(self, *, job_id: str) -> None:
         target = str(job_id or "").strip()
@@ -564,3 +577,23 @@ class SchedulerPanelWidget(QWidget):
             self._background_tasks.add(task)
             task.add_done_callback(lambda done: self._background_tasks.discard(done))
         return task
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.title_label.setText(t("desktop.scheduler.title", lang))
+        self.project_label.setText(t("desktop.scheduler.project_label", lang))
+        self.session_label.setText(t("desktop.scheduler.session_uid_label", lang))
+        self.refresh_button.setText(t("desktop.btn.refresh", lang))
+        self.jobs_box.setTitle(t("desktop.scheduler.jobs_group", lang))
+        self.form_box.setTitle(t("desktop.scheduler.editor_group", lang))
+        self.job_name_row_label.setText(t("desktop.scheduler.name_label", lang))
+        self.cron_row_label.setText(t("desktop.scheduler.cron_label", lang))
+        self.mode_row_label.setText(t("desktop.scheduler.target_mode_label", lang))
+        self.enabled_checkbox.setText(t("desktop.admin.label.monitor_enabled", lang))
+        self.payload_label.setText(t("desktop.scheduler.payload_label", lang))
+        self.save_button.setText(t("desktop.btn.save", lang))
+        self.delete_button.setText(t("desktop.btn.delete", lang))
+        self.run_now_button.setText(t("desktop.scheduler.run_now", lang))
+        self.pause_button.setText(t("desktop.scheduler.pause", lang))
+        self.resume_button.setText(t("desktop.scheduler.resume", lang))
+        self.reset_button.setText(t("miniapp.btn.reset", lang))
+        self._update_job_meta()

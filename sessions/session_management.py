@@ -14,7 +14,9 @@ from app.services.logging_service import bind_session_log_context
 from app.services.session_interrupt_service import SessionInterruptReport, SessionInterruptService
 from app.services.task_bearing_cli_hook_service import get_task_bearing_cli_hook_service
 from app.services.session_run_service import ModeScopedPreRunResetService
+from i18n import t
 from telegram.ext import ContextTypes
+from utils.lang import resolve_user_lang
 
 from session import Session, session_runtime_uid, switch_session_active_cli_if_needed
 from summary import summarize_text_with_reason
@@ -428,12 +430,12 @@ class SessionManagement:
                 logging.exception(f"tool failed {str(e)}")
 
     @staticmethod
-    def format_interrupt_user_message(report: SessionInterruptReport) -> str:
+    def format_interrupt_user_message(report: SessionInterruptReport, lang: str = "ru") -> str:
         if str(report.status or "") == "completed":
-            return "Текущая работа прервана. Сессия освобождена."
+            return t("msg.session.interrupt_work_done", lang)
         if str(report.status or "") == "partial_timeout":
-            return "Прерывание отправлено, но часть runtime еще завершает остановку."
-        return "Не удалось полностью прервать сессию. Нужна дополнительная диагностика."
+            return t("msg.session.interrupt_partial_runtime", lang)
+        return t("msg.session.interrupt_failed_diag", lang)
 
     async def interrupt_session_runtime(
         self,
@@ -532,13 +534,14 @@ class SessionManagement:
                 owner_chat_id=int(chat_id),
             )
         if not session:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
             if not self.bot_app.is_admin(chat_id):
                 projects = self.bot_app.user_projects(chat_id)
                 if not projects:
                     await self.bot_app._send_message(
                         context,
                         chat_id=chat_id,
-                        text="Доступ не настроен. Обратитесь к администратору.",
+                        text=t("msg.session.access_not_configured", lang),
                     )
                     return None
                 sessions = [
@@ -546,7 +549,7 @@ class SessionManagement:
                     for item in self.bot_app.manager.sessions_for_chat(chat_id).values()
                     if self.bot_app.is_session_allowed_for_chat(chat_id, item)
                 ]
-                text = "Используйте топики существующих сессий." if sessions else "Сначала создайте сессию."
+                text = t("msg.session.use_existing_topics", lang) if sessions else t("msg.session.create_session_first", lang)
                 await self.bot_app._send_message(
                     context,
                     chat_id=chat_id,
@@ -554,7 +557,7 @@ class SessionManagement:
                 )
                 return None
             sessions = self.bot_app.manager.sessions_for_chat(chat_id)
-            text = "Используйте топики существующих сессий." if sessions else "Сначала создайте сессию."
+            text = t("msg.session.use_existing_topics", lang) if sessions else t("msg.session.create_session_first", lang)
             await self.bot_app._send_message(
                 context,
                 chat_id=chat_id,

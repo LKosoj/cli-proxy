@@ -14,7 +14,7 @@ from modes.sdk.services.callback_data import (
 from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled, set_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
 from tg.handlers import build_lang_menu, format_session_state
-from i18n import t, SUPPORTED_LANGS
+from i18n import t, SUPPORTED_LANGS, lang_from_query
 from i18n.resolver import resolve_language
 
 
@@ -63,6 +63,7 @@ class SessionActionsMixin:
         session,
         created: bool,
     ) -> None:
+        lang = lang_from_query(query, self.bot_app.config)
         ui_key = self.bot_app.telegram_ui_key_from_query(query) or self.bot_app.telegram_ui_key(owner_chat_id)
         current_kwargs = ui_key.reply_kwargs()
         target_kwargs = self._session_reply_kwargs(session, ui_chat_id=ui_key.chat_id)
@@ -78,9 +79,9 @@ class SessionActionsMixin:
             **target_kwargs,
         )
         notice = (
-            f"Сессия {session.id} создана и привязана к новому topic. Продолжайте там."
+            t("msg.session.created_bound_topic", lang, id=session.id)
             if created
-            else f"Сессия {session.id} выбрана. Продолжайте в её topic."
+            else t("msg.session.selected_topic", lang, id=session.id)
         )
         await self._edit_msg(context, query, notice)
 
@@ -114,13 +115,14 @@ class SessionActionsMixin:
         return True
 
     async def _cb_sess_active_pick(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         session_uid = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
         if not session_uid:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         session = self.bot_app.manager.get_by_uid(session_uid)
         if not session:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
         await self._present_selected_session_after_callback(
@@ -133,6 +135,7 @@ class SessionActionsMixin:
         return True
 
     async def _cb_user_project_menu(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
         _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
         session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
@@ -144,6 +147,7 @@ class SessionActionsMixin:
             session_uid=str(getattr(getattr(session, "conversation_scope", None), "session_uid", "") or payload or ""),
             force_new=False,
             back_callback=back_callback,
+            lang=lang,
         )
         await self._edit_msg(context, query, text, reply_markup=keyboard)
         return True
@@ -157,6 +161,7 @@ class SessionActionsMixin:
         context,
         force_new: bool,
     ) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
         current = None
         idx_token = payload
@@ -180,7 +185,7 @@ class SessionActionsMixin:
         try:
             idx = int(idx_token)
         except Exception:
-            await self._edit_msg(context, query, "Выбор недоступен.")
+            await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
         if current is None:
@@ -189,14 +194,14 @@ class SessionActionsMixin:
             owner_chat_id = int(getattr(current, "chat_id", 0) or owner_chat_id)
         projects = self.bot_app.user_projects(owner_chat_id)
         if idx < 0 or idx >= len(projects):
-            await self._edit_msg(context, query, "Выбор недоступен.")
+            await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         if current and not force_new:
             busy = bool(getattr(current, "busy", False))
             locked = bool(getattr(current, "run_lock", None) and current.run_lock.locked())
             ticking = bool(getattr(current, "is_active_by_tick", None) and current.is_active_by_tick())
             if busy or locked or ticking:
-                await self._edit_msg(context, query, "Сессия занята. Переключение проекта недоступно.")
+                await self._edit_msg(context, query, t("msg.error.session_busy_project", lang))
                 return True
         target = projects[idx]
         found_id = None
@@ -251,12 +256,13 @@ class SessionActionsMixin:
         )
 
     async def _cb_sess_list(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         _reply_chat_id, owner_chat_id, _session = self._callback_scope(chat_id, query)
         keyboard = self.bot_app.session_ui.build_sessions_menu(
             owner_chat_id,
-            include_back=True, back_callback="sess_active", back_text="⬅️ Назад"
+            include_back=True, back_callback="sess_active", back_text=t("common.back", lang)
         )
-        await self._edit_msg(context, query, "Выберите сессию:", reply_markup=keyboard)
+        await self._edit_msg(context, query, t("msg.session.choose", lang), reply_markup=keyboard)
         return True
 
     async def _cb_sess_new(self, *, data: str, chat_id: int, query, context) -> bool:
@@ -264,6 +270,7 @@ class SessionActionsMixin:
         return True
 
     async def _cb_sess_cli(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         payload = str(data).split(":", 1)[1].strip() if ":" in str(data) else ""
         session = None
         owner_chat_id = int(chat_id)
@@ -279,21 +286,21 @@ class SessionActionsMixin:
         if session is None:
             _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
         if not session:
-            await self._edit_msg(context, query, "Сессия не определена для текущего scope.")
+            await self._edit_msg(context, query, t("msg.error.session_no_scope", lang))
             return True
         available = list(sorted(self.bot_app._available_tools()))
         if cli not in available:
-            await self._edit_msg(context, query, "CLI недоступен (не установлен или выключен в настройках).")
+            await self._edit_msg(context, query, t("msg.error.cli_unavailable", lang))
             return True
         busy = bool(getattr(session, "busy", False))
         locked = bool(getattr(session, "run_lock", None) and session.run_lock.locked())
         ticking = bool(getattr(session, "is_active_by_tick", None) and session.is_active_by_tick())
         if busy or locked or ticking:
-            await self._edit_msg(context, query, "Сессия занята. Переключение CLI недоступно.")
+            await self._edit_msg(context, query, t("msg.error.session_busy", lang))
             return True
         try:
             if not hasattr(session, "set_active_cli"):
-                await self._edit_msg(context, query, "Переключение CLI не поддерживается.")
+                await self._edit_msg(context, query, t("msg.error.cli_switch_unsupported", lang))
                 return True
             # Capture previous CLI info for transfer offer.
             previous_cli = str(getattr(getattr(session, "cli", None), "active_cli", "") or "").strip()
@@ -301,7 +308,7 @@ class SessionActionsMixin:
             session.set_active_cli(cli)
             await self._persist_session_async(owner_chat_id, session.id)
         except Exception:
-            await self._edit_msg(context, query, "Не удалось переключить CLI.")
+            await self._edit_msg(context, query, t("msg.error.cli_switch_failed", lang))
             return True
         # Offer session transfer if source CLI had a session.
         transfer_available = bool(
@@ -317,19 +324,16 @@ class SessionActionsMixin:
             transfer_keyboard = InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton(
-                        "Да, перенести",
+                        t("btn.transfer.yes", lang),
                         callback_data=f"sess_transfer_yes:{session_uid}:{previous_cli}",
                     ),
                     InlineKeyboardButton(
-                        "Нет, начать заново",
+                        t("btn.transfer.no", lang),
                         callback_data=f"sess_transfer_no:{session_uid}",
                     ),
                 ]
             ])
-            transfer_text = (
-                f"CLI переключён: {previous_cli} → {cli}.\n"
-                f"Перенести контекст предыдущей сессии ({previous_cli})?"
-            )
+            transfer_text = t("msg.transfer.offer", lang, src=previous_cli, dst=cli)
             await self._edit_msg(context, query, text=transfer_text, reply_markup=transfer_keyboard)
         else:
             text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
@@ -338,20 +342,21 @@ class SessionActionsMixin:
 
     async def _cb_sess_transfer_yes(self, *, data: str, chat_id: int, query, context) -> bool:
         """User confirmed session transfer: read source session and write it into the target CLI."""
+        lang = lang_from_query(query, self.bot_app.config)
         # data format: "sess_transfer_yes:<session_uid>:<source_cli>"
         payload = str(data).split(":", 1)[1].strip() if ":" in str(data) else ""
         if ":" not in payload:
-            await self._edit_msg(context, query, "Ошибка: неверный формат callback.")
+            await self._edit_msg(context, query, t("msg.error.callback_format", lang))
             return True
         session_uid, source_cli = payload.rsplit(":", 1)
         session_uid = session_uid.strip()
         source_cli = source_cli.strip()
         if not session_uid or not source_cli:
-            await self._edit_msg(context, query, "Ошибка: неверный формат callback.")
+            await self._edit_msg(context, query, t("msg.error.callback_format", lang))
             return True
         session = self.bot_app.manager.get_by_uid(session_uid) if session_uid else None
         if not session:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         try:
             from app.services.session_transfer.service import extract_session, write_target_session
@@ -360,20 +365,17 @@ class SessionActionsMixin:
             source_token = (getattr(getattr(session, "cli", None), "resume_tokens", None) or {}).get(source_cli)
             workspace = getattr(session, "workdir", "") or ""
             if not (source_token and workspace and target_cli):
-                await self._edit_msg(context, query, "Не удалось извлечь контекст из предыдущей сессии.")
+                await self._edit_msg(context, query, t("msg.error.transfer_extract_failed", lang))
                 return True
 
             canonical = extract_session(source_cli, str(source_token), workspace)
             if not canonical or not canonical.messages:
-                await self._edit_msg(context, query, "Не удалось извлечь контекст из предыдущей сессии.")
+                await self._edit_msg(context, query, t("msg.error.transfer_extract_failed", lang))
                 return True
 
             new_token = write_target_session(canonical, target_cli, workspace)
             if not new_token:
-                await self._edit_msg(
-                    context, query,
-                    f"Не удалось записать сессию в целевой CLI ({target_cli}).",
-                )
+                await self._edit_msg(context, query, t("msg.error.transfer_write_failed", lang, cli=target_cli))
                 return True
 
             session.resume_token = new_token
@@ -381,19 +383,16 @@ class SessionActionsMixin:
             await self._persist_session_async(owner_chat_id, session.id)
             await self._edit_msg(
                 context, query,
-                (
-                    f"Сформирован компактный перенос из {len(canonical.messages)} сообщений "
-                    f"{source_cli} -> {target_cli}. "
-                    f"Сессия будет продолжена в {target_cli}."
-                ),
+                t("msg.transfer.done", lang, n=len(canonical.messages), src=source_cli, dst=target_cli),
             )
         except Exception:
             logging.getLogger(__name__).exception("session transfer failed")
-            await self._edit_msg(context, query, "Ошибка при переносе сессии.")
+            await self._edit_msg(context, query, t("msg.error.transfer_failed", lang))
         return True
 
     async def _cb_sess_transfer_no(self, *, data: str, chat_id: int, query, context) -> bool:
         """User declined session transfer."""
+        lang = lang_from_query(query, self.bot_app.config)
         # data format: "sess_transfer_no:<session_uid>"
         parts = str(data).split(":", 1)
         session_uid = parts[1].strip() if len(parts) > 1 else ""
@@ -403,19 +402,20 @@ class SessionActionsMixin:
             text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
             await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         else:
-            await self._edit_msg(context, query, "Перенос отклонён. Работа продолжается в текущем CLI.")
+            await self._edit_msg(context, query, t("msg.transfer.declined", lang))
         return True
 
     async def _open_mode_menu(self, *, mode_id: str, chat_id: int, query, context, session, owner_chat_id: int) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         policy = getattr(self.bot_app, "access_policy_service", None)
         is_mode_allowed = policy.is_mode_allowed_for_chat(owner_chat_id, mode_id) if policy else True
         if not is_mode_allowed:
-            await self._edit_msg(context, query, "Режим недоступен для вашего пользователя.")
+            await self._edit_msg(context, query, t("msg.error.mode_unavailable_user", lang))
             return True
         svc = getattr(self.bot_app, "mode_registry_service", None)
         plugin = svc.get(mode_id) if svc else None
         if plugin is None:
-            await self._edit_msg(context, query, "Режим недоступен.")
+            await self._edit_msg(context, query, t("msg.error.mode_unavailable", lang))
             return True
         if hasattr(plugin, "build_menu"):
             try:
@@ -429,7 +429,7 @@ class SessionActionsMixin:
                     plugin,
                     session,
                     back_callback=build_session_overview_callback_data(session),
-                    back_text="⬅️ Назад",
+                    back_text=t("common.back", lang),
                     menu_visibility=menu_visibility,
                 )
                 await self._edit_msg(context, query, text=text, reply_markup=keyboard, md2=True)
@@ -502,13 +502,14 @@ class SessionActionsMixin:
             return True
         except Exception:
             logging.getLogger(__name__).exception("mode open menu callback failed mode=%s", mode_id)
-            await self._edit_msg(context, query, "Не удалось открыть меню режима.")
+            await self._edit_msg(context, query, t("msg.error.mode_menu_failed", lang))
             return True
 
     async def _cb_sess_mode(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
         if not session:
-            await self._edit_msg(context, query, "Сессия не определена для текущего scope.")
+            await self._edit_msg(context, query, t("msg.error.session_no_scope", lang))
             return True
         mode_id = str(data.split(":", 1)[1] or "").strip()
         return await self._open_mode_menu(
@@ -521,11 +522,12 @@ class SessionActionsMixin:
         )
 
     async def _cb_sess_mode_pick(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
         session_uid = payload
         explicit_mode_id = ""
         if not session_uid:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         _reply_chat_id, owner_chat_id, _session = self._callback_scope(chat_id, query)
         session = self.bot_app.manager.get_by_uid(session_uid)
@@ -539,7 +541,7 @@ class SessionActionsMixin:
                 explicit_mode_id = candidate_mode_id
                 session = candidate_session
         if not session:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         mode_id = explicit_mode_id or str(get_active_mode(session, "") or "").strip()
         if not mode_id:
@@ -556,6 +558,7 @@ class SessionActionsMixin:
         )
 
     async def _cb_agent_cancel(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         _reply_chat_id, _owner_chat_id, session = self._callback_scope(chat_id, query)
         if session is not None:
             try:
@@ -564,74 +567,78 @@ class SessionActionsMixin:
                     pending.pop(getattr(session, "id", None), None)
             except Exception:
                 logging.getLogger(__name__).exception("failed to clear manager pending on agent_cancel")
-        await self._edit_msg(context, query, "Отменено.")
+        await self._edit_msg(context, query, t("msg.session.cancelled", lang))
         return True
 
     async def _cb_state_pick(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         ui_key = self.bot_app.telegram_ui_key_from_query(query) or self.bot_app.telegram_ui_key(int(chat_id))
         _reply_chat_id, owner_chat_id, _session = self._callback_scope(chat_id, query)
         idx = int(str(data).split(":", 1)[1])
         keys = self.bot_app.ui_state.state_menu.get(ui_key, [])
         if idx < 0 or idx >= len(keys):
-            await self._edit_msg(context, query, "Выбор недоступен.")
+            await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         repo = self._state_repository()
         if repo is None:
-            await self._edit_msg(context, query, "Состояние недоступно: state_path не настроен.")
+            await self._edit_msg(context, query, t("msg.session.state_path_missing", lang))
             return True
         data_state = repo.load_state(chat_id=owner_chat_id)
         key = keys[idx]
         st = data_state.get(key)
         if not st:
-            await self._edit_msg(context, query, "Состояние не найдено.")
+            await self._edit_msg(context, query, t("msg.session.state_not_found", lang))
             return True
-        text = format_session_state(st, self.bot_app._format_ts(st.updated_at))
+        text = format_session_state(st, self.bot_app._format_ts(st.updated_at), lang)
         await self._edit_msg(context, query, text)
         return True
 
     async def _cb_state_page(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         ui_key = self.bot_app.telegram_ui_key_from_query(query) or self.bot_app.telegram_ui_key(int(chat_id))
         page = int(str(data).split(":", 1)[1])
         keys = self.bot_app.ui_state.state_menu.get(ui_key, [])
         if not keys:
-            await self._edit_msg(context, query, "Состояние не найдено.")
+            await self._edit_msg(context, query, t("msg.session.state_not_found", lang))
             return True
         self.bot_app.ui_state.state_menu_page[ui_key] = page
         await self._edit_msg(
             context,
             query,
-            "Выберите запись состояния:",
+            t("msg.session.state_choose", lang),
             reply_markup=self.bot_app._build_state_keyboard(ui_key),
         )
         return True
 
     async def _cb_close_pick(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         ui_key = self.bot_app.telegram_ui_key_from_query(query) or self.bot_app.telegram_ui_key(int(chat_id))
         _reply_chat_id, owner_chat_id, _session = self._callback_scope(chat_id, query)
         idx = int(str(data).split(":", 1)[1])
         items = self.bot_app.ui_state.close_menu.get(ui_key, [])
         if idx < 0 or idx >= len(items):
-            await self._edit_msg(context, query, "Выбор недоступен.")
+            await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         sid = items[idx]
         ok = await self.bot_app.close_session_with_cleanup(sid, owner_chat_id, context)
         if ok:
-            await self._edit_msg(context, query, "Сессия закрыта.")
+            await self._edit_msg(context, query, t("msg.session.closed", lang))
         else:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
         return True
 
     async def _cb_sess_ssh_toggle(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
         session = self.bot_app.manager.get_by_uid(payload) if payload else None
         if not session:
             _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
         if not session:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
 
         if not ssh_remote_available(session.workdir):
-            await query.answer("SSH не настроен для этого проекта", show_alert=True)
+            await query.answer(t("msg.session.ssh_unavailable", lang), show_alert=True)
             return True
 
         current = is_ssh_remote_enabled(session)
@@ -640,8 +647,8 @@ class SessionActionsMixin:
         owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
         await self._persist_session_async(owner_chat_id, session.id)
 
-        status = "включено" if not current else "выключено"
-        await query.answer(f"Удалённое управление {status}")
+        ssh_msg = t("msg.session.ssh_enabled", lang) if not current else t("msg.session.ssh_disabled", lang)
+        await query.answer(ssh_msg)
 
         text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
@@ -661,7 +668,7 @@ class SessionActionsMixin:
         """Handle language selection: persist and redraw session menu."""
         code = str(data).split(":", 1)[1].strip() if ":" in str(data) else ""
         if code not in SUPPORTED_LANGS:
-            await query.answer(t("msg.lang.invalid", "ru"), show_alert=True)
+            await query.answer(t("msg.lang.invalid", lang_from_query(query, self.bot_app.config)), show_alert=True)
             return True
         from_user = getattr(query, "from_user", None)
         user_id = getattr(from_user, "id", None)

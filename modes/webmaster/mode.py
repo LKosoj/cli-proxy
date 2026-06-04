@@ -25,6 +25,8 @@ from modes.sdk import BaseMode, CallbackModel, MessageModel, MessagingService, T
 from modes.sdk.run_artifacts_mixin import MergeStrategy, RunArtifactsMixin
 from modes.sdk.services import ModeStatusService
 from sessions.session_state_access import get_active_mode
+from i18n import t
+from utils.lang import resolve_user_lang
 from utils.paths import cli_proxy_artifact_path
 
 from .feedback_optimizer import apply_prompt_learning, normalize_general_patch, normalize_learning_payload
@@ -2520,17 +2522,26 @@ class WebmasterMode(BaseMode, RunArtifactsMixin):
             queue_len=ModeStatusService.get_session_queue_len(session),
             wm_stage=str(wm_ctx.stage or "idle"),
         )
+        try:
+            _lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
+        except Exception:
+            _lang = "ru"
         return ModeStatusService.build_mode_status_text(
             session,
-            title="🌐 Статус Вебмастера",
+            title=t("session_status.webmaster_title", _lang),
             stage=stage,
             enabled=enabled,
-            task_suffix=f"Задача: {'активна' if running else 'нет'}",
+            task_suffix=f"{t('session_status.task', _lang)}: "
+            f"{t('session_status.task_active', _lang) if running else t('session_status.none', _lang)}",
             extra_sections=[
-                ("Тип задачи", str(wm_ctx.task_kind or "unknown")),
-                ("Версия промпта", str(wm_ctx.active_prompt_version)),
-                ("Последняя классификация", str(wm_ctx.last_feedback_class or "нет")),
+                (t("session_status.wm_task_kind", _lang), str(wm_ctx.task_kind or "unknown")),
+                (t("session_status.wm_prompt_version", _lang), str(wm_ctx.active_prompt_version)),
+                (
+                    t("session_status.wm_last_class", _lang),
+                    str(wm_ctx.last_feedback_class or t("session_status.none", _lang)),
+                ),
             ],
+            lang=_lang,
         )
 
     async def _rerender_menu(

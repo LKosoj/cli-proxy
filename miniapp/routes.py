@@ -29,6 +29,7 @@ from app.services.runtime_progress_service import build_runtime_progress_payload
 from app.services.run_artifact_store import is_terminal_status
 from app.services.run_utils import clean_text as clean_run_listing_text, summarize_run_skill_log
 from app.services.run_operations_policy import RunOperationsPolicy
+from i18n import t
 from i18n.resolver import SUPPORTED_LANGS
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.sdk.session_busy import is_session_busy
@@ -1333,6 +1334,11 @@ class MiniAppRoutes:
                 runtime_status = f"{'/'.join(parts) if parts else '-'}: {r_msg}" if r_msg else "/".join(parts)
         except Exception:
             runtime_status = None
+        try:
+            from utils.lang import resolve_user_lang as _resolve_user_lang
+            _mode_status_lang = _resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            _mode_status_lang = "ru"
         if active_mode == "manager":
             try:
                 plan = load_plan(
@@ -1405,6 +1411,7 @@ class MiniAppRoutes:
                         pending_questions=self.bot_app.ui_state.pending_questions,
                         active_plugin_flow=flow_value,
                         runtime_progress=runtime_progress,
+                        lang=_mode_status_lang,
                     )
                     or ""
                 ).strip() or None
@@ -1448,6 +1455,7 @@ class MiniAppRoutes:
                         analyst_running=running,
                         pending_questions=self.bot_app.ui_state.pending_questions,
                         mode_id="analyst",
+                        lang=_mode_status_lang,
                     )
                     or ""
                 ).strip() or None
@@ -1495,18 +1503,29 @@ class MiniAppRoutes:
                 webmaster_mode_status = str(
                     ModeStatusService.build_mode_status_text(
                         session,
-                        title="🌐 Статус Вебмастера",
+                        title=t("session_status.webmaster_title", _mode_status_lang),
                         stage=stage,
                         enabled=True,
-                        task_suffix=f"Задача: {'активна' if running else 'нет'}",
+                        task_suffix=f"{t('session_status.task', _mode_status_lang)}: "
+                        f"{t('session_status.task_active', _mode_status_lang) if running else t('session_status.none', _mode_status_lang)}",
                         extra_sections=[
-                            ("Тип задачи", str(getattr(wm_ctx, "task_kind", "unknown") or "unknown")),
-                            ("Версия промпта", str(getattr(wm_ctx, "active_prompt_version", 1))),
                             (
-                                "Последняя классификация",
-                                str(getattr(wm_ctx, "last_feedback_class", "нет") or "нет"),
+                                t("session_status.wm_task_kind", _mode_status_lang),
+                                str(getattr(wm_ctx, "task_kind", "unknown") or "unknown"),
+                            ),
+                            (
+                                t("session_status.wm_prompt_version", _mode_status_lang),
+                                str(getattr(wm_ctx, "active_prompt_version", 1)),
+                            ),
+                            (
+                                t("session_status.wm_last_class", _mode_status_lang),
+                                str(
+                                    getattr(wm_ctx, "last_feedback_class", "")
+                                    or t("session_status.none", _mode_status_lang)
+                                ),
                             ),
                         ],
+                        lang=_mode_status_lang,
                     )
                     or ""
                 ).strip() or None
@@ -1563,7 +1582,13 @@ class MiniAppRoutes:
         proc_returncode = getattr(proc, "returncode", None) if proc is not None else None
 
         mode_registry = getattr(self.bot_app, "mode_registry_service", None) or getattr(self.bot_app, "mode_registry", None)
-        status_text = build_session_status_text(session, mode_registry=mode_registry)
+        try:
+            from utils.lang import resolve_user_lang
+
+            status_lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            status_lang = "ru"
+        status_text = build_session_status_text(session, mode_registry=mode_registry, lang=status_lang)
 
         from app.services.remote_control_service import ExecutionTarget, RemoteControlService
         from app.services.ssh_config_loader import load_ssh_config

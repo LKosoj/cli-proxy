@@ -163,7 +163,7 @@ def remember_session_cli_switch_notice(session: Any, previous_cli: Optional[str]
     }
 
 
-def consume_session_cli_switch_notice_text(session: Any) -> Optional[str]:
+def consume_session_cli_switch_notice_text(session: Any, lang: str = "ru") -> Optional[str]:
     cli_state = getattr(session, "cli", None)
     if cli_state is None:
         return None
@@ -175,9 +175,10 @@ def consume_session_cli_switch_notice_text(session: Any) -> Optional[str]:
     target = _normalize_cli_name(raw_notice.get("to"))
     if not target or previous == target:
         return None
+    from i18n import t
     if previous:
-        return f"CLI {previous} в этой сессии недоступен или выключен. Переключаю на {target}."
-    return f"Активный CLI в этой сессии недоступен. Переключаю на {target}."
+        return t("msg.session.cli_switch_notice_with_prev", lang, previous=previous, target=target)
+    return t("msg.session.cli_switch_notice_no_prev", lang, target=target)
 
 
 def _strip_transient_codex_stderr_blocks(stderr_text: str) -> tuple[str, int]:
@@ -596,6 +597,24 @@ class Session:
                 self.cli.resume_tokens[k] = None
         self.resume_token = None
 
+    def _cli_language_directive(self) -> str:
+        """Localized instruction telling the CLI agent which language to answer in.
+
+        Resolved from the session owner (chat_id == telegram user_id in private chats).
+        Returns "" for the fallback language (Russian baseline) so existing
+        Russian-default flows send the prompt byte-for-byte unchanged.
+        """
+        try:
+            from utils.lang import resolve_user_lang, FALLBACK_LANG
+            from i18n import t
+
+            lang = resolve_user_lang(self.config, chat_id=self.chat_id)
+            if lang == FALLBACK_LANG:
+                return ""
+            return t("agent.cli_language_directive", lang)
+        except Exception:
+            return ""
+
     async def run_prompt(
         self,
         prompt: str,
@@ -604,6 +623,9 @@ class Session:
         *,
         force_fresh: bool = False,
     ) -> str:
+        directive = self._cli_language_directive()
+        if directive:
+            prompt = f"{directive}\n\n{prompt}"
         if image_paths:
             valid_paths = [str(p).strip() for p in image_paths if str(p).strip()]
             if not valid_paths:
@@ -1188,7 +1210,10 @@ class Session:
             if forced_reason:
                 self.headless_forced_stop = forced_reason
                 if not text:
-                    text = "⚠️ CLI завершился, но бот не смог корректно дочитать вывод (stdout не закрыт)."
+                    from i18n import t
+                    from utils.lang import resolve_user_lang
+                    _lang = resolve_user_lang(self.config, chat_id=self.chat_id)
+                    text = t("msg.session.headless_read_failed", _lang, reason=forced_reason)
             if not (semantic_output_text is not None and streamed_assistant_tick_seen and not forced_reason):
                 self._update_activity(
                     text,
@@ -2731,7 +2756,7 @@ class SessionManager:
         return
 
 
-def run_tool_help(tool: ToolConfig, workdir: str, idle_timeout_sec: int) -> str:
+def run_tool_help(tool: ToolConfig, workdir: str, idle_timeout_sec: int, lang: str = "ru") -> str:
     cmd_template = tool.interactive_cmd or tool.cmd
     env = os.environ.copy()
     if tool.env:
@@ -2764,4 +2789,5 @@ def run_tool_help(tool: ToolConfig, workdir: str, idle_timeout_sec: int) -> str:
         child.close(force=True)
     except Exception:
         logging.getLogger(__name__).exception("help probe: child close failed")
-    return output or "help не вернул данных."
+    from i18n import t
+    return output or t("msg.session.help_no_data", lang)

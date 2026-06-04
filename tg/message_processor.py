@@ -11,7 +11,9 @@ from telegram import Update, Message
 from telegram.ext import ContextTypes
 
 from app.services.telegram_ui_scope import TelegramUiKey
+from i18n import t
 from modes.sdk import decode_mode_dirs
+from utils.lang import resolve_user_lang
 
 
 TEXT_DOCUMENT_INLINE_LIMIT_BYTES = 5 * 1024
@@ -175,6 +177,7 @@ class MessageProcessor:
         ui_chat_id: int,
         session,
     ) -> None:
+        lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
         target_reply_kwargs = {
             key: value
             for key, value in self._reply_dest(session, ui_chat_id).items()
@@ -183,13 +186,13 @@ class MessageProcessor:
         if self._same_reply_scope(origin_reply_kwargs, target_reply_kwargs):
             await self.bot_app._send_message(
                 context,
-                text=f"Сессия {session.id} создана и выбрана.",
+                text=t("msg.session.created", lang, id=session.id),
                 **target_reply_kwargs,
             )
             return
         await self.bot_app._send_message(
             context,
-            text=f"Сессия {session.id} создана. Продолжайте в новом topic.",
+            text=t("msg.session.created_new_topic", lang, id=session.id),
             **origin_reply_kwargs,
         )
         handlers = getattr(self.bot_app, "handlers", None)
@@ -206,7 +209,7 @@ class MessageProcessor:
             return
         await self.bot_app._send_message(
             context,
-            text=f"Сессия {session.id} создана и выбрана.",
+            text=t("msg.session.created", lang, id=session.id),
             **target_reply_kwargs,
         )
 
@@ -228,6 +231,7 @@ class MessageProcessor:
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
             return
+        lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
         route_ui_chat_id = int(getattr(route, "reply_chat_id", ui_chat_id) or ui_chat_id)
         route_thread_id = getattr(route, "message_thread_id", None) if route is not None else None
         route_direct_topic_id = getattr(route, "direct_messages_topic_id", None) if route is not None else None
@@ -262,11 +266,11 @@ class MessageProcessor:
             if callable(pop_status):
                 status = str(pop_status(route_ui_chat_id, message_thread_id=route_thread_id) or "")
             if status == "cancelled":
-                await self.bot_app._send_message(context, text="Ок, ввод своего варианта отменен.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.input.custom_cancelled", lang), **reply_kwargs)
             elif status == "stale":
-                await self.bot_app._send_message(context, text="Вопрос устарел.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.input.question_stale", lang), **reply_kwargs)
             else:
-                await self.bot_app._send_message(context, text="Принял ваш вариант ответа.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.input.custom_accepted", lang), **reply_kwargs)
             return
         if ui_key in self.bot_app.ui_state.files_pending_rename:
             pending = self.bot_app.ui_state.files_pending_rename.get(ui_key) or {}
@@ -275,55 +279,55 @@ class MessageProcessor:
             expires_at = float(pending.get("expires_at", 0.0))
             if not source_path:
                 self.bot_app._stop_files_rename_wait(route_ui_chat_id, message_thread_id=route_thread_id)
-                await self.bot_app._send_message(context, text="Режим переименования отменен.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.rename_cancelled", lang), **reply_kwargs)
                 return
             name = (text or "").strip()
             if name in ("-", "отмена", "Отмена", "cancel", "Cancel"):
                 self.bot_app._stop_files_rename_wait(route_ui_chat_id, message_thread_id=route_thread_id)
-                await self.bot_app._send_message(context, text="Режим переименования отменен.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.rename_cancelled", lang), **reply_kwargs)
                 return
             if time.time() > expires_at:
                 self.bot_app._stop_files_rename_wait(route_ui_chat_id, message_thread_id=route_thread_id)
                 await self.bot_app._send_message(
                     context,
-                    text="Режим переименования отменен: за 2 минуты новое имя не введено.",
+                    text=t("msg.files.rename_timeout", lang),
                     **reply_kwargs,
                 )
                 return
             if not os.path.exists(source_path):
                 self.bot_app._stop_files_rename_wait(route_ui_chat_id, message_thread_id=route_thread_id)
-                await self.bot_app._send_message(context, text="Элемент для переименования не найден.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.rename_not_found", lang), **reply_kwargs)
                 return
             if not self.bot_app.is_within_root(source_path, root_dir):
                 self.bot_app._stop_files_rename_wait(route_ui_chat_id, message_thread_id=route_thread_id)
-                await self.bot_app._send_message(context, text="Нельзя выйти за пределы рабочей директории.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.escapes_workdir", lang), **reply_kwargs)
                 return
             if not name:
-                await self.bot_app._send_message(context, text="Новое имя пустое.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.new_name_empty", lang), **reply_kwargs)
                 return
             if os.path.basename(name) != name:
-                await self.bot_app._send_message(context, text="Укажите только имя без пути.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.name_no_path", lang), **reply_kwargs)
                 return
             target_path = os.path.join(os.path.dirname(source_path), name)
             if target_path == source_path:
-                await self.bot_app._send_message(context, text="Имя не изменилось.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.name_unchanged", lang), **reply_kwargs)
                 return
             if not self.bot_app.is_within_root(target_path, root_dir):
-                await self.bot_app._send_message(context, text="Нельзя выйти за пределы рабочей директории.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.escapes_workdir", lang), **reply_kwargs)
                 return
             if os.path.exists(target_path):
-                await self.bot_app._send_message(context, text="Элемент с таким именем уже существует.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.already_exists", lang), **reply_kwargs)
                 return
             try:
                 os.rename(source_path, target_path)
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
-                await self.bot_app._send_message(context, text=f"Не удалось переименовать: {e}", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.rename_failed", lang, e=e), **reply_kwargs)
                 return
             self.bot_app._stop_files_rename_wait(route_ui_chat_id, message_thread_id=route_thread_id)
             await self.bot_app._send_message(
                 context,
-                text=f"Переименовано: {os.path.basename(target_path)}",
+                text=t("msg.files.renamed", lang, name=os.path.basename(target_path)),
                 **reply_kwargs,
             )
             session = route.session if route is not None else None
@@ -350,13 +354,13 @@ class MessageProcessor:
             base = self.bot_app.ui_state.pending_dir_create.pop(ui_key)
             name = text.strip()
             if name in ("-", "отмена", "Отмена"):
-                await self.bot_app._send_message(context, text="Создание каталога отменено.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.dir_create_cancelled", lang), **reply_kwargs)
                 return
             if not name:
-                await self.bot_app._send_message(context, text="Имя каталога пустое.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.dir_name_empty", lang), **reply_kwargs)
                 return
             if not os.path.isdir(base):
-                await self.bot_app._send_message(context, text="Базовый каталог недоступен.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.base_dir_unavailable", lang), **reply_kwargs)
                 return
             if os.path.isabs(name):
                 target = os.path.normpath(name)
@@ -364,21 +368,21 @@ class MessageProcessor:
                 target = os.path.normpath(os.path.join(base, name))
             root = self.bot_app.ui_state.dirs_root.get(ui_key, self.bot_app.config.defaults.workdir)
             if not self.bot_app.is_within_root(target, root):
-                await self.bot_app._send_message(context, text="Нельзя выйти за пределы корневого каталога.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.dirs.cannot_leave_root", lang), **reply_kwargs)
                 return
             if not self.bot_app.is_within_root(target, base):
-                await self.bot_app._send_message(context, text="Путь должен быть внутри текущего каталога.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.path_must_be_inside", lang), **reply_kwargs)
                 return
             if os.path.exists(target):
-                await self.bot_app._send_message(context, text="Каталог уже существует.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.dir_exists", lang), **reply_kwargs)
                 return
             try:
                 os.makedirs(target, exist_ok=False)
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
-                await self.bot_app._send_message(context, text=f"Не удалось создать каталог: {e}", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.files.dir_create_failed", lang, e=e), **reply_kwargs)
                 return
-            await self.bot_app._send_message(context, text=f"Каталог создан: {target}", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.files.dir_created", lang, path=target), **reply_kwargs)
             await self.bot_app._send_dirs_menu(
                 route_ui_chat_id,
                 context,
@@ -402,11 +406,11 @@ class MessageProcessor:
                 return
             path = text.strip()
             if not os.path.isdir(path):
-                await self.bot_app._send_message(context, text="Каталог не существует.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.error.dir_not_found", lang), **reply_kwargs)
                 return
             root = self.bot_app.ui_state.dirs_root.get(ui_key, self.bot_app.config.defaults.workdir)
             if not self.bot_app.is_within_root(path, root):
-                await self.bot_app._send_message(context, text="Нельзя выйти за пределы корневого каталога.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.dirs.cannot_leave_root", lang), **reply_kwargs)
                 return
             mode_id, flow = decode_mode_dirs(mode)
             if mode_id and flow:
@@ -504,12 +508,12 @@ class MessageProcessor:
                 base,
                 self.bot_app.ui_state.dirs_root.get(ui_key, self.bot_app.config.defaults.workdir),
             ):
-                await self.bot_app._send_message(context, text="Нельзя выйти за пределы корневого каталога.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.dirs.cannot_leave_root", lang), **reply_kwargs)
                 return
             if not os.path.isdir(base):
-                await self.bot_app._send_message(context, text="Каталог не существует.", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.error.dir_not_found", lang), **reply_kwargs)
                 return
-            await self.bot_app._send_message(context, text="Запускаю git clone…", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.git.clone_starting", lang), **reply_kwargs)
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "git",
@@ -523,7 +527,7 @@ class MessageProcessor:
                 out, _ = await proc.communicate()
                 output = (out or b"").decode(errors="ignore")
                 if proc.returncode == 0:
-                    await self.bot_app._send_message(context, text="Клонирование завершено.", **reply_kwargs)
+                    await self.bot_app._send_message(context, text=t("msg.git.clone_done", lang), **reply_kwargs)
                     session, err = await self.bot_app.session_creation_service.complete_git_clone(
                         owner_chat_id=owner_chat_id,
                         base=base,
@@ -545,10 +549,12 @@ class MessageProcessor:
                             session=session,
                         )
                 else:
-                    await self.bot_app._send_message(context, text=f"Ошибка git clone:\\n{output[:4000]}", **reply_kwargs)
+                    await self.bot_app._send_message(
+                        context, text=t("msg.git.clone_error", lang, output=output[:4000]), **reply_kwargs
+                    )
             except Exception as e:
                 logging.exception(f"tool failed {str(e)}")
-                await self.bot_app._send_message(context, text=f"Ошибка запуска git clone: {e}", **reply_kwargs)
+                await self.bot_app._send_message(context, text=t("msg.git.clone_launch_error", lang, e=e), **reply_kwargs)
             return
         if self.bot_app._plugin_awaiting_input(route_ui_chat_id):
             # Safety net: if the agent was turned off while a dialog was active,
@@ -591,7 +597,7 @@ class MessageProcessor:
             if not forwarded.startswith("/"):
                 await self.bot_app._send_message(
                     context,
-                    text="После '>' должна идти /команда.",
+                    text=t("msg.input.forward_must_be_command", lang),
                     **reply_kwargs,
                 )
                 return
@@ -623,6 +629,7 @@ class MessageProcessor:
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
             return
+        lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
         route_ui_chat_id = int(getattr(route, "reply_chat_id", ui_chat_id) or ui_chat_id)
         route_thread_id = getattr(route, "message_thread_id", None) if route is not None else None
         route_direct_topic_id = getattr(route, "direct_messages_topic_id", None) if route is not None else None
@@ -638,7 +645,7 @@ class MessageProcessor:
             data = await file_obj.download_as_bytearray()
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
-            await self.bot_app._send_message(context, text=f"Не удалось скачать файл: {e}", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.files.download_failed", lang, e=e), **reply_kwargs)
             return
         if await self.bot_app._maybe_save_pending_uploaded_file(
             route_ui_chat_id,
@@ -665,7 +672,7 @@ class MessageProcessor:
             if doc.file_size and doc.file_size > self.bot_app.config.defaults.image_max_mb * 1024 * 1024:
                 await self.bot_app._send_message(
                     context,
-                    text=f"Изображение слишком большое. Лимит {self.bot_app.config.defaults.image_max_mb} МБ.",
+                    text=t("msg.files.image_too_large", lang, n=self.bot_app.config.defaults.image_max_mb),
                     **reply_kwargs,
                 )
                 return
@@ -700,7 +707,7 @@ class MessageProcessor:
         ):
             await self.bot_app._send_message(
                 context,
-                text="Поддерживаются только .txt, .md, .rst, .log, .html и .htm.",
+                text=t("msg.files.unsupported_doc_type", lang),
                 **reply_kwargs,
             )
             return
@@ -757,6 +764,7 @@ class MessageProcessor:
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
             return
+        lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
         route_ui_chat_id = int(getattr(route, "reply_chat_id", ui_chat_id) or ui_chat_id)
         route_thread_id = getattr(route, "message_thread_id", None) if route is not None else None
         route_session_uid = str(getattr(route, "session_uid", "") or "").strip() or None
@@ -781,7 +789,7 @@ class MessageProcessor:
         if photo.file_size and photo.file_size > self.bot_app.config.defaults.image_max_mb * 1024 * 1024:
             await self.bot_app._send_message(
                 context,
-                text=f"Изображение слишком большое. Лимит {self.bot_app.config.defaults.image_max_mb} МБ.",
+                text=t("msg.files.image_too_large", lang, n=self.bot_app.config.defaults.image_max_mb),
                 **reply_kwargs,
             )
             return
@@ -790,7 +798,7 @@ class MessageProcessor:
             data = await file_obj.download_as_bytearray()
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
-            await self.bot_app._send_message(context, text=f"Не удалось скачать изображение: {e}", **reply_kwargs)
+            await self.bot_app._send_message(context, text=t("msg.files.image_download_failed", lang, e=e), **reply_kwargs)
             return
         caption = (update.message.caption or "").strip()
         filename = f"{photo.file_unique_id}.jpg"

@@ -5,6 +5,12 @@ import pytest
 from PySide6.QtWidgets import QPushButton
 
 from desktop.widgets.run_operations_panel import RunOperationsPanelWidget
+from i18n import t
+
+
+def _btn_label(key: str) -> str:
+    # Panel falls back to "ru" for MagicMock facade.ui_language.
+    return t(key, "ru")
 
 
 @pytest.fixture
@@ -56,21 +62,21 @@ async def test_run_operations_panel_renders_runs_and_invokes_facade_methods(qtbo
 
     with patch("desktop.widgets.run_operations_panel.ensure_async", side_effect=_ensure_async):
         buttons = panel.findChildren(QPushButton)
-        doctor_button = next(btn for btn in buttons if btn.text() == "Doctor")
+        doctor_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_doctor"))
         doctor_button.click()
         await asyncio.sleep(0)
 
         buttons = panel.findChildren(QPushButton)
-        recover_button = next(btn for btn in buttons if btn.text() == "Recover")
+        recover_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_recover"))
         recover_button.click()
         await asyncio.sleep(0)
 
         buttons = panel.findChildren(QPushButton)
-        resume_button = next(btn for btn in buttons if btn.text() == "Resume")
+        resume_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_resume"))
         assert resume_button.isEnabled() is False
 
         buttons = panel.findChildren(QPushButton)
-        promote_button = next(btn for btn in buttons if btn.text() == "Promote Skills")
+        promote_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_promote_skills"))
         promote_button.click()
         await asyncio.sleep(0)
 
@@ -139,9 +145,9 @@ async def test_run_operations_panel_renders_apply_recommendation_for_codebase_ma
 
     with patch("desktop.widgets.run_operations_panel.ensure_async", side_effect=_ensure_async):
         buttons = panel.findChildren(QPushButton)
-        recover_button = next(btn for btn in buttons if btn.text() == "Recover")
-        resume_button = next(btn for btn in buttons if btn.text() == "Resume")
-        apply_button = next(btn for btn in buttons if btn.text() == "Validate")
+        recover_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_recover"))
+        resume_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_resume"))
+        apply_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_validate"))
         assert recover_button.isEnabled() is False
         assert resume_button.isEnabled() is False
         assert apply_button.isEnabled() is True
@@ -191,11 +197,11 @@ def test_run_operations_panel_applies_policy_metadata_to_buttons(qtbot):
 
     buttons_by_text = {button.text(): button for button in panel.findChildren(QPushButton)}
 
-    assert buttons_by_text["Doctor"].isEnabled() is True
-    assert "Recover" not in buttons_by_text
-    assert buttons_by_text["Resume"].isEnabled() is False
-    assert "Validate" not in buttons_by_text
-    assert "Promote Skills" not in buttons_by_text
+    assert buttons_by_text[_btn_label("desktop.runops.btn_doctor")].isEnabled() is True
+    assert _btn_label("desktop.runops.btn_recover") not in buttons_by_text
+    assert buttons_by_text[_btn_label("desktop.runops.btn_resume")].isEnabled() is False
+    assert _btn_label("desktop.runops.btn_validate") not in buttons_by_text
+    assert _btn_label("desktop.runops.btn_promote_skills") not in buttons_by_text
 
 
 @pytest.mark.asyncio
@@ -239,8 +245,8 @@ async def test_run_operations_panel_disables_resume_and_recover_for_superseded_r
 
     with patch("desktop.widgets.run_operations_panel.ensure_async", side_effect=_ensure_async):
         buttons = panel.findChildren(QPushButton)
-        recover_button = next(btn for btn in buttons if btn.text() == "Recover")
-        resume_button = next(btn for btn in buttons if btn.text() == "Resume")
+        recover_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_recover"))
+        resume_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_resume"))
 
         assert recover_button.isEnabled() is False
         assert resume_button.isEnabled() is False
@@ -286,8 +292,8 @@ async def test_run_operations_panel_blocks_superseded_run_even_without_backend_t
     qtbot.addWidget(panel)
 
     buttons = panel.findChildren(QPushButton)
-    recover_button = next(btn for btn in buttons if btn.text() == "Recover")
-    resume_button = next(btn for btn in buttons if btn.text() == "Resume")
+    recover_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_recover"))
+    resume_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_resume"))
 
     assert recover_button.isEnabled() is False
     assert resume_button.isEnabled() is False
@@ -334,8 +340,8 @@ async def test_run_operations_panel_keeps_failed_run_resume_and_recover_semantic
 
     with patch("desktop.widgets.run_operations_panel.ensure_async", side_effect=_ensure_async):
         buttons = panel.findChildren(QPushButton)
-        recover_button = next(btn for btn in buttons if btn.text() == "Recover")
-        resume_button = next(btn for btn in buttons if btn.text() == "Resume")
+        recover_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_recover"))
+        resume_button = next(btn for btn in buttons if btn.text() == _btn_label("desktop.runops.btn_resume"))
 
         assert recover_button.isEnabled() is True
         assert resume_button.isEnabled() is True

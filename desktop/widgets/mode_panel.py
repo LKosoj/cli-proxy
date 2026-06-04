@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from i18n import t
 from session import session_runtime_uid
 from sessions.session_state_access import get_active_mode
 from utils.ui import ensure_async
@@ -68,7 +69,8 @@ class ModePanelWidget(QWidget):
 
         # Режим
         mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel("Mode:"))
+        self.mode_label = QLabel(t("desktop.modepanel.label.mode", "ru"))
+        mode_layout.addWidget(self.mode_label)
         self.mode_combo = QComboBox()
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         mode_layout.addWidget(self.mode_combo, 1)
@@ -86,12 +88,12 @@ class ModePanelWidget(QWidget):
 
         # Кнопки управления
         btn_layout = QHBoxLayout()
-        self.menu_btn = QPushButton("Menu")
+        self.menu_btn = QPushButton(t("desktop.modepanel.btn.menu", "ru"))
         self.menu_btn.setEnabled(False)
         self.menu_btn.clicked.connect(self._request_mode_menu)
         btn_layout.addWidget(self.menu_btn)
 
-        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn = QPushButton(t("desktop.btn.refresh", "ru"))
         self.refresh_btn.clicked.connect(self._refresh_modes)
         btn_layout.addWidget(self.refresh_btn)
 
@@ -117,7 +119,7 @@ class ModePanelWidget(QWidget):
 
         self.history_btn = QPushButton("🕒")
         self.history_btn.setFixedSize(24, 24)
-        self.history_btn.setToolTip("История статусов")
+        self.history_btn.setToolTip(t("desktop.modepanel.tooltip.status_history", "ru"))
         self.history_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; }")
         self.history_btn.clicked.connect(self._show_history)
         status_layout.addWidget(self.history_btn)
@@ -211,7 +213,7 @@ class ModePanelWidget(QWidget):
 
         menu = QMenu(self)
         if not self._status_history:
-            menu.addAction("Нет истории")
+            menu.addAction(t("desktop.modepanel.msg.no_history", self.facade.ui_language))
         else:
             for entry in reversed(self._status_history):
                 action = QAction(entry, menu)
@@ -295,6 +297,12 @@ class ModePanelWidget(QWidget):
             self._update_status("Cancelled")
         elif event == "task:failed":
             self._update_status("Failed")
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.mode_label.setText(t("desktop.modepanel.label.mode", lang))
+        self.menu_btn.setText(t("desktop.modepanel.btn.menu", lang))
+        self.refresh_btn.setText(t("desktop.btn.refresh", lang))
+        self.history_btn.setToolTip(t("desktop.modepanel.tooltip.status_history", lang))
 
     def closeEvent(self, event):
         self._unsubscribe()

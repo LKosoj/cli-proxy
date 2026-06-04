@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from i18n import t
 from utils.ui import ensure_async
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ class AdminChatSection(QGroupBox):
         get_status_payload: Optional[Callable[[], Mapping[str, Any]]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
-        super().__init__("Admin chat", parent)
+        super().__init__(t("desktop.adminchat.title", facade.ui_language), parent)
         self.setObjectName("admin_chat_section")
         self.facade = facade
         self._get_session_uid = get_session_uid
@@ -58,23 +59,23 @@ class AdminChatSection(QGroupBox):
         self.messages_view.setObjectName("admin_chat_messages_view")
         self.messages_view.setReadOnly(True)
         self.messages_view.setMinimumHeight(180)
-        self.messages_view.setPlaceholderText("История сообщений появится здесь.")
+        self.messages_view.setPlaceholderText(t("desktop.adminchat.messages_placeholder", facade.ui_language))
         layout.addWidget(self.messages_view, 1)
 
         input_row = QHBoxLayout()
         input_row.setSpacing(8)
         self.input_edit = QLineEdit()
         self.input_edit.setObjectName("admin_chat_input_edit")
-        self.input_edit.setPlaceholderText("Спросите админа (Enter = отправить)")
+        self.input_edit.setPlaceholderText(t("desktop.adminchat.input_placeholder", facade.ui_language))
         self.input_edit.returnPressed.connect(self._on_send_clicked)
         input_row.addWidget(self.input_edit, 1)
-        self.send_button = QPushButton("Send")
+        self.send_button = QPushButton(t("desktop.adminchat.btn_send", facade.ui_language))
         self.send_button.setObjectName("admin_chat_send_button")
         self.send_button.clicked.connect(self._on_send_clicked)
         input_row.addWidget(self.send_button)
         layout.addLayout(input_row)
 
-        self.pending_label = QLabel("Pending approvals (0):")
+        self.pending_label = QLabel(t("desktop.adminchat.pending_label", facade.ui_language, count=0))
         self.pending_label.setObjectName("admin_chat_pending_label")
         layout.addWidget(self.pending_label)
 
@@ -85,11 +86,11 @@ class AdminChatSection(QGroupBox):
 
         pending_row = QHBoxLayout()
         pending_row.setSpacing(8)
-        self.approve_button = QPushButton("Approve")
+        self.approve_button = QPushButton(t("desktop.adminchat.btn_approve", facade.ui_language))
         self.approve_button.setObjectName("admin_chat_approve_button")
         self.approve_button.clicked.connect(self._on_approve_clicked)
         pending_row.addWidget(self.approve_button)
-        self.reject_button = QPushButton("Reject")
+        self.reject_button = QPushButton(t("desktop.adminchat.btn_reject", facade.ui_language))
         self.reject_button.setObjectName("admin_chat_reject_button")
         self.reject_button.clicked.connect(self._on_reject_clicked)
         pending_row.addWidget(self.reject_button)
@@ -103,17 +104,17 @@ class AdminChatSection(QGroupBox):
         self.memory_edit = QPlainTextEdit()
         self.memory_edit.setObjectName("admin_chat_memory_edit")
         self.memory_edit.setMinimumHeight(100)
-        self.memory_edit.setPlaceholderText("Заметки для агента (свободный текст).")
+        self.memory_edit.setPlaceholderText(t("desktop.adminchat.memory_notes_placeholder", facade.ui_language))
         self.memory_edit.textChanged.connect(self._on_memory_changed)
         layout.addWidget(self.memory_edit)
 
         memory_row = QHBoxLayout()
         memory_row.setSpacing(8)
-        self.memory_reload_button = QPushButton("Reload")
+        self.memory_reload_button = QPushButton(t("desktop.adminchat.btn_reload", facade.ui_language))
         self.memory_reload_button.setObjectName("admin_chat_memory_reload_button")
         self.memory_reload_button.clicked.connect(self._reload_memory)
         memory_row.addWidget(self.memory_reload_button)
-        self.memory_save_button = QPushButton("Save")
+        self.memory_save_button = QPushButton(t("desktop.adminchat.btn_save", facade.ui_language))
         self.memory_save_button.setObjectName("admin_chat_memory_save_button")
         self.memory_save_button.clicked.connect(self._on_save_memory_clicked)
         memory_row.addWidget(self.memory_save_button)
@@ -143,7 +144,7 @@ class AdminChatSection(QGroupBox):
         self.messages_view.clear()
         self.pending_list.clear()
         self._pending_items = []
-        self.pending_label.setText("Pending approvals (0):")
+        self.pending_label.setText(t("desktop.adminchat.pending_label", self.facade.ui_language, count=0))
         self.memory_edit.blockSignals(True)
         self.memory_edit.clear()
         self.memory_edit.blockSignals(False)
@@ -213,10 +214,11 @@ class AdminChatSection(QGroupBox):
             result = loader(session_uid)
         except Exception as exc:
             self.logger.exception("admin_chat: get_admin_chat_messages failed")
-            self._update_status(f"Ошибка загрузки сообщений: {exc}")
+            self._update_status(t("desktop.adminchat.status_load_messages_error", self.facade.ui_language, error=str(exc)))
             return
         if not isinstance(result, Mapping) or not result.get("ok"):
-            self._update_status(f"Сообщения недоступны: {result.get('error') if isinstance(result, Mapping) else 'unknown'}")
+            self._update_status(t("desktop.adminchat.status_messages_unavailable", self.facade.ui_language,
+                                  error=result.get('error') if isinstance(result, Mapping) else 'unknown'))
             return
         messages = result.get("messages") or []
         self._render_messages(messages)
@@ -244,7 +246,7 @@ class AdminChatSection(QGroupBox):
     def _on_send_clicked(self) -> None:
         session_uid = self._active_uid()
         if not session_uid:
-            self._update_status("Выберите сессию")
+            self._update_status(t("desktop.adminchat.status_select_session", self.facade.ui_language))
             return
         text = self.input_edit.text().strip()
         if not text:
@@ -254,14 +256,14 @@ class AdminChatSection(QGroupBox):
             return
         self.input_edit.clear()
         self.send_button.setEnabled(False)
-        self._update_status("Отправка…")
+        self._update_status(t("desktop.adminchat.status_sending", self.facade.ui_language))
 
         async def _do_send() -> None:
             try:
                 result = await sender(session_uid, text=text)
             except Exception as exc:
                 self.logger.exception("admin_chat: post_admin_chat_message failed")
-                self._update_status(f"Ошибка отправки: {exc}")
+                self._update_status(t("desktop.adminchat.status_send_error", self.facade.ui_language, error=str(exc)))
                 return
             finally:
                 self.send_button.setEnabled(True)
@@ -273,10 +275,13 @@ class AdminChatSection(QGroupBox):
 
     def _handle_send_result(self, result: Any) -> None:
         if not isinstance(result, Mapping):
-            self._update_status("Неожиданный ответ сервиса")
+            self._update_status(t("desktop.adminchat.status_unexpected_response", self.facade.ui_language))
             return
         if not result.get("ok"):
-            self._update_status(f"Ошибка: {result.get('error') or 'unknown'}")
+            self._update_status(
+                t("desktop.adminchat.status_error", self.facade.ui_language,
+                  error=result.get('error') or 'unknown')
+            )
             return
         intent = result.get("intent") or {}
         intent_type = str(intent.get("type") or "") if isinstance(intent, Mapping) else ""
@@ -285,21 +290,26 @@ class AdminChatSection(QGroupBox):
             exec_result = result.get("exec_result") or {}
             exit_code = exec_result.get("exit_code") if isinstance(exec_result, Mapping) else None
             target_kind = exec_result.get("target_kind") if isinstance(exec_result, Mapping) else None
-            parts = [f"Autopilot executed ({target_kind or '?'})"]
+            parts = [
+                t("desktop.adminchat.status_autopilot_executed", self.facade.ui_language,
+                  kind=target_kind or '?')
+            ]
             if exit_code is not None:
                 parts.append(f"exit={exit_code}")
             self._update_status(" · ".join(parts))
             return
         blocked = str(result.get("autopilot_blocked") or "").strip()
         if blocked:
-            self._update_status(f"Autopilot blocked: {blocked}")
+            self._update_status(
+                t("desktop.adminchat.status_autopilot_blocked", self.facade.ui_language, reason=blocked)
+            )
             return
         if intent_type and intent_type != "answer":
-            self._update_status(f"Намерение: {intent_type}")
+            self._update_status(t("desktop.adminchat.status_intent", self.facade.ui_language, intent_type=intent_type))
         elif reply:
             self._update_status("")
         else:
-            self._update_status("Ответ принят")
+            self._update_status(t("desktop.adminchat.status_answer_accepted", self.facade.ui_language))
 
     # ---------- pending ----------
 
@@ -314,10 +324,11 @@ class AdminChatSection(QGroupBox):
             result = loader(session_uid)
         except Exception as exc:
             self.logger.exception("admin_chat: get_admin_chat_pending failed")
-            self._update_status(f"Ошибка загрузки pending: {exc}")
+            self._update_status(t("desktop.adminchat.status_load_pending_error", self.facade.ui_language, error=str(exc)))
             return
         if not isinstance(result, Mapping) or not result.get("ok"):
-            self._update_status(f"Pending недоступны: {result.get('error') if isinstance(result, Mapping) else 'unknown'}")
+            self._update_status(t("desktop.adminchat.status_pending_unavailable", self.facade.ui_language,
+                                  error=result.get('error') if isinstance(result, Mapping) else 'unknown'))
             return
         items = list(result.get("items") or [])
         self._pending_items = [dict(item) for item in items if isinstance(item, Mapping)]
@@ -342,7 +353,7 @@ class AdminChatSection(QGroupBox):
             list_item = QListWidgetItem(label)
             list_item.setData(Qt.ItemDataRole.UserRole, approval_id)
             self.pending_list.addItem(list_item)
-        self.pending_label.setText(f"Pending approvals ({len(self._pending_items)}):")
+        self.pending_label.setText(t("desktop.adminchat.pending_label", self.facade.ui_language, count=len(self._pending_items)))
 
     def _selected_approval_id(self) -> Optional[str]:
         item = self.pending_list.currentItem()
@@ -355,20 +366,22 @@ class AdminChatSection(QGroupBox):
         session_uid = self._active_uid()
         approval_id = self._selected_approval_id()
         if not session_uid or not approval_id:
-            self._update_status("Выберите pending-запись")
+            self._update_status(t("desktop.adminchat.status_select_pending", self.facade.ui_language))
             return
         approver = getattr(self.facade, "approve_admin_chat_pending", None)
         if not callable(approver):
             return
         self.approve_button.setEnabled(False)
-        self._update_status(f"Approving {approval_id}…")
+        self._update_status(
+            t("desktop.adminchat.status_approving", self.facade.ui_language, id=approval_id)
+        )
 
         async def _do_approve() -> None:
             try:
                 result = await approver(session_uid, approval_id=approval_id)
             except Exception as exc:
                 self.logger.exception("admin_chat: approve_admin_chat_pending failed")
-                self._update_status(f"Ошибка approve: {exc}")
+                self._update_status(t("desktop.adminchat.status_approve_error", self.facade.ui_language, error=str(exc)))
                 return
             finally:
                 self.approve_button.setEnabled(True)
@@ -380,15 +393,16 @@ class AdminChatSection(QGroupBox):
 
     def _handle_approve_result(self, result: Any) -> None:
         if not isinstance(result, Mapping):
-            self._update_status("Неожиданный ответ approve")
+            self._update_status(t("desktop.adminchat.status_unexpected_approve", self.facade.ui_language))
             return
         if not result.get("ok"):
-            self._update_status(f"Approve ошибка: {result.get('error') or 'unknown'}")
+            self._update_status(t("desktop.adminchat.status_approve_error_result", self.facade.ui_language,
+                                  error=result.get('error') or 'unknown'))
             return
         exit_code = result.get("exit_code")
         target_kind = result.get("target_kind") or "?"
         duration = result.get("duration_ms")
-        parts = [f"Executed ({target_kind})"]
+        parts = [t("desktop.adminchat.status_executed", self.facade.ui_language, kind=target_kind)]
         if exit_code is not None:
             parts.append(f"exit={exit_code}")
         if duration is not None:
@@ -399,7 +413,7 @@ class AdminChatSection(QGroupBox):
         session_uid = self._active_uid()
         approval_id = self._selected_approval_id()
         if not session_uid or not approval_id:
-            self._update_status("Выберите pending-запись")
+            self._update_status(t("desktop.adminchat.status_select_pending", self.facade.ui_language))
             return
         rejector = getattr(self.facade, "reject_admin_chat_pending", None)
         if not callable(rejector):
@@ -408,13 +422,13 @@ class AdminChatSection(QGroupBox):
             result = rejector(session_uid, approval_id=approval_id)
         except Exception as exc:
             self.logger.exception("admin_chat: reject_admin_chat_pending failed")
-            self._update_status(f"Ошибка reject: {exc}")
+            self._update_status(t("desktop.adminchat.status_reject_error", self.facade.ui_language, error=str(exc)))
             return
         if isinstance(result, Mapping) and result.get("ok"):
-            self._update_status(f"Rejected {approval_id}")
+            self._update_status(t("desktop.adminchat.status_rejected", self.facade.ui_language, id=approval_id))
         else:
             err = result.get("error") if isinstance(result, Mapping) else "unknown"
-            self._update_status(f"Reject ошибка: {err}")
+            self._update_status(t("desktop.adminchat.status_reject_fail", self.facade.ui_language, error=str(err)))
         self._reload_pending(session_uid)
 
     # ---------- memory ----------
@@ -430,7 +444,7 @@ class AdminChatSection(QGroupBox):
             result = loader(session_uid)
         except Exception as exc:
             self.logger.exception("admin_chat: get_admin_chat_memory_md failed")
-            self._update_status(f"Ошибка загрузки memory: {exc}")
+            self._update_status(t("desktop.adminchat.status_load_memory_error", self.facade.ui_language, error=str(exc)))
             return
         if not isinstance(result, Mapping) or not result.get("ok"):
             return
@@ -446,7 +460,7 @@ class AdminChatSection(QGroupBox):
     def _on_save_memory_clicked(self) -> None:
         session_uid = self._active_uid()
         if not session_uid:
-            self._update_status("Выберите сессию")
+            self._update_status(t("desktop.adminchat.status_select_session", self.facade.ui_language))
             return
         saver = getattr(self.facade, "save_admin_chat_memory_md", None)
         if not callable(saver):
@@ -456,14 +470,29 @@ class AdminChatSection(QGroupBox):
             result = saver(session_uid, text=text)
         except Exception as exc:
             self.logger.exception("admin_chat: save_admin_chat_memory_md failed")
-            QMessageBox.warning(self, "Memory", f"Ошибка сохранения: {exc}")
+            QMessageBox.warning(self, t("desktop.adminchat.memory_title", self.facade.ui_language),
+                                t("desktop.adminchat.status_save_error_msg", self.facade.ui_language, error=str(exc)))
             return
         if isinstance(result, Mapping) and result.get("ok"):
             self._memory_dirty = False
-            self._update_status("Memory сохранён")
+            self._update_status(t("desktop.adminchat.status_memory_saved", self.facade.ui_language))
         else:
             err = result.get("error") if isinstance(result, Mapping) else "unknown"
-            self._update_status(f"Memory ошибка: {err}")
+            self._update_status(t("desktop.adminchat.status_memory_error", self.facade.ui_language, error=str(err)))
+
+    # ---------- i18n ----------
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.setTitle(t("desktop.adminchat.title", lang))
+        self.messages_view.setPlaceholderText(t("desktop.adminchat.messages_placeholder", lang))
+        self.input_edit.setPlaceholderText(t("desktop.adminchat.input_placeholder", lang))
+        self.send_button.setText(t("desktop.adminchat.btn_send", lang))
+        self.pending_label.setText(t("desktop.adminchat.pending_label", lang, count=len(self._pending_items)))
+        self.approve_button.setText(t("desktop.adminchat.btn_approve", lang))
+        self.reject_button.setText(t("desktop.adminchat.btn_reject", lang))
+        self.memory_reload_button.setText(t("desktop.adminchat.btn_reload", lang))
+        self.memory_save_button.setText(t("desktop.adminchat.btn_save", lang))
+        self.memory_edit.setPlaceholderText(t("desktop.adminchat.memory_notes_placeholder", lang))
 
     # ---------- helpers ----------
 

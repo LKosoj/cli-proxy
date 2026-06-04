@@ -27,6 +27,6 @@ def test_miniapp_app_js_remote_control_explains_empty_target_host():
     js_path = Path("miniapp/static/app.js")
     js_content = js_path.read_text(encoding="utf-8")
 
-    assert 'rcHostSelect.innerHTML = \'<option value="">No eligible hosts</option>\';' in js_content
+    assert 'miniapp.settings.no_eligible_hosts' in js_content
     assert "для Remote Control нужно заполнить remote_project_root" in js_content
     assert "rcHostSelect.disabled = isBusy || validHosts.length === 0;" in js_content

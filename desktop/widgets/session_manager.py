@@ -114,9 +114,11 @@ class SessionManagerWidget(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
+        lang = self.facade.ui_language
+
         # Поиск
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search sessions...")
+        self.search_input.setPlaceholderText(t("desktop.session.search_placeholder", lang))
         self.search_input.textChanged.connect(self._filter_sessions)
         layout.addWidget(self.search_input)
 
@@ -131,12 +133,12 @@ class SessionManagerWidget(QWidget):
         # Основные действия
         btn_layout = QHBoxLayout()
 
-        self.btn_new = QPushButton("New")
+        self.btn_new = QPushButton(t("desktop.btn.new", lang))
         self.btn_new.clicked.connect(self._on_new_session)
         btn_layout.addWidget(self.btn_new)
 
         self.btn_actions = QToolButton()
-        self.btn_actions.setText("Actions")
+        self.btn_actions.setText(t("desktop.btn.actions", lang))
         self.btn_actions.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.btn_actions.setEnabled(False)
         btn_layout.addWidget(self.btn_actions)
@@ -145,28 +147,30 @@ class SessionManagerWidget(QWidget):
         self._rebuild_actions_menu()
 
     def _rebuild_actions_menu(self) -> None:
+        lang = self.facade.ui_language
         menu = QMenu(self)
-        menu.addAction("Delete", self._on_delete_session)
-        menu.addAction("Rename", self._on_rename_session)
-        menu.addAction("Reset", self._on_reset_session)
+        menu.addAction(t("desktop.btn.delete", lang), self._on_delete_session)
+        menu.addAction(t("desktop.sessmgr.rename", lang), self._on_rename_session)
+        menu.addAction(t("desktop.sessmgr.reset", lang), self._on_reset_session)
         menu.addSeparator()
-        menu.addAction("Switch CLI", self._on_switch_cli)
-        menu.addAction("Resume Token", self._on_resume_edit)
+        menu.addAction(t("desktop.session.switch_cli_title", lang), self._on_switch_cli)
+        menu.addAction(t("desktop.sessmgr.resume_token", lang), self._on_resume_edit)
         self.btn_actions.setMenu(menu)
 
     def _show_context_menu(self, pos) -> None:
         item = self.session_list.itemAt(pos)
         if item is not None:
             self.session_list.setCurrentItem(item)
+        lang = self.facade.ui_language
         menu = QMenu(self)
-        menu.addAction("New Session", self._on_new_session)
+        menu.addAction(t("desktop.session.new_title", lang), self._on_new_session)
         if self.session_list.selectedItems():
             menu.addSeparator()
-            menu.addAction("Rename", self._on_rename_session)
-            menu.addAction("Delete", self._on_delete_session)
-            menu.addAction("Reset", self._on_reset_session)
-            menu.addAction("Switch CLI", self._on_switch_cli)
-            menu.addAction("Resume Token", self._on_resume_edit)
+            menu.addAction(t("desktop.sessmgr.rename", lang), self._on_rename_session)
+            menu.addAction(t("desktop.btn.delete", lang), self._on_delete_session)
+            menu.addAction(t("desktop.sessmgr.reset", lang), self._on_reset_session)
+            menu.addAction(t("desktop.session.switch_cli_title", lang), self._on_switch_cli)
+            menu.addAction(t("desktop.sessmgr.resume_token", lang), self._on_resume_edit)
         menu.exec(self.session_list.mapToGlobal(pos))
 
     def refresh_sessions(self):
@@ -277,7 +281,7 @@ class SessionManagerWidget(QWidget):
         default_dir = os.path.abspath(os.path.expanduser(root_dir or os.getcwd()))
         workdir = QFileDialog.getExistingDirectory(
             self,
-            "Select Work Directory",
+            t("desktop.sessmgr.select_workdir", lang),
             default_dir,
             QFileDialog.Option.ShowDirsOnly,
         )
@@ -291,15 +295,15 @@ class SessionManagerWidget(QWidget):
                 if os.path.commonpath([workdir, root_abs]) != root_abs:
                     QMessageBox.warning(
                         self,
-                        "Invalid directory",
-                        f"Selected directory must be inside work_dir:\n{root_abs}",
+                        t("desktop.sessmgr.invalid_dir_title", lang),
+                        t("desktop.sessmgr.invalid_dir_msg", lang, root=root_abs),
                     )
                     return
             except ValueError:
                 QMessageBox.warning(
                     self,
-                    "Invalid directory",
-                    f"Selected directory must be inside work_dir:\n{root_abs}",
+                    t("desktop.sessmgr.invalid_dir_title", lang),
+                    t("desktop.sessmgr.invalid_dir_msg", lang, root=root_abs),
                 )
                 return
 
@@ -387,11 +391,11 @@ class SessionManagerWidget(QWidget):
         target_cli = str(payload.get("target_cli") or "")
         if not session_uid or not source_cli:
             return
+        lang = self.facade.ui_language
         reply = QMessageBox.question(
             self,
-            "Перенос контекста сессии",
-            f"CLI переключён: {source_cli} → {target_cli}.\n"
-            f"Перенести контекст предыдущей сессии ({source_cli})?",
+            t("desktop.sessmgr.transfer_title", lang),
+            t("desktop.sessmgr.transfer_msg", lang, source=source_cli, target=target_cli),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -400,8 +404,8 @@ class SessionManagerWidget(QWidget):
             if not result:
                 QMessageBox.warning(
                     self,
-                    "Перенос контекста",
-                    "Не удалось извлечь контекст из предыдущей сессии.",
+                    t("desktop.sessmgr.transfer_fail_title", lang),
+                    t("desktop.sessmgr.transfer_fail_msg", lang),
                 )
 
     def _on_switch_cli(self):
@@ -463,3 +467,4 @@ class SessionManagerWidget(QWidget):
         self.search_input.setPlaceholderText(t("desktop.session.search_placeholder", lang))
         self.btn_new.setText(t("desktop.btn.new", lang))
         self.btn_actions.setText(t("desktop.btn.actions", lang))
+        self._rebuild_actions_menu()

@@ -59,7 +59,9 @@
       "reset": "Zurücksetzen",
       "save_changes": "Änderungen speichern",
       "clear": "Leeren",
-      "cancel": "Abbrechen"
+      "cancel": "Abbrechen",
+      "load": "Laden",
+      "send": "Senden"
     },
     "label": {
       "session": "Sitzung",
@@ -73,19 +75,101 @@
       "actions": "Aktionen",
       "choose_session": "Sitzung auswählen",
       "choose_project": "Projekt auswählen",
-      "choose_session_uid": "session_uid auswählen"
+      "choose_session_uid": "session_uid auswählen",
+      "status": "Status",
+      "optional": "optional"
     },
     "cfg": {
-      "restart_banner": "Neustart für einige Änderungen erforderlich"
+      "restart_banner": "Neustart für einige Änderungen erforderlich",
+      "preview_diff": "Diff anzeigen",
+      "subtab_general": "Allgemein",
+      "subtab_paths": "Pfade und Speicher",
+      "subtab_apikeys": "API-Schlüssel",
+      "subtab_orchestration": "Orchestrierung",
+      "subtab_skills": "Fähigkeiten",
+      "subtab_runtime": "Runtime und LLM",
+      "add_tool": "Werkzeug hinzufügen",
+      "remove_tool": "Werkzeug entfernen",
+      "no_tools": "Keine Werkzeuge, über «Werkzeug hinzufügen» hinzufügen.",
+      "add_mcp_client": "mcp_client hinzufügen",
+      "remove_mcp_client": "mcp_client entfernen",
+      "list_empty": "Die Liste ist leer.",
+      "add_preset": "Voreinstellung hinzufügen",
+      "remove_preset": "Voreinstellung entfernen",
+      "reset_section": "Abschnitt zurücksetzen",
+      "err_draft_not_loaded": "Konfigurationsentwurf nicht geladen",
+      "err_telegram_token": "telegram.token ist erforderlich",
+      "err_defaults_workdir": "defaults.workdir ist erforderlich",
+      "err_miniapp_base_path": "miniapp.base_path ist erforderlich",
+      "err_miniapp_bind_host": "miniapp.bind_host ist erforderlich",
+      "err_miniapp_bind_port": "miniapp.bind_port muss eine Zahl > 0 sein",
+      "err_tool_bad_struct": "ungültige Struktur",
+      "err_tool_mode": "muss headless oder interactive sein",
+      "err_tool_cmd_empty": "darf nicht leer sein",
+      "err_mcp_port": "mcp.port muss eine Zahl sein",
+      "err_thread_mode": "thread_mode.mode muss private oder group sein",
+      "err_thread_topics_chat_id": "thread_mode.topics_chat_id ist für mode=group erforderlich",
+      "err_webhooks_path": "webhooks.path ist erforderlich",
+      "err_webhooks_path_slash": "webhooks.path muss mit / beginnen",
+      "err_webhooks_timeout": "webhooks.request_timeout_sec muss > 0 sein",
+      "err_webhooks_max_payload": "webhooks.max_payload_bytes muss > 0 sein",
+      "err_scheduler_timezone": "scheduler.timezone ist erforderlich",
+      "err_must_be_positive": "muss > 0 sein",
+      "err_scheduler_misfire": "scheduler.misfire_grace_sec muss >= 0 sein",
+      "err_rate_limit_backend": "security.rate_limits.backend muss sqlite sein",
+      "err_rate_limit_policy": "security.rate_limits.default oder security.rate_limits.policies ist bei enabled=true erforderlich",
+      "err_must_be_nonneg": "muss >= 0 sein",
+      "err_lint_canary_max": "lint_evolution.canary_max_schema_fields_per_180d muss eine ganze Zahl >= 0 sein",
+      "err_field_required": "ist erforderlich",
+      "err_transport": "muss stdio oder http sein",
+      "err_cmd_empty_stdio": "darf für transport=stdio nicht leer sein",
+      "err_url_required_http": "ist für transport=http erforderlich",
+      "local_validation": "Lokale Validierung",
+      "server_validation": "Server-Validierung",
+      "validation_passed": "Validierung bestanden",
+      "no_changes": "Keine Änderungen",
+      "changed_sections": "Geänderte Abschnitte",
+      "secret_changed_confirm": "Secret-Felder geändert oder geleert: {paths}. Speichern fortsetzen?",
+      "err_must_be_json_object": "muss ein JSON-Objekt sein",
+      "prompt_tool_name": "Werkzeugname (Schlüssel in tools)",
+      "err_tool_exists": "Ein Werkzeug mit diesem Namen existiert bereits",
+      "confirm_delete_tool": "Werkzeug '{name}' löschen?",
+      "diff_changed": "Geändert",
+      "diff_none": "keine",
+      "diff_no_live": "keine Live-Änderungen",
+      "diff_restart": "Neustart erforderlich",
+      "save_confirm": "config.yaml speichern und Hot-Reload anwenden?",
+      "restart_required_for": "Neustart erforderlich für:",
+      "and_more": "und mehr",
+      "reload_error": "Hot-Reload hat keine Änderungen angewendet.",
+      "reload_live_only": "Hot-Reload hat nur Live-Änderungen angewendet.",
+      "reload_restart_hint": "Um restart-only-Felder ({fields}) anzuwenden, starten Sie den Prozess neu.",
+      "reload_ok": "Änderungen per Hot-Reload angewendet, kein Neustart erforderlich."
     },
     "editor": {
       "no_file": "Keine Datei ausgewählt",
       "conflict_title": "Versionskonflikt erkannt!",
-      "conflict_desc": "Die Datei wurde seit dem letzten Öffnen auf dem Server geändert."
+      "conflict_desc": "Die Datei wurde seit dem letzten Öffnen auf dem Server geändert.",
+      "force_save_btn": "Speichern erzwingen"
     },
     "logs": {
       "only_new": "Nur neue",
-      "prev_N": "{n} vorherige"
+      "prev_N": "{n} vorherige",
+      "preparing": "Datei wird vorbereitet...",
+      "download_started": "Download gestartet",
+      "ws_connecting": "Verbindung zum Log-Stream herstellen...",
+      "ws_connected": "Log-Stream verbunden",
+      "ws_error": "Log-Stream-Fehler",
+      "ws_conn_error": "WebSocket-Verbindungsfehler",
+      "ws_disconnected": "Log-Stream getrennt",
+      "ws_disconnected_error": "Log-Stream mit Fehler getrennt",
+      "ws_disconnected_reconnect": "Log-Stream getrennt, Neuverbindung in",
+      "err_ws_token": "Fehler beim Abrufen des ws-Tokens:",
+      "err_reopen": "Bitte MiniApp erneut öffnen.",
+      "err_no_ws_token": "ws-Token nicht empfangen",
+      "all_sessions": "Alle Sitzungen",
+      "my_sessions": "Alle meine Sitzungen",
+      "load_error_prefix": "Fehler beim Laden der Logs:"
     },
     "status": {
       "empty": "Lädt oder keine Sitzung ausgewählt...",
@@ -102,12 +186,56 @@
       "manager_plan": "Manager-Plan",
       "analyst": "Analyst-Status",
       "agent": "Agent-Status",
-      "session_unavailable": "Sitzung nicht ausgewählt oder nicht verfügbar"
+      "session_unavailable": "Sitzung nicht ausgewählt oder nicht verfügbar",
+      "webmaster": "Webmaster-Status",
+      "runtime_progress": "Laufzeit-Fortschritt",
+      "queue_prefix": "Warteschlange (Queue:",
+      "state_summary": "Statuszusammenfassung",
+      "last_tick_prefix": "Letzter Tick-Wert (",
+      "all_ticks": "Alle Ticks",
+      "extra_params": "Zusätzliche Parameter",
+      "run_operations": "Run-Operationen",
+      "runs_header": "Läufe",
+      "selected_run": "Ausgewählter Run",
+      "show_json": "JSON anzeigen (Diagnose)",
+      "kv_cli": "CLI / Profil:",
+      "kv_work_type": "Arbeitstyp:",
+      "kv_resume_token": "Resume-Token:",
+      "kv_project": "Projekt:",
+      "saving": "Speichern…",
+      "saved": "Gespeichert.",
+      "busy": "Beschäftigt",
+      "on": "an",
+      "bool_yes": "ja",
+      "bool_no": "nein",
+      "git_conflict": "Konflikt:",
+      "git_busy": "Beschäftigt",
+      "ws_connecting": "Verbindung zum Status-Stream herstellen...",
+      "ws_connected_waiting": "Status-Stream verbunden, warte auf Daten...",
+      "ws_error": "Fehler im Status-Stream",
+      "ws_conn_error": "Status-WebSocket-Verbindungsfehler",
+      "ws_disconnected": "Status-Stream getrennt",
+      "ws_disconnected_error": "Status-Stream mit Fehler getrennt",
+      "ws_disconnected_reconnect": "Status-Stream getrennt, Neuverbindung in",
+      "err_ws_token": "Fehler beim Abrufen des Status-ws-Tokens:",
+      "err_no_ws_token": "Status-ws-Token nicht empfangen",
+      "git_unavailable": "git für dieses Ziel nicht verfügbar"
     },
     "runs": {
       "select_hint": "Run in der Tabelle auswählen.",
       "select_run": "Run auswählen.",
-      "choose_session": "Sitzung auswählen, um Run-Artefakte anzuzeigen."
+      "choose_session": "Sitzung auswählen, um Run-Artefakte anzuzeigen.",
+      "btn_doctor": "Diagnose",
+      "btn_recover": "Wiederherstellen",
+      "btn_resume": "Fortsetzen",
+      "btn_apply_rec": "Empfehlung anwenden",
+      "btn_promote": "Skills anwenden",
+      "no_runs": "Noch keine Läufe.",
+      "no_injections": "Skills: keine Injektionen",
+      "err_detail": "Fehler bei Run-Detail:",
+      "err_load_artifacts": "Fehler beim Laden von Run-Artefakten:",
+      "select_run_first": "Bitte zuerst einen Lauf auswählen.",
+      "err_action": "Fehler bei Run-Aktion:"
     },
     "settings": {
       "empty": "Lädt oder keine Sitzung ausgewählt...",
@@ -116,25 +244,253 @@
       "mode_hint": "Sitzungsmodus oder Direkt-CLI auswählen, um den aktiven Modus zu deaktivieren.",
       "lang_title": "Sprache",
       "lang_label": "Oberflächensprache",
-      "lang_save": "Sprache speichern"
+      "lang_save": "Sprache speichern",
+      "exec_target_local": "Ausführungsziel: Lokal",
+      "recheck": "Erneut prüfen",
+      "remote_control_label": "Fernsteuerung",
+      "remote_control_note": "Wechselt die Sitzung in den strikten Remote-only-Modus (kein lokales Fallback).",
+      "ssh_note": "Aktiviert/deaktiviert die Remote-Befehlsausführung über SSH.",
+      "target_host": "Zielhost",
+      "ssh_hosts_title": "Projekt-SSH-Hosts",
+      "ssh_host_add": "Host hinzufügen",
+      "ssh_key_file": "Schlüsseldatei-Pfad",
+      "ssh_passphrase_env": "Passphrase-Env",
+      "ssh_password_env": "Passwort-Env",
+      "ssh_password_value": "Passwort (Wert)",
+      "ssh_password_note": "Falls angegeben, wird es in den Projektgeheimnissen gespeichert.",
+      "ssh_sudo_pass_env": "Sudo-Passwort-Env",
+      "ssh_sudo_password": "Sudo-Passwort",
+      "ssh_roles": "Rollen",
+      "ssh_desc": "Beschreibung",
+      "ssh_remote_root": "Remote-Projektstamm",
+      "ssh_remote_root_note": "Erforderlich für Fernsteuerung und Remote-Dateioperationen.",
+      "ssh_timeout": "Leerlauf-Timeout (s)",
+      "rc_error_no_root": "SSH-Host existiert, aber remote_project_root ist für Remote Control erforderlich.",
+      "saved": "Einstellungen gespeichert",
+      "preflight_ok": "Preflight erfolgreich bestanden",
+      "preflight_error_prefix": "Fehler bei der erneuten Prüfung:",
+      "exec_target_remote": "Ausführungsziel: remote — {host}",
+      "no_eligible_hosts": "Keine geeigneten Hosts"
     },
     "scheduler": {
       "choose_project": "Projekt auswählen, um den Zeitplan zu verwalten.",
-      "no_projects": "Keine Projekte verfügbar."
+      "no_projects": "Keine Projekte verfügbar.",
+      "session_label": "Telegram session_uid",
+      "target_mode": "Zielmodus",
+      "enabled": "Aktiviert",
+      "run_now": "Jetzt ausführen",
+      "no_jobs_for_project": "Noch keine Jobs für Projekt",
+      "select_project_first": "Bitte zuerst ein Projekt auswählen.",
+      "selected_jobs": "Jobs ausgewählt",
+      "click_to_edit": "Auf einen Job klicken zum Bearbeiten.",
+      "err_no_project": "Kein Projekt ausgewählt",
+      "err_no_session_uid": "Telegram-session_uid nicht ausgewählt",
+      "err_no_cron": "Cron ist erforderlich",
+      "err_no_target_mode": "Zielmodus ist erforderlich",
+      "err_payload_not_object": "Payload muss ein JSON-Objekt sein",
+      "err_invalid_json": "Ungültiges JSON im Payload:",
+      "err_save": "Fehler beim Speichern im Scheduler:",
+      "no_job_selected": "Kein Job ausgewählt",
+      "delete_job_confirm": "Job löschen",
+      "err_delete": "Fehler beim Löschen im Scheduler:",
+      "job_dispatched": "Job für sofortige Ereignispublikation gesendet.",
+      "err_run_now": "Fehler bei Scheduler run_now:"
     },
     "admin": {
       "choose_session": "Sitzung für das Admin-Panel auswählen.",
-      "choose_skill": "Ausstehende Skill-Installation auswählen"
+      "choose_skill": "Ausstehende Skill-Installation auswählen",
+      "state_title": "Admin-Zustand",
+      "subtab": {
+        "overview": "Übersicht",
+        "monitoring": "Überwachung",
+        "operations": "Operationen",
+        "config": "Konfiguration",
+        "chat": "Chat",
+        "data": "Daten"
+      },
+      "pending_actions": "Warte auf Aktionen",
+      "manual_confirms": "manuelle Bestätigungen",
+      "recent_events": "Letzte Ereignisse",
+      "incidents": "Vorfälle",
+      "admin_actions": "Admin-Aktionen",
+      "current_pending": "Aktuelle Ausstehende / Stummschaltung",
+      "event_history": "Ereignisverlauf / Überschreibungen",
+      "refresh_runs": "Läufe aktualisieren",
+      "show_details": "Details anzeigen",
+      "add_server": "Server hinzufügen",
+      "enabled": "Aktiviert",
+      "monitor_hint": "SSH-Hosts werden im Tab «Einstellungen» konfiguriert. Hier wird nur server → action ausgewählt.",
+      "add_action": "Aktion hinzufügen",
+      "th_argv": "argv (ein Eintrag pro Zeile)",
+      "config_placeholder": "Klicken Sie auf «Laden», um das resultierende YAML anzuzeigen.",
+      "chat_placeholder": "Admin fragen (Enter = senden)",
+      "memory_placeholder": "Notizen für den Agenten (Freitext).",
+      "no_runs": "Keine Läufe für diese Sitzung.",
+      "status_unavailable": "Admin-Status nicht verfügbar",
+      "analyzer_no_action": "Analyzer hat noch keine detaillierte Aktion veröffentlicht.",
+      "disabled_hint": "Der Admin-Modus ist für die ausgewählte Sitzung deaktiviert. Klicken Sie auf Aktivieren, um ihn zu starten. Deaktivieren ist vor der Aktivierung nicht verfügbar. Alternativ Rescan ausführen.",
+      "disabled_hint_static": "Der Admin-Modus ist für die ausgewählte Sitzung deaktiviert. Aktivieren Sie ihn oder aktualisieren Sie den Zustand per Rescan.",
+      "no_pending": "kein Ausstehend",
+      "err_timeout": "Admin-Status-Anfrage hat das Zeitlimit überschritten. Bitte erneut versuchen.",
+      "err_timeout_stale": "Admin-Status-Anfrage hat das Zeitlimit überschritten. Es werden die zuletzt bekannten Daten angezeigt.",
+      "err_access": "Kein Zugriff auf den Admin-Status für die ausgewählte Sitzung.",
+      "err_access_stale": "Kein Zugriff auf den Admin-Status für die ausgewählte Sitzung. Es werden die zuletzt bekannten Daten angezeigt.",
+      "err_server": "Admin-Status-Server ist vorübergehend nicht verfügbar.",
+      "err_server_stale": "Admin-Status-Server ist vorübergehend nicht verfügbar. Es werden die zuletzt bekannten Daten angezeigt.",
+      "err_load": "Fehler beim Laden des Admin-Status: {detail}",
+      "err_load_stale": "Fehler beim Laden des Admin-Status: {detail}. Es werden die zuletzt bekannten Daten angezeigt.",
+      "err_action": "Admin-Aktionsfehler:",
+      "err_action_stale": "Admin-Aktionsfehler: {detail}. Es werden die zuletzt bekannten Daten angezeigt.",
+      "err_load_runs": "Fehler beim Laden der Läufe:",
+      "readiness_hint_ok": "Pipeline ist bereit für den nächsten Monitor-Zyklus.",
+      "readiness_hint_failure": "Pipeline befindet sich in einem Fehlerzustand. Prüfen Sie Analyzer und Executor.",
+      "readiness_hint_live": "Monitor-Zyklus ist aktiv; Daten kommen aus dem aktuellen Pipeline-Lauf.",
+      "readiness_hint_disabled": "Pipeline ist deaktiviert und führt keine Monitor-Checks durch.",
+      "err_load_messages": "Fehler beim Laden der Nachrichten:",
+      "err_load_pending": "Fehler beim Laden ausstehender Elemente:",
+      "err_load_memory": "Fehler beim Laden des Speichers:",
+      "chat_sending": "Senden…",
+      "chat_intent": "Absicht:",
+      "err_chat_send": "Sendefehler:",
+      "err_approve": "Genehmigungsfehler:",
+      "err_approve_req": "Fehler bei der Genehmigungsanfrage:",
+      "err_reject": "Ablehnungsfehler:",
+      "err_reject_req": "Fehler bei der Ablehnungsanfrage:",
+      "memory_saved": "Speicher gespeichert",
+      "err_memory": "Speicherfehler:",
+      "loaded_prefix": "Geladen: ",
+      "pending_approvals": "Ausstehende Bestätigungen ({n}):",
+      "approve": "Genehmigen",
+      "reject": "Ablehnen",
+      "th_server_ssh": "Server (aus SSH-Hosts)"
     },
     "mode": {
       "direct_cli": "Direkt-CLI"
     },
     "error": {
       "auth": "Autorisierungsfehler",
-      "access_denied": "Zugriff verweigert"
+      "access_denied": "Zugriff verweigert",
+      "load_prefix": "Ladefehler:",
+      "generic_prefix": "Fehler:",
+      "save": "Speicherfehler",
+      "init": "Initialisierungsfehler"
     },
     "ssh": {
-      "no_hosts": "Keine Hosts konfiguriert."
+      "no_hosts": "Keine Hosts konfiguriert.",
+      "toggle_hint": "Aktiviert/deaktiviert die Remote-Befehlsausführung über SSH.",
+      "no_config": "SSH Remote ist aktiviert, aber ssh.yaml fehlt in .cli-proxy/.",
+      "enabled_no_hosts": "SSH Remote ist aktiviert. Fügen Sie Hosts in ssh.yaml oder über das Formular unten hinzu.",
+      "edit_prefix": "Bearbeiten",
+      "add_host": "Host hinzufügen",
+      "no_workdir_save": "Projektverzeichnis zum Speichern des SSH-Hosts konnte nicht ermittelt werden.",
+      "host_saved": "Host gespeichert",
+      "err_save_host": "Fehler beim Speichern des Hosts:",
+      "delete_confirm": "Host löschen",
+      "no_workdir_delete": "Projektverzeichnis zum Löschen des SSH-Hosts konnte nicht ermittelt werden.",
+      "err_delete": "Löschfehler:",
+      "no_workdir_test": "Projektverzeichnis für SSH-Test konnte nicht ermittelt werden.",
+      "test_ok": "Erfolgreich:",
+      "err_request": "Anfragefehler:",
+      "keygen_confirm": "Neuen Schlüssel generieren für",
+      "keygen_warn": "Dies überschreibt den vorhandenen Schlüsselpfad in der Konfiguration.",
+      "no_workdir_keygen": "Projektverzeichnis für Schlüsselgenerierung konnte nicht ermittelt werden.",
+      "keygen_success": "Schlüssel generiert und in die Konfiguration geschrieben.",
+      "keygen_add_hint": "Fügen Sie diesen öffentlichen Schlüssel zu ~/.ssh/authorized_keys auf dem Server hinzu:",
+      "err_keygen": "Fehler bei der Schlüsselgenerierung:",
+      "alias_required": "Alias ist erforderlich"
+    },
+    "banner": {
+      "remote_fs": "Remote-FS"
+    },
+    "files": {
+      "path_remote": "Aktueller Pfad (Remote: {root}):",
+      "path_local": "Aktueller Pfad:",
+      "saved": "Datei gespeichert",
+      "save_error_prefix": "Speicherfehler:",
+      "download_error_prefix": "Downloadfehler:",
+      "reset_confirm": "Nicht gespeicherte Änderungen verwerfen und Datei von Disk neu laden?",
+      "prompt_filename": "Dateiname",
+      "prompt_dirname": "Ordnername",
+      "delete_confirm": "{path} löschen?"
+    },
+    "autonomy": {
+      "no_servers": "Keine Server. Fügen Sie sie zur Admin-Konfiguration hinzu.",
+      "no_open_drifts": "keine offenen Drifts",
+      "no_session": "Keine Sitzung ausgewählt.",
+      "rescan_all_started": "Rescan all gestartet…",
+      "rescan_all_done": "Rescan all abgeschlossen.",
+      "err_rescan_all": "Fehler bei Rescan all:",
+      "maintenance_started": "Tägliche Wartung gestartet…",
+      "maintenance_done": "Tägliche Wartung abgeschlossen (Server: {count}).",
+      "err_maintenance": "Wartungsfehler:",
+      "loading_server": "Lädt {server}…",
+      "empty": "(leer)",
+      "no_facts": "Keine Fakten.",
+      "no_notes": "Keine Notizen.",
+      "no_runbooks": "Keine passenden Runbooks.",
+      "no_drift": "Kein Drift.",
+      "baseline_accepted": "Baseline für {server} akzeptiert.",
+      "proposal_discarded": "Vorschlag für {server} verworfen.",
+      "err_accept": "Fehler bei Accept:",
+      "err_discard": "Fehler bei Discard:",
+      "no_drifts_filtered": "Keine passenden Drifts.",
+      "err_ack": "Fehler bei Ack:",
+      "err_save_fact": "Fehler beim Speichern des Fakts:",
+      "err_delete_fact": "Fehler beim Löschen des Fakts:",
+      "err_add_fact": "Fehler beim Hinzufügen des Fakts:",
+      "err_append_note": "Fehler beim Anhängen der Notiz:",
+      "err_compact": "Fehler bei Compact:",
+      "new_note_placeholder": "Neue Notiz…",
+      "no_runbooks_server": "Keine Runbooks für diesen Server.",
+      "open": "Öffnen",
+      "err_no_server_id": "Mindestens eine server_id angeben",
+      "err_confidence_range": "Confidence muss eine Zahl in [0.0, 1.0] sein",
+      "builder_sources_title": "1. Skriptquelle (admin.runbook_sources)",
+      "builder_params_title": "2. Runbook-Parameter",
+      "builder_build_title": "3. Erstellen und prüfen",
+      "err_enter_dir": "Bitte ein Verzeichnis eingeben.",
+      "scanning": "Scannen…",
+      "no_scripts": "Keine Skripte gefunden.",
+      "bytes": "Bytes",
+      "err_title_required": "Titel ist erforderlich.",
+      "err_dev_server_required": "Dev server_id ist erforderlich.",
+      "err_select_script": "Mindestens ein Skript auswählen.",
+      "building_runbook": "Runbook wird erstellt…",
+      "runbook_built_prefix": "Runbook erstellt",
+      "runbook_built_suffix": "Klicken Sie auf Validate zum Prüfen.",
+      "manual_actions": "Manuelle Aktionen",
+      "history_empty": "Verlauf ist leer.",
+      "refresh_list": "Liste aktualisieren",
+      "select_check_id": "check_id zum Anzeigen des Verlaufs auswählen.",
+      "select_check_id_short": "check_id auswählen.",
+      "no_snapshots": "Keine Snapshots.",
+      "prereqs_hint": "Klicken Sie auf «Check prereqs», um die Prüfung zu starten.",
+      "requesting": "Anfrage läuft…",
+      "building_bootstrap": "Bootstrap-Runbook wird erstellt…",
+      "runbook_not_created": "Runbook nicht erstellt. Grund:",
+      "runbook_created_prefix": "Runbook erstellt",
+      "path_label": "Pfad:",
+      "no_diff": "(keine Unterschiede)",
+      "err_rescan": "Fehler bei Rescan:",
+      "checksum_mismatch": "SHA1 stimmt nicht mit dem im Runbook aufgezeichneten Wert überein – das Skript wurde möglicherweise geändert. Ausführung gestoppt.",
+      "statuses_label": "Status",
+      "section_title": "Autonomie: Server / baseline / drift / Speicher",
+      "rescan_all": "Alles neu scannen",
+      "daily_maintenance": "Tägliche Wartung ausführen",
+      "validate": "Prüfen",
+      "promote_ellipsis": "Anwenden…",
+      "run_first_step_dry": "Ersten Schritt ausführen (dry-run)",
+      "validating": "Prüfung…",
+      "running_dry_run": "Dry-run läuft…",
+      "validation_label": "Prüfung:",
+      "errors_label": "Fehler:",
+      "warnings_label": "Warnungen:",
+      "promote_runbook_title": "Runbook anwenden",
+      "promote_add_servers": "Server hinzufügen (durch Komma getrennt):",
+      "promote_confidence": "Konfidenz (0.0–1.0, optional):",
+      "run_validation_first": "zuerst Prüfung ausführen",
+      "promote": "Anwenden",
+      "promoting": "Wird angewendet…"
     }
   },
   "btn": {
@@ -151,7 +507,8 @@
       "state": "💾 State",
       "close": "🚫 Schließen",
       "reset": "♻️ Reset",
-      "lang": "🌐 Sprache"
+      "lang": "🌐 Sprache",
+      "close_menu": "❌ Menü schließen"
     },
     "cli": {
       "unavailable": "CLI nicht verfügbar"
@@ -167,6 +524,25 @@
     "ssh": {
       "on": "🔗✅ SSH: an",
       "off": "🔗⬜ SSH: aus"
+    },
+    "input": {
+      "queue_new": "🆕 Neue Warteschlange",
+      "queue_confirm": "🆕 In Warteschlange",
+      "orch_apply": "✅ Anwenden",
+      "queue_append": "➕ Zur aktuellen hinzufügen",
+      "orch_cancel": "⛔ Abbrechen",
+      "take": "✅ Annehmen",
+      "discard": "❌ Verwerfen"
+    },
+    "files": {
+      "up": "⬅️ Hoch",
+      "delete_dir": "🗑 Diesen Ordner löschen",
+      "confirm_yes": "✅ Ja",
+      "save_here": "💾 Hier speichern (2 Min.)"
+    },
+    "orch_transition": {
+      "apply": "✅ Weiterleiten",
+      "cancel": "⛔ Prozess stoppen"
     }
   },
   "msg": {
@@ -192,7 +568,43 @@
       "cancelled": "Abgebrochen.",
       "ssh_unavailable": "SSH ist für dieses Projekt nicht konfiguriert",
       "ssh_enabled": "Fernsteuerung aktiviert",
-      "ssh_disabled": "Fernsteuerung deaktiviert"
+      "ssh_disabled": "Fernsteuerung deaktiviert",
+      "access_not_configured": "Zugriff ist nicht konfiguriert. Wenden Sie sich an den Administrator.",
+      "choose_close": "Sitzung zum Schließen auswählen:",
+      "cli_active": "Aktive CLI: {cli_name}",
+      "cli_switch_notice_no_prev": "Der aktive CLI ist in dieser Sitzung nicht verfügbar. Wechsle zu {target}.",
+      "cli_switch_notice_with_prev": "CLI {previous} ist in dieser Sitzung nicht verfügbar oder deaktiviert. Wechsle zu {target}.",
+      "closed_and_removed": "Sitzung geschlossen und aus dem Zustand entfernt.",
+      "create_session_first": "Erstellen Sie zuerst eine Sitzung.",
+      "created_cwd": "Neue Sitzung {id} erstellt und ausgewählt.",
+      "headless_read_failed": "⚠️ CLI wurde beendet, aber der Bot konnte die Ausgabe nicht korrekt lesen (stdout nicht geschlossen).",
+      "help_no_data": "help hat keine Daten zurückgegeben.",
+      "interrupt_failed_diag": "Die Sitzung konnte nicht vollständig unterbrochen werden. Weitere Diagnose erforderlich.",
+      "interrupt_partial_runtime": "Unterbrechung gesendet, aber ein Teil des Runtimes beendet den Stopp noch.",
+      "interrupt_sent": "Unterbrechung gesendet.",
+      "interrupt_work_done": "Aktuelle Arbeit unterbrochen. Sitzung freigegeben.",
+      "menu_closed": "Menü geschlossen.",
+      "none": "Keine aktiven Sitzungen.",
+      "open_topic_first": "Öffnen Sie zuerst das passende Thema oder wählen Sie eine Sitzung über /sessions.",
+      "orch_off": "aus",
+      "orch_on": "ein",
+      "orch_toggled": "Erweiterter Orchestrator {status}.",
+      "queue_cleared": "Warteschlange geleert.",
+      "queue_count": "{n} Nachrichten in der Warteschlange.",
+      "queue_empty": "Die Warteschlange ist leer.",
+      "rename_cancelled": "Umbenennen abgebrochen.",
+      "rename_empty": "Der Sitzungsname ist leer.",
+      "rename_prompt": "Geben Sie einen neuen Namen für {session_id} ein (oder '-' zum Abbrechen).",
+      "renamed": "Sitzungsname aktualisiert.",
+      "reset_done": "Sitzung zurückgesetzt.",
+      "resume_current": "Aktuelles Resume-Token: {token}",
+      "resume_prompt": "Aktuelles Resume: {current}\nGeben Sie ein neues Resume ein (oder '-' zum Abbrechen).",
+      "resume_saved": "Resume-Token gespeichert.",
+      "resume_token_cancelled": "Resume-Änderung abgebrochen.",
+      "resume_token_updated": "Resume aktualisiert.",
+      "state_header": "Sitzung: {session_id}\nWerkzeug: {tool}\nVerzeichnis: {workdir}\nResume: {resume}\nZusammenfassung: ",
+      "state_not_found_hint": "Zustand nicht gefunden (verwenden Sie /state <session_id> oder /state <tool> <workdir>)",
+      "use_existing_topics": "Verwenden Sie die Themen vorhandener Sitzungen."
     },
     "error": {
       "session_not_found": "Sitzung nicht gefunden.",
@@ -219,7 +631,19 @@
       "queue_failed": "Input konnte nicht in die Warteschlange gestellt werden. Bitte erneut versuchen.",
       "queue_append_failed": "Nachricht in der Warteschlange konnte nicht aktualisiert werden. Bitte erneut versuchen.",
       "unknown_tool": "Unbekanntes Werkzeug.",
-      "session_closed_stale": "Sitzung ist bereits geschlossen."
+      "session_closed_stale": "Sitzung ist bereits geschlossen.",
+      "config_service_unavailable": "ConfigService nicht verfügbar: prompt_regex nicht gespeichert.",
+      "dir_not_found": "Verzeichnis nicht gefunden.",
+      "limits_fetch_failed": "Limits konnten nicht abgerufen werden.",
+      "limits_unavailable": "Limits sind nicht verfügbar.",
+      "mode_unavailable_named": "Modus `{mode_id}` ist nicht verfügbar.",
+      "mode_unavailable_user_named": "Modus `{mode_id}` ist für Ihren Benutzer nicht verfügbar.",
+      "orch_unavailable_user": "Orchestrator ist für Ihren Benutzer nicht verfügbar.",
+      "session_no_context": "Sitzung für den aktuellen Kontext nicht gefunden.",
+      "session_unavailable": "Sitzung ist nicht verfügbar.",
+      "state_read_error": "Fehler beim Lesen des Zustands: {e}",
+      "tool_not_found": "Werkzeug nicht gefunden.",
+      "tool_not_selected": "Wählen Sie zuerst ein Werkzeug über /sessions aus."
     },
     "input": {
       "no_pending": "Kein ausstehender Input.",
@@ -231,7 +655,12 @@
       "interrupted": "Aktuelle Generierung unterbrochen. Input verworfen.",
       "interrupted_freed": "Aktuelle Generierung unterbrochen. Sitzung freigegeben. Input verworfen.",
       "interrupted_partial": "Aktuelle Generierung unterbrochen, aber ein Teil der Laufzeit beendet noch. Input verworfen.",
-      "interrupt_failed": "Sitzung konnte nicht vollständig unterbrochen werden. Input verworfen."
+      "interrupt_failed": "Sitzung konnte nicht vollständig unterbrochen werden. Input verworfen.",
+      "custom_accepted": "Ihre Antwort wurde übernommen.",
+      "custom_cancelled": "OK, Eingabe der eigenen Antwort abgebrochen.",
+      "forward_must_be_command": "Eine weitergeleitete Nachricht muss ein Befehl sein.",
+      "prompt_retired": "Nachricht aktualisiert.",
+      "question_stale": "Die Frage ist veraltet."
     },
     "transfer": {
       "offer": "CLI gewechselt: {src} → {dst}.\nKontext aus vorheriger Sitzung ({src}) übertragen?",
@@ -247,6 +676,131 @@
       "choose": "Sprache wählen:",
       "changed": "Sprache geändert: {lang}",
       "invalid": "Unbekannter Sprachcode."
+    },
+    "ask": {
+      "answer_already_received": "Antwort bereits erhalten.",
+      "choice_selected": "Ausgewählt: {answer}",
+      "enter_custom": "Geben Sie Ihre eigene Antwort in einer einzigen Nachricht ein.",
+      "invalid_choice": "Ungültige Auswahl.",
+      "invalid_format": "Ungültiges Format.",
+      "wrong_chat": "Die Frage gehört zu einem anderen Chat.",
+      "wrong_thread": "Die Frage gehört zu einem anderen Thread."
+    },
+    "cmd": {
+      "already_handled": "Befehl bereits bearbeitet.",
+      "approved_continue": "Genehmigt. Schritt wird weiter ausgeführt...",
+      "approved_execute": "Genehmigt. Befehl wird ausgeführt...",
+      "denied": "Abgelehnt.",
+      "denied_continue": "Befehl abgelehnt. Fortfahren ohne ihn.",
+      "empty_output": "(leere Ausgabe)"
+    },
+    "dirs": {
+      "cannot_leave_root": "Das Stammverzeichnis kann nicht verlassen werden.",
+      "choose_dir": "Verzeichnis auswählen:",
+      "send_git_clone_url": "Senden Sie die git-clone-URL.",
+      "send_new_dir_name": "Senden Sie den Namen des neuen Verzeichnisses oder einen Pfad relativ zum aktuellen. Geben Sie '-' zum Abbrechen ein.",
+      "send_path": "Senden Sie den Verzeichnispfad als Nachricht.",
+      "tool_selected": "Werkzeug {tool} ausgewählt. Wählen Sie ein Verzeichnis.",
+      "btn_up": "⬆️ Nach oben",
+      "btn_prev": "◀️ Zurück",
+      "btn_next": "▶️ Weiter",
+      "btn_use_current": "✅ Dieses Verzeichnis verwenden",
+      "btn_create": "📁 Verzeichnis erstellen",
+      "btn_git_clone": "📦 git clone",
+      "btn_enter": "✏️ Pfad eingeben",
+      "btn_cancel": "❌ Abbrechen",
+      "choose_file_or_dir": "Datei oder Ordner auswählen:"
+    },
+    "files": {
+      "already_at_root": "Bereits im Stammverzeichnis.",
+      "already_exists": "Ein Element mit diesem Namen existiert bereits.",
+      "base_dir_unavailable": "Das Basisverzeichnis ist nicht verfügbar.",
+      "cannot_delete_root": "Das Stammverzeichnis kann nicht gelöscht werden.",
+      "delete_cancelled": "Löschen abgebrochen.",
+      "delete_confirm": "{name} löschen? Bestätigen:",
+      "delete_error": "Löschfehler: {error}",
+      "delete_folder_confirm": "Ordner {name} rekursiv löschen? Bestätigen:",
+      "deleted": "Gelöscht.",
+      "dir_create_cancelled": "Verzeichniserstellung abgebrochen.",
+      "dir_create_failed": "Verzeichnis konnte nicht erstellt werden: {e}",
+      "dir_created": "Verzeichnis erstellt: {path}",
+      "dir_exists": "Verzeichnis existiert bereits.",
+      "dir_name_empty": "Der Verzeichnisname ist leer.",
+      "dir_page": "Verzeichnis: {base}\nSeite {page}/{total}",
+      "dir_unavailable": "Verzeichnis ist nicht verfügbar.",
+      "download_failed": "Download fehlgeschlagen: {e}",
+      "enter_new_name": "Geben Sie einen neuen Namen ein (ohne Pfad). Timeout 2 Minuten.",
+      "escapes_workdir": "Der Pfad verlässt das Arbeitsverzeichnis.",
+      "file_not_found": "Datei nicht gefunden.",
+      "file_too_large": "Die Datei ist zu groß zum Senden.",
+      "folder_not_found": "Ordner nicht gefunden.",
+      "image_download_failed": "Bild-Download fehlgeschlagen: {e}",
+      "image_too_large": "Das Bild ist zu groß (max. {n} MB).",
+      "item_not_found": "Element nicht gefunden.",
+      "name_no_path": "Der Name darf keinen Pfad enthalten.",
+      "name_unchanged": "Der Name ist unverändert.",
+      "new_name_empty": "Der neue Name ist leer.",
+      "no_pending_delete": "Keine ausstehende Löschung.",
+      "operation_cancelled": "Vorgang abgebrochen.",
+      "path_must_be_inside": "Der Pfad muss innerhalb des aktuellen Verzeichnisses liegen.",
+      "rename_cancelled": "Umbenennen abgebrochen.",
+      "rename_failed": "Umbenennen fehlgeschlagen: {e}",
+      "rename_not_found": "Umzubenennendes Element nicht gefunden.",
+      "rename_timeout": "Umbenennungsmodus abgebrochen: innerhalb von 2 Minuten wurde kein neuer Name eingegeben.",
+      "renamed": "Umbenannt: {name}",
+      "save_failed": "Speichern fehlgeschlagen: {e}",
+      "saved": "Datei gespeichert: {path}",
+      "send_error": "Fehler beim Senden der Datei. Überprüfen Sie die Bot-Logs.",
+      "sending_file": "Datei wird gesendet: {filename}",
+      "unsupported_doc_type": "Nicht unterstützter Dokumenttyp.",
+      "upload_dir_outside_root": "Das Zielverzeichnis liegt außerhalb des Arbeitsverzeichnisses. Dateispeichermodus deaktiviert.",
+      "upload_dir_unavailable": "Das Zielverzeichnis ist nicht mehr verfügbar. Dateispeichermodus deaktiviert.",
+      "upload_expired": "Der Dateispeichermodus ist bereits abgelaufen. Drücken Sie erneut die Speicher-Schaltfläche.",
+      "upload_pending": "\n⏳ Warten auf Datei: {remaining} Sek.",
+      "upload_pending_other_dir": "\n⏳ Datei-Upload in einem anderen Verzeichnis ausstehend: {remaining} Sek.",
+      "upload_timeout": "Dateispeichermodus zurückgesetzt: innerhalb von 2 Minuten wurde keine Datei gesendet."
+    },
+    "git": {
+      "clone_done": "Klonen abgeschlossen.",
+      "clone_error": "git-clone-Fehler:\\n{output}",
+      "clone_launch_error": "git clone konnte nicht gestartet werden: {e}",
+      "clone_starting": "git clone wird gestartet...",
+      "operations_menu": "Git-Operationen:"
+    },
+    "lint": {
+      "autopause_not_active": "Lint Evolution L{level}: Pause war nicht aktiv — keine Änderungen.",
+      "autopause_resumed": "Lint Evolution L{level}: Autopause aufgehoben.",
+      "error": "Fehler: {exc}",
+      "gate_error": "Lint-Gate-Fehler: {exc}",
+      "level_not_int": "level muss eine ganze Zahl 1/2/3 sein.",
+      "level_out_of_range": "level muss 1, 2 oder 3 sein.",
+      "more_findings": "  … {n} weitere",
+      "no_active_rules": "Lint Evolution: Keine aktiven Regeln — nichts anzuwenden."
+    },
+    "preset": {
+      "choose": "Preset auswählen:",
+      "not_found": "Preset nicht gefunden.",
+      "sending_task": "Aufgabe wird gesendet: {code}"
+    },
+    "selfupdate": {
+      "confirmed": "Selfupdate bestätigt: Dienst `{service_name}` neu gestartet und Bot ist wieder online.",
+      "deps_failed": "git pull ausgeführt, aber die Aktualisierung der Abhängigkeiten ist fehlgeschlagen.",
+      "no_repo": "Fehler bei git pull: Repository nicht gefunden unter `{repo_root}`.",
+      "no_venv": "git pull ausgeführt, aber `.venv` nicht gefunden. Neustart abgebrochen.",
+      "pull_error": "git-pull-Fehler: {e}",
+      "pull_failed": "git pull fehlgeschlagen.",
+      "pulling": "git pull wird ausgeführt...",
+      "restart_failed": "git pull erfolgreich, aber Dienst `{service_name}` konnte nicht neu gestartet werden.",
+      "restart_failed_no_invoke": "git pull erfolgreich, aber der Neustart von Dienst `{service_name}` konnte nicht ausgelöst werden.",
+      "restart_status": "\n\nsystemctl restart hat Code {restart_rc} zurückgegeben, aktueller Status: {restart_state}.",
+      "restart_unconfirmed": "git pull erfolgreich. Neustartbefehl für Dienst `{service_name}` gesendet, aber der Status konnte nicht sofort bestätigt werden.",
+      "startup_delay": "\nStartverzögerung: {delay_sec}s.",
+      "success": "git pull erfolgreich. Dienst-Neustart gestartet.",
+      "updating_deps": "Änderungen in `{req_file}` erkannt. Abhängigkeiten in .venv werden aktualisiert..."
+    },
+    "setprompt": {
+      "saved": "prompt_regex gespeichert.",
+      "not_saved": "prompt_regex nicht gespeichert."
     }
   },
   "cmd": {
@@ -275,7 +829,8 @@
       "desc": "Lint Evolution: L1/L2/L3-Levelstatus, Autopause, Schema-Version."
     },
     "lint_autopause_resume": {
-      "desc": "Lint Evolution: Autopause von einem Level entfernen (1, 2 oder 3)."
+      "desc": "Lint Evolution: Autopause von einem Level entfernen (1, 2 oder 3).",
+      "usage": "Verwendung: /lint_autopause_resume <level: 1|2|3>"
     },
     "lint_schema_history": {
       "desc": "Lint Evolution: aktuelle Schema-Version, Feldliste, ausstehende Vorschläge."
@@ -293,7 +848,8 @@
       "desc": "Verfügbare Werkzeuge anzeigen."
     },
     "newpath": {
-      "desc": "Pfad für neue Sitzung nach Werkzeugauswahl festlegen."
+      "desc": "Pfad für neue Sitzung nach Werkzeugauswahl festlegen.",
+      "usage": "Verwendung: /newpath <Pfad>"
     },
     "close": {
       "desc": "Sitzung schließen (über Menü)."
@@ -311,10 +867,12 @@
       "desc": "Warteschlange der aktuellen Kontextsitzung leeren."
     },
     "rename": {
-      "desc": "Sitzung umbenennen."
+      "desc": "Sitzung umbenennen.",
+      "usage": "Verwendung: /rename <Name> oder /rename <id> <Name>"
     },
     "cwd": {
-      "desc": "Neue Sitzung in einem anderen Verzeichnis erstellen."
+      "desc": "Neue Sitzung in einem anderen Verzeichnis erstellen.",
+      "usage": "Verwendung: /cwd <Pfad>"
     },
     "dirs": {
       "desc": "Verzeichnisse durchsuchen (Menü)."
@@ -326,10 +884,12 @@
       "desc": "Zustand durchsuchen (Menü)."
     },
     "setprompt": {
-      "desc": "prompt_regex für ein Werkzeug setzen."
+      "desc": "prompt_regex für ein Werkzeug setzen.",
+      "usage": "Verwendung: /setprompt <tool> <regex>"
     },
     "send": {
-      "desc": "Text direkt an CLI senden."
+      "desc": "Text direkt an CLI senden.",
+      "usage": "Verwendung: /send <Text>"
     },
     "mode": {
       "desc": "Modusmenü: {label}."
@@ -416,13 +976,31 @@
       "msg": {
         "select_commit": "Bitte einen Commit auswählen, um den Diff anzuzeigen.",
         "success": "Vorgang erfolgreich abgeschlossen.",
-        "error": "Vorgang fehlgeschlagen."
+        "error": "Vorgang fehlgeschlagen.",
+        "not_a_repo": "Kein git-Repository oder git-Fehler (Code {code}):\n{output}",
+        "show_failed": "git show fehlgeschlagen mit Code {code}:\n{output}",
+        "system_error_title": "Git-Systemfehler",
+        "unexpected_error": "Ein unerwarteter Fehler ist aufgetreten:\n{error}",
+        "fetching_status": "Git-Status wird abgerufen...",
+        "generate_msg_failed": "Nachricht konnte nicht generiert werden. Bitte manuell eingeben oder openai_api_key in config.yaml konfigurieren.",
+        "generate_msg_failed_check": "Nachricht konnte nicht generiert werden. Prüfen Sie die openai_api_key-Einstellungen in config.yaml."
       },
       "dialog": {
         "create_branch_title": "Branch erstellen",
         "create_branch_prompt": "Namen des neuen Branches eingeben:",
         "switch_branch_title": "Branch wechseln",
-        "switch_branch_prompt": "Namen des Branches eingeben, zu dem gewechselt werden soll:"
+        "switch_branch_prompt": "Namen des Branches eingeben, zu dem gewechselt werden soll:",
+        "diff_title": "Diff für Commit {hash}"
+      },
+      "history": {
+        "col_date": "Datum",
+        "col_author": "Autor",
+        "col_commit": "Commit",
+        "col_message": "Nachricht"
+      },
+      "group": {
+        "other_ops": "Weitere Operationen",
+        "remote_ops": "Remote-Operationen"
       }
     },
     "log": {
@@ -441,6 +1019,10 @@
       "btn": {
         "apply_filters": "Filter anwenden",
         "refresh_tasks": "Aufgaben aktualisieren"
+      },
+      "group": {
+        "module_filters": "Modul-Filter",
+        "level_filters": "Protokollebenen-Filter"
       }
     },
     "session": {
@@ -467,10 +1049,25 @@
       "saved": "Gespeichert.",
       "create_error": "Pfad konnte nicht erstellt werden: {error}",
       "delete_error": "Pfad konnte nicht gelöscht werden: {error}",
-      "exec_target_local": "Ausführungsziel: Lokal"
+      "exec_target_local": "Ausführungsziel: Lokal",
+      "new_dir_title": "Neues Verzeichnis",
+      "exec_target_remote": "Ausführungsziel: Remote ({host}: {root})",
+      "revision_conflict": "Versionskonflikt. Aktuelle Version: {revision}.",
+      "name_label": "Name:",
+      "delete_confirm": "'{path}' löschen?",
+      "path_prefix": "Pfad: {path}"
     },
     "chat": {
-      "input_placeholder": "Nachricht eingeben... (Strg+Enter zum Senden)"
+      "input_placeholder": "Nachricht eingeben... (Strg+Enter zum Senden)",
+      "prefix_you": "Sie:",
+      "prefix_agent": "Agent:",
+      "select_files": "Dateien auswählen",
+      "all_files": "Alle Dateien (*)",
+      "ask_hint": "oder geben Sie Ihre eigene Antwort unten ein (Strg+Enter)",
+      "status_ready": "Bereit",
+      "btn_stop": "Stopp",
+      "status_thinking": "Denke nach...",
+      "status_waiting_answer": "Warte auf Antwort..."
     },
     "status": {
       "ready": "Bereit"
@@ -531,7 +1128,171 @@
         "config_title": "Admin-Konfiguration (YAML, schreibgeschützt)",
         "config_placeholder": "Klicken Sie auf «Konfiguration neu laden», um das resultierende YAML anzuzeigen.",
         "disabled_title": "Admin deaktiviert",
-        "disabled_hint": "Aktivieren Sie Admin für diese Sitzung oder scannen Sie die Umgebung neu."
+        "disabled_hint": "Aktivieren Sie Admin für diese Sitzung oder scannen Sie die Umgebung neu.",
+        "optional": "optional",
+        "optional2": "optional",
+        "interval_sec": "interval_sec:"
+      },
+      "autonomy": {
+        "btn": {
+          "accept_proposed": "Vorschlag annehmen",
+          "daily_maintenance": "Tägliche Wartung",
+          "rescan_selected": "Ausgewählten neu scannen",
+          "open_details": "Details öffnen",
+          "append_note": "Notiz anhängen",
+          "refresh_list": "Liste aktualisieren",
+          "ack": "Bestätigen",
+          "build_bootstrap": "Bootstrap-Runbook erstellen",
+          "close": "Schließen",
+          "rescan_all": "Alle neu scannen",
+          "add_fact": "Fakt hinzufügen",
+          "check_prereqs": "Voraussetzungen prüfen",
+          "compact_memory": "Speicher komprimieren",
+          "discard_proposed": "Vorschlag verwerfen",
+          "browse": "Durchsuchen…",
+          "show_all": "Alle anzeigen"
+        },
+        "msg": {
+          "promoting": "Wird angewendet…",
+          "baseline_discard_error": "Verwerfungsfehler.",
+          "running_step": "{mode}-Run {step} auf {server}…",
+          "live_run_confirm": "LIVE-Ausführung des Schritts '{step}' auf {server} starten?",
+          "bootstrap_done": "Runbook {rb_id} erstellt. Pfad: {path}",
+          "drift_not_changed": "Drift nicht geändert.",
+          "title_required": "Titel ist erforderlich.",
+          "validating": "Validierung läuft…",
+          "specify_server_id": "Geben Sie mindestens eine server_id an.",
+          "validate_error": "Validierungsfehler.",
+          "no_steps": "Das Runbook hat keine Schritte.",
+          "build_done": "Runbook {rb_id} erstellt\nPfad: {path}\nServer: {servers}\nKlicken Sie auf Validate zur Prüfung.",
+          "generic_error": "Fehler.",
+          "scan_done": "Dateien gefunden: {count}. Wählen Sie die benötigten aus der Liste aus.",
+          "bootstrap_no_runbook": "Runbook nicht erstellt. Grund: {reason}",
+          "building": "Runbook wird erstellt…",
+          "rescan_all_result": "Server: {count}, Drifts: {drifts}, Alarm: {alarm}",
+          "dry_run_question": "Im DRY-RUN-Modus ausführen?\n(Nein — auf dem Server real ausführen)",
+          "rescan_all_error": "Fehler beim Neu-Scannen aller Einträge.",
+          "baseline_accept_error": "Annahmefehler.",
+          "dev_server_required": "Dev server_id ist erforderlich.",
+          "no_proposed_baseline": "(kein vorgeschlagener Baseline)",
+          "scan_error": "Scanfehler.",
+          "no_data": "Keine Daten.",
+          "maintenance_done": "Fertig. Verarbeitete Server: {count}.",
+          "run_step_error": "Ausführungsfehler.",
+          "update_fact_error": "Fakt konnte nicht aktualisiert werden.",
+          "maintenance_error": "Wartungsfehler.",
+          "append_note_error": "Notiz konnte nicht hinzugefügt werden.",
+          "promote_error": "Beförderungsfehler.",
+          "rescan_error": "Fehler beim Neu-Scannen.",
+          "delete_fact_error": "Fakt konnte nicht gelöscht werden.",
+          "select_server": "Bitte einen Server auswählen.",
+          "rescan_result": "Rescan {sid}: drifts_written={drifts_written}, alarm={alarm}, warn={warn}",
+          "scanning": "Wird gescannt…",
+          "compact_error": "Komprimierungsfehler.",
+          "steps_no_names": "Schritte haben keine Namen.",
+          "nothing_to_discard": "Nichts zu verwerfen.",
+          "build_error": "Build-Fehler.",
+          "select_script": "Wählen Sie mindestens ein Skript aus.",
+          "runbook_not_found": "Runbook {rb_id} nicht gefunden.",
+          "ack_error": "Bestätigungsfehler.",
+          "prereqs_check_error": "Prüffehler.",
+          "specify_dir": "Bitte ein Verzeichnis angeben."
+        },
+        "dialog": {
+          "edit_fact_title": "Fakt bearbeiten",
+          "fact_key_prompt": "Schlüssel:",
+          "run_validation_label": "Zuerst Validierung ausführen",
+          "select_step_title": "Schritt auswählen",
+          "scripts_dir_title": "Skriptverzeichnis",
+          "delete_fact_prompt": "{key} löschen?",
+          "fact_value_prompt": "Wert für {key}:",
+          "new_fact_title": "Neuer Fakt",
+          "confidence_no_change": "— (nicht ändern)",
+          "select_step_prompt": "Auszuführender Schritt:",
+          "delete_fact_title": "Fakt löschen"
+        },
+        "label": {
+          "notes": "Notizen:",
+          "proposed_baseline": "Vorgeschlagene Baseline:",
+          "facts": "Fakten:",
+          "result": "Ergebnis:",
+          "current_baseline": "Aktueller Baseline:"
+        },
+        "col": {
+          "alarm": "Alarm",
+          "host": "Host",
+          "label": "Bezeichnung",
+          "last_scan": "Letzter Scan",
+          "warn": "Warnung",
+          "baseline": "Basislinie",
+          "transport": "Transport",
+          "memory": "Speicher",
+          "server_id": "Server-ID",
+          "status": "Status"
+        },
+        "memory_title": "Speicher",
+        "details_title": "Details",
+        "run_step_title": "Schritt ausführen",
+        "builder": {
+          "src_group": "1. Skriptquelle (admin.runbook_sources)",
+          "file_item": "{name}  ({size} Byte · sha1:{sha1}…)",
+          "meta_group": "2. Runbook-Parameter"
+        },
+        "servers_not_loaded": "Server nicht geladen.",
+        "drifts_title": "Abweichungen",
+        "placeholder": {
+          "add_note": "Notiz hinzufügen...",
+          "comma_separated": "kommagetrennt"
+        },
+        "rescan_title": "Neu scannen",
+        "servers_summary": "Server: {count} | Status: {statuses} | Drifts: {totals}",
+        "bootstrap_title": "Bootstrap",
+        "validate_title": "Validieren",
+        "baseline_title": "Baseline",
+        "group_title": "Autonomie",
+        "maintenance_title": "Tägliche Wartung",
+        "rescan_all_title": "Alle neu scannen",
+        "detail_title": "Autonomie — {server_id}",
+        "promote_title": "Anwenden"
+      },
+      "col": {
+        "description": "Beschreibung",
+        "argv_per_line": "argv (je Zeile)",
+        "timeout_sec": "timeout_sec",
+        "server_alias": "Server (Alias)",
+        "status": "Status",
+        "started_at": "started_at",
+        "risk_level": "Risikostufe",
+        "action_id": "action_id",
+        "run_id": "run_id",
+        "phase": "Phase"
+      },
+      "msg": {
+        "select_run_row": "Wählen Sie eine Zeile in der Runs-Tabelle.",
+        "config_api_unavailable": "Konfigurations-API nicht verfügbar.",
+        "no_runs": "Keine Runs für diese Sitzung.",
+        "run_not_found": "Run {run_id} nicht gefunden.",
+        "error_fmt": "Fehler: {error}",
+        "monitor_api_unavailable": "Monitor-API nicht verfügbar.",
+        "artifact_store_unavailable": "Artifact Store nicht verfügbar.",
+        "run_detail_hint": "Wählen Sie einen Run und klicken Sie auf «Laufdetails anzeigen».",
+        "config_load_error": "Konfiguration konnte nicht geladen werden.",
+        "session_state": "Sitzung: {uid}",
+        "autonomy_api_unavailable": "Autonomie-API nicht verfügbar.",
+        "runs_loaded": "Runs geladen: {count}",
+        "save_error": "Speicherfehler.",
+        "ssh_api_unavailable": "SSH-Aktionen-API nicht verfügbar.",
+        "saved": "Gespeichert.",
+        "run_id_undefined": "run_id ist nicht definiert.",
+        "inventory_load_error": "Inventar konnte nicht geladen werden.",
+        "config_loaded": "Geladen: {path}",
+        "runs_load_error": "Runs konnten nicht geladen werden.",
+        "run_detail_load_error": "Laufdetails konnten nicht geladen werden.",
+        "config_unavailable": "Konfiguration nicht verfügbar.",
+        "load_error": "Ladefehler.",
+        "select_skill_install": "Ausstehende Skill-Installation auswählen",
+        "no_session": "Keine Sitzung ausgewählt.",
+        "api_unavailable": "API nicht verfügbar."
       }
     },
     "msg": {
@@ -546,6 +1307,485 @@
       "answer_accepted": "Antwort akzeptiert: {answer}",
       "question_closed": "Frage ist bereits geschlossen.",
       "select_session_first": "Bitte zuerst eine Desktop-Sitzung auswählen."
+    },
+    "remotebanner": {
+      "remote_fs": "Remote-FS · {host} · {root}"
+    },
+    "runops": {
+      "btn_doctor": "Diagnose",
+      "btn_recover": "Wiederherstellen",
+      "btn_resume": "Fortsetzen",
+      "btn_promote_skills": "Skills übernehmen",
+      "btn_rerun": "Erneut ausführen",
+      "btn_validate": "Validieren",
+      "btn_repair": "Reparieren",
+      "btn_apply_recommendation": "Empfehlung anwenden",
+      "no_injections": "keine Injektionen",
+      "no_session": "Keine Sitzung ausgewählt",
+      "summary": "Aktive Läufe: {active} · Gesamt: {total}",
+      "skills_prefix": "Skills: ",
+      "no_runs": "Keine Läufe",
+      "no_recovery_meta": "Keine Recovery-Metadaten",
+      "action_failed": "Vorgang fehlgeschlagen.",
+      "load_error": "Läufe konnten nicht geladen werden",
+      "action_unavailable": "Run-Operation in Facade nicht verfügbar."
+    },
+    "adminchat": {
+      "status_error": "Fehler: {error}",
+      "status_autopilot_executed": "Autopilot ausgeführt ({kind})",
+      "status_autopilot_blocked": "Autopilot blockiert: {reason}",
+      "status_approving": "Bestätige {id}…",
+      "status_memory_saved": "Memory gespeichert",
+      "btn_approve": "Genehmigen",
+      "status_pending_unavailable": "Ausstehende nicht verfügbar: {error}",
+      "memory_title": "Memory",
+      "status_executed": "Ausgeführt ({kind})",
+      "btn_reload": "Neu laden",
+      "status_intent": "Absicht: {intent_type}",
+      "btn_reject": "Ablehnen",
+      "status_messages_unavailable": "Nachrichten nicht verfügbar: {error}",
+      "status_reject_fail": "Reject fehlgeschlagen: {error}",
+      "status_select_pending": "Ausstehenden Eintrag auswählen",
+      "status_rejected": "Abgelehnt {id}",
+      "status_load_memory_error": "Fehler beim Laden von Memory: {error}",
+      "status_unexpected_response": "Unerwartete Service-Antwort",
+      "status_unexpected_approve": "Unerwartete Approve-Antwort",
+      "btn_send": "Senden",
+      "status_answer_accepted": "Antwort akzeptiert",
+      "status_sending": "Senden…",
+      "status_send_error": "Sendefehler: {error}",
+      "btn_save": "Speichern",
+      "status_memory_error": "Memory-Fehler: {error}",
+      "messages_placeholder": "Nachrichtenverlauf erscheint hier.",
+      "status_reject_error": "Reject-Fehler: {error}",
+      "status_select_session": "Sitzung auswählen",
+      "title": "Admin-Chat",
+      "status_approve_error": "Approve-Fehler: {error}",
+      "status_approve_error_result": "Approve-Fehler: {error}",
+      "pending_label": "Ausstehende Genehmigungen ({count}):",
+      "input_placeholder": "Admin fragen (Enter = Senden)",
+      "memory_notes_placeholder": "Notizen für den Agenten (freier Text).",
+      "status_load_messages_error": "Fehler beim Laden der Nachrichten: {error}",
+      "status_load_pending_error": "Fehler beim Laden der Ausstehenden: {error}",
+      "status_save_error_msg": "Speicherfehler: {error}"
+    },
+    "report": {
+      "sysinfo": {
+        "title": "Systeminformationen",
+        "active_session": "Aktive Sitzung",
+        "label": "Bezeichnung",
+        "col_property": "Eigenschaft",
+        "col_value": "Wert",
+        "row_name": "Name",
+        "row_tool": "Werkzeug",
+        "row_active_cli": "Aktive CLI",
+        "row_workdir": "Arbeitsverzeichnis",
+        "row_resume_token": "Resume-Token",
+        "row_active_mode": "Aktiver Modus",
+        "row_tokens_used": "Verbrauchte Token",
+        "row_busy": "Beschäftigt",
+        "summary": "Sitzungszusammenfassung"
+      },
+      "btn": {
+        "sys_info": "Systeminformationen",
+        "refresh": "Verlauf aktualisieren",
+        "gen_md": "MD erstellen",
+        "gen_pdf": "PDF erstellen"
+      },
+      "msg": {
+        "saved_md": "Bericht als MD gespeichert: {filename}",
+        "success_title": "Erfolg",
+        "gen_error": "Bericht konnte nicht erstellt werden: {error}",
+        "file_not_found": "Datei nicht gefunden.",
+        "saved_pdf": "Bericht als PDF gespeichert: {filename}",
+        "read_error": "Fehler beim Lesen der Datei: {error}",
+        "no_plan": "Kein aktiver Plan für diese Sitzung gefunden."
+      },
+      "tooltip": {
+        "pdf_unavailable": "PDF nicht verfügbar (QtPrintSupport fehlt)"
+      }
+    },
+    "palette": {
+      "cmd": {
+        "open_tasks_panel": {
+          "subtitle": "Aktive Aufgaben anzeigen",
+          "title": "Aufgabenbereich öffnen"
+        },
+        "open_status": {
+          "title": "Status öffnen",
+          "subtitle": "Sitzungsstatus, Warteschlange und Läufe"
+        },
+        "open_files": {
+          "subtitle": "Dateibrowser und -editor der Sitzung",
+          "title": "Dateien öffnen"
+        },
+        "refresh_git": {
+          "subtitle": "Git-Status/-Verlauf aktualisieren",
+          "title": "Git aktualisieren"
+        },
+        "show_cli_limits": {
+          "subtitle": "Limits/Nutzung des aktiven CLI anzeigen",
+          "title": "CLI-Limits anzeigen"
+        },
+        "open_reports": {
+          "title": "Berichte öffnen",
+          "subtitle": "Berichtsansicht"
+        },
+        "open_scheduler": {
+          "subtitle": "Geplante Aufträge",
+          "title": "Planer öffnen"
+        },
+        "open_chat": {
+          "subtitle": "Hauptarbeitsbereich",
+          "title": "Chat öffnen"
+        },
+        "toggle_sessions": {
+          "title": "Sitzungsbereich umschalten",
+          "subtitle": "Linken Bereich ein-/ausblenden"
+        },
+        "open_plugins": {
+          "title": "Plugins öffnen",
+          "subtitle": "Plugin-Verwaltung"
+        },
+        "open_config": {
+          "subtitle": "Konfigurationseditor",
+          "title": "Konfiguration öffnen"
+        },
+        "new_session": {
+          "subtitle": "Sitzung aus gewähltem CLI erstellen",
+          "title": "Neue Sitzung"
+        },
+        "open_logs": {
+          "subtitle": "Aufgabenwarteschlange und Protokolle",
+          "title": "Protokolle öffnen"
+        },
+        "open_session_settings": {
+          "title": "Einstellungen öffnen",
+          "subtitle": "Sitzungs- und SSH-Einstellungen"
+        },
+        "open_runs_panel": {
+          "title": "Lauf-Bereich öffnen",
+          "subtitle": "Steuerung der Lauf-Wiederherstellung anzeigen"
+        },
+        "open_git_panel": {
+          "subtitle": "Git-Operationen anzeigen",
+          "title": "Git-Bereich öffnen"
+        },
+        "open_admin": {
+          "subtitle": "Admin-Bereich",
+          "title": "Admin öffnen"
+        }
+      },
+      "hint": "Tippen zum Suchen, Enter zum Ausführen",
+      "section": {
+        "navigation": "Navigation",
+        "git": "Git",
+        "panels": "Bereiche",
+        "session": "Sitzung"
+      },
+      "footer_reopen": "Ctrl+K: Erneut öffnen",
+      "title": "Befehlspalette",
+      "footer_esc": "Esc: Schließen",
+      "search_placeholder": "Befehle suchen..."
+    },
+    "scheduler": {
+      "run_now": "Jetzt ausführen",
+      "err_load_scope": "Scheduler-Daten konnten nicht geladen werden: {error}",
+      "target_mode_label": "Zielmodus:",
+      "job_deleted": "Auftrag gelöscht.",
+      "session_uid_label": "Sitzungs-UID:",
+      "cron_label": "Cron:",
+      "job_already_removed": "Auftrag wurde bereits entfernt.",
+      "no_job_selected": "Kein Auftrag ausgewählt",
+      "job_triggered": "Auftrag ausgelöst: {job_id}",
+      "name_label": "Name:",
+      "err_delete": "Scheduler-Auftrag konnte nicht gelöscht werden: {error}",
+      "err_mode_required": "Zielmodus ist erforderlich.",
+      "err_pause": "Scheduler-Auftrag konnte nicht pausiert werden: {error}",
+      "err_trigger": "Scheduler-Auftrag konnte nicht ausgelöst werden: {error}",
+      "err_project_required": "Projekt ist erforderlich.",
+      "err_load_projects": "Projekte konnten nicht geladen werden: {error}",
+      "jobs_group": "Aufträge",
+      "pause": "Pausieren",
+      "err_save": "Scheduler-Auftrag konnte nicht gespeichert werden: {error}",
+      "err_session_required": "Benachrichtigungs-Sitzung ist erforderlich.",
+      "payload_label": "Nutzlast (JSON):",
+      "job_meta": "Auftrag: {job_id}\nNächste Ausführung: {next_run}\nZuletzt ausgelöst: {last_fired}\nStatus: {last_status}\nAusführungsanzahl: {run_count}\nLetzter Fehler: {last_error}",
+      "resume": "Fortsetzen",
+      "title": "Planer-Aufgaben",
+      "err_payload_not_object": "Payload muss ein JSON-Objekt sein.",
+      "job_paused": "Auftrag pausiert: {job_id}",
+      "job_created": "Auftrag erstellt: {job_id}",
+      "err_payload_invalid_json": "Ungültiges JSON in Payload: {error}",
+      "job_on": "an",
+      "job_resumed": "Auftrag fortgesetzt: {job_id}",
+      "job_updated": "Auftrag aktualisiert: {job_id}",
+      "editor_group": "Auftragseditor",
+      "err_resume": "Scheduler-Auftrag konnte nicht fortgesetzt werden: {error}",
+      "project_label": "Projekt:",
+      "no_sessions": "Das Projekt hat keine offenen Desktop-Sitzungen als Benachrichtigungsziel.",
+      "no_projects": "Keine eigenen Projekte verfügbar."
+    },
+    "modepanel": {
+      "label": {
+        "mode": "Modus:"
+      },
+      "btn": {
+        "menu": "Menü"
+      },
+      "tooltip": {
+        "status_history": "Statusverlauf"
+      },
+      "msg": {
+        "no_history": "Kein Verlauf"
+      }
+    },
+    "ssh": {
+      "keygen_result_title": "Öffentlicher Schlüssel erstellt",
+      "duplicate_alias_title": "Doppelter Alias",
+      "keygen_fail_msg": "Schlüsselerzeugung fehlgeschlagen: {error}",
+      "label_auth": "Authentifizierung:",
+      "confirm_delete_msg": "Host '{alias}' wirklich löschen?",
+      "error_title": "Fehler",
+      "label_host": "Host:",
+      "test_exception_msg": "Test fehlgeschlagen: {error}",
+      "pwd_keep_existing": "Leer lassen, um vorhandenes Secret beizubehalten",
+      "confirm_delete_title": "Löschen bestätigen",
+      "label_passphrase_env": "Passphrase-Env:",
+      "group_key": "Schlüsseleinstellungen",
+      "test_result_title": "Testergebnis",
+      "label_port": "Port:",
+      "test_fail_msg": "Fehlgeschlagen: {message}",
+      "label_description": "Beschreibung:",
+      "label_user": "Benutzer:",
+      "empty_hint": "Host auswählen oder Hinzufügen klicken",
+      "host_saved_msg": "Host '{alias}' erfolgreich gespeichert.",
+      "duplicate_alias_msg": "Host '{alias}' existiert bereits",
+      "validation_error_title": "Validierungsfehler",
+      "confirm_keygen_msg": "Neuen Schlüssel für '{alias}' generieren? Dies überschreibt die vorhandene Schlüsseldatei, falls bereits angegeben.",
+      "remote_root_placeholder": "/absoluter/Pfad/zum/Projekt (optional)",
+      "test_ok_msg": "Erfolgreich!\n\n{info}",
+      "dialog_add_title": "SSH-Host hinzufügen",
+      "dialog_add_prompt": "Host-Alias eingeben (z. B. staging):",
+      "group_sudo": "Sudo-Einstellungen",
+      "keygen_close_btn": "Schließen",
+      "validation_host_user_required": "Host und Benutzer sind erforderlich.",
+      "label_value": "Wert:",
+      "keygen_copy_hint": "Diesen öffentlichen Schlüssel in ~/.ssh/authorized_keys auf dem Server kopieren:",
+      "label_sudo_pass_env": "Sudo-Passwort-Env:",
+      "invalid_alias_title": "Ungültiger Alias",
+      "success_title": "Erfolg",
+      "group_password": "Passworteinstellungen",
+      "validation_remote_root_msg": "Remote-Projektstamm muss ein absoluter Pfad sein (beginnt mit /).",
+      "confirm_keygen_title": "Schlüsselerzeugung bestätigen",
+      "label_idle_timeout": "Leerlauf-Timeout (s):",
+      "label_roles": "Rollen:",
+      "label_password_env": "Passwort-Env:",
+      "label_remote_root": "Remote-Projektstamm:",
+      "enable_sudo": "Sudo aktivieren",
+      "invalid_alias_msg": "Alias darf nur alphanumerische Zeichen, - oder _ enthalten",
+      "label_key_file": "Schlüsseldatei:"
+    },
+    "main": {
+      "select_file": "Datei auswählen",
+      "select_folder": "Ordner auswählen",
+      "analyst_progress": "🧠 Analyst: {phase}\n⏱ {mins}:{secs}",
+      "analyst_phase_default": "Analyse"
+    },
+    "cfgedit": {
+      "whitelist_ids": "Whitelist-IDs",
+      "memory_outcomes": "Gedächtnis-Ergebnisse",
+      "prompt_regex": "Prompt-Regex",
+      "memory_native_hooks": "Native CLI-Gedächtnishaken",
+      "msg_backup": "Sicherung erstellt: {path}",
+      "gemini_secret": "Gemini OAuth Client Secret",
+      "memory_events": "Gedächtnis-Ereignisse",
+      "pending_input_confirmation": "Eingabebestätigung ausstehend",
+      "msg_changed": "Geändert: {value}",
+      "log_path": "Protokollpfad",
+      "review_changes": "Änderungen prüfen",
+      "memory_learning": "Gedächtnislernen",
+      "memory_retention_days": "Gedächtnis-Aufbewahrung (Tage)",
+      "archive_cli_json": "CLI-JSON-Streams archivieren",
+      "err_token_required": "Telegram-Token ist erforderlich.",
+      "bot_token": "Bot-Token",
+      "bind_host": "Bind-Host",
+      "network_settings": "Netzwerkeinstellungen",
+      "err_workdir_required": "Standard-Arbeitsverzeichnis ist erforderlich.",
+      "msg_saved": "Konfiguration gespeichert.",
+      "connect_timeout": "Verbindungs-Timeout (s)",
+      "memory_dreaming_batch": "Dreaming-Batch-Größe",
+      "err_mcp_host_required": "MCP-Host ist erforderlich, wenn MCP aktiviert ist.",
+      "read_timeout": "Lese-Timeout (s)",
+      "tab": {
+        "tools": "Werkzeuge",
+        "defaults": "Standardwerte"
+      },
+      "msg_restart_required": "Neustart erforderlich",
+      "host": "Host",
+      "idle_timeout": "Leerlauf-Timeout (s)",
+      "api_keys": "API-Schlüssel und Anbieter",
+      "mcp_server_settings": "MCP-Server-Einstellungen",
+      "mcp_clients_active": "MCP-Clients (Aktiv)",
+      "port": "Port",
+      "msg_not_saved": "Konfiguration wurde nicht gespeichert.",
+      "save_failed": "Speichern fehlgeschlagen",
+      "client_disabled": "Deaktiviert",
+      "msg_up_to_date": "Konfiguration ist bereits aktuell.",
+      "headless_command": "Headless-Befehl",
+      "msg_restart_none": "Neustart nicht erforderlich",
+      "memory_redaction": "Gedächtnis-Ereignis-Redaktion",
+      "zai_api_key": "ZAI API-Schlüssel",
+      "openai_model": "OpenAI-Modell",
+      "openai_api_key": "OpenAI API-Schlüssel",
+      "save_error": "Konfiguration konnte nicht gespeichert werden: {error}",
+      "memory_dreaming": "Gedächtnis-Dreaming",
+      "assistant_preview": "Assistent-Livevorschau",
+      "public_url": "Öffentliche URL",
+      "validation_error": "Validierungsfehler",
+      "load_error": "Konfiguration konnte nicht geladen werden: {error}",
+      "memory_payload_limit": "Ereignis-Nutzlastlimit",
+      "success": "Erfolgreich",
+      "collect_error": "Konfiguration konnte nicht gesammelt werden: {error}",
+      "default_workdir": "Standard-Arbeitsverzeichnis",
+      "github_token": "GitHub-Token",
+      "bind_port": "Bind-Port",
+      "save_config": "Konfiguration speichern",
+      "msg_reloadable": "Neu ladbar",
+      "command": "Befehl",
+      "msg_reloadable_none": "Neu ladbar: keine",
+      "no_changes": "Keine Änderungen",
+      "admin_ids": "Admin-IDs",
+      "msg_errors": "Fehler",
+      "tool_mode": "Modus"
+    },
+    "sessmgr": {
+      "transfer_msg": "CLI gewechselt: {source} → {target}.\nKontext der vorherigen Sitzung ({source}) übertragen?",
+      "transfer_title": "Sitzungskontext übertragen",
+      "transfer_fail_msg": "Kontext der vorherigen Sitzung konnte nicht extrahiert werden.",
+      "invalid_dir_title": "Ungültiges Verzeichnis",
+      "invalid_dir_msg": "Ausgewähltes Verzeichnis muss innerhalb work_dir liegen:\n{root}",
+      "select_workdir": "Arbeitsverzeichnis auswählen",
+      "transfer_fail_title": "Kontextübertragung",
+      "rename": "Umbenennen",
+      "reset": "Zurücksetzen",
+      "resume_token": "Resume Token"
+    },
+    "statuspanel": {
+      "mode": "Modus",
+      "queue": "Warteschlange",
+      "progress": "Fortschritt"
+    },
+    "sesssettings": {
+      "no_hosts": "(Keine Hosts in .cli-proxy/ssh.yaml konfiguriert)",
+      "rc_root_required": "SSH-Host vorhanden, aber remote_project_root muss für Remote Control gesetzt werden.",
+      "no_eligible_hosts": "Keine geeigneten Hosts",
+      "hosts_count": "({n} Hosts konfiguriert)",
+      "preflight_failed": "Preflight fehlgeschlagen: {error}",
+      "effective_local": "lokal",
+      "rc_error": "Fehler: {error}",
+      "exec_target_remote": "Ausführungsziel: Remote · {host} · {root}",
+      "preflight_passed": "Preflight erfolgreich.",
+      "recheck": "Erneut prüfen",
+      "recheck_failed": "Erneute Prüfung fehlgeschlagen: {error}"
+    },
+    "taskprogress": {
+      "cancel_tooltip": "Aufgabe abbrechen",
+      "title": "Aufgabenfortschritt"
+    },
+    "pluginmenu": {
+      "msg": {
+        "no_plugins": "Keine Plugins verfügbar",
+        "no_actions": "Keine Aktionen verfügbar",
+        "load_error": "Fehler beim Laden der Plugins: {error}"
+      },
+      "btn": {
+        "refresh": "Plugins aktualisieren"
+      },
+      "title": "Plugins"
+    },
+    "taskqueue": {
+      "no_active_tasks": "Keine aktiven Aufgaben",
+      "title": "Aufgabenwarteschlange",
+      "active_tasks_count": "Aktive Aufgaben: {count}"
+    },
+    "managetasks": {
+      "remaining": "... {count} weitere",
+      "header": "Ausführungsplan",
+      "closed_count": "Abgeschlossen: {closed}/{total}"
+    },
+    "modemenu": {
+      "title": "Modusmenü"
     }
+  },
+  "session_status": {
+    "resume": "Resume",
+    "active_session": "Aktive Sitzung",
+    "session": "Sitzung",
+    "busy": "beschäftigt",
+    "free": "frei",
+    "git_busy": "git: beschäftigt",
+    "git_free": "git: frei",
+    "conflict": "Konflikt",
+    "conflict_yes": "ja",
+    "status": "Status",
+    "in_progress": "In Arbeit",
+    "project": "Projekt",
+    "last_output": "Letzte Ausgabe",
+    "last_tick": "Letzter Tick",
+    "ticks": "Ticks",
+    "queue": "Warteschlange",
+    "yes": "ja",
+    "no": "nein",
+    "orchestrator": "Orchestrator",
+    "on": "ein",
+    "off": "aus",
+    "ssh_on": "SSH: ein",
+    "ssh_off": "SSH: aus",
+    "modes_none": "Modi: keine",
+    "none": "keine",
+    "sec": "s",
+    "ago": "vor {v}",
+    "mode_label": "Modus",
+    "enabled": "aktiviert",
+    "disabled": "deaktiviert",
+    "stage": "Phase",
+    "stage_running": "verarbeitet die Aufgabe",
+    "stage_queued": "wartet auf eine Aufgabe in der Warteschlange",
+    "stage_idle": "wartet auf eine neue Anfrage",
+    "stage_manager_idle": "kein aktiver Plan",
+    "stage_agent_running": "führt die Aufgabe aus",
+    "stage_draining": "beendet die Verarbeitung",
+    "manager_title": "🏗 Manager-Status",
+    "webmaster_title": "🌐 Webmaster-Status",
+    "task": "Aufgabe",
+    "task_active": "aktiv",
+    "quiet_mode": "Stiller Modus",
+    "plan_header": "Plan",
+    "plan_not_found": "Plan: nicht gefunden.",
+    "truncated": "(Wegen Telegram-Limit gekürzt. Der Rest wurde als HTML-Ausgabe gesendet.)",
+    "wm_task_kind": "Aufgabentyp",
+    "wm_prompt_version": "Prompt-Version",
+    "wm_last_class": "Letzte Klassifizierung",
+    "plugins_ui": "UI-Plugins",
+    "plugins_available": "verfügbar"
+  },
+  "agent": {
+    "cli_language_directive": "Antworte auf Deutsch. Erstelle auch alle Dateien, Code-Kommentare und Artefakte auf Deutsch."
+  },
+  "run": {
+    "cli_abnormal": "Die CLI für Sitzung {details} wurde unerwartet beendet.",
+    "exec_error": "Ausführungsfehler: {e}",
+    "mode_interrupted": "Modus {mode_id} wurde unterbrochen.",
+    "mode_error": "Fehler im Modus {mode_id}: {e}",
+    "output_delivery_with_summary": "Zuerst sende ich die Ausgabe als Anhang (HTML, die letzten {n} Zeichen), danach eine Zusammenfassung.",
+    "output_delivery_only": "Ich sende die Ausgabe als Anhang (HTML, die letzten {n} Zeichen).",
+    "output_header": "[{sid}|{name}] Sitzung: {sid} | Werkzeug: {tool}\nVerzeichnis: {workdir}\nAusgabelänge: {length} Zeichen | Warteschlange: {queue}\nResume: {resume}\n{delivery}",
+    "orch_transition_ready": "Das Ergebnis des aktuellen Modus ist bereit.\n",
+    "orch_transition_return_warning": "\n\n⚠️ Eine Rückkehr zum vorherigen Modus in der Kette wird vorgeschlagen. Prüfen Sie die Sicherheit und bestätigen Sie manuell.",
+    "summary_unavailable": " (Zusammenfassung nicht verfügbar: {err})",
+    "html_pending": "\nHTML wird noch vorbereitet.",
+    "summary_error_timeout": "Zusammenfassungs-Timeout ({sec}s)",
+    "summary_error_unknown": "unbekannter Fehler"
   }
 }

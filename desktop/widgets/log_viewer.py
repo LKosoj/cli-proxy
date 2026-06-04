@@ -147,7 +147,8 @@ class LogViewerWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
 
         # Группа фильтров по уровням
-        level_group = QGroupBox("Log Level Filters")
+        self.level_group = QGroupBox(t("desktop.log.group.level_filters", "ru"))
+        level_group = self.level_group
         level_layout = QVBoxLayout(level_group)
 
         self.verbose_filter_cb = QCheckBox("VERBOSE")
@@ -173,7 +174,8 @@ class LogViewerWidget(QWidget):
         layout.addWidget(level_group)
 
         # Группа фильтров по модулям
-        module_group = QGroupBox("Module Filters")
+        self.module_group = QGroupBox(t("desktop.log.group.module_filters", "ru"))
+        module_group = self.module_group
         module_layout = QVBoxLayout(module_group)
 
         self.module_filter_input = QLineEdit()
@@ -360,6 +362,8 @@ class LogViewerWidget(QWidget):
         self.wrap_text_cb.setText(t("desktop.log.wrap_text", lang))
         self.copy_btn.setText(t("desktop.btn.copy", lang))
         self.clear_btn.setText(t("desktop.btn.clear", lang))
+        self.level_group.setTitle(t("desktop.log.group.level_filters", lang))
+        self.module_group.setTitle(t("desktop.log.group.module_filters", lang))
         self.module_filter_input.setPlaceholderText(t("desktop.log.module_filter_placeholder", lang))
         self.apply_filters_btn.setText(t("desktop.log.btn.apply_filters", lang))
         self.tasks_monitor_title.setText(t("desktop.log.tasks_monitor_title", lang))

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from app.services.ssh_config_loader import load_ssh_config, load_ssh_secrets, save_ssh_config
 from config import SSHHostConfig
+from i18n import t
 from session import ModeState, session_runtime_uid
 
 
@@ -68,7 +69,7 @@ def test_session_settings_rc_ui_update_remote():
     widget._update_rc_ui(rc_settings)
     assert widget.rc_check.isChecked() is True
     assert widget.rc_host_combo.currentText() == "prod"
-    assert "Remote" in widget.status_banner.text()
+    assert t("desktop.sesssettings.exec_target_remote", "ru", host="prod", root="/app") == widget.status_banner.text()
     assert "prod" in widget.status_banner.text()
     assert "remote" in widget.rc_effective_label.text()
     assert "prod" in widget.rc_effective_label.text()
@@ -91,7 +92,7 @@ def test_session_settings_rc_ui_update_local():
     }
     widget._update_rc_ui(rc_settings)
     assert widget.rc_check.isChecked() is False
-    assert "Local" in widget.status_banner.text()
+    assert t("desktop.files.exec_target_local", "ru") == widget.status_banner.text()
     assert "local" in widget.rc_effective_label.text()
 
 
@@ -116,7 +117,7 @@ def test_session_settings_rc_ui_shows_reason_when_hosts_are_not_eligible():
 
     assert widget.rc_host_combo.count() == 1
     assert widget.rc_host_combo.currentData() is None
-    assert widget.rc_host_combo.currentText() == "No eligible hosts"
+    assert widget.rc_host_combo.currentText() == t("desktop.sesssettings.no_eligible_hosts", "ru")
     assert widget.rc_host_combo.isEnabled() is False
     assert widget.rc_error_label.isHidden() is False
     assert "remote_project_root" in widget.rc_error_label.text()
@@ -138,7 +139,7 @@ def test_parity_desktop_has_all_miniapp_rc_features():
     assert hasattr(widget, "rc_recheck_btn"), "Missing recheck action"
     # Status banner
     assert hasattr(widget, "status_banner"), "Missing status banner"
-    assert "Execution Target" in widget.status_banner.text()
+    assert t("desktop.files.exec_target_local", "ru") == widget.status_banner.text()
     # Effective target inline
     assert hasattr(widget, "rc_effective_label"), "Missing effective label"
     # Error label
@@ -218,8 +219,8 @@ def test_session_settings_recheck_updates_error_and_banner():
 
     facade.recheck_remote_control.assert_awaited_once_with("chat:1:s1")
     assert widget.rc_error_label.isHidden() is False
-    assert widget.rc_error_label.text() == "Preflight failed: refused"
-    assert "Remote" in widget.status_banner.text()
+    assert widget.rc_error_label.text() == t("desktop.sesssettings.preflight_failed", "ru", error="refused")
+    assert t("desktop.sesssettings.exec_target_remote", "ru", host="prod", root="/srv/prod") == widget.status_banner.text()
     assert "prod" in widget.status_banner.text()
     assert "/srv/prod" in widget.status_banner.text()
 

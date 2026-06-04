@@ -74,7 +74,7 @@ async def test_files_panel_loads_tree_opens_and_saves_file(qtbot):
         await asyncio.sleep(0)
 
         assert widget.file_list.count() == 2
-        assert widget.path_label.text() == "Path: ."
+        assert widget.path_label.text() == "Путь: ."
 
         item = widget.file_list.item(0)
         widget._on_item_activated(item)

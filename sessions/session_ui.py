@@ -4,6 +4,9 @@ from typing import Callable, Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+from i18n import t
+from utils.lang import resolve_user_lang
+
 from app.services.session_run_service import ModeScopedPreRunResetService
 from app.services.state_repository import get_state_repository
 from app.services.telegram_ui_scope import TelegramUiKey
@@ -137,8 +140,9 @@ class SessionUI:
         chat_id: int,
         include_back: bool = False,
         back_callback: str = "sess_active",
-        back_text: str = "⬅️ Назад",
+        back_text: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
+        lang = resolve_user_lang(self.config, chat_id=chat_id)
         rows = []
         for sid, s in self.manager.sessions_for_chat(chat_id).items():
             if not self._can_access_session(chat_id, s):
@@ -147,9 +151,9 @@ class SessionUI:
             text = self._short_label(f"{sid}: {label}", max_len=60)
             rows.append([InlineKeyboardButton(text, callback_data=build_session_overview_callback_data(s))])
         if include_back:
-            rows.append([InlineKeyboardButton(back_text, callback_data=back_callback)])
+            rows.append([InlineKeyboardButton(back_text or t("common.back", lang), callback_data=back_callback)])
         else:
-            rows.append([InlineKeyboardButton("❌ Закрыть меню", callback_data="sess_close_menu")])
+            rows.append([InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")])
         return InlineKeyboardMarkup(rows)
 
     async def handle_pending_message(
@@ -163,17 +167,18 @@ class SessionUI:
         if ui_key in self.pending_session_rename:
             pending = self.pending_session_rename.pop(ui_key)
             owner_chat_id = int(pending.get("owner_chat_id") or chat_id)
+            lang = resolve_user_lang(self.config, chat_id=owner_chat_id)
             session_id = str(pending.get("session_id") or "")
             session = self.manager.get(owner_chat_id, session_id)
             name = text.strip()
             if name in ("-", "отмена", "Отмена"):
-                await self._send_message(context, text="Переименование отменено.", **ui_key.reply_kwargs())
+                await self._send_message(context, text=t("msg.session.rename_cancelled", lang), **ui_key.reply_kwargs())
                 return True
             if not name:
-                await self._send_message(context, text="Имя сессии пустое.", **ui_key.reply_kwargs())
+                await self._send_message(context, text=t("msg.session.rename_empty", lang), **ui_key.reply_kwargs())
                 return True
             if not session:
-                await self._send_message(context, text="Сессия не найдена.", **ui_key.reply_kwargs())
+                await self._send_message(context, text=t("msg.error.session_not_found", lang), **ui_key.reply_kwargs())
                 return True
             session.name = name
             self._persist_session(owner_chat_id, session.id)
@@ -191,37 +196,39 @@ class SessionUI:
                         chat_id,
                         session.id,
                     )
-            await self._send_message(context, text="Имя сессии обновлено.", **ui_key.reply_kwargs())
+            await self._send_message(context, text=t("msg.session.renamed", lang), **ui_key.reply_kwargs())
             return True
         if ui_key in self.pending_session_resume:
             pending = self.pending_session_resume.pop(ui_key)
             owner_chat_id = int(pending.get("owner_chat_id") or chat_id)
+            lang = resolve_user_lang(self.config, chat_id=owner_chat_id)
             session_id = str(pending.get("session_id") or "")
             session = self.manager.get(owner_chat_id, session_id)
             token = text.strip()
             if token in ("-", "отмена", "Отмена"):
-                await self._send_message(context, text="Изменение resume отменено.", **ui_key.reply_kwargs())
+                await self._send_message(context, text=t("msg.session.resume_token_cancelled", lang), **ui_key.reply_kwargs())
                 return True
             if not session:
-                await self._send_message(context, text="Сессия не найдена.", **ui_key.reply_kwargs())
+                await self._send_message(context, text=t("msg.error.session_not_found", lang), **ui_key.reply_kwargs())
                 return True
             session.resume_token = token
             self._persist_session(owner_chat_id, session.id)
-            await self._send_message(context, text="Resume обновлен.", **ui_key.reply_kwargs())
+            await self._send_message(context, text=t("msg.session.resume_token_updated", lang), **ui_key.reply_kwargs())
             return True
         return False
 
     async def handle_callback(self, query, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         data = query.data or ""
         owner_chat_id = self._resolve_owner_chat_id(chat_id, query)
+        lang = resolve_user_lang(self.config, chat_id=owner_chat_id)
         if data.startswith("sess_pick:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             text, keyboard = self._bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
             await self._edit_msg(context, query, text=text, reply_markup=keyboard)
@@ -230,10 +237,10 @@ class SessionUI:
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             text = build_session_status_text(
                 session,
@@ -250,7 +257,8 @@ class SessionUI:
                         lambda _chat_id: False,
                     )(owner_chat_id)
                 ),
-                title_prefix="Сессия",
+                title_prefix=t("session_status.session", lang),
+                lang=lang,
             )
             await self._edit_msg(context, query, text)
             return True
@@ -258,40 +266,32 @@ class SessionUI:
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             self.pending_session_rename[self._ui_key(chat_id, query=query)] = {
                 "owner_chat_id": owner_chat_id,
                 "session_id": session_id,
             }
-            await self._edit_msg(
-                context,
-                query,
-                f"Введите новое имя для {session.id} (или '-' для отмены)."
-            )
+            await self._edit_msg(context, query, t("msg.session.rename_prompt", lang, session_id=session.id))
             return True
         if data.startswith("sess_resume:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
-            current = session.resume_token or "нет"
+            current = session.resume_token or t("session_status.no", lang)
             self.pending_session_resume[self._ui_key(chat_id, query=query)] = {
                 "owner_chat_id": owner_chat_id,
                 "session_id": session_id,
             }
-            await self._edit_msg(
-                context,
-                query,
-                f"Текущий resume: {current}\nВведите новый resume (или '-' для отмены)."
-            )
+            await self._edit_msg(context, query, t("msg.session.resume_prompt", lang, current=current))
             return True
         if data.startswith("sess_cli:"):
             # This callback is typically handled in callbacks.py (BotApp has better context),
@@ -306,26 +306,26 @@ class SessionUI:
             elif callable(resolver):
                 _reply_chat_id, _thread_id, _resolved_owner_chat_id, session = resolver(query)
             if not session:
-                await self._edit_msg(context, query, "Сессия для текущего контекста не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_no_context", lang))
                 return True
             if getattr(session, "busy", False) or getattr(session, "run_lock", None) and session.run_lock.locked():
-                await self._edit_msg(context, query, "Сессия занята. Переключение CLI недоступно.")
+                await self._edit_msg(context, query, t("msg.error.session_busy", lang))
                 return True
             try:
                 session.set_active_cli(cli)
                 self._persist_session(owner_chat_id, session.id)
-                await self._edit_msg(context, query, f"Активный CLI: {session.tool.name}")
+                await self._edit_msg(context, query, t("msg.session.cli_active", lang, cli_name=session.tool.name))
             except Exception:
-                await self._edit_msg(context, query, "Не удалось переключить CLI.")
+                await self._edit_msg(context, query, t("msg.error.cli_switch_failed", lang))
             return True
         if data.startswith("sess_state:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             st = self._state_repo.get_state(
                 tool=session.tool.name,
@@ -334,15 +334,17 @@ class SessionUI:
                 chat_id=owner_chat_id,
             )
             if not st:
-                await self._edit_msg(context, query, "Состояние не найдено.")
+                await self._edit_msg(context, query, t("msg.session.state_not_found", lang))
                 return True
-            summary = st.summary or "нет"
-            header = (
-                f"Session: {st.session_id or 'нет'}\n"
-                f"Инструмент: {st.tool}\n"
-                f"Каталог: {st.workdir}\n"
-                f"Resume: {st.resume_token or 'нет'}\n"
-                f"Summary: "
+            no_val = t("session_status.no", lang)
+            summary = st.summary or no_val
+            header = t(
+                "msg.session.state_header",
+                lang,
+                session_id=st.session_id or no_val,
+                tool=st.tool,
+                workdir=st.workdir,
+                resume=st.resume_token or no_val,
             )
             footer = f"\nUpdated: {self._format_ts(st.updated_at)}"
             max_summary = 4096 - len(header) - len(footer) - 4
@@ -355,53 +357,53 @@ class SessionUI:
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             if not session.queue:
-                await self._edit_msg(context, query, "Очередь пуста.")
+                await self._edit_msg(context, query, t("msg.session.queue_empty", lang))
                 return True
-            await self._edit_msg(context, query, f"В очереди {len(session.queue)} сообщений.")
+            await self._edit_msg(context, query, t("msg.session.queue_count", lang, n=len(session.queue)))
             return True
         if data.startswith("sess_clearqueue:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             if not session.queue:
-                await self._edit_msg(context, query, "Очередь пуста.")
+                await self._edit_msg(context, query, t("msg.session.queue_empty", lang))
                 return True
             session.queue.clear()
             self._persist_session(owner_chat_id, session.id)
-            await self._edit_msg(context, query, "Очередь очищена.")
+            await self._edit_msg(context, query, t("msg.session.queue_cleared", lang))
             return True
         if data.startswith("sess_reset:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             self._reset_session_fields(session, owner_chat_id=owner_chat_id)
             self._persist_session(owner_chat_id, session.id)
-            await self._edit_msg(context, query, "Сессия сброшена.")
+            await self._edit_msg(context, query, t("msg.session.reset_done", lang))
             return True
         if data.startswith("sess_orch_toggle:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             access_policy = getattr(self._bot_app, "access_policy_service", None)
             orchestrator_allowed_checker = (
@@ -414,52 +416,40 @@ class SessionUI:
                 except Exception:
                     orchestrator_allowed = False
                 if not orchestrator_allowed:
-                    await self._edit_msg(
-                        context,
-                        query,
-                        "Оркестратор недоступен для вашего пользователя.",
-                    )
+                    await self._edit_msg(context, query, t("msg.error.orch_unavailable_user", lang))
                     return True
             mode_allowed_checker = getattr(access_policy, "is_mode_allowed_for_chat", None) if access_policy is not None else None
             if orchestrator_allowed_checker is None and callable(mode_allowed_checker):
                 try:
                     if not bool(mode_allowed_checker(owner_chat_id, ORCHESTRATOR_MODE_ID)):
-                        await self._edit_msg(
-                            context,
-                            query,
-                            "Оркестратор недоступен для вашего пользователя.",
-                        )
+                        await self._edit_msg(context, query, t("msg.error.orch_unavailable_user", lang))
                         return True
                 except Exception:
-                    await self._edit_msg(
-                        context,
-                        query,
-                        "Оркестратор недоступен для вашего пользователя.",
-                    )
+                    await self._edit_msg(context, query, t("msg.error.orch_unavailable_user", lang))
                     return True
             current = is_orchestrator_enabled(session, False)
             set_orchestrator_enabled(session, not current)
             set_orchestrator_pending_input(session, None)
             self._persist_session(owner_chat_id, session.id)
-            status = "включен" if is_orchestrator_enabled(session, False) else "выключен"
-            await self._edit_msg(context, query, f"Продвинутый оркестратор {status}.")
+            status = t("msg.session.orch_on", lang) if is_orchestrator_enabled(session, False) else t("msg.session.orch_off", lang)
+            await self._edit_msg(context, query, t("msg.session.orch_toggled", lang, status=status))
             return True
         if data.startswith("sess_close:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
                 return True
             if not self._can_access_session(owner_chat_id, session):
-                await self._edit_msg(context, query, "Сессия недоступна.")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
             ok = await self._bot_app.close_session_with_cleanup(session_id, owner_chat_id, context)
             if ok:
-                await self._edit_msg(context, query, "Сессия закрыта и удалена из состояния.")
+                await self._edit_msg(context, query, t("msg.session.closed_and_removed", lang))
             else:
-                await self._edit_msg(context, query, "Сессия не найдена.")
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         if data == "sess_close_menu":
-            await self._edit_msg(context, query, "Меню закрыто.")
+            await self._edit_msg(context, query, t("msg.session.menu_closed", lang))
             return True
         return False

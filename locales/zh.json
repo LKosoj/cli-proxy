@@ -59,7 +59,9 @@
       "reset": "重置",
       "save_changes": "保存更改",
       "clear": "清除",
-      "cancel": "取消"
+      "cancel": "取消",
+      "load": "加载",
+      "send": "发送"
     },
     "label": {
       "session": "会话",
@@ -73,19 +75,101 @@
       "actions": "操作",
       "choose_session": "选择会话",
       "choose_project": "选择项目",
-      "choose_session_uid": "选择 session_uid"
+      "choose_session_uid": "选择 session_uid",
+      "status": "状态",
+      "optional": "可选"
     },
     "cfg": {
-      "restart_banner": "部分更改需要重启"
+      "restart_banner": "部分更改需要重启",
+      "preview_diff": "预览差异",
+      "subtab_general": "常规",
+      "subtab_paths": "路径和存储",
+      "subtab_apikeys": "API 密钥",
+      "subtab_orchestration": "编排",
+      "subtab_skills": "技能",
+      "subtab_runtime": "运行时和 LLM",
+      "add_tool": "添加工具",
+      "remove_tool": "删除工具",
+      "no_tools": "没有工具，请点击「添加工具」按钮添加。",
+      "add_mcp_client": "添加 mcp_client",
+      "remove_mcp_client": "删除 mcp_client",
+      "list_empty": "列表为空。",
+      "add_preset": "添加预设",
+      "remove_preset": "删除预设",
+      "reset_section": "重置部分",
+      "err_draft_not_loaded": "配置草稿未加载",
+      "err_telegram_token": "telegram.token 为必填项",
+      "err_defaults_workdir": "defaults.workdir 为必填项",
+      "err_miniapp_base_path": "miniapp.base_path 为必填项",
+      "err_miniapp_bind_host": "miniapp.bind_host 为必填项",
+      "err_miniapp_bind_port": "miniapp.bind_port 必须是 > 0 的数字",
+      "err_tool_bad_struct": "结构无效",
+      "err_tool_mode": "必须是 headless 或 interactive",
+      "err_tool_cmd_empty": "不得为空",
+      "err_mcp_port": "mcp.port 必须是数字",
+      "err_thread_mode": "thread_mode.mode 必须是 private 或 group",
+      "err_thread_topics_chat_id": "mode=group 时 thread_mode.topics_chat_id 为必填项",
+      "err_webhooks_path": "webhooks.path 为必填项",
+      "err_webhooks_path_slash": "webhooks.path 必须以 / 开头",
+      "err_webhooks_timeout": "webhooks.request_timeout_sec 必须 > 0",
+      "err_webhooks_max_payload": "webhooks.max_payload_bytes 必须 > 0",
+      "err_scheduler_timezone": "scheduler.timezone 为必填项",
+      "err_must_be_positive": "必须 > 0",
+      "err_scheduler_misfire": "scheduler.misfire_grace_sec 必须 >= 0",
+      "err_rate_limit_backend": "security.rate_limits.backend 必须是 sqlite",
+      "err_rate_limit_policy": "enabled=true 时 security.rate_limits.default 或 security.rate_limits.policies 为必填项",
+      "err_must_be_nonneg": "必须 >= 0",
+      "err_lint_canary_max": "lint_evolution.canary_max_schema_fields_per_180d 必须是 >= 0 的整数",
+      "err_field_required": "为必填项",
+      "err_transport": "必须是 stdio 或 http",
+      "err_cmd_empty_stdio": "transport=stdio 时不得为空",
+      "err_url_required_http": "transport=http 时为必填项",
+      "local_validation": "本地验证",
+      "server_validation": "服务器验证",
+      "validation_passed": "验证通过",
+      "no_changes": "无变更",
+      "changed_sections": "已更改的部分",
+      "secret_changed_confirm": "密钥字段已更改或清除：{paths}。继续保存？",
+      "err_must_be_json_object": "必须是 JSON 对象",
+      "prompt_tool_name": "工具名称（tools 中的键）",
+      "err_tool_exists": "已存在同名工具",
+      "confirm_delete_tool": "删除工具「{name}」？",
+      "diff_changed": "已更改",
+      "diff_none": "无",
+      "diff_no_live": "无实时变更",
+      "diff_restart": "需要重启",
+      "save_confirm": "保存 config.yaml 并应用热重载？",
+      "restart_required_for": "需要重启才能应用：",
+      "and_more": "还有",
+      "reload_error": "热重载未应用更改。",
+      "reload_live_only": "热重载仅应用了实时更改。",
+      "reload_restart_hint": "要应用仅限重启的字段（{fields}），请重启进程。",
+      "reload_ok": "更改已通过热重载应用，无需重启。"
     },
     "editor": {
       "no_file": "未选择文件",
       "conflict_title": "检测到版本冲突！",
-      "conflict_desc": "自上次打开以来，文件已在服务器上被修改。"
+      "conflict_desc": "自上次打开以来，文件已在服务器上被修改。",
+      "force_save_btn": "强制保存"
     },
     "logs": {
       "only_new": "仅新内容",
-      "prev_N": "前 {n} 条"
+      "prev_N": "前 {n} 条",
+      "preparing": "正在准备文件...",
+      "download_started": "下载已开始",
+      "ws_connecting": "正在连接日志流...",
+      "ws_connected": "日志流已连接",
+      "ws_error": "日志流错误",
+      "ws_conn_error": "WebSocket 连接错误",
+      "ws_disconnected": "日志流已断开",
+      "ws_disconnected_error": "日志流因错误断开",
+      "ws_disconnected_reconnect": "日志流已断开，将在以下时间后重连",
+      "err_ws_token": "获取 ws-令牌出错：",
+      "err_reopen": "请重新打开 MiniApp。",
+      "err_no_ws_token": "未收到 ws-令牌",
+      "all_sessions": "所有会话",
+      "my_sessions": "我的所有会话",
+      "load_error_prefix": "加载日志出错："
     },
     "status": {
       "empty": "加载中或未选择会话...",
@@ -102,12 +186,56 @@
       "manager_plan": "管理器计划",
       "analyst": "分析师状态",
       "agent": "Agent 状态",
-      "session_unavailable": "会话未选择或不可用"
+      "session_unavailable": "会话未选择或不可用",
+      "webmaster": "站长状态",
+      "runtime_progress": "运行时进度",
+      "queue_prefix": "队列(Queue:",
+      "state_summary": "状态摘要",
+      "last_tick_prefix": "最新 Tick 值 (",
+      "all_ticks": "所有 Tick",
+      "extra_params": "附加参数",
+      "run_operations": "运行操作",
+      "runs_header": "运行列表",
+      "selected_run": "已选运行",
+      "show_json": "显示 JSON（诊断）",
+      "kv_cli": "CLI / 配置：",
+      "kv_work_type": "工作类型：",
+      "kv_resume_token": "恢复令牌：",
+      "kv_project": "项目：",
+      "saving": "保存中…",
+      "saved": "已保存。",
+      "busy": "工作中",
+      "on": "开",
+      "bool_yes": "是",
+      "bool_no": "否",
+      "git_conflict": "冲突：",
+      "git_busy": "占用中",
+      "ws_connecting": "正在连接状态流...",
+      "ws_connected_waiting": "状态流已连接，等待数据...",
+      "ws_error": "状态流错误",
+      "ws_conn_error": "状态 WebSocket 连接错误",
+      "ws_disconnected": "状态流已断开",
+      "ws_disconnected_error": "状态流因错误断开",
+      "ws_disconnected_reconnect": "状态流已断开，将在以下时间后重连",
+      "err_ws_token": "获取状态 ws-令牌出错：",
+      "err_no_ws_token": "未收到状态 ws-令牌",
+      "git_unavailable": "此目标不支持 git"
     },
     "runs": {
       "select_hint": "在表格中选择一个运行。",
       "select_run": "选择一个运行。",
-      "choose_session": "选择会话以查看运行产物。"
+      "choose_session": "选择会话以查看运行产物。",
+      "btn_doctor": "诊断",
+      "btn_recover": "恢复",
+      "btn_resume": "继续",
+      "btn_apply_rec": "应用建议",
+      "btn_promote": "应用技能",
+      "no_runs": "暂无运行记录。",
+      "no_injections": "技能：无注入",
+      "err_detail": "运行详情错误：",
+      "err_load_artifacts": "加载运行产物出错：",
+      "select_run_first": "请先选择一个运行。",
+      "err_action": "运行操作错误："
     },
     "settings": {
       "empty": "加载中或未选择会话...",
@@ -116,25 +244,253 @@
       "mode_hint": "选择会话模式或直接 CLI 以禁用活动模式。",
       "lang_title": "语言",
       "lang_label": "界面语言",
-      "lang_save": "保存语言"
+      "lang_save": "保存语言",
+      "exec_target_local": "执行目标：本地",
+      "recheck": "重新检查",
+      "remote_control_label": "远程控制",
+      "remote_control_note": "将会话切换为严格的仅远程模式（无本地回退）。",
+      "ssh_note": "启用/禁用通过 SSH 远程执行命令。",
+      "target_host": "目标主机",
+      "ssh_hosts_title": "项目 SSH 主机",
+      "ssh_host_add": "添加主机",
+      "ssh_key_file": "密钥文件路径",
+      "ssh_passphrase_env": "口令环境变量",
+      "ssh_password_env": "密码环境变量",
+      "ssh_password_value": "密码（值）",
+      "ssh_password_note": "若填写，将保存到项目密钥中。",
+      "ssh_sudo_pass_env": "Sudo 密码环境变量",
+      "ssh_sudo_password": "Sudo 密码",
+      "ssh_roles": "角色",
+      "ssh_desc": "描述",
+      "ssh_remote_root": "远程项目根目录",
+      "ssh_remote_root_note": "远程控制和远程文件操作所必需。",
+      "ssh_timeout": "空闲超时（秒）",
+      "rc_error_no_root": "SSH 主机存在，但远程控制需要填写 remote_project_root。",
+      "saved": "设置已保存",
+      "preflight_ok": "Preflight 检查通过",
+      "preflight_error_prefix": "重新检查出错：",
+      "exec_target_remote": "执行目标：远程 — {host}",
+      "no_eligible_hosts": "没有可用的主机"
     },
     "scheduler": {
       "choose_project": "选择项目以管理调度。",
-      "no_projects": "没有可用项目。"
+      "no_projects": "没有可用项目。",
+      "session_label": "Telegram session_uid",
+      "target_mode": "目标模式",
+      "enabled": "已启用",
+      "run_now": "立即运行",
+      "no_jobs_for_project": "项目",
+      "select_project_first": "请先选择一个项目。",
+      "selected_jobs": "已选择 jobs",
+      "click_to_edit": "点击 job 进行编辑。",
+      "err_no_project": "未选择项目",
+      "err_no_session_uid": "未选择 Telegram session_uid",
+      "err_no_cron": "Cron 为必填项",
+      "err_no_target_mode": "目标模式为必填项",
+      "err_payload_not_object": "Payload 必须是 JSON 对象",
+      "err_invalid_json": "Payload 中 JSON 格式无效：",
+      "err_save": "调度器保存出错：",
+      "no_job_selected": "未选择 Job",
+      "delete_job_confirm": "删除 Job",
+      "err_delete": "调度器删除出错：",
+      "job_dispatched": "Job 已发送以立即发布事件。",
+      "err_run_now": "调度器立即运行出错："
     },
     "admin": {
       "choose_session": "选择会话以进入管理面板。",
-      "choose_skill": "选择待安装技能"
+      "choose_skill": "选择待安装技能",
+      "state_title": "管理员状态",
+      "subtab": {
+        "overview": "概览",
+        "monitoring": "监控",
+        "operations": "操作",
+        "config": "配置",
+        "chat": "聊天",
+        "data": "数据"
+      },
+      "pending_actions": "等待操作",
+      "manual_confirms": "手动确认",
+      "recent_events": "最近事件",
+      "incidents": "事件",
+      "admin_actions": "管理操作",
+      "current_pending": "当前等待 / 静音",
+      "event_history": "事件历史 / 覆盖",
+      "refresh_runs": "刷新运行",
+      "show_details": "显示详情",
+      "add_server": "添加服务器",
+      "enabled": "已启用",
+      "monitor_hint": "SSH 主机在「设置」选项卡中配置。此处仅选择 server → action。",
+      "add_action": "添加动作",
+      "th_argv": "argv（每行一个条目）",
+      "config_placeholder": "点击「加载」查看最终 YAML。",
+      "chat_placeholder": "询问管理员（Enter = 发送）",
+      "memory_placeholder": "给 Agent 的备注（自由文本）。",
+      "no_runs": "此会话没有运行记录。",
+      "status_unavailable": "管理员状态不可用",
+      "analyzer_no_action": "分析器尚未发布详细操作。",
+      "disabled_hint": "所选会话的管理员模式已禁用。点击「启用」以激活，Disable 在启用前不可用，或运行 Rescan。",
+      "disabled_hint_static": "所选会话的管理员模式已禁用。请启用它或通过 Rescan 更新状态。",
+      "no_pending": "无等待",
+      "err_timeout": "Admin 状态请求超时，请重试。",
+      "err_timeout_stale": "Admin 状态请求超时，显示上次已知数据。",
+      "err_access": "无法访问所选会话的管理员状态。",
+      "err_access_stale": "无法访问所选会话的管理员状态，显示上次已知数据。",
+      "err_server": "管理员状态服务器暂时不可用。",
+      "err_server_stale": "管理员状态服务器暂时不可用，显示上次已知数据。",
+      "err_load": "加载管理员状态出错：{detail}",
+      "err_load_stale": "加载管理员状态出错：{detail}。显示上次已知数据。",
+      "err_action": "管理员操作错误：",
+      "err_action_stale": "管理员操作错误：{detail}。显示上次已知数据。",
+      "err_load_runs": "加载运行记录出错：",
+      "readiness_hint_ok": "Pipeline 已准备好进行下一个监控周期。",
+      "readiness_hint_failure": "Pipeline 处于失败状态，请检查 Analyzer 和 Executor。",
+      "readiness_hint_live": "监控周期处于活跃状态，数据来自当前 pipeline 运行。",
+      "readiness_hint_disabled": "Pipeline 已禁用，不执行监控检查。",
+      "err_load_messages": "加载消息出错：",
+      "err_load_pending": "加载待处理项出错：",
+      "err_load_memory": "加载记忆出错：",
+      "chat_sending": "发送中…",
+      "chat_intent": "意图：",
+      "err_chat_send": "发送错误：",
+      "err_approve": "批准错误：",
+      "err_approve_req": "批准请求错误：",
+      "err_reject": "拒绝错误：",
+      "err_reject_req": "拒绝请求错误：",
+      "memory_saved": "记忆已保存",
+      "err_memory": "记忆错误：",
+      "loaded_prefix": "已加载：",
+      "pending_approvals": "待审批（{n}）：",
+      "approve": "批准",
+      "reject": "拒绝",
+      "th_server_ssh": "服务器（来自 SSH 主机）"
     },
     "mode": {
       "direct_cli": "直接 CLI"
     },
     "error": {
       "auth": "授权错误",
-      "access_denied": "访问被拒绝"
+      "access_denied": "访问被拒绝",
+      "load_prefix": "加载错误：",
+      "generic_prefix": "错误：",
+      "save": "保存错误",
+      "init": "初始化错误"
     },
     "ssh": {
-      "no_hosts": "未配置主机。"
+      "no_hosts": "未配置主机。",
+      "toggle_hint": "启用/禁用通过 SSH 的远程命令执行。",
+      "no_config": "SSH Remote 已启用，但 .cli-proxy/ 中缺少 ssh.yaml。",
+      "enabled_no_hosts": "SSH Remote 已启用。通过 ssh.yaml 或下方表单添加主机。",
+      "edit_prefix": "编辑",
+      "add_host": "添加主机",
+      "no_workdir_save": "无法确定保存 SSH 主机的项目目录。",
+      "host_saved": "主机已保存",
+      "err_save_host": "保存主机出错：",
+      "delete_confirm": "删除主机",
+      "no_workdir_delete": "无法确定删除 SSH 主机的项目目录。",
+      "err_delete": "删除错误：",
+      "no_workdir_test": "无法确定 SSH 测试的项目目录。",
+      "test_ok": "成功：",
+      "err_request": "请求错误：",
+      "keygen_confirm": "为以下主机生成新密钥",
+      "keygen_warn": "这将覆盖配置中现有的密钥路径。",
+      "no_workdir_keygen": "无法确定密钥生成的项目目录。",
+      "keygen_success": "密钥已生成并写入配置。",
+      "keygen_add_hint": "将此公钥添加到服务器上的 ~/.ssh/authorized_keys：",
+      "err_keygen": "密钥生成错误：",
+      "alias_required": "需要别名（alias）"
+    },
+    "banner": {
+      "remote_fs": "远程文件系统"
+    },
+    "files": {
+      "path_remote": "当前路径（远程：{root}）：",
+      "path_local": "当前路径：",
+      "saved": "文件已保存",
+      "save_error_prefix": "保存错误：",
+      "download_error_prefix": "下载错误：",
+      "reset_confirm": "放弃未保存的更改并从磁盘重新加载文件？",
+      "prompt_filename": "文件名",
+      "prompt_dirname": "文件夹名",
+      "delete_confirm": "删除 {path}？"
+    },
+    "autonomy": {
+      "no_servers": "没有服务器，请在管理员配置中添加。",
+      "no_open_drifts": "无开放的漂移",
+      "no_session": "未选择会话。",
+      "rescan_all_started": "全部重新扫描已启动…",
+      "rescan_all_done": "全部重新扫描已完成。",
+      "err_rescan_all": "全部重新扫描出错：",
+      "maintenance_started": "每日维护已启动…",
+      "maintenance_done": "每日维护完成（服务器数：{count}）。",
+      "err_maintenance": "维护出错：",
+      "loading_server": "正在加载 {server}…",
+      "empty": "（空）",
+      "no_facts": "没有事实。",
+      "no_notes": "没有备注。",
+      "no_runbooks": "没有匹配的 runbook。",
+      "no_drift": "没有漂移。",
+      "baseline_accepted": "已为 {server} 接受基线。",
+      "proposal_discarded": "已为 {server} 丢弃提案。",
+      "err_accept": "接受出错：",
+      "err_discard": "丢弃出错：",
+      "no_drifts_filtered": "没有匹配的漂移。",
+      "err_ack": "确认出错：",
+      "err_save_fact": "保存事实出错：",
+      "err_delete_fact": "删除事实出错：",
+      "err_add_fact": "添加事实出错：",
+      "err_append_note": "追加备注出错：",
+      "err_compact": "压缩出错：",
+      "new_note_placeholder": "新备注…",
+      "no_runbooks_server": "此服务器没有 runbook。",
+      "open": "打开",
+      "err_no_server_id": "请至少指定一个 server_id",
+      "err_confidence_range": "置信度必须是 [0.0, 1.0] 范围内的数字",
+      "builder_sources_title": "1. 脚本来源 (admin.runbook_sources)",
+      "builder_params_title": "2. Runbook 参数",
+      "builder_build_title": "3. 构建并验证",
+      "err_enter_dir": "请输入目录。",
+      "scanning": "正在扫描…",
+      "no_scripts": "未找到脚本。",
+      "bytes": "字节",
+      "err_title_required": "标题为必填项。",
+      "err_dev_server_required": "Dev server_id 为必填项。",
+      "err_select_script": "请至少选择一个脚本。",
+      "building_runbook": "正在构建 runbook…",
+      "runbook_built_prefix": "已构建 runbook",
+      "runbook_built_suffix": "点击「验证」进行检查。",
+      "manual_actions": "手动操作",
+      "history_empty": "历史记录为空。",
+      "refresh_list": "刷新列表",
+      "select_check_id": "选择 check_id 以查看历史记录。",
+      "select_check_id_short": "选择 check_id。",
+      "no_snapshots": "没有快照。",
+      "prereqs_hint": "点击「Check prereqs」开始检查。",
+      "requesting": "请求中…",
+      "building_bootstrap": "正在构建 bootstrap runbook…",
+      "runbook_not_created": "Runbook 未创建。原因：",
+      "runbook_created_prefix": "已创建 runbook",
+      "path_label": "路径：",
+      "no_diff": "（无差异）",
+      "err_rescan": "重新扫描出错：",
+      "checksum_mismatch": "SHA1 与 runbook 中记录的值不符——脚本可能已被修改。执行已停止。",
+      "statuses_label": "状态",
+      "section_title": "自治：服务器 / baseline / drift / 内存",
+      "rescan_all": "全部重新扫描",
+      "daily_maintenance": "运行每日维护",
+      "validate": "校验",
+      "promote_ellipsis": "应用…",
+      "run_first_step_dry": "运行第一步（dry-run）",
+      "validating": "校验中…",
+      "running_dry_run": "Dry-run 运行中…",
+      "validation_label": "校验：",
+      "errors_label": "错误：",
+      "warnings_label": "警告：",
+      "promote_runbook_title": "应用 runbook",
+      "promote_add_servers": "添加服务器（用逗号分隔）：",
+      "promote_confidence": "置信度（0.0–1.0，可选）：",
+      "run_validation_first": "先运行校验",
+      "promote": "应用",
+      "promoting": "应用中…"
     }
   },
   "btn": {
@@ -151,7 +507,8 @@
       "state": "💾 State",
       "close": "🚫 关闭",
       "reset": "♻️ Reset",
-      "lang": "🌐 语言"
+      "lang": "🌐 语言",
+      "close_menu": "❌ 关闭菜单"
     },
     "cli": {
       "unavailable": "CLI 不可用"
@@ -167,6 +524,25 @@
     "ssh": {
       "on": "🔗✅ SSH：开",
       "off": "🔗⬜ SSH：关"
+    },
+    "input": {
+      "queue_new": "🆕 新队列",
+      "queue_confirm": "🆕 放入队列",
+      "orch_apply": "✅ 执行",
+      "queue_append": "➕ 追加到当前",
+      "orch_cancel": "⛔ 取消",
+      "take": "✅ 接受",
+      "discard": "❌ 取消输入"
+    },
+    "files": {
+      "up": "⬅️ 返回上级",
+      "delete_dir": "🗑 删除此文件夹",
+      "confirm_yes": "✅ 是",
+      "save_here": "💾 保存到此处（2 分钟）"
+    },
+    "orch_transition": {
+      "apply": "✅ 传递下去",
+      "cancel": "⛔ 停止进程"
     }
   },
   "msg": {
@@ -192,7 +568,43 @@
       "cancelled": "已取消。",
       "ssh_unavailable": "该项目未配置 SSH",
       "ssh_enabled": "远程管理已启用",
-      "ssh_disabled": "远程管理已禁用"
+      "ssh_disabled": "远程管理已禁用",
+      "access_not_configured": "未配置访问权限。请联系管理员。",
+      "choose_close": "请选择要关闭的会话:",
+      "cli_active": "活动 CLI: {cli_name}",
+      "cli_switch_notice_no_prev": "此会话中活动的 CLI 不可用。切换到 {target}。",
+      "cli_switch_notice_with_prev": "此会话中 CLI {previous} 不可用或已关闭。切换到 {target}。",
+      "closed_and_removed": "会话已关闭并从状态中移除。",
+      "create_session_first": "请先创建会话。",
+      "created_cwd": "已创建并选择新会话 {id}。",
+      "headless_read_failed": "⚠️ CLI 已退出，但机器人无法正确读取输出（stdout 未关闭）。",
+      "help_no_data": "help 未返回数据。",
+      "interrupt_failed_diag": "未能完全中断会话。需要进一步诊断。",
+      "interrupt_partial_runtime": "中断已发送，但部分 runtime 仍在完成停止。",
+      "interrupt_sent": "已发送中断。",
+      "interrupt_work_done": "当前工作已中断。会话已释放。",
+      "menu_closed": "菜单已关闭。",
+      "none": "没有活动会话。",
+      "open_topic_first": "请先打开相关话题或通过 /sessions 选择会话。",
+      "orch_off": "关",
+      "orch_on": "开",
+      "orch_toggled": "高级编排器{status}。",
+      "queue_cleared": "队列已清空。",
+      "queue_count": "队列中有 {n} 条消息。",
+      "queue_empty": "队列为空。",
+      "rename_cancelled": "重命名已取消。",
+      "rename_empty": "会话名称为空。",
+      "rename_prompt": "请输入 {session_id} 的新名称（或输入 '-' 取消）。",
+      "renamed": "会话名称已更新。",
+      "reset_done": "会话已重置。",
+      "resume_current": "当前 resume 令牌: {token}",
+      "resume_prompt": "当前 resume: {current}\n请输入新的 resume（或输入 '-' 取消）。",
+      "resume_saved": "resume 令牌已保存。",
+      "resume_token_cancelled": "resume 更改已取消。",
+      "resume_token_updated": "Resume 已更新。",
+      "state_header": "会话: {session_id}\n工具: {tool}\n目录: {workdir}\nResume: {resume}\n摘要: ",
+      "state_not_found_hint": "未找到状态（使用 /state <session_id> 或 /state <tool> <workdir>）",
+      "use_existing_topics": "请使用现有会话的话题。"
     },
     "error": {
       "session_not_found": "未找到会话。",
@@ -219,7 +631,19 @@
       "queue_failed": "无法将输入加入队列。请重试。",
       "queue_append_failed": "无法更新队列中的消息。请重试。",
       "unknown_tool": "未知工具。",
-      "session_closed_stale": "会话已关闭。"
+      "session_closed_stale": "会话已关闭。",
+      "config_service_unavailable": "ConfigService 不可用：prompt_regex 未保存。",
+      "dir_not_found": "未找到目录。",
+      "limits_fetch_failed": "无法获取限额。",
+      "limits_unavailable": "限额不可用。",
+      "mode_unavailable_named": "模式 `{mode_id}` 不可用。",
+      "mode_unavailable_user_named": "模式 `{mode_id}` 对您的用户不可用。",
+      "orch_unavailable_user": "编排器对您的用户不可用。",
+      "session_no_context": "未找到当前上下文的会话。",
+      "session_unavailable": "会话不可用。",
+      "state_read_error": "读取状态出错: {e}",
+      "tool_not_found": "未找到工具。",
+      "tool_not_selected": "请先通过 /sessions 选择工具。"
     },
     "input": {
       "no_pending": "没有待处理的输入。",
@@ -231,7 +655,12 @@
       "interrupted": "当前生成已中断。输入已丢弃。",
       "interrupted_freed": "当前生成已中断。会话已释放。输入已丢弃。",
       "interrupted_partial": "当前生成已中断，但部分 runtime 仍在完成停止。输入已丢弃。",
-      "interrupt_failed": "无法完全中断会话。输入已丢弃。"
+      "interrupt_failed": "无法完全中断会话。输入已丢弃。",
+      "custom_accepted": "已接受您的回答。",
+      "custom_cancelled": "好的，已取消自定义回答的输入。",
+      "forward_must_be_command": "转发的消息必须是命令。",
+      "prompt_retired": "消息已更新。",
+      "question_stale": "该问题已过期。"
     },
     "transfer": {
       "offer": "CLI 已切换：{src} → {dst}。\n是否迁移上一个会话（{src}）的上下文？",
@@ -247,6 +676,131 @@
       "choose": "请选择语言：",
       "changed": "语言已更改：{lang}",
       "invalid": "未知语言代码。"
+    },
+    "ask": {
+      "answer_already_received": "已收到回答。",
+      "choice_selected": "已选择: {answer}",
+      "enter_custom": "请用一条消息输入您自己的回答。",
+      "invalid_choice": "无效选项。",
+      "invalid_format": "格式无效。",
+      "wrong_chat": "该问题属于另一个聊天。",
+      "wrong_thread": "该问题属于另一个话题。"
+    },
+    "cmd": {
+      "already_handled": "命令已处理。",
+      "approved_continue": "已批准。继续执行步骤……",
+      "approved_execute": "已批准。正在执行命令……",
+      "denied": "已拒绝。",
+      "denied_continue": "命令已拒绝。不执行并继续。",
+      "empty_output": "(空输出)"
+    },
+    "dirs": {
+      "cannot_leave_root": "无法超出根目录。",
+      "choose_dir": "请选择目录:",
+      "send_git_clone_url": "请发送 git clone 的 URL。",
+      "send_new_dir_name": "请发送新目录名称或相对于当前目录的路径。输入\"-\"可取消。",
+      "send_path": "请通过消息发送目录路径。",
+      "tool_selected": "已选择工具 {tool}。请选择目录。",
+      "btn_up": "⬆️ 上级",
+      "btn_prev": "◀️ 上一页",
+      "btn_next": "▶️ 下一页",
+      "btn_use_current": "✅ 使用此目录",
+      "btn_create": "📁 创建目录",
+      "btn_git_clone": "📦 git clone",
+      "btn_enter": "✏️ 输入路径",
+      "btn_cancel": "❌ 取消",
+      "choose_file_or_dir": "选择文件或文件夹："
+    },
+    "files": {
+      "already_at_root": "已在根目录。",
+      "already_exists": "已存在同名项目。",
+      "base_dir_unavailable": "基础目录不可用。",
+      "cannot_delete_root": "无法删除根目录。",
+      "delete_cancelled": "删除已取消。",
+      "delete_confirm": "删除 {name}？请确认:",
+      "delete_error": "删除出错: {error}",
+      "delete_folder_confirm": "递归删除文件夹 {name}？请确认：",
+      "deleted": "已删除。",
+      "dir_create_cancelled": "目录创建已取消。",
+      "dir_create_failed": "创建目录失败: {e}",
+      "dir_created": "已创建目录: {path}",
+      "dir_exists": "目录已存在。",
+      "dir_name_empty": "目录名为空。",
+      "dir_page": "目录：{base}\n第 {page}/{total} 页",
+      "dir_unavailable": "目录不可用。",
+      "download_failed": "下载失败: {e}",
+      "enter_new_name": "请输入新名称（不含路径）。超时 2 分钟。",
+      "escapes_workdir": "路径超出了工作目录。",
+      "file_not_found": "未找到文件。",
+      "file_too_large": "文件过大，无法发送。",
+      "folder_not_found": "未找到文件夹。",
+      "image_download_failed": "图片下载失败: {e}",
+      "image_too_large": "图片过大（最大 {n} MB）。",
+      "item_not_found": "未找到项目。",
+      "name_no_path": "名称不能包含路径。",
+      "name_unchanged": "名称未更改。",
+      "new_name_empty": "新名称为空。",
+      "no_pending_delete": "没有待处理的删除。",
+      "operation_cancelled": "操作已取消。",
+      "path_must_be_inside": "路径必须在当前目录内。",
+      "rename_cancelled": "重命名已取消。",
+      "rename_failed": "重命名失败: {e}",
+      "rename_not_found": "未找到要重命名的项目。",
+      "rename_timeout": "重命名模式已取消：2 分钟内未输入新名称。",
+      "renamed": "已重命名: {name}",
+      "save_failed": "保存失败: {e}",
+      "saved": "文件已保存: {path}",
+      "send_error": "文件发送出错。请检查机器人日志。",
+      "sending_file": "正在发送文件: {filename}",
+      "unsupported_doc_type": "不支持的文档类型。",
+      "upload_dir_outside_root": "目标目录位于工作目录之外。文件保存模式已关闭。",
+      "upload_dir_unavailable": "目标目录不再可用。文件保存模式已关闭。",
+      "upload_expired": "文件保存模式已过期。请再次点击保存按钮。",
+      "upload_pending": "\n⏳ 等待文件：{remaining} 秒。",
+      "upload_pending_other_dir": "\n⏳ 另一目录中等待文件上传：{remaining} 秒。",
+      "upload_timeout": "文件保存模式已重置：2 分钟内未发送文件。"
+    },
+    "git": {
+      "clone_done": "克隆已完成。",
+      "clone_error": "git clone 出错:\\n{output}",
+      "clone_launch_error": "无法启动 git clone: {e}",
+      "clone_starting": "正在启动 git clone...",
+      "operations_menu": "Git 操作:"
+    },
+    "lint": {
+      "autopause_not_active": "Lint Evolution L{level}：暂停未激活——无变更。",
+      "autopause_resumed": "Lint Evolution L{level}：autopause 已解除。",
+      "error": "错误：{exc}",
+      "gate_error": "Lint 闸门错误：{exc}",
+      "level_not_int": "level 必须是整数 1/2/3。",
+      "level_out_of_range": "level 必须是 1、2 或 3。",
+      "more_findings": "  … 还有 {n} 个",
+      "no_active_rules": "Lint Evolution：没有活动规则——无可应用。"
+    },
+    "preset": {
+      "choose": "请选择预设:",
+      "not_found": "未找到预设。",
+      "sending_task": "正在发送任务：{code}"
+    },
+    "selfupdate": {
+      "confirmed": "Selfupdate 已确认：服务 `{service_name}` 已重启，机器人重新上线。",
+      "deps_failed": "git pull 已完成，但依赖更新失败。",
+      "no_repo": "git pull 错误：在 `{repo_root}` 未找到仓库。",
+      "no_venv": "git pull 已完成，但未找到 `.venv`。重启已取消。",
+      "pull_error": "git pull 错误: {e}",
+      "pull_failed": "git pull 失败。",
+      "pulling": "正在执行 git pull...",
+      "restart_failed": "git pull 成功，但无法重启服务 `{service_name}`。",
+      "restart_failed_no_invoke": "git pull 成功，但无法启动服务 `{service_name}` 的重启。",
+      "restart_status": "\n\nsystemctl restart 返回代码 {restart_rc}，当前状态：{restart_state}。",
+      "restart_unconfirmed": "git pull 成功。服务 `{service_name}` 的重启命令已发送，但状态无法立即确认。",
+      "startup_delay": "\n启动延迟：{delay_sec}秒。",
+      "success": "git pull 成功。已启动服务重启。",
+      "updating_deps": "检测到 `{req_file}` 中有变更。正在更新 .venv 中的依赖……"
+    },
+    "setprompt": {
+      "saved": "prompt_regex 已保存。",
+      "not_saved": "prompt_regex 未保存。"
     }
   },
   "cmd": {
@@ -275,7 +829,8 @@
       "desc": "Lint Evolution：L1/L2/L3 层级状态、autopause、schema-version。"
     },
     "lint_autopause_resume": {
-      "desc": "Lint Evolution：解除某层级的 autopause（1、2 或 3）。"
+      "desc": "Lint Evolution：解除某层级的 autopause（1、2 或 3）。",
+      "usage": "用法：/lint_autopause_resume <level: 1|2|3>"
     },
     "lint_schema_history": {
       "desc": "Lint Evolution：当前 schema 版本、字段列表、pending proposals。"
@@ -293,7 +848,8 @@
       "desc": "显示可用工具。"
     },
     "newpath": {
-      "desc": "选择工具后为新会话设置路径。"
+      "desc": "选择工具后为新会话设置路径。",
+      "usage": "用法: /newpath <路径>"
     },
     "close": {
       "desc": "关闭会话（通过菜单）。"
@@ -311,10 +867,12 @@
       "desc": "清空当前上下文会话的队列。"
     },
     "rename": {
-      "desc": "重命名会话。"
+      "desc": "重命名会话。",
+      "usage": "用法：/rename <名称> 或 /rename <id> <名称>"
     },
     "cwd": {
-      "desc": "在其他目录中创建新会话。"
+      "desc": "在其他目录中创建新会话。",
+      "usage": "用法: /cwd <路径>"
     },
     "dirs": {
       "desc": "浏览目录（菜单）。"
@@ -326,10 +884,12 @@
       "desc": "浏览状态（菜单）。"
     },
     "setprompt": {
-      "desc": "为工具设置 prompt_regex。"
+      "desc": "为工具设置 prompt_regex。",
+      "usage": "用法：/setprompt <tool> <regex>"
     },
     "send": {
-      "desc": "直接向 CLI 发送文本。"
+      "desc": "直接向 CLI 发送文本。",
+      "usage": "用法: /send <文本>"
     },
     "mode": {
       "desc": "模式菜单：{label}。"
@@ -416,13 +976,31 @@
       "msg": {
         "select_commit": "请选择一个提交以查看差异。",
         "success": "操作成功完成。",
-        "error": "操作失败。"
+        "error": "操作失败。",
+        "not_a_repo": "不是 git 仓库或 git 错误（代码 {code}）：\n{output}",
+        "show_failed": "git show 失败（代码 {code}）：\n{output}",
+        "system_error_title": "Git 系统错误",
+        "unexpected_error": "发生了意外错误：\n{error}",
+        "fetching_status": "正在获取 git 状态...",
+        "generate_msg_failed": "消息生成失败。请手动输入或在 config.yaml 中配置 openai_api_key。",
+        "generate_msg_failed_check": "消息生成失败。请检查 config.yaml 中的 openai_api_key 设置。"
       },
       "dialog": {
         "create_branch_title": "创建分支",
         "create_branch_prompt": "输入新分支名称:",
         "switch_branch_title": "切换分支",
-        "switch_branch_prompt": "输入要切换到的分支名称:"
+        "switch_branch_prompt": "输入要切换到的分支名称:",
+        "diff_title": "提交 {hash} 的差异"
+      },
+      "history": {
+        "col_date": "日期",
+        "col_author": "作者",
+        "col_commit": "提交",
+        "col_message": "消息"
+      },
+      "group": {
+        "other_ops": "其他操作",
+        "remote_ops": "远程操作"
       }
     },
     "log": {
@@ -441,6 +1019,10 @@
       "btn": {
         "apply_filters": "应用过滤器",
         "refresh_tasks": "刷新任务"
+      },
+      "group": {
+        "module_filters": "模块过滤器",
+        "level_filters": "日志级别过滤器"
       }
     },
     "session": {
@@ -467,10 +1049,25 @@
       "saved": "已保存。",
       "create_error": "创建路径失败: {error}",
       "delete_error": "删除路径失败: {error}",
-      "exec_target_local": "执行目标: 本地"
+      "exec_target_local": "执行目标: 本地",
+      "new_dir_title": "新建目录",
+      "exec_target_remote": "执行目标: 远程 ({host}: {root})",
+      "revision_conflict": "版本冲突。当前版本: {revision}。",
+      "name_label": "名称：",
+      "delete_confirm": "删除 '{path}'?",
+      "path_prefix": "路径: {path}"
     },
     "chat": {
-      "input_placeholder": "输入消息...（Ctrl+Enter 发送）"
+      "input_placeholder": "输入消息...（Ctrl+Enter 发送）",
+      "prefix_you": "您：",
+      "prefix_agent": "智能体：",
+      "select_files": "选择文件",
+      "all_files": "所有文件 (*)",
+      "ask_hint": "或在下方输入您自己的答案（Ctrl+Enter）",
+      "status_ready": "就绪",
+      "btn_stop": "停止",
+      "status_thinking": "思考中...",
+      "status_waiting_answer": "等待回答..."
     },
     "status": {
       "ready": "就绪"
@@ -531,7 +1128,171 @@
         "config_title": "Admin 配置（YAML，只读）",
         "config_placeholder": "点击「重新加载配置」查看最终 YAML。",
         "disabled_title": "Admin 已禁用",
-        "disabled_hint": "为此会话启用 admin 或重新扫描其环境。"
+        "disabled_hint": "为此会话启用 admin 或重新扫描其环境。",
+        "optional": "可选",
+        "optional2": "可选",
+        "interval_sec": "interval_sec："
+      },
+      "autonomy": {
+        "btn": {
+          "accept_proposed": "接受建议",
+          "daily_maintenance": "每日维护",
+          "rescan_selected": "重新扫描选中项",
+          "open_details": "打开详情",
+          "append_note": "追加备注",
+          "refresh_list": "刷新列表",
+          "ack": "确认",
+          "build_bootstrap": "构建引导运行手册",
+          "close": "关闭",
+          "rescan_all": "全部重新扫描",
+          "add_fact": "添加事实",
+          "check_prereqs": "检查先决条件",
+          "compact_memory": "压缩内存",
+          "discard_proposed": "放弃建议",
+          "browse": "浏览…",
+          "show_all": "显示全部"
+        },
+        "msg": {
+          "promoting": "应用中…",
+          "baseline_discard_error": "放弃出错。",
+          "running_step": "{mode} 运行 {step} 于 {server}…",
+          "live_run_confirm": "在 {server} 上 LIVE 执行步骤「{step}」？",
+          "bootstrap_done": "已创建 runbook {rb_id}。路径：{path}",
+          "drift_not_changed": "漂移未变更。",
+          "title_required": "标题是必填项。",
+          "validating": "验证中…",
+          "specify_server_id": "请至少指定一个 server_id。",
+          "validate_error": "验证出错。",
+          "no_steps": "Runbook 没有步骤。",
+          "build_done": "已构建 runbook {rb_id}\npath: {path}\nservers: {servers}\n点击 Validate 进行检查。",
+          "generic_error": "错误。",
+          "scan_done": "找到文件：{count}。从列表中选择所需文件。",
+          "bootstrap_no_runbook": "Runbook 未创建。原因：{reason}",
+          "building": "构建 runbook 中…",
+          "rescan_all_result": "服务器：{count}，漂移：{drifts}，告警：{alarm}",
+          "dry_run_question": "以 DRY-RUN 模式运行？\n（否 — 在服务器上实际执行）",
+          "rescan_all_error": "全部重新扫描出错。",
+          "baseline_accept_error": "接受出错。",
+          "dev_server_required": "Dev server_id 是必填项。",
+          "no_proposed_baseline": "（无建议基线）",
+          "scan_error": "扫描出错。",
+          "no_data": "无数据。",
+          "maintenance_done": "完成。已处理服务器：{count}。",
+          "run_step_error": "执行出错。",
+          "update_fact_error": "更新事实失败。",
+          "maintenance_error": "维护出错。",
+          "append_note_error": "追加备注失败。",
+          "promote_error": "推广出错。",
+          "rescan_error": "重新扫描出错。",
+          "delete_fact_error": "删除事实失败。",
+          "select_server": "请选择一个服务器。",
+          "rescan_result": "重新扫描 {sid}：drifts_written={drifts_written}，alarm={alarm}，warn={warn}",
+          "scanning": "扫描中…",
+          "compact_error": "压缩出错。",
+          "steps_no_names": "步骤没有名称。",
+          "nothing_to_discard": "没有可放弃的内容。",
+          "build_error": "构建出错。",
+          "select_script": "请至少选择一个脚本。",
+          "runbook_not_found": "Runbook {rb_id} 未找到。",
+          "ack_error": "确认出错。",
+          "prereqs_check_error": "检查出错。",
+          "specify_dir": "请指定目录。"
+        },
+        "dialog": {
+          "edit_fact_title": "编辑事实",
+          "fact_key_prompt": "键：",
+          "run_validation_label": "先运行验证",
+          "select_step_title": "选择步骤",
+          "scripts_dir_title": "脚本目录",
+          "delete_fact_prompt": "删除 {key}？",
+          "fact_value_prompt": "{key} 的值：",
+          "new_fact_title": "新建事实",
+          "confidence_no_change": "— （不更改）",
+          "select_step_prompt": "要执行的步骤：",
+          "delete_fact_title": "删除事实"
+        },
+        "label": {
+          "notes": "备注：",
+          "proposed_baseline": "建议基线：",
+          "facts": "事实：",
+          "result": "结果：",
+          "current_baseline": "当前基线："
+        },
+        "col": {
+          "alarm": "告警",
+          "host": "主机",
+          "label": "标签",
+          "last_scan": "上次扫描",
+          "warn": "警告",
+          "baseline": "基线",
+          "transport": "传输",
+          "memory": "记忆",
+          "server_id": "服务器 ID",
+          "status": "状态"
+        },
+        "memory_title": "内存",
+        "details_title": "详情",
+        "run_step_title": "执行步骤",
+        "builder": {
+          "src_group": "1. 脚本来源 (admin.runbook_sources)",
+          "file_item": "{name}  （{size} 字节 · sha1:{sha1}…）",
+          "meta_group": "2. Runbook 参数"
+        },
+        "servers_not_loaded": "服务器未加载。",
+        "drifts_title": "漂移",
+        "placeholder": {
+          "add_note": "添加备注...",
+          "comma_separated": "用逗号分隔"
+        },
+        "rescan_title": "重新扫描",
+        "servers_summary": "服务器：{count} | 状态：{statuses} | 漂移：{totals}",
+        "bootstrap_title": "引导",
+        "validate_title": "验证",
+        "baseline_title": "基线",
+        "group_title": "自主性",
+        "maintenance_title": "每日维护",
+        "rescan_all_title": "全部重新扫描",
+        "detail_title": "自主性 — {server_id}",
+        "promote_title": "应用"
+      },
+      "col": {
+        "description": "描述",
+        "argv_per_line": "argv（每行一项）",
+        "timeout_sec": "timeout_sec",
+        "server_alias": "服务器（别名）",
+        "status": "状态",
+        "started_at": "started_at",
+        "risk_level": "风险级别",
+        "action_id": "action_id",
+        "run_id": "run_id",
+        "phase": "阶段"
+      },
+      "msg": {
+        "select_run_row": "在运行表格中选择一行。",
+        "config_api_unavailable": "Config API 不可用。",
+        "no_runs": "此会话没有运行记录。",
+        "run_not_found": "运行 {run_id} 未找到。",
+        "error_fmt": "错误：{error}",
+        "monitor_api_unavailable": "Monitor API 不可用。",
+        "artifact_store_unavailable": "Artifact store 不可用。",
+        "run_detail_hint": "选择一个运行并点击「查看运行详情」。",
+        "config_load_error": "加载配置失败。",
+        "session_state": "会话：{uid}",
+        "autonomy_api_unavailable": "Autonomy API 不可用。",
+        "runs_loaded": "已加载运行：{count}",
+        "save_error": "保存错误。",
+        "ssh_api_unavailable": "SSH 操作 API 不可用。",
+        "saved": "已保存。",
+        "run_id_undefined": "run_id 未定义。",
+        "inventory_load_error": "加载清单失败。",
+        "config_loaded": "已加载：{path}",
+        "runs_load_error": "加载运行失败。",
+        "run_detail_load_error": "加载运行详情失败。",
+        "config_unavailable": "配置不可用。",
+        "load_error": "加载错误。",
+        "select_skill_install": "选择待安装技能",
+        "no_session": "未选择会话。",
+        "api_unavailable": "API 不可用。"
       }
     },
     "msg": {
@@ -546,6 +1307,485 @@
       "answer_accepted": "已接受答案: {answer}",
       "question_closed": "问题已关闭。",
       "select_session_first": "请先选择桌面会话。"
+    },
+    "remotebanner": {
+      "remote_fs": "远程文件系统 · {host} · {root}"
+    },
+    "runops": {
+      "btn_doctor": "诊断",
+      "btn_recover": "恢复",
+      "btn_resume": "继续",
+      "btn_promote_skills": "提升技能",
+      "btn_rerun": "重新运行",
+      "btn_validate": "校验",
+      "btn_repair": "修复",
+      "btn_apply_recommendation": "应用建议",
+      "no_injections": "无注入",
+      "no_session": "未选择会话",
+      "summary": "活动运行: {active} · 总计: {total}",
+      "skills_prefix": "Skills: ",
+      "no_runs": "没有运行",
+      "no_recovery_meta": "无恢复元数据",
+      "action_failed": "操作失败。",
+      "load_error": "加载运行列表失败",
+      "action_unavailable": "运行操作在 facade 中不可用。"
+    },
+    "adminchat": {
+      "status_error": "错误：{error}",
+      "status_autopilot_executed": "自动驾驶已执行（{kind}）",
+      "status_autopilot_blocked": "自动驾驶被阻止：{reason}",
+      "status_approving": "正在批准 {id}…",
+      "status_memory_saved": "Memory 已保存",
+      "btn_approve": "批准",
+      "status_pending_unavailable": "待处理项不可用：{error}",
+      "memory_title": "Memory",
+      "status_executed": "已执行 ({kind})",
+      "btn_reload": "重新加载",
+      "status_intent": "意图：{intent_type}",
+      "btn_reject": "拒绝",
+      "status_messages_unavailable": "消息不可用：{error}",
+      "status_reject_fail": "拒绝失败: {error}",
+      "status_select_pending": "选择待处理记录",
+      "status_rejected": "已拒绝 {id}",
+      "status_load_memory_error": "加载 memory 错误：{error}",
+      "status_unexpected_response": "意外的服务响应",
+      "status_unexpected_approve": "意外的批准响应",
+      "btn_send": "发送",
+      "status_answer_accepted": "答案已接受",
+      "status_sending": "发送中…",
+      "status_send_error": "发送错误：{error}",
+      "btn_save": "保存",
+      "status_memory_error": "Memory 错误: {error}",
+      "messages_placeholder": "消息历史将显示在这里。",
+      "status_reject_error": "拒绝错误: {error}",
+      "status_select_session": "选择会话",
+      "title": "管理聊天",
+      "status_approve_error": "批准错误：{error}",
+      "status_approve_error_result": "批准错误：{error}",
+      "pending_label": "待审批 ({count}):",
+      "input_placeholder": "向管理员提问（Enter = 发送）",
+      "memory_notes_placeholder": "代理注释（自由文本）。",
+      "status_load_messages_error": "加载消息错误：{error}",
+      "status_load_pending_error": "加载待处理错误：{error}",
+      "status_save_error_msg": "保存错误：{error}"
+    },
+    "report": {
+      "sysinfo": {
+        "title": "系统信息",
+        "active_session": "活动会话",
+        "label": "标签",
+        "col_property": "属性",
+        "col_value": "值",
+        "row_name": "名称",
+        "row_tool": "工具",
+        "row_active_cli": "活动 CLI",
+        "row_workdir": "工作目录",
+        "row_resume_token": "恢复令牌",
+        "row_active_mode": "活动模式",
+        "row_tokens_used": "已用令牌",
+        "row_busy": "繁忙",
+        "summary": "会话摘要"
+      },
+      "btn": {
+        "sys_info": "系统信息",
+        "refresh": "刷新历史",
+        "gen_md": "生成 MD",
+        "gen_pdf": "生成 PDF"
+      },
+      "msg": {
+        "saved_md": "报告已保存为 MD: {filename}",
+        "success_title": "成功",
+        "gen_error": "生成报告失败: {error}",
+        "file_not_found": "文件未找到。",
+        "saved_pdf": "报告已保存为 PDF: {filename}",
+        "read_error": "读取文件时出错: {error}",
+        "no_plan": "未找到此会话的活动计划。"
+      },
+      "tooltip": {
+        "pdf_unavailable": "PDF 不可用（缺少 QtPrintSupport）"
+      }
+    },
+    "palette": {
+      "cmd": {
+        "open_tasks_panel": {
+          "subtitle": "显示活动任务",
+          "title": "打开任务面板"
+        },
+        "open_status": {
+          "title": "打开状态",
+          "subtitle": "会话状态、队列和运行"
+        },
+        "open_files": {
+          "subtitle": "会话文件浏览器和编辑器",
+          "title": "打开文件"
+        },
+        "refresh_git": {
+          "subtitle": "刷新 Git 状态/历史",
+          "title": "刷新 Git"
+        },
+        "show_cli_limits": {
+          "subtitle": "显示活动 CLI 的限额/用量",
+          "title": "显示 CLI 限额"
+        },
+        "open_reports": {
+          "title": "打开报告",
+          "subtitle": "报告查看器"
+        },
+        "open_scheduler": {
+          "subtitle": "计划任务",
+          "title": "打开调度器"
+        },
+        "open_chat": {
+          "subtitle": "主工作区",
+          "title": "打开聊天"
+        },
+        "toggle_sessions": {
+          "title": "切换会话面板",
+          "subtitle": "显示/隐藏左侧面板"
+        },
+        "open_plugins": {
+          "title": "打开插件",
+          "subtitle": "插件管理"
+        },
+        "open_config": {
+          "subtitle": "配置编辑器",
+          "title": "打开配置"
+        },
+        "new_session": {
+          "subtitle": "从所选 CLI 创建会话",
+          "title": "新建会话"
+        },
+        "open_logs": {
+          "subtitle": "任务队列和日志",
+          "title": "打开日志"
+        },
+        "open_session_settings": {
+          "title": "打开设置",
+          "subtitle": "会话和 SSH 设置"
+        },
+        "open_runs_panel": {
+          "title": "打开运行面板",
+          "subtitle": "显示运行恢复控件"
+        },
+        "open_git_panel": {
+          "subtitle": "显示 Git 操作",
+          "title": "打开 Git 面板"
+        },
+        "open_admin": {
+          "subtitle": "管理面板",
+          "title": "打开管理面板"
+        }
+      },
+      "hint": "输入以搜索命令，回车执行",
+      "section": {
+        "navigation": "导航",
+        "git": "Git",
+        "panels": "面板",
+        "session": "会话"
+      },
+      "footer_reopen": "Ctrl+K：重新打开",
+      "title": "命令面板",
+      "footer_esc": "Esc：关闭",
+      "search_placeholder": "搜索命令..."
+    },
+    "scheduler": {
+      "run_now": "立即运行",
+      "err_load_scope": "加载调度器数据失败：{error}",
+      "target_mode_label": "目标模式：",
+      "job_deleted": "任务已删除。",
+      "session_uid_label": "会话 UID：",
+      "cron_label": "Cron：",
+      "job_already_removed": "任务已被删除。",
+      "no_job_selected": "未选择作业",
+      "job_triggered": "任务已触发：{job_id}",
+      "name_label": "名称：",
+      "err_delete": "删除调度任务失败：{error}",
+      "err_mode_required": "请选择目标模式。",
+      "err_pause": "暂停调度任务失败：{error}",
+      "err_trigger": "触发调度任务失败：{error}",
+      "err_project_required": "请选择项目。",
+      "err_load_projects": "加载项目失败：{error}",
+      "jobs_group": "作业",
+      "pause": "暂停",
+      "err_save": "保存调度任务失败：{error}",
+      "err_session_required": "请选择通知会话。",
+      "payload_label": "有效载荷 (JSON)：",
+      "job_meta": "任务：{job_id}\n下次运行：{next_run}\n上次触发：{last_fired}\n状态：{last_status}\n运行次数：{run_count}\n最近错误：{last_error}",
+      "resume": "恢复",
+      "title": "调度任务",
+      "err_payload_not_object": "Payload 必须是 JSON 对象。",
+      "job_paused": "任务已暂停：{job_id}",
+      "job_created": "任务已创建：{job_id}",
+      "err_payload_invalid_json": "Payload 中的 JSON 无效：{error}",
+      "job_on": "开",
+      "job_resumed": "任务已恢复：{job_id}",
+      "job_updated": "任务已更新：{job_id}",
+      "editor_group": "作业编辑器",
+      "err_resume": "恢复调度任务失败：{error}",
+      "project_label": "项目：",
+      "no_sessions": "该项目没有用于通知目标的打开的桌面会话。",
+      "no_projects": "没有可用的项目。"
+    },
+    "modepanel": {
+      "label": {
+        "mode": "模式："
+      },
+      "btn": {
+        "menu": "菜单"
+      },
+      "tooltip": {
+        "status_history": "状态历史"
+      },
+      "msg": {
+        "no_history": "无历史记录"
+      }
+    },
+    "ssh": {
+      "keygen_result_title": "公钥已生成",
+      "duplicate_alias_title": "别名重复",
+      "keygen_fail_msg": "密钥生成失败：{error}",
+      "label_auth": "认证：",
+      "confirm_delete_msg": "确定要删除主机 '{alias}' 吗？",
+      "error_title": "错误",
+      "label_host": "主机：",
+      "test_exception_msg": "测试失败：{error}",
+      "pwd_keep_existing": "留空以保留现有密钥",
+      "confirm_delete_title": "确认删除",
+      "label_passphrase_env": "密钥短语环境变量：",
+      "group_key": "密钥设置",
+      "test_result_title": "测试结果",
+      "label_port": "端口：",
+      "test_fail_msg": "失败：{message}",
+      "label_description": "描述：",
+      "label_user": "用户：",
+      "empty_hint": "选择主机或点击添加",
+      "host_saved_msg": "主机 '{alias}' 已成功保存。",
+      "duplicate_alias_msg": "主机 '{alias}' 已存在",
+      "validation_error_title": "验证错误",
+      "confirm_keygen_msg": "为 '{alias}' 生成新密钥？如果已指定密钥文件，这将覆盖现有文件。",
+      "remote_root_placeholder": "/项目的绝对路径（可选）",
+      "test_ok_msg": "成功！\n\n{info}",
+      "dialog_add_title": "添加 SSH 主机",
+      "dialog_add_prompt": "输入主机别名（例如：staging）：",
+      "group_sudo": "Sudo 设置",
+      "keygen_close_btn": "关闭",
+      "validation_host_user_required": "主机和用户为必填项。",
+      "label_value": "值：",
+      "keygen_copy_hint": "将此公钥复制到服务器的 ~/.ssh/authorized_keys：",
+      "label_sudo_pass_env": "Sudo 密码环境变量：",
+      "invalid_alias_title": "无效别名",
+      "success_title": "成功",
+      "group_password": "密码设置",
+      "validation_remote_root_msg": "远程项目根目录必须是绝对路径（以 / 开头）。",
+      "confirm_keygen_title": "确认生成密钥",
+      "label_idle_timeout": "空闲超时（秒）：",
+      "label_roles": "角色：",
+      "label_password_env": "密码环境变量：",
+      "label_remote_root": "远程项目根目录：",
+      "enable_sudo": "启用 Sudo",
+      "invalid_alias_msg": "别名只能包含字母、数字、- 或 _",
+      "label_key_file": "密钥文件："
+    },
+    "main": {
+      "select_file": "选择文件",
+      "select_folder": "选择文件夹",
+      "analyst_progress": "🧠 分析师: {phase}\n⏱ {mins}:{secs}",
+      "analyst_phase_default": "分析"
+    },
+    "cfgedit": {
+      "whitelist_ids": "白名单 ID",
+      "memory_outcomes": "记忆结果",
+      "prompt_regex": "提示符正则",
+      "memory_native_hooks": "原生 CLI 记忆钩子",
+      "msg_backup": "已创建备份: {path}",
+      "gemini_secret": "Gemini OAuth 客户端密钥",
+      "memory_events": "记忆事件",
+      "pending_input_confirmation": "等待输入确认",
+      "msg_changed": "已更改: {value}",
+      "log_path": "日志路径",
+      "review_changes": "查看更改",
+      "memory_learning": "记忆学习",
+      "memory_retention_days": "记忆事件保留天数",
+      "archive_cli_json": "归档 CLI JSON 流",
+      "err_token_required": "Telegram 令牌是必填项。",
+      "bot_token": "Bot 令牌",
+      "bind_host": "绑定主机",
+      "network_settings": "网络设置",
+      "err_workdir_required": "默认工作目录是必填项。",
+      "msg_saved": "配置已保存。",
+      "connect_timeout": "连接超时（秒）",
+      "memory_dreaming_batch": "梦境批次大小",
+      "err_mcp_host_required": "启用 MCP 时必须填写 MCP 主机。",
+      "read_timeout": "读取超时（秒）",
+      "tab": {
+        "tools": "工具",
+        "defaults": "默认设置"
+      },
+      "msg_restart_required": "需要重启",
+      "host": "主机",
+      "idle_timeout": "空闲超时（秒）",
+      "api_keys": "API 密钥和提供商",
+      "mcp_server_settings": "MCP 服务器设置",
+      "mcp_clients_active": "MCP 客户端（活跃）",
+      "port": "端口",
+      "msg_not_saved": "配置未被保存。",
+      "save_failed": "保存失败",
+      "client_disabled": "已禁用",
+      "msg_up_to_date": "配置已是最新。",
+      "headless_command": "无头命令",
+      "msg_restart_none": "无需重启",
+      "memory_redaction": "记忆事件编辑",
+      "zai_api_key": "ZAI API 密钥",
+      "openai_model": "OpenAI 模型",
+      "openai_api_key": "OpenAI API 密钥",
+      "save_error": "保存配置失败: {error}",
+      "memory_dreaming": "记忆梦境",
+      "assistant_preview": "助手实时预览",
+      "public_url": "公共 URL",
+      "validation_error": "验证错误",
+      "load_error": "加载配置失败: {error}",
+      "memory_payload_limit": "记忆事件负载限制",
+      "success": "成功",
+      "collect_error": "收集配置失败: {error}",
+      "default_workdir": "默认工作目录",
+      "github_token": "GitHub 令牌",
+      "bind_port": "绑定端口",
+      "save_config": "保存配置",
+      "msg_reloadable": "可重新加载",
+      "command": "命令",
+      "msg_reloadable_none": "可重新加载: 无",
+      "no_changes": "无更改",
+      "admin_ids": "管理员 ID",
+      "msg_errors": "错误",
+      "tool_mode": "模式"
+    },
+    "sessmgr": {
+      "transfer_msg": "CLI 已切换: {source} → {target}。\n是否迁移上一个会话 ({source}) 的上下文?",
+      "transfer_title": "会话上下文迁移",
+      "transfer_fail_msg": "无法从上一个会话中提取上下文。",
+      "invalid_dir_title": "无效目录",
+      "invalid_dir_msg": "选定目录必须在 work_dir 内:\n{root}",
+      "select_workdir": "选择工作目录",
+      "transfer_fail_title": "上下文迁移",
+      "rename": "重命名",
+      "reset": "重置",
+      "resume_token": "Resume Token"
+    },
+    "statuspanel": {
+      "mode": "模式",
+      "queue": "队列",
+      "progress": "进度"
+    },
+    "sesssettings": {
+      "no_hosts": "（.cli-proxy/ssh.yaml 中未配置主机）",
+      "rc_root_required": "SSH 主机存在，但远程控制需要设置 remote_project_root。",
+      "no_eligible_hosts": "没有符合条件的主机",
+      "hosts_count": "（已配置 {n} 个主机）",
+      "preflight_failed": "预检失败: {error}",
+      "effective_local": "本地",
+      "rc_error": "错误：{error}",
+      "exec_target_remote": "执行目标: 远程 · {host} · {root}",
+      "preflight_passed": "预检通过。",
+      "recheck": "重新检查",
+      "recheck_failed": "重新检查失败: {error}"
+    },
+    "taskprogress": {
+      "cancel_tooltip": "取消任务",
+      "title": "任务进度"
+    },
+    "pluginmenu": {
+      "msg": {
+        "no_plugins": "没有可用插件",
+        "no_actions": "没有可用操作",
+        "load_error": "加载插件出错：{error}"
+      },
+      "btn": {
+        "refresh": "刷新插件"
+      },
+      "title": "插件"
+    },
+    "taskqueue": {
+      "no_active_tasks": "没有活动任务",
+      "title": "任务队列",
+      "active_tasks_count": "活动任务：{count}"
+    },
+    "managetasks": {
+      "remaining": "... 还有 {count} 项",
+      "header": "执行计划",
+      "closed_count": "已完成：{closed}/{total}"
+    },
+    "modemenu": {
+      "title": "模式菜单"
     }
+  },
+  "session_status": {
+    "resume": "Resume",
+    "active_session": "活动会话",
+    "session": "会话",
+    "busy": "繁忙",
+    "free": "空闲",
+    "git_busy": "git: 繁忙",
+    "git_free": "git: 空闲",
+    "conflict": "冲突",
+    "conflict_yes": "是",
+    "status": "状态",
+    "in_progress": "进行中",
+    "project": "项目",
+    "last_output": "最后输出",
+    "last_tick": "最后心跳",
+    "ticks": "心跳数",
+    "queue": "队列",
+    "yes": "有",
+    "no": "无",
+    "orchestrator": "编排器",
+    "on": "开",
+    "off": "关",
+    "ssh_on": "SSH: 开",
+    "ssh_off": "SSH: 关",
+    "modes_none": "模式: 无",
+    "none": "无",
+    "sec": "秒",
+    "ago": "{v} 前",
+    "mode_label": "模式",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "stage": "阶段",
+    "stage_running": "正在处理任务",
+    "stage_queued": "等待队列中的任务",
+    "stage_idle": "等待新请求",
+    "stage_manager_idle": "没有活动计划",
+    "stage_agent_running": "正在执行任务",
+    "stage_draining": "正在完成处理",
+    "manager_title": "🏗 管理器状态",
+    "webmaster_title": "🌐 站长状态",
+    "task": "任务",
+    "task_active": "进行中",
+    "quiet_mode": "静默模式",
+    "plan_header": "计划",
+    "plan_not_found": "计划：未找到。",
+    "truncated": "（因 Telegram 限制已截断。其余内容已通过 HTML 输出发送。）",
+    "wm_task_kind": "任务类型",
+    "wm_prompt_version": "提示词版本",
+    "wm_last_class": "最近分类",
+    "plugins_ui": "UI 插件",
+    "plugins_available": "可用"
+  },
+  "agent": {
+    "cli_language_directive": "请用中文回复。你生成的所有文件、代码注释和产物也请使用中文。"
+  },
+  "run": {
+    "cli_abnormal": "会话 {details} 的 CLI 异常终止。",
+    "exec_error": "执行错误: {e}",
+    "mode_interrupted": "模式 {mode_id} 已中断。",
+    "mode_error": "模式 {mode_id} 错误: {e}",
+    "output_delivery_with_summary": "我先以附件形式发送输出（HTML，最后 {n} 个字符），然后发送摘要。",
+    "output_delivery_only": "我将以附件形式发送输出（HTML，最后 {n} 个字符）。",
+    "output_header": "[{sid}|{name}] 会话: {sid} | 工具: {tool}\n目录: {workdir}\n输出长度: {length} 个字符 | 队列: {queue}\nResume: {resume}\n{delivery}",
+    "orch_transition_ready": "当前模式的结果已就绪。\n",
+    "orch_transition_return_warning": "\n\n⚠️ 建议返回链中的上一个模式。请检查置信度并手动确认。",
+    "summary_unavailable": " (摘要不可用: {err})",
+    "html_pending": "\nHTML 尚在准备中。",
+    "summary_error_timeout": "摘要超时（{sec}秒）",
+    "summary_error_unknown": "未知错误"
   }
 }

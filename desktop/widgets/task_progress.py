@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QSizePolicy
 )
 
+from i18n import t
+
 if TYPE_CHECKING:
     from desktop.services.application_facade import ApplicationFacade
     from desktop.services.application_facade import AppNotification as AppNotificationType
@@ -38,6 +40,7 @@ class TaskProgressWidget(QWidget):
         self._task_buttons: Dict[str, QWidget] = {}  # Контейнер для кнопок управления задачей
 
         self._setup_ui()
+        self.retranslate_ui(self.facade.ui_language)
         self._unsubscribe = self.facade.subscribe(self._on_facade_notification)
 
     def _setup_ui(self) -> None:
@@ -45,7 +48,7 @@ class TaskProgressWidget(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(4)
 
-        self.title_label = QLabel("Task Progress")
+        self.title_label = QLabel()
         self.title_label.setObjectName("progress_title")
         self.main_layout.addWidget(self.title_label)
         self.title_label.hide()  # Hidden by default, shown when tasks exist
@@ -121,7 +124,7 @@ class TaskProgressWidget(QWidget):
         # Кнопка отмены задачи
         cancel_btn = QPushButton("❌")
         cancel_btn.setFixedSize(20, 20)
-        cancel_btn.setToolTip("Cancel task")
+        cancel_btn.setToolTip(t("desktop.taskprogress.cancel_tooltip", self.facade.ui_language))
         cancel_btn.clicked.connect(lambda: self._on_cancel_clicked(task_id))
         buttons_layout.addWidget(cancel_btn)
 
@@ -194,6 +197,9 @@ class TaskProgressWidget(QWidget):
 
         if not self._task_containers:
             self.title_label.hide()
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.title_label.setText(t("desktop.taskprogress.title", lang))
 
     def closeEvent(self, event):
         # Отменяем все таймеры перед закрытием

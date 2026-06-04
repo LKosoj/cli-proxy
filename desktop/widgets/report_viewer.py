@@ -17,6 +17,7 @@ try:
 except ImportError:
     QPrinter = None
 
+from i18n import t
 from sessions.session_state_access import get_active_mode
 from utils.html_renderer import ansi_to_html
 from utils.paths import cli_proxy_artifact_path
@@ -81,19 +82,20 @@ class ReportViewerWidget(QWidget):
         toolbar.setFixedHeight(50)
         toolbar_layout = QHBoxLayout(toolbar)
 
-        self.gen_md_btn = QPushButton("Generate MD")
+        lang = self.facade.ui_language
+        self.gen_md_btn = QPushButton(t("desktop.report.btn.gen_md", lang))
         self.gen_md_btn.clicked.connect(lambda: self._generate_report("md"))
 
-        self.gen_pdf_btn = QPushButton("Generate PDF")
+        self.gen_pdf_btn = QPushButton(t("desktop.report.btn.gen_pdf", lang))
         if QPrinter is None:
             self.gen_pdf_btn.setEnabled(False)
-            self.gen_pdf_btn.setToolTip("PDF support not available (missing QtPrintSupport)")
+            self.gen_pdf_btn.setToolTip(t("desktop.report.tooltip.pdf_unavailable", lang))
         self.gen_pdf_btn.clicked.connect(lambda: self._generate_report("pdf"))
 
-        self.refresh_btn = QPushButton("Refresh History")
+        self.refresh_btn = QPushButton(t("desktop.report.btn.refresh", lang))
         self.refresh_btn.clicked.connect(self.refresh_history)
 
-        self.sys_info_btn = QPushButton("System Info")
+        self.sys_info_btn = QPushButton(t("desktop.report.btn.sys_info", lang))
         self.sys_info_btn.clicked.connect(self._show_system_info)
 
         toolbar_layout.addWidget(self.gen_md_btn)
@@ -170,7 +172,7 @@ class ReportViewerWidget(QWidget):
 
         path = items[0].data(Qt.ItemDataRole.UserRole)
         if not os.path.exists(path):
-            self.viewer.setPlainText("File not found.")
+            self.viewer.setPlainText(t("desktop.report.msg.file_not_found", self.facade.ui_language))
             return
 
         if path.lower().endswith(".md"):
@@ -182,7 +184,9 @@ class ReportViewerWidget(QWidget):
                 # utils.ansi_to_html превращает markdown в HTML через markdown-it-py
                 self.viewer.setHtml(ansi_to_html(content, theme_colors=self._theme_colors or None))
             except Exception as e:
-                self.viewer.setPlainText(f"Error reading file: {e}")
+                self.viewer.setPlainText(
+                    t("desktop.report.msg.read_error", self.facade.ui_language, error=e)
+                )
         elif path.lower().endswith(".pdf"):
             self.viewer.setHtml(f"<b>PDF File:</b> {os.path.basename(path)}<br/><br/>"
                                 f"Please open this file in an external viewer.")
@@ -192,9 +196,10 @@ class ReportViewerWidget(QWidget):
         if not self._active_session_uid:
             return
 
+        lang = self.facade.ui_language
         plan = self.facade.get_manager_plan(self._active_session_uid)
         if not plan:
-            QMessageBox.warning(self, "Error", "No active plan found for this session.")
+            QMessageBox.warning(self, t("common.error", lang), t("desktop.report.msg.no_plan", lang))
             return
 
         md_content = self._build_plan_markdown(plan)
@@ -210,15 +215,18 @@ class ReportViewerWidget(QWidget):
             if fmt == "pdf" and QPrinter:
                 pdf_path = path.replace(".md", ".pdf")
                 self._export_to_pdf(md_content, pdf_path)
-                msg = f"Report saved as PDF: {os.path.basename(pdf_path)}"
+                msg = t("desktop.report.msg.saved_pdf", lang, filename=os.path.basename(pdf_path))
             else:
-                msg = f"Report saved as MD: {os.path.basename(path)}"
+                msg = t("desktop.report.msg.saved_md", lang, filename=os.path.basename(path))
 
             self.refresh_history()
-            QMessageBox.information(self, "Success", msg)
+            QMessageBox.information(self, t("desktop.report.msg.success_title", lang), msg)
         except Exception as e:
             self.logger.exception("failed to generate report")
-            QMessageBox.critical(self, "Error", f"Failed to generate report: {e}")
+            QMessageBox.critical(
+                self, t("common.error", lang),
+                t("desktop.report.msg.gen_error", lang, error=e)
+            )
 
     def _build_plan_markdown(self, plan: Any) -> str:
         """Сборка Markdown-текста на основе ProjectPlan."""
@@ -241,19 +249,19 @@ class ReportViewerWidget(QWidget):
         lines.append("## Task Tree")
 
         # Строим дерево как в ManagerPanel
-        tasks_dict = {t.id: t for t in plan.tasks}
-        dependents: Dict[str, List[str]] = {t.id: [] for t in plan.tasks}
+        tasks_dict = {task.id: task for task in plan.tasks}
+        dependents: Dict[str, List[str]] = {task.id: [] for task in plan.tasks}
         roots = []
-        for t in plan.tasks:
-            if not t.depends_on:
-                roots.append(t.id)
+        for task in plan.tasks:
+            if not task.depends_on:
+                roots.append(task.id)
             else:
-                for dep_id in t.depends_on:
+                for dep_id in task.depends_on:
                     if dep_id in dependents:
-                        dependents[dep_id].append(t.id)
+                        dependents[dep_id].append(task.id)
                     else:
-                        if t.id not in roots:
-                            roots.append(t.id)
+                        if task.id not in roots:
+                            roots.append(task.id)
 
         added_ids = set()
 
@@ -305,6 +313,7 @@ class ReportViewerWidget(QWidget):
 
     def _show_system_info(self):
         """Отображение системных метрик и состояния текущей сессии."""
+        lang = self.facade.ui_language
         metrics = self.facade.get_metrics_snapshot()
         state_html = ""
         if self._active_session_uid:
@@ -313,7 +322,7 @@ class ReportViewerWidget(QWidget):
                 state_html = self._build_session_state_html(session)
 
         html = f"""
-        <h1>System Information</h1>
+        <h1>{t("desktop.report.sysinfo.title", lang)}</h1>
         <pre>{metrics}</pre>
         {state_html}
         """
@@ -323,30 +332,43 @@ class ReportViewerWidget(QWidget):
     def _build_session_state_html(self, session: Any) -> str:
         """Сборка HTML с подробным состоянием сессии."""
         from utils.ui import format_session_title
+        lang = self.facade.ui_language
         label = format_session_title(session)
         active_cli = getattr(getattr(session, "cli", None), "active_cli", getattr(session, "active_cli", None))
         active_cli = active_cli or session.tool.name
 
         html = f"""
-        <h2>Active Session: {session.id}</h2>
-        <p><b>Label:</b> {label}</p>
+        <h2>{t("desktop.report.sysinfo.active_session", lang)}: {session.id}</h2>
+        <p><b>{t("desktop.report.sysinfo.label", lang)}:</b> {label}</p>
         <table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
-            <tr><th align="left">Property</th><th align="left">Value</th></tr>
-            <tr><td>Name</td><td>{session.name or "N/A"}</td></tr>
-            <tr><td>Tool</td><td>{session.tool.name}</td></tr>
-            <tr><td>Active CLI</td><td>{active_cli}</td></tr>
-            <tr><td>Workdir</td><td>{session.workdir}</td></tr>
-            <tr><td>Resume Token</td><td>{session.resume_token or "None"}</td></tr>
-            <tr><td>Active Mode</td><td>{get_active_mode(session, None) or "None"}</td></tr>
-            <tr><td>Tokens Used</td><td>{getattr(session, "tokens_used", 0)}</td></tr>
-            <tr><td>Busy</td><td>{session.busy}</td></tr>
+            <tr><th align="left">{t("desktop.report.sysinfo.col_property", lang)}</th>
+                <th align="left">{t("desktop.report.sysinfo.col_value", lang)}</th></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_name", lang)}</td><td>{session.name or "N/A"}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_tool", lang)}</td><td>{session.tool.name}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_active_cli", lang)}</td><td>{active_cli}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_workdir", lang)}</td><td>{session.workdir}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_resume_token", lang)}</td>
+                <td>{session.resume_token or "None"}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_active_mode", lang)}</td>
+                <td>{get_active_mode(session, None) or "None"}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_tokens_used", lang)}</td>
+                <td>{getattr(session, "tokens_used", 0)}</td></tr>
+            <tr><td>{t("desktop.report.sysinfo.row_busy", lang)}</td><td>{session.busy}</td></tr>
         </table>
         """
 
         if hasattr(session, "summary") and session.summary:
-            html += f"<h3>Session Summary</h3><p>{session.summary}</p>"
+            html += f"<h3>{t('desktop.report.sysinfo.summary', lang)}</h3><p>{session.summary}</p>"
 
         return html
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.gen_md_btn.setText(t("desktop.report.btn.gen_md", lang))
+        self.gen_pdf_btn.setText(t("desktop.report.btn.gen_pdf", lang))
+        if not self.gen_pdf_btn.isEnabled():
+            self.gen_pdf_btn.setToolTip(t("desktop.report.tooltip.pdf_unavailable", lang))
+        self.refresh_btn.setText(t("desktop.report.btn.refresh", lang))
+        self.sys_info_btn.setText(t("desktop.report.btn.sys_info", lang))
 
     def closeEvent(self, event):
         self._unsubscribe()

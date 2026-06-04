@@ -20,6 +20,7 @@ from sessions.session_state_access import (
     set_orchestrator_enabled,
     set_orchestrator_pending_input,
 )
+from i18n import t, lang_from_query
 from tg.callback_actions import CallbackActionsMixin
 
 
@@ -213,14 +214,18 @@ class CallbackHandler(CallbackActionsMixin):
         # Format:
         # - orch_transition:apply:<session_uid>:<target_mode_id>
         # - orch_transition:cancel:<session_uid>
+        try:
+            lang = lang_from_query(query, self.bot_app.config)
+        except Exception:
+            lang = "ru"
         parts = str(data or "").split(":")
         if len(parts) < 3:
-            await self._edit_msg(context, query, "Некорректный callback оркестратора.")
+            await self._edit_msg(context, query, t("msg.error.orch_invalid", lang))
             return True
         action = str(parts[1] or "").strip().lower()
         if action == "apply":
             if len(parts) < 4:
-                await self._edit_msg(context, query, "Некорректный callback оркестратора.")
+                await self._edit_msg(context, query, t("msg.error.orch_invalid", lang))
                 return True
             target_mode_id = str(parts[-1] or "").strip()
             session_uid = ":".join(parts[2:-1]).strip()
@@ -228,17 +233,17 @@ class CallbackHandler(CallbackActionsMixin):
             target_mode_id = ""
             session_uid = ":".join(parts[2:]).strip()
         if not session_uid:
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
 
         session = self.bot_app.manager.get_by_uid(session_uid)
         if not session:
             self._clear_stale_orchestrator_pending_input(session_token=session_uid, chat_id=chat_id, query=query)
-            await self._edit_msg(context, query, "Сессия не найдена.")
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
         pending = get_orchestrator_pending_input(session, None)
         if not isinstance(pending, dict):
-            await self._edit_msg(context, query, "Нет ожидающего ввода оркестратора.")
+            await self._edit_msg(context, query, t("msg.error.orch_no_pending", lang))
             return True
 
         pending_target = str(pending.get("target_mode_id") or "").strip()
@@ -246,15 +251,15 @@ class CallbackHandler(CallbackActionsMixin):
 
         if action == "apply":
             if not target_mode_id or target_mode_id != pending_target:
-                await self._edit_msg(context, query, "Переход устарел. Отправьте сообщение снова.")
+                await self._edit_msg(context, query, t("msg.error.orch_stale", lang))
                 return True
             orch = getattr(self.bot_app, "advanced_orchestrator_service", None)
             if orch is None:
-                await self._edit_msg(context, query, "Оркестратор недоступен.")
+                await self._edit_msg(context, query, t("msg.error.orch_unavailable", lang))
                 return True
         else:
             if action != "cancel":
-                await self._edit_msg(context, query, "Неизвестное действие оркестратора.")
+                await self._edit_msg(context, query, t("msg.error.orch_unknown_action", lang))
                 return True
 
         text = str(pending.get("text") or "")
@@ -271,18 +276,18 @@ class CallbackHandler(CallbackActionsMixin):
         if action == "apply":
             orch.apply_mode(session=session, target_mode_id=target_mode_id)
             await self._persist_session_async(int(chat_id), session.id)
-            await self._edit_msg(context, query, "Переход применен. Выполняю запрос.")
+            await self._edit_msg(context, query, t("msg.orch.applied", lang))
         elif disable_on_cancel:
             set_orchestrator_enabled(session, False)
             await self._persist_session_async(int(chat_id), session.id)
             await self._edit_msg(
                 context,
                 query,
-                "Процесс остановлен пользователем. Продвинутый оркестратор выключен.",
+                t("msg.orch.disabled", lang),
             )
             return True
         else:
-            await self._edit_msg(context, query, "Переход отменен. Остаюсь в текущем режиме.")
+            await self._edit_msg(context, query, t("msg.orch.cancelled", lang))
 
         await self.bot_app.input_dispatch_service.handle_user_input_no_orchestration(
             session,
@@ -571,6 +576,10 @@ class CallbackHandler(CallbackActionsMixin):
         chat_id = query.message.chat_id if query.message else None
         if not chat_id:
             return
+        try:
+            lang = lang_from_query(query, self.bot_app.config)
+        except Exception:
+            lang = "ru"
         policy_chat_id = int(chat_id)
         resolver = getattr(self.bot_app, "resolve_telegram_callback_scope", None)
         if callable(resolver):
@@ -621,7 +630,7 @@ class CallbackHandler(CallbackActionsMixin):
                 return
         except Exception as e:
             logging.exception(f"Ошибка обработки кнопки: {e}")
-            send_kwargs = {"chat_id": int(chat_id), "text": f"Ошибка обработки кнопки: {e}"}
+            send_kwargs = {"chat_id": int(chat_id), "text": t("msg.error.callback_handler", lang, e=e)}
             thread_id = getattr(getattr(query, "message", None), "message_thread_id", None)
             if thread_id is not None:
                 send_kwargs["message_thread_id"] = int(thread_id)
@@ -647,7 +656,7 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Сессия уже закрыта." if purged else "Нет ожидающего ввода.",
+                    text=t("msg.error.session_closed_stale", lang) if purged else t("msg.input.no_pending", lang),
                 )
                 return
             dispatch = getattr(self.bot_app, "input_dispatch_service", None)
@@ -655,7 +664,7 @@ class CallbackHandler(CallbackActionsMixin):
                 dispatch.clear_pending_prompt_record(ui_key)
             InputDispatchService.pop_pending(pending_map, ui_key)
             interrupt_runtime = getattr(getattr(self.bot_app, "session_management", None), "interrupt_session_runtime", None)
-            message_text = "Текущая генерация прервана. Ввод отброшен."
+            message_text = t("msg.input.interrupted", lang)
             if callable(interrupt_runtime):
                 try:
                     report = await interrupt_runtime(
@@ -672,11 +681,11 @@ class CallbackHandler(CallbackActionsMixin):
                     )
                 else:
                     if str(getattr(report, "status", "") or "") == "completed":
-                        message_text = "Текущая генерация прервана. Сессия освобождена. Ввод отброшен."
+                        message_text = t("msg.input.interrupted_freed", lang)
                     elif str(getattr(report, "status", "") or "") == "partial_timeout":
-                        message_text = "Текущая генерация прервана, но часть runtime еще завершает остановку. Ввод отброшен."
+                        message_text = t("msg.input.interrupted_partial", lang)
                     else:
-                        message_text = "Не удалось полностью прервать сессию. Ввод отброшен."
+                        message_text = t("msg.input.interrupt_failed", lang)
             else:
                 session.interrupt()
                 try:
@@ -706,7 +715,7 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Сессия уже закрыта." if purged else "Нет ожидающего ввода.",
+                    text=t("msg.error.session_closed_stale", lang) if purged else t("msg.input.no_pending", lang),
                 )
                 return
             dispatch = getattr(self.bot_app, "input_dispatch_service", None)
@@ -718,7 +727,7 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Сессия занята. Переношу ввод в очередь.",
+                    text=t("msg.input.busy_queued", lang),
                 )
                 if dispatch is not None and hasattr(dispatch, "_handle_busy_pending_input"):
                     await dispatch._handle_busy_pending_input(
@@ -732,7 +741,7 @@ class CallbackHandler(CallbackActionsMixin):
                 context=context,
                 query=query,
                 chat_id=int(chat_id),
-                text="Взято в работу.",
+                text=t("msg.input.taken", lang),
             )
             await self.bot_app._handle_user_input(
                 session,
@@ -750,7 +759,7 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Сессия уже закрыта." if purged else "Нет ожидающего ввода.",
+                    text=t("msg.error.session_closed_stale", lang) if purged else t("msg.input.no_pending", lang),
                 )
                 return
             dispatch = getattr(self.bot_app, "input_dispatch_service", None)
@@ -771,14 +780,14 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Не удалось обновить сообщение в очереди. Попробуйте еще раз.",
+                    text=t("msg.error.queue_append_failed", lang),
                 )
                 return
             await self._respond_callback(
                 context=context,
                 query=query,
                 chat_id=int(chat_id),
-                text="Ввод добавлен к текущему сообщению в очереди.",
+                text=t("msg.input.appended", lang),
             )
             await self._show_next_pending_input(
                 chat_id=int(chat_id),
@@ -795,7 +804,7 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Сессия уже закрыта." if purged else "Нет ожидающего ввода.",
+                    text=t("msg.error.session_closed_stale", lang) if purged else t("msg.input.no_pending", lang),
                 )
                 return
             dispatch = getattr(self.bot_app, "input_dispatch_service", None)
@@ -813,10 +822,10 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     query=query,
                     chat_id=int(chat_id),
-                    text="Не удалось поставить ввод в очередь. Попробуйте еще раз.",
+                    text=t("msg.error.queue_failed", lang),
                 )
                 return
-            await self._respond_callback(context=context, query=query, chat_id=int(chat_id), text="Ввод поставлен в очередь.")
+            await self._respond_callback(context=context, query=query, chat_id=int(chat_id), text=t("msg.input.queued", lang))
             await self._show_next_pending_input(
                 chat_id=int(chat_id),
                 context=context,
@@ -831,9 +840,9 @@ class CallbackHandler(CallbackActionsMixin):
                 dispatch.clear_pending_prompt_record(ui_key)
             pending = InputDispatchService.pop_pending(pending_map, ui_key)
             if not pending:
-                await self._respond_callback(context=context, query=query, chat_id=int(chat_id), text="Нет ожидающего ввода.")
+                await self._respond_callback(context=context, query=query, chat_id=int(chat_id), text=t("msg.input.no_pending", lang))
                 return
-            await self._respond_callback(context=context, query=query, chat_id=int(chat_id), text="Ввод отменен.")
+            await self._respond_callback(context=context, query=query, chat_id=int(chat_id), text=t("msg.input.discarded", lang))
             await self._show_next_pending_input(
                 chat_id=int(chat_id),
                 context=context,

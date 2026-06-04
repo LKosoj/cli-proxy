@@ -419,9 +419,9 @@
     if (!root || root.dataset.ready === "1") return;
     root.innerHTML = `
       <div class="toolbar status-toolbar">
-        <label for="adminSession">Сессия</label>
+        <label for="adminSession">${escapeHtml(t("miniapp.label.session", "Сессия"))}</label>
         <select id="adminSession"></select>
-        <button id="adminApply">Применить</button>
+        <button id="adminApply">${escapeHtml(t("miniapp.btn.apply", "Применить"))}</button>
       </div>
       <div id="adminStatusBanner" class="admin-status-banner hidden"></div>
       <div id="adminStatusMessage" class="status-empty">${escapeHtml(t("miniapp.admin.choose_session", "Выберите сессию для Admin-панели."))}</div>
@@ -429,7 +429,7 @@
         <div id="adminDisabledState" class="admin-state-card admin-state-card-disabled hidden">
           <div class="admin-state-title">Admin disabled</div>
           <div id="adminDisabledHint" class="admin-state-copy">
-            Для выбранной сессии Admin-режим выключен. Включите его или обновите состояние через Rescan.
+            ${escapeHtml(t("miniapp.admin.disabled_hint_static", "Для выбранной сессии Admin-режим выключен. Включите его или обновите состояние через Rescan."))}
           </div>
           <div class="admin-state-actions">
             <button id="adminEnableAction" type="button">Enable</button>
@@ -441,7 +441,7 @@
           <div class="admin-live-header">
             <div class="admin-live-title-block">
               <div class="admin-section-eyebrow">Live state</div>
-              <div class="admin-state-title">Состояние админа</div>
+              <div class="admin-state-title">${escapeHtml(t("miniapp.admin.state_title", "Состояние админа"))}</div>
               <div id="adminMonitorReadinessHint" class="admin-state-caption">-</div>
             </div>
             <div id="adminMonitorReadiness" class="admin-state-pill admin-state-pill-neutral">-</div>
@@ -492,7 +492,7 @@
             <div class="status-card admin-summary-card">
               <div class="status-card-header">Scan</div>
               <div class="status-card-body admin-compact-stack">
-                <div><span class="admin-muted-label">Статус</span> <span id="adminScanStatus">-</span></div>
+                <div><span class="admin-muted-label">${escapeHtml(t("miniapp.label.status", "Статус"))}</span> <span id="adminScanStatus">-</span></div>
                 <div><span class="admin-muted-label">Readiness</span> <span id="adminReadiness">-</span></div>
                 <div id="adminScanDetails" class="admin-state-caption admin-no-top-margin">-</div>
               </div>
@@ -506,12 +506,12 @@
         </div>
         <div id="adminStructuredState" class="admin-workspace hidden">
           <nav class="admin-subtabs" role="tablist" aria-label="Admin sections">
-            <button type="button" class="active" data-admin-subtab="overview">Обзор</button>
-            <button type="button" data-admin-subtab="monitoring">Мониторинг</button>
-            <button type="button" data-admin-subtab="operations">Операции</button>
-            <button type="button" data-admin-subtab="config">Конфиг</button>
-            <button type="button" data-admin-subtab="chat">Чат</button>
-            <button type="button" data-admin-subtab="diagnostics">Данные</button>
+            <button type="button" class="active" data-admin-subtab="overview">${escapeHtml(t("miniapp.admin.subtab.overview", "Обзор"))}</button>
+            <button type="button" data-admin-subtab="monitoring">${escapeHtml(t("miniapp.admin.subtab.monitoring", "Мониторинг"))}</button>
+            <button type="button" data-admin-subtab="operations">${escapeHtml(t("miniapp.admin.subtab.operations", "Операции"))}</button>
+            <button type="button" data-admin-subtab="config">${escapeHtml(t("miniapp.admin.subtab.config", "Конфиг"))}</button>
+            <button type="button" data-admin-subtab="chat">${escapeHtml(t("miniapp.admin.subtab.chat", "Чат"))}</button>
+            <button type="button" data-admin-subtab="diagnostics">${escapeHtml(t("miniapp.admin.subtab.data", "Данные"))}</button>
           </nav>
           <section id="adminSubtabOverview" class="admin-subtab-panel active" data-admin-subtab-panel="overview">
             <div class="admin-structured-grid">
@@ -544,12 +544,12 @@
                 </div>
               </details>
               <details id="adminAutonomyDetails" class="status-card-details">
-                <summary>Autonomy: servers / baseline / drift / memory</summary>
+                <summary>${escapeHtml(t("miniapp.autonomy.section_title", "Автономность: серверы / baseline / drift / память"))}</summary>
                 <div class="status-card-body">
                   <div class="admin-state-actions">
-                    <button id="autonomyRefresh" type="button">Обновить</button>
-                    <button id="autonomyRescanAll" type="button">Rescan all</button>
-                    <button id="autonomyMaintenance" type="button">Run daily maintenance</button>
+                    <button id="autonomyRefresh" type="button">${escapeHtml(t("miniapp.btn.refresh", "Обновить"))}</button>
+                    <button id="autonomyRescanAll" type="button">${escapeHtml(t("miniapp.autonomy.rescan_all", "Пересканировать всё"))}</button>
+                    <button id="autonomyMaintenance" type="button">${escapeHtml(t("miniapp.autonomy.daily_maintenance", "Ежедневное обслуживание"))}</button>
                   </div>
                   <div id="autonomyStatusMessage" class="autonomy-status-msg"></div>
                   <div id="autonomyGlobalSummary" class="autonomy-global-summary"></div>
@@ -563,9 +563,9 @@
             <div class="admin-structured-grid">
               <div class="admin-approval-panel">
                 <div class="admin-approval-main">
-                  <div class="admin-section-eyebrow">Ожидает действий</div>
+                  <div class="admin-section-eyebrow">${escapeHtml(t("miniapp.admin.pending_actions", "Ожидает действий"))}</div>
                   <div class="admin-compact-metrics">
-                    <span>ручные подтверждения: <strong id="adminPendingState">-</strong></span>
+                    <span>${escapeHtml(t("miniapp.admin.manual_confirms", "ручные подтверждения"))}: <strong id="adminPendingState">-</strong></span>
                     <span>skill installs: <strong id="adminPendingSkillInstalls">-</strong></span>
                     <span>mute: <strong id="adminMuteState">-</strong></span>
                   </div>
@@ -580,22 +580,22 @@
               </div>
               <div class="admin-approval-panel">
                 <div class="admin-approval-main">
-                  <div class="admin-section-eyebrow">Последние события</div>
+                  <div class="admin-section-eyebrow">${escapeHtml(t("miniapp.admin.recent_events", "Последние события"))}</div>
                   <div class="admin-compact-metrics">
-                    <span>инциденты: <strong id="adminRecentIncidents">-</strong></span>
-                    <span>действия Admin: <strong id="adminRecentActions">-</strong></span>
+                    <span>${escapeHtml(t("miniapp.admin.incidents", "инциденты"))}: <strong id="adminRecentIncidents">-</strong></span>
+                    <span>${escapeHtml(t("miniapp.admin.admin_actions", "действия Admin"))}: <strong id="adminRecentActions">-</strong></span>
                     <span>approved overrides: <strong id="adminApprovedOverrides">-</strong></span>
                   </div>
                 </div>
               </div>
               <details id="adminOperatorDetails" class="status-card-details">
-                <summary>Текущие ожидания / mute</summary>
+                <summary>${escapeHtml(t("miniapp.admin.current_pending", "Текущие ожидания / mute"))}</summary>
                 <div class="status-card-body">
                   <div id="adminOperatorBody" class="admin-detail-stack"></div>
                 </div>
               </details>
               <details id="adminHistoryDetails" class="status-card-details">
-                <summary>История событий / overrides</summary>
+                <summary>${escapeHtml(t("miniapp.admin.event_history", "История событий / overrides"))}</summary>
                 <div class="status-card-body">
                   <div id="adminHistoryBody" class="admin-detail-stack"></div>
                 </div>
@@ -604,8 +604,8 @@
                 <summary>Pipeline runs</summary>
                 <div class="status-card-body">
                   <div class="admin-state-actions">
-                    <button id="adminRunsRefresh" type="button">Обновить runs</button>
-                    <button id="adminRunsView" type="button">Показать детали</button>
+                    <button id="adminRunsRefresh" type="button">${escapeHtml(t("miniapp.admin.refresh_runs", "Обновить runs"))}</button>
+                    <button id="adminRunsView" type="button">${escapeHtml(t("miniapp.admin.show_details", "Показать детали"))}</button>
                   </div>
                   <table id="adminRunsTable" class="admin-runs-table">
                     <thead>
@@ -629,13 +629,13 @@
                 <summary>Monitor servers</summary>
                 <div class="status-card-body">
                   <div class="admin-state-actions">
-                    <button id="adminMonitorServersReload" type="button">Загрузить</button>
-                    <button id="adminMonitorServersAdd" type="button">Добавить сервер</button>
-                    <button id="adminMonitorServersSave" type="button">Сохранить</button>
+                    <button id="adminMonitorServersReload" type="button">${escapeHtml(t("miniapp.btn.load", "Загрузить"))}</button>
+                    <button id="adminMonitorServersAdd" type="button">${escapeHtml(t("miniapp.admin.add_server", "Добавить сервер"))}</button>
+                    <button id="adminMonitorServersSave" type="button">${escapeHtml(t("miniapp.btn.save", "Сохранить"))}</button>
                   </div>
                   <div class="admin-monitor-meta">
                     <label>
-                      <input type="checkbox" id="adminMonitorEnabled"> Включён
+                      <input type="checkbox" id="adminMonitorEnabled"> ${escapeHtml(t("miniapp.admin.enabled", "Включён"))}
                     </label>
                     <label>
                       interval_sec
@@ -646,7 +646,7 @@
                   <table id="adminMonitorServersTable" class="admin-runs-table">
                     <thead>
                       <tr>
-                        <th>server (из SSH hosts)</th>
+                        <th>${escapeHtml(t("miniapp.admin.th_server_ssh", "server (из SSH hosts)"))}</th>
                         <th>action_id</th>
                         <th>timeout_sec</th>
                         <th></th>
@@ -654,23 +654,23 @@
                     </thead>
                     <tbody id="adminMonitorServersBody"></tbody>
                   </table>
-                  <div class="admin-monitor-hint">SSH-хосты редактируются на вкладке «Настройки». Здесь выбирается только server → action.</div>
+                  <div class="admin-monitor-hint">${escapeHtml(t("miniapp.admin.monitor_hint", "SSH-хосты редактируются на вкладке «Настройки». Здесь выбирается только server → action."))}</div>
                 </div>
               </details>
               <details id="adminSshActionsDetails" class="status-card-details">
                 <summary>SSH actions</summary>
                 <div class="status-card-body">
                   <div class="admin-state-actions">
-                    <button id="adminSshActionsReload" type="button">Загрузить</button>
-                    <button id="adminSshActionsAdd" type="button">Добавить действие</button>
-                    <button id="adminSshActionsSave" type="button">Сохранить</button>
+                    <button id="adminSshActionsReload" type="button">${escapeHtml(t("miniapp.btn.load", "Загрузить"))}</button>
+                    <button id="adminSshActionsAdd" type="button">${escapeHtml(t("miniapp.admin.add_action", "Добавить действие"))}</button>
+                    <button id="adminSshActionsSave" type="button">${escapeHtml(t("miniapp.btn.save", "Сохранить"))}</button>
                   </div>
                   <div id="adminSshActionsStatus" class="admin-config-status"></div>
                   <table id="adminSshActionsTable" class="admin-runs-table">
                     <thead>
                       <tr>
                         <th>action_id</th>
-                        <th>argv (по одному пункту на строке)</th>
+                        <th>${escapeHtml(t("miniapp.admin.th_argv", "argv (по одному пункту на строке)"))}</th>
                         <th>timeout_sec</th>
                         <th>risk_level</th>
                         <th>description</th>
@@ -685,10 +685,10 @@
                 <summary>Admin config YAML</summary>
                 <div class="status-card-body">
                   <div class="admin-state-actions">
-                    <button id="adminConfigReload" type="button">Загрузить</button>
+                    <button id="adminConfigReload" type="button">${escapeHtml(t("miniapp.btn.load", "Загрузить"))}</button>
                   </div>
                   <div id="adminConfigStatus" class="admin-config-status"></div>
-                  <textarea id="adminConfigEditor" class="admin-config-editor" rows="20" spellcheck="false" readonly placeholder="Нажмите «Загрузить» для просмотра итогового YAML."></textarea>
+                  <textarea id="adminConfigEditor" class="admin-config-editor" rows="20" spellcheck="false" readonly placeholder="${escapeHtml(t("miniapp.admin.config_placeholder", "Нажмите «Загрузить» для просмотра итогового YAML."))}"></textarea>
                 </div>
               </details>
             </div>
@@ -700,7 +700,7 @@
                 <div id="adminChatStatus" class="admin-chat-status"></div>
                 <div id="adminChatMessages" class="admin-chat-messages"></div>
                 <div class="admin-chat-input-row">
-                  <input id="adminChatInput" type="text" placeholder="Спросите админа (Enter = отправить)">
+                  <input id="adminChatInput" type="text" placeholder="${escapeHtml(t("miniapp.admin.chat_placeholder", "Спросите админа (Enter = отправить)"))}">
                   <button id="adminChatSend" type="button">Send</button>
                 </div>
                 <div class="admin-chat-pending">
@@ -709,7 +709,7 @@
                 </div>
                 <div class="admin-chat-memory">
                   <label for="adminChatMemory" class="admin-chat-memory-label">MEMORY.md</label>
-                  <textarea id="adminChatMemory" class="admin-chat-memory-editor" rows="6" placeholder="Заметки для агента (свободный текст)."></textarea>
+                  <textarea id="adminChatMemory" class="admin-chat-memory-editor" rows="6" placeholder="${escapeHtml(t("miniapp.admin.memory_placeholder", "Заметки для агента (свободный текст)."))}"></textarea>
                   <div class="admin-state-actions">
                     <button id="adminChatMemoryReload" type="button">Reload</button>
                     <button id="adminChatMemorySave" type="button">Save</button>
@@ -792,13 +792,13 @@
       const stalePayload = getAdminCachedStatus(sessionUid, { allowStale: true });
       if (stalePayload) {
         renderAdminPayload(stalePayload);
-        setAdminStatusBanner(`Ошибка admin action: ${err.message || "unknown"}. Показаны последние известные данные.`, false);
+        setAdminStatusBanner(`${t("miniapp.admin.err_action_stale", "Ошибка admin action: {detail}. Показаны последние известные данные.").replace("{detail}", err.message || "unknown")}`, false);
         return stalePayload;
       }
       setAdminStatusBanner("");
       setAdminStateVisibility({});
       setAdminStructuredVisibility(false);
-      setAdminStatusMessage(`Ошибка admin action: ${err.message || "unknown"}`, false);
+      setAdminStatusMessage(`${t("miniapp.admin.err_action", "Ошибка admin action:")} ${err.message || "unknown"}`, false);
       return null;
     } finally {
       state.adminRequestInFlight = false;
@@ -827,7 +827,7 @@
         const tr = document.createElement("tr");
         const td = document.createElement("td");
         td.colSpan = 4;
-        td.textContent = "Нет runs для этой сессии.";
+        td.textContent = t("miniapp.admin.no_runs", "Нет runs для этой сессии.");
         tr.appendChild(td);
         tbody.appendChild(tr);
         return;
@@ -847,7 +847,7 @@
         tbody.appendChild(tr);
       }
     } catch (err) {
-      setAdminStatusBanner(`Ошибка загрузки runs: ${err.message || "unknown"}`, false);
+      setAdminStatusBanner(`${t("miniapp.admin.err_load_runs", "Ошибка загрузки runs:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -865,9 +865,9 @@
     try {
       const response = await api(`/v1/admin/config?session_uid=${encodeURIComponent(sessionUid)}`);
       editor.value = String(response?.yaml || "");
-      if (statusEl) statusEl.textContent = `Loaded: ${response?.config_path || "-"}`;
+      if (statusEl) statusEl.textContent = `${t("miniapp.admin.loaded_prefix", "Загружено: ")}${response?.config_path || "-"}`;
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Ошибка загрузки: ${err.message || "unknown"}`;
+      if (statusEl) statusEl.textContent = `${t("miniapp.error.load_prefix", "Ошибка загрузки:")} ${err.message || "unknown"}`;
     }
   }
 
@@ -936,7 +936,7 @@
       const tdDel = document.createElement("td");
       const btnDel = document.createElement("button");
       btnDel.type = "button";
-      btnDel.textContent = "Удалить";
+      btnDel.textContent = t("miniapp.btn.delete", "Удалить");
       btnDel.dataset.action = "delete-monitor-server";
       btnDel.dataset.index = String(index);
       tdDel.appendChild(btnDel);
@@ -999,7 +999,7 @@
       renderAdminMonitorServers(state.adminMonitorServers);
       if (statusEl) statusEl.textContent = "";
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Ошибка загрузки: ${err.message || "unknown"}`;
+      if (statusEl) statusEl.textContent = `${t("miniapp.error.load_prefix", "Ошибка загрузки:")} ${err.message || "unknown"}`;
     }
   }
 
@@ -1034,12 +1034,12 @@
     };
     const intervalRaw = String(intervalInp?.value || "").trim();
     if (intervalRaw) body.interval_sec = Number(intervalRaw);
-    if (statusEl) statusEl.textContent = "Сохранение…";
+    if (statusEl) statusEl.textContent = t("miniapp.status.saving", "Сохранение…");
     try {
       await api("/v1/admin/monitor/servers", { method: "PUT", body: JSON.stringify(body) });
-      if (statusEl) statusEl.textContent = "Сохранено.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.saved", "Сохранено.");
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Ошибка сохранения: ${err.message || "unknown"}`;
+      if (statusEl) statusEl.textContent = `${t("miniapp.error.save", "Ошибка сохранения")}: ${err.message || "unknown"}`;
     }
   }
 
@@ -1106,7 +1106,7 @@
       const tdDel = document.createElement("td");
       const btnDel = document.createElement("button");
       btnDel.type = "button";
-      btnDel.textContent = "Удалить";
+      btnDel.textContent = t("miniapp.btn.delete", "Удалить");
       btnDel.dataset.action = "delete-ssh-action";
       btnDel.dataset.index = String(index);
       tdDel.appendChild(btnDel);
@@ -1161,7 +1161,7 @@
       renderAdminSshActions(state.adminSshActions);
       if (statusEl) statusEl.textContent = "";
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Ошибка загрузки: ${err.message || "unknown"}`;
+      if (statusEl) statusEl.textContent = `${t("miniapp.error.load_prefix", "Ошибка загрузки:")} ${err.message || "unknown"}`;
     }
   }
 
@@ -1187,15 +1187,15 @@
       return;
     }
     const actions = collectAdminSshActionsFromUi();
-    if (statusEl) statusEl.textContent = "Сохранение…";
+    if (statusEl) statusEl.textContent = t("miniapp.status.saving", "Сохранение…");
     try {
       await api("/v1/admin/actions/ssh", {
         method: "PUT",
         body: JSON.stringify({ session_uid: sessionUid, actions }),
       });
-      if (statusEl) statusEl.textContent = "Сохранено.";
+      if (statusEl) statusEl.textContent = t("miniapp.status.saved", "Сохранено.");
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Ошибка сохранения: ${err.message || "unknown"}`;
+      if (statusEl) statusEl.textContent = `${t("miniapp.error.save", "Ошибка сохранения")}: ${err.message || "unknown"}`;
     }
   }
 
@@ -1244,7 +1244,7 @@
       );
       detailBody.textContent = adminRunDetailText(payload);
     } catch (err) {
-      detailBody.textContent = `Ошибка: ${err.message || "unknown"}`;
+      detailBody.textContent = `${t("miniapp.error.generic_prefix", "Ошибка:")} ${err.message || "unknown"}`;
     }
   }
 
@@ -1272,7 +1272,7 @@
       empty.classList.add("hidden");
       panel.classList.remove("hidden");
     } catch (err) {
-      empty.textContent = `Ошибка: ${err.message || "unknown"}`;
+      empty.textContent = `${t("miniapp.error.generic_prefix", "Ошибка:")} ${err.message || "unknown"}`;
       empty.classList.remove("hidden");
       panel.classList.add("hidden");
     } finally {
@@ -1319,14 +1319,14 @@
     sshEnabled.disabled = false;
     sshNote.style.color = "";
     if (!sshRemoteEnabled) {
-      sshNote.textContent = "Включает/выключает удаленное выполнение команд через SSH.";
+      sshNote.textContent = t("miniapp.ssh.toggle_hint", "Включает/выключает удаленное выполнение команд через SSH.");
     } else if (!sshConfigExists) {
-      sshNote.textContent = "SSH Remote включён, но ssh.yaml отсутствует в .cli-proxy/.";
+      sshNote.textContent = t("miniapp.ssh.no_config", "SSH Remote включён, но ssh.yaml отсутствует в .cli-proxy/.");
       sshNote.style.color = "var(--danger)";
     } else if (!sshAvailable) {
-      sshNote.textContent = "SSH Remote включён. Добавьте hosts в ssh.yaml или через форму ниже.";
+      sshNote.textContent = t("miniapp.ssh.enabled_no_hosts", "SSH Remote включён. Добавьте hosts в ssh.yaml или через форму ниже.");
     } else {
-      sshNote.textContent = "Включает/выключает удаленное выполнение команд через SSH.";
+      sshNote.textContent = t("miniapp.ssh.toggle_hint", "Включает/выключает удаленное выполнение команд через SSH.");
     }
 
     if (sshEnabled.checked) {
@@ -1348,7 +1348,7 @@
         return `<option value="${escapeHtml(alias)}">${escapeHtml(alias)}</option>`;
       }).join("");
     } else if (Object.keys(rcHosts).length > 0) {
-      rcHostSelect.innerHTML = '<option value="">No eligible hosts</option>';
+      rcHostSelect.innerHTML = `<option value="">${escapeHtml(t("miniapp.settings.no_eligible_hosts", "Нет подходящих хостов"))}</option>`;
     } else {
       rcHostSelect.innerHTML = "";
     }
@@ -1360,7 +1360,7 @@
     // Toggle field visibility
     rcHostField.style.display = isRcEnabled ? "block" : "none";
     if (Object.keys(rcHosts).length > 0 && validHosts.length === 0) {
-      rcError.textContent = "SSH host существует, но для Remote Control нужно заполнить remote_project_root.";
+      rcError.textContent = t("miniapp.settings.rc_error_no_root", "SSH host существует, но для Remote Control нужно заполнить remote_project_root.");
       rcError.style.display = "block";
     } else {
       rcError.style.display = "none";
@@ -1370,11 +1370,11 @@
     // Show effective target
     const effective = data.effective || {};
     if (effective.execution_target === "remote") {
-      execTargetBanner.textContent = "Execution Target: Remote - " + effective.host_alias + " - " + effective.remote_project_root;
+      execTargetBanner.textContent = t("miniapp.settings.exec_target_remote", "Цель выполнения: удалённо — {host}").replace("{host}", effective.host_alias + " — " + effective.remote_project_root);
       execTargetBanner.style.backgroundColor = "var(--button-primary)";
       execTargetBanner.style.color = "white";
     } else {
-      execTargetBanner.textContent = "Execution Target: Local";
+      execTargetBanner.textContent = t("miniapp.settings.exec_target_local", "Цель выполнения: локально");
       execTargetBanner.style.backgroundColor = "var(--card-bg)";
       execTargetBanner.style.color = "";
     }
@@ -1411,13 +1411,13 @@
           remote_control_host_alias: rcHost
         })
       });
-      tg.showScanResult?.("Настройки сохранены");
+      tg.showScanResult?.(t("miniapp.settings.saved", "Настройки сохранены"));
       await fetchSessionSettings();
     } catch (err) {
       const preflightError = err?.body?.preflight?.error ?? err?.body?.error;
       rcError.textContent = preflightError
         ? `Preflight failed: ${t("errors." + preflightError, preflightError)}`
-        : `Ошибка сохранения: ${err.message || "unknown"}`;
+        : `${t("miniapp.error.save", "Ошибка сохранения")}: ${err.message || "unknown"}`;
       rcError.style.display = "block";
     }
   }
@@ -1514,7 +1514,7 @@
     
     if (alias && state.sshHosts[alias]) {
       const h = state.sshHosts[alias];
-      title.textContent = `Редактировать ${alias}`;
+      title.textContent = `${t("miniapp.ssh.edit_prefix", "Редактировать")} ${alias}`;
       aliasInput.value = alias;
       aliasInput.disabled = true; // Cannot change alias of existing host easily
       document.getElementById("sshHostAddr").value = h.host || "";
@@ -1533,7 +1533,7 @@
       document.getElementById("sshHostRemoteProjectRoot").value = h.remote_project_root || "";
       document.getElementById("sshHostTimeout").value = h.idle_timeout_sec || 1200;
     } else {
-      title.textContent = "Добавить хост";
+      title.textContent = t("miniapp.ssh.add_host", "Добавить хост");
       aliasInput.value = "";
       aliasInput.disabled = false;
       document.getElementById("sshHostAddr").value = "";
@@ -1573,13 +1573,13 @@
   async function saveSshHost() {
     const workdir = getSshWorkdir();
     if (!workdir) {
-      alert("Не удалось определить каталог проекта для сохранения SSH host.");
+      alert(t("miniapp.ssh.no_workdir_save", "Не удалось определить каталог проекта для сохранения SSH host."));
       return;
     }
     const alias = document.getElementById("sshHostAlias").value.trim();
     const originalAlias = document.getElementById("sshHostAliasOriginal").value.trim();
     if (!alias) {
-      alert("Alias is required");
+      alert(t("miniapp.ssh.alias_required", "Требуется псевдоним (alias)"));
       return;
     }
 
@@ -1611,21 +1611,21 @@
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        tg.showScanResult?.("Хост сохранен");
+        tg.showScanResult?.(t("miniapp.ssh.host_saved", "Хост сохранен"));
         closeSshHostForm();
         await fetchSshHosts();
         await fetchSessionSettings();
       }
     } catch (err) {
-      alert(`Ошибка сохранения хоста: ${err.message}`);
+      alert(`${t("miniapp.ssh.err_save_host", "Ошибка сохранения хоста:")} ${err.message}`);
     }
   }
 
   async function deleteSshHost(alias) {
-    if (!confirm(`Удалить хост ${alias}?`)) return;
+    if (!confirm(`${t("miniapp.ssh.delete_confirm", "Удалить хост")} ${alias}?`)) return;
     const workdir = getSshWorkdir();
     if (!workdir) {
-      alert("Не удалось определить каталог проекта для удаления SSH host.");
+      alert(t("miniapp.ssh.no_workdir_delete", "Не удалось определить каталог проекта для удаления SSH host."));
       return;
     }
     try {
@@ -1638,14 +1638,14 @@
         await fetchSessionSettings();
       }
     } catch (err) {
-      alert(`Ошибка удаления: ${err.message}`);
+      alert(`${t("miniapp.ssh.err_delete", "Ошибка удаления:")} ${err.message}`);
     }
   }
 
   async function testSshConnection(alias) {
     const workdir = getSshWorkdir();
     if (!workdir) {
-      alert("Не удалось определить каталог проекта для SSH-проверки.");
+      alert(t("miniapp.ssh.no_workdir_test", "Не удалось определить каталог проекта для SSH-проверки."));
       return;
     }
     try {
@@ -1654,20 +1654,20 @@
         body: JSON.stringify({ alias })
       });
       if (res.ok) {
-        alert(`Успешно: ${res.message}\\n${res.server_info || ""}`);
+        alert(`${t("miniapp.ssh.test_ok", "Успешно:")} ${res.message}\n${res.server_info || ""}`);
       } else {
-        alert(`Ошибка: ${res.message}`);
+        alert(`${t("miniapp.error.generic_prefix", "Ошибка:")} ${res.message}`);
       }
     } catch (err) {
-      alert(`Ошибка запроса: ${err.message}`);
+      alert(`${t("miniapp.ssh.err_request", "Ошибка запроса:")} ${err.message}`);
     }
   }
 
   async function generateSshKey(alias) {
-    if (!confirm(`Сгенерировать новый ключ для ${alias}? Это перезапишет существующий в конфиге путь к ключу.`)) return;
+    if (!confirm(`${t("miniapp.ssh.keygen_confirm", "Сгенерировать новый ключ для")} ${alias}? ${t("miniapp.ssh.keygen_warn", "Это перезапишет существующий в конфиге путь к ключу.")}`)) return;
     const workdir = getSshWorkdir();
     if (!workdir) {
-      alert("Не удалось определить каталог проекта для генерации ключа.");
+      alert(t("miniapp.ssh.no_workdir_keygen", "Не удалось определить каталог проекта для генерации ключа."));
       return;
     }
     try {
@@ -1678,11 +1678,11 @@
       if (res.ok) {
         // We might want to show the public key so user can add it to server
         const pub = res.public_key;
-        alert(`Ключ сгенерирован и прописан в конфиг.\\n\\nДобавьте этот публичный ключ в ~/.ssh/authorized_keys на сервере:\\n\\n${pub}`);
+        alert(`${t("miniapp.ssh.keygen_success", "Ключ сгенерирован и прописан в конфиг.")}\n\n${t("miniapp.ssh.keygen_add_hint", "Добавьте этот публичный ключ в ~/.ssh/authorized_keys на сервере:")}\n\n${pub}`);
         await fetchSshHosts();
       }
     } catch (err) {
-      alert(`Ошибка генерации ключа: ${err.message}`);
+      alert(`${t("miniapp.ssh.err_keygen", "Ошибка генерации ключа:")} ${err.message}`);
     }
   }
 
@@ -1814,7 +1814,7 @@
       qs.set("session_id", sessionId);
     }
 
-    setLogsStatus("Подготовка файла...");
+    setLogsStatus(t("miniapp.logs.preparing", "Подготовка файла..."));
     api("/logs/ws_ticket")
       .then((payload) => {
         const ticket = String(payload.ticket || "");
@@ -1824,10 +1824,10 @@
         qs.set("ticket", ticket);
         const downloadUrl = new URL(`./api/logs/download?${qs.toString()}`, window.location.href).toString();
         openDownloadUrl(downloadUrl);
-        setLogsStatus("Скачивание запущено");
+        setLogsStatus(t("miniapp.logs.download_started", "Скачивание запущено"));
       })
       .catch((err) => {
-        setLogsStatus(`Ошибка скачивания: ${err.message || "unknown"}`, false);
+        setLogsStatus(`${t("miniapp.files.download_error_prefix", "Ошибка скачивания:")} ${err.message || "unknown"}`, false);
       });
   }
 
@@ -1878,7 +1878,7 @@
     if (state.logsReconnectTimer) return;
     state.logsReconnectAttempts += 1;
     const delayMs = Math.min(10000, 1000 * (2 ** Math.max(0, state.logsReconnectAttempts - 1)));
-    setLogsStatus(`Поток логов отключен, переподключение через ${Math.round(delayMs / 1000)}с...`, false);
+    setLogsStatus(`${t("miniapp.logs.ws_disconnected_reconnect", "Поток логов отключен, переподключение через")} ${Math.round(delayMs / 1000)}с...`, false);
     state.logsReconnectTimer = setTimeout(() => {
       state.logsReconnectTimer = null;
       if (!state.logsShouldReconnect) return;
@@ -1891,7 +1891,7 @@
     if (state.statusReconnectTimer) return;
     state.statusReconnectAttempts += 1;
     const delayMs = Math.min(10000, 1000 * (2 ** Math.max(0, state.statusReconnectAttempts - 1)));
-    setStatus(`Поток статуса отключен, переподключение через ${Math.round(delayMs / 1000)}с...`);
+    setStatus(`${t("miniapp.status.ws_disconnected_reconnect", "Поток статуса отключен, переподключение через")} ${Math.round(delayMs / 1000)}с...`);
     state.statusReconnectTimer = setTimeout(() => {
       state.statusReconnectTimer = null;
       if (!state.statusShouldReconnect) return;
@@ -1925,12 +1925,12 @@
   }
 
   function boolText(value) {
-    return value ? "да" : "нет";
+    return value ? t("miniapp.status.bool_yes", "да") : t("miniapp.status.bool_no", "нет");
   }
 
   function ageText(seconds) {
     const sec = Number(seconds);
-    if (!Number.isFinite(sec) || sec < 0) return "нет";
+    if (!Number.isFinite(sec) || sec < 0) return t("miniapp.status.bool_no", "нет");
     if (sec < 60) return `${Math.floor(sec)}с`;
     const min = Math.floor(sec / 60);
     const rest = Math.floor(sec % 60);
@@ -2041,23 +2041,23 @@
     const status = Number(err?.status || 0);
     if (err?.name === "AbortError" || err?.code === "timeout") {
       return stale
-        ? "Таймаут запроса Admin status. Показаны последние известные данные."
-        : "Таймаут запроса Admin status. Повторите попытку.";
+        ? t("miniapp.admin.err_timeout_stale", "Таймаут запроса Admin status. Показаны последние известные данные.")
+        : t("miniapp.admin.err_timeout", "Таймаут запроса Admin status. Повторите попытку.");
     }
     if (status === 401 || status === 403) {
       return stale
-        ? "Нет доступа к Admin status для выбранной сессии. Показаны последние известные данные."
-        : "Нет доступа к Admin status для выбранной сессии.";
+        ? t("miniapp.admin.err_access_stale", "Нет доступа к Admin status для выбранной сессии. Показаны последние известные данные.")
+        : t("miniapp.admin.err_access", "Нет доступа к Admin status для выбранной сессии.");
     }
     if (status >= 500) {
       return stale
-        ? "Сервер Admin status временно недоступен. Показаны последние известные данные."
-        : "Сервер Admin status временно недоступен.";
+        ? t("miniapp.admin.err_server_stale", "Сервер Admin status временно недоступен. Показаны последние известные данные.")
+        : t("miniapp.admin.err_server", "Сервер Admin status временно недоступен.");
     }
     const detail = String(err?.message || "unknown").trim();
     return stale
-      ? `Ошибка загрузки Admin-статуса: ${detail || "unknown"}. Показаны последние известные данные.`
-      : `Ошибка загрузки Admin-статуса: ${detail || "unknown"}`;
+      ? t("miniapp.admin.err_load_stale", "Ошибка загрузки Admin-статуса: {detail}. Показаны последние известные данные.").replace("{detail}", detail || "unknown")
+      : t("miniapp.admin.err_load", "Ошибка загрузки Admin-статуса: {detail}").replace("{detail}", detail || "unknown");
   }
 
   function setAdminStateVisibility({ active = false, disabled = false } = {}) {
@@ -2114,7 +2114,7 @@
   }
 
   function adminBoolValue(value) {
-    return value ? "Да" : "Нет";
+    return value ? t("common.yes", "Да") : t("common.no", "Нет");
   }
 
   function adminTimeValue(value) {
@@ -2141,7 +2141,7 @@
     const askCount = adminCountValue(askPayload.count);
     const approvalCount = adminCountValue(approvalsPayload.count);
     const active = Boolean(askPayload.active || approvalsPayload.active);
-    if (!active && askCount === 0 && approvalCount === 0) return "нет ожидания";
+    if (!active && askCount === 0 && approvalCount === 0) return t("miniapp.admin.no_pending", "нет ожидания");
     return `ask_user ${askCount} | approvals ${approvalCount}${active ? " | active" : ""}`;
   }
 
@@ -2274,7 +2274,7 @@
       const options = sessions
         .map((item) => `<option value="${escapeHtml(item.session_uid)}">${escapeHtml(item.label || item.session_uid)}</option>`)
         .join("");
-      select.innerHTML = `<option value="">Выберите сессию</option>${options}`;
+      select.innerHTML = `<option value="">${escapeHtml(t("miniapp.label.choose_session", "Выберите сессию"))}</option>${options}`;
       if (desiredSelected) {
         select.value = desiredSelected;
       }
@@ -2299,7 +2299,7 @@
     if (!payload || typeof payload !== "object") {
       setAdminStateVisibility({});
       setAdminStructuredVisibility(false);
-      setAdminStatusMessage("Admin status недоступен", false);
+      setAdminStatusMessage(t("miniapp.admin.status_unavailable", "Admin status недоступен"), false);
       const raw = document.getElementById("adminStatusJson");
       if (raw) raw.textContent = "";
       return;
@@ -2351,20 +2351,20 @@
     const isActive = payload.active !== false;
     let readinessText = "Ready";
     let readinessTone = "admin-state-pill-ok";
-    let readinessHintText = "Pipeline готов к следующему monitor-cycle.";
+    let readinessHintText = t("miniapp.admin.readiness_hint_ok", "Pipeline готов к следующему monitor-cycle.");
 
     if (hasFailure) {
       readinessText = "Needs attention";
       readinessTone = "admin-state-pill-danger";
-      readinessHintText = "В пайплайне есть failure-state. Проверьте Analyzer и Executor.";
+      readinessHintText = t("miniapp.admin.readiness_hint_failure", "В пайплайне есть failure-state. Проверьте Analyzer и Executor.");
     } else if (pipelineStatus === "running" || payload.mode_tasks_running) {
       readinessText = "Live";
       readinessTone = "admin-state-pill-ok";
-      readinessHintText = "Monitor-cycle активен, данные приходят из текущего pipeline-run.";
+      readinessHintText = t("miniapp.admin.readiness_hint_live", "Monitor-cycle активен, данные приходят из текущего pipeline-run.");
     } else if (pipelineStatus === "disabled") {
       readinessText = "Disabled";
       readinessTone = "admin-state-pill-neutral";
-      readinessHintText = "Пайплайн выключен и не выполняет monitor-checks.";
+      readinessHintText = t("miniapp.admin.readiness_hint_disabled", "Пайплайн выключен и не выполняет monitor-checks.");
     }
 
     if (pipeline) pipeline.textContent = statusValueText(payload.pipeline_status);
@@ -2434,7 +2434,7 @@
     if (analyzerActionHint) {
       analyzerActionHint.textContent = analyzerStatus
         ? `Analyzer status: ${analyzerStatus}`
-        : "Analyzer ещё не публиковал подробное действие.";
+        : t("miniapp.admin.analyzer_no_action", "Analyzer ещё не публиковал подробное действие.");
     }
 
     setAdminDetailHtml("adminRuntimeDetails", "adminRuntimeBody", {
@@ -2541,7 +2541,7 @@
     setAdminStructuredVisibility(true);
     if (payload.active === false) {
       if (disabledHint) {
-        disabledHint.textContent = "Для выбранной сессии Admin-режим выключен. Нажмите Enable, чтобы включить режим, Disable недоступен до включения, либо запустите Rescan.";
+        disabledHint.textContent = t("miniapp.admin.disabled_hint", "Для выбранной сессии Admin-режим выключен. Нажмите Enable, чтобы включить режим, Disable недоступен до включения, либо запустите Rescan.");
       }
       setAdminStateVisibility({ disabled: true });
       setAdminStatusMessage("");
@@ -2706,7 +2706,7 @@
     const label = document.getElementById("adminChatPendingLabel");
     const list = document.getElementById("adminChatPendingList");
     const items = Array.isArray(state.adminChatPending) ? state.adminChatPending : [];
-    if (label) label.textContent = `Pending approvals (${items.length}):`;
+    if (label) label.textContent = t("miniapp.admin.pending_approvals", "Подтверждения ({n}):").replace("{n}", String(items.length));
     if (!list) return;
     list.innerHTML = "";
     items.forEach((item) => {
@@ -2743,7 +2743,7 @@
       actions.className = "admin-chat-pending-row-actions";
       const approveBtn = document.createElement("button");
       approveBtn.type = "button";
-      approveBtn.textContent = "Approve";
+      approveBtn.textContent = t("miniapp.admin.approve", "Одобрить");
       approveBtn.disabled = state.adminChatApproveInFlight;
       approveBtn.onclick = () => {
         state.adminChatSelectedApproval = approvalId;
@@ -2752,7 +2752,7 @@
       actions.appendChild(approveBtn);
       const rejectBtn = document.createElement("button");
       rejectBtn.type = "button";
-      rejectBtn.textContent = "Reject";
+      rejectBtn.textContent = t("miniapp.admin.reject", "Отклонить");
       rejectBtn.onclick = () => {
         state.adminChatSelectedApproval = approvalId;
         void rejectAdminChatPending(approvalId);
@@ -2774,7 +2774,7 @@
         renderAdminChatMessages();
       }
     } catch (err) {
-      setAdminChatStatus(`Ошибка загрузки сообщений: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.admin.err_load_messages", "Ошибка загрузки сообщений:")} ${err.message || err}`);
     }
   }
 
@@ -2789,7 +2789,7 @@
         renderAdminChatPending();
       }
     } catch (err) {
-      setAdminChatStatus(`Ошибка загрузки pending: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.admin.err_load_pending", "Ошибка загрузки pending:")} ${err.message || err}`);
     }
   }
 
@@ -2806,7 +2806,7 @@
         }
       }
     } catch (err) {
-      setAdminChatStatus(`Ошибка загрузки memory: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.admin.err_load_memory", "Ошибка загрузки memory:")} ${err.message || err}`);
     }
   }
 
@@ -2819,19 +2819,19 @@
     if (state.adminChatSendInFlight) return;
     state.adminChatSendInFlight = true;
     if (input) input.value = "";
-    setAdminChatStatus("Отправка…");
+    setAdminChatStatus(t("miniapp.admin.chat_sending", "Отправка…"));
     try {
       const resp = await api("/v1/admin/chat/messages", {
         method: "POST",
         body: JSON.stringify({ session_uid: sessionUid, text }),
       });
       if (!resp || !resp.ok) {
-        setAdminChatStatus(`Ошибка: ${resp && resp.error ? resp.error : "unknown"}`);
+        setAdminChatStatus(`${t("miniapp.error.generic_prefix", "Ошибка:")} ${resp && resp.error ? resp.error : "unknown"}`);
       } else {
         const intent = resp.intent && typeof resp.intent === "object" ? resp.intent : {};
         const intentType = String(intent.type || "");
         if (intentType && intentType !== "answer") {
-          setAdminChatStatus(`Намерение: ${intentType}`);
+          setAdminChatStatus(`${t("miniapp.admin.chat_intent", "Намерение:")} ${intentType}`);
         } else {
           setAdminChatStatus("");
         }
@@ -2839,7 +2839,7 @@
       await fetchAdminChatMessages();
       await fetchAdminChatPending();
     } catch (err) {
-      setAdminChatStatus(`Ошибка отправки: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.admin.err_chat_send", "Ошибка отправки:")} ${err.message || err}`);
     } finally {
       state.adminChatSendInFlight = false;
     }
@@ -2858,7 +2858,7 @@
         body: JSON.stringify({ session_uid: sessionUid }),
       });
       if (!resp || !resp.ok) {
-        setAdminChatStatus(`Approve ошибка: ${resp && resp.error ? resp.error : "unknown"}`);
+        setAdminChatStatus(`${t("miniapp.admin.err_approve", "Approve ошибка:")} ${resp && resp.error ? resp.error : "unknown"}`);
       } else {
         const targetKind = String(resp.target_kind || "?");
         const parts = [`Executed (${targetKind})`];
@@ -2869,7 +2869,7 @@
       await fetchAdminChatMessages();
       await fetchAdminChatPending();
     } catch (err) {
-      setAdminChatStatus(`Ошибка approve: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.admin.err_approve_req", "Ошибка approve:")} ${err.message || err}`);
     } finally {
       state.adminChatApproveInFlight = false;
       renderAdminChatPending();
@@ -2887,11 +2887,11 @@
       if (resp && resp.ok) {
         setAdminChatStatus(`Rejected ${approvalId}`);
       } else {
-        setAdminChatStatus(`Reject ошибка: ${resp && resp.error ? resp.error : "unknown"}`);
+        setAdminChatStatus(`${t("miniapp.admin.err_reject", "Reject ошибка:")} ${resp && resp.error ? resp.error : "unknown"}`);
       }
       await fetchAdminChatPending();
     } catch (err) {
-      setAdminChatStatus(`Ошибка reject: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.admin.err_reject_req", "Ошибка reject:")} ${err.message || err}`);
     }
   }
 
@@ -2907,12 +2907,12 @@
       });
       if (resp && resp.ok) {
         state.adminChatMemoryDirty = false;
-        setAdminChatStatus("Memory сохранён");
+        setAdminChatStatus(t("miniapp.admin.memory_saved", "Memory сохранён"));
       } else {
-        setAdminChatStatus(`Memory ошибка: ${resp && resp.error ? resp.error : "unknown"}`);
+        setAdminChatStatus(`${t("miniapp.admin.err_memory", "Memory ошибка:")} ${resp && resp.error ? resp.error : "unknown"}`);
       }
     } catch (err) {
-      setAdminChatStatus(`Ошибка сохранения: ${err.message || err}`);
+      setAdminChatStatus(`${t("miniapp.error.save", "Ошибка сохранения")}: ${err.message || err}`);
     }
   }
 
@@ -3084,7 +3084,7 @@
       document.getElementById("schedulerSession").value = "";
       state.schedulerSessionUid = "";
     }
-    if (saveButton) saveButton.textContent = "Создать";
+    if (saveButton) saveButton.textContent = t("miniapp.btn.create", "Создать");
     if (deleteButton) deleteButton.disabled = true;
     if (runNowButton) runNowButton.disabled = true;
   }
@@ -3109,7 +3109,7 @@
     const saveButton = document.getElementById("schedulerSave");
     const deleteButton = document.getElementById("schedulerDelete");
     const runNowButton = document.getElementById("schedulerRunNow");
-    if (saveButton) saveButton.textContent = "Обновить";
+    if (saveButton) saveButton.textContent = t("miniapp.btn.refresh", "Обновить");
     if (deleteButton) deleteButton.disabled = false;
     if (runNowButton) runNowButton.disabled = false;
   }
@@ -3123,8 +3123,8 @@
     list.innerHTML = "";
     if (!items.length) {
       meta.textContent = state.schedulerProjectSlug
-        ? `Для проекта ${state.schedulerProjectSlug} jobs пока нет.`
-        : "Сначала выберите проект.";
+        ? `${t("miniapp.scheduler.no_jobs_for_project", "Для проекта")} ${state.schedulerProjectSlug} jobs пока нет.`
+        : t("miniapp.scheduler.select_project_first", "Сначала выберите проект.");
       if (!state.schedulerSelectedJobId) {
         resetSchedulerForm();
       }
@@ -3160,7 +3160,7 @@
       }
     }
     resetSchedulerForm();
-    meta.textContent = `Выбрано jobs: ${items.length}. Нажмите на job для редактирования.`;
+    meta.textContent = `${t("miniapp.scheduler.selected_jobs", "Выбрано jobs")}: ${items.length}. ${t("miniapp.scheduler.click_to_edit", "Нажмите на job для редактирования.")}`;
   }
 
   function renderSchedulerPayload(payload) {
@@ -3206,16 +3206,16 @@
     const targetMode = String(document.getElementById("schedulerTargetMode")?.value || "").trim();
     const enabled = !!document.getElementById("schedulerEnabled")?.checked;
     if (!projectSlug) {
-      throw new Error("Проект не выбран");
+      throw new Error(t("miniapp.scheduler.err_no_project", "Проект не выбран"));
     }
     if (!telegramSessionUid) {
-      throw new Error("Telegram session_uid не выбран");
+      throw new Error(t("miniapp.scheduler.err_no_session_uid", "Telegram session_uid не выбран"));
     }
     if (!cron) {
-      throw new Error("Cron обязателен");
+      throw new Error(t("miniapp.scheduler.err_no_cron", "Cron обязателен"));
     }
     if (!targetMode) {
-      throw new Error("Target mode обязателен");
+      throw new Error(t("miniapp.scheduler.err_no_target_mode", "Target mode обязателен"));
     }
 
     let payload = { project_slug: projectSlug };
@@ -3224,11 +3224,11 @@
       try {
         const parsed = JSON.parse(rawPayload);
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          throw new Error("Payload должен быть JSON-объектом");
+          throw new Error(t("miniapp.scheduler.err_payload_not_object", "Payload должен быть JSON-объектом"));
         }
         payload = Object.assign({}, parsed, { project_slug: projectSlug });
       } catch (err) {
-        throw new Error(`Некорректный JSON в Payload: ${err.message}`);
+        throw new Error(`${t("miniapp.scheduler.err_invalid_json", "Некорректный JSON в Payload:")} ${err.message}`);
       }
     }
 
@@ -3258,7 +3258,7 @@
       setSchedulerStatus("");
       await fetchSchedulerJobs();
     } catch (err) {
-      setSchedulerStatus(`Ошибка scheduler save: ${err.message || "unknown"}`, false);
+      setSchedulerStatus(`${t("miniapp.scheduler.err_save", "Ошибка scheduler save:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -3266,10 +3266,10 @@
     applySchedulerStateFromControls();
     const jobId = String(state.schedulerSelectedJobId || "").trim();
     if (!jobId) {
-      setSchedulerStatus("Job не выбрана", false);
+      setSchedulerStatus(t("miniapp.scheduler.no_job_selected", "Job не выбрана"), false);
       return;
     }
-    if (!window.confirm(`Удалить job ${jobId}?`)) {
+    if (!window.confirm(`${t("miniapp.scheduler.delete_job_confirm", "Удалить job")} ${jobId}?`)) {
       return;
     }
     try {
@@ -3283,7 +3283,7 @@
       resetSchedulerForm();
       await fetchSchedulerJobs();
     } catch (err) {
-      setSchedulerStatus(`Ошибка scheduler delete: ${err.message || "unknown"}`, false);
+      setSchedulerStatus(`${t("miniapp.scheduler.err_delete", "Ошибка scheduler delete:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -3291,7 +3291,7 @@
     applySchedulerStateFromControls();
     const jobId = String(state.schedulerSelectedJobId || "").trim();
     if (!jobId) {
-      setSchedulerStatus("Job не выбрана", false);
+      setSchedulerStatus(t("miniapp.scheduler.no_job_selected", "Job не выбрана"), false);
       return;
     }
     try {
@@ -3302,10 +3302,10 @@
           job_id: jobId,
         }),
       });
-      setSchedulerStatus("Job отправлена на немедленную публикацию события.");
+      setSchedulerStatus(t("miniapp.scheduler.job_dispatched", "Job отправлена на немедленную публикацию события."));
       await fetchSchedulerJobs();
     } catch (err) {
-      setSchedulerStatus(`Ошибка scheduler run_now: ${err.message || "unknown"}`, false);
+      setSchedulerStatus(`${t("miniapp.scheduler.err_run_now", "Ошибка scheduler run_now:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -3578,16 +3578,16 @@
       `Status: ${String(run.status || "-")}`,
       `Action: ${String(run.recommended_action || "-")}`,
       `Current unit: ${String(run.current_unit_id || "-")}`,
-      `Issues: ${issueCodes.length ? issueCodes.join(", ") : "нет"}`,
+      `Issues: ${issueCodes.length ? issueCodes.join(", ") : t("miniapp.status.bool_no", "нет")}`,
       `Local skills: ${
         Array.isArray(run.project_local_skill_ids) && run.project_local_skill_ids.length
           ? run.project_local_skill_ids.join(", ")
-          : "нет"
+          : t("miniapp.status.bool_no", "нет")
       }`,
     ];
     detail.textContent = detailLines.join("\n");
     const skills = Array.isArray(run.skill_log) ? run.skill_log.filter(Boolean) : [];
-    skillLog.textContent = skills.length ? `Skills:\n${skills.join("\n")}` : "Skills: нет инъекций";
+    skillLog.textContent = skills.length ? `Skills:\n${skills.join("\n")}` : t("miniapp.runs.no_injections", "Skills: нет инъекций");
     setRunActionButtonsEnabled(!state.runsRequestInFlight, run);
   }
 
@@ -3612,7 +3612,7 @@
       return run;
     } catch (err) {
       renderRunDetail(null);
-      setRunsActionMessage(`Ошибка run detail: ${err.message || "unknown"}`, false);
+      setRunsActionMessage(`${t("miniapp.runs.err_detail", "Ошибка run detail:")} ${err.message || "unknown"}`, false);
       return null;
     }
   }
@@ -3675,7 +3675,7 @@
       const runs = Array.isArray(payload?.runs) ? payload.runs : [];
       renderRunsList(payload || {});
       if (!runs.length) {
-        setRunsMessage("Запусков пока нет.");
+        setRunsMessage(t("miniapp.runs.no_runs", "Запусков пока нет."));
         setRunsActionMessage("");
         return payload;
       }
@@ -3700,7 +3700,7 @@
       state.runsSelectedRunId = "";
       state.runsSelectedModeId = "";
       setRunsActionMessage("");
-      setRunsMessage(`Ошибка загрузки run artifacts: ${err.message || "unknown"}`, false);
+      setRunsMessage(`${t("miniapp.runs.err_load_artifacts", "Ошибка загрузки run artifacts:")} ${err.message || "unknown"}`, false);
       renderRunDetail(null);
       return null;
     } finally {
@@ -3714,7 +3714,7 @@
     const runId = String(state.runsSelectedRunId || "").trim();
     const modeId = String(state.runsSelectedModeId || "").trim();
     if (!sessionUid || !runId) {
-      setRunsActionMessage("Сначала выберите запуск.", false);
+      setRunsActionMessage(t("miniapp.runs.select_run_first", "Сначала выберите запуск."), false);
       return null;
     }
     state.runsRequestInFlight = true;
@@ -3741,7 +3741,7 @@
       await fetchRuns();
       return payload;
     } catch (err) {
-      state.runsLastActionMessage = `Ошибка run action: ${err.message || "unknown"}`;
+      state.runsLastActionMessage = `${t("miniapp.runs.err_action", "Ошибка run action:")} ${err.message || "unknown"}`;
       setRunsActionMessage(state.runsLastActionMessage, false);
       return null;
     } finally {
@@ -3831,7 +3831,7 @@
     ];
     
     if (execTarget === "remote") {
-        const text = `Execution Target: Remote · ${remoteHost} · ${remoteRoot}`;
+        const text = t("miniapp.settings.exec_target_remote", "Цель выполнения: удалённо — {host}").replace("{host}", `${remoteHost} · ${remoteRoot}`);
         bannerElements.forEach(el => {
             if (el) {
                 el.textContent = text;
@@ -3842,12 +3842,12 @@
         });
         remoteFsElements.forEach(el => {
             if (el) {
-                el.textContent = `Remote FS · ${remoteHost} · ${remoteRoot}`;
+                el.textContent = `${t("miniapp.banner.remote_fs", "Удалённая ФС")} · ${remoteHost} · ${remoteRoot}`;
                 el.style.display = "block";
             }
         });
     } else {
-        const text = "Execution Target: Local";
+        const text = t("miniapp.settings.exec_target_local", "Цель выполнения: локально");
         bannerElements.forEach(el => {
             if (el) {
                 el.textContent = text;
@@ -3869,7 +3869,7 @@
     const stStatusText = document.getElementById("stStatusText");
     if (stStatusIcon) stStatusIcon.textContent = isBusy ? "🔄" : "⏳";
     if (stStatusText) {
-        stStatusText.textContent = isBusy ? "Работает" : "Ожидает";
+        stStatusText.textContent = isBusy ? t("miniapp.status.busy", "Работает") : t("miniapp.status.waiting", "Ожидает");
         stStatusText.style.color = isBusy ? "var(--tg-theme-link-color, #2481cc)" : "var(--muted)";
         stStatusText.style.fontWeight = isBusy ? "bold" : "normal";
     }
@@ -3877,20 +3877,20 @@
     const stGitText = document.getElementById("stGitText");
     if (stGitText) {
         if (active.execution_target === "remote" && active.git_available === false) {
-            stGitText.textContent = "git unavailable for this target";
+            stGitText.textContent = t("miniapp.status.git_unavailable", "git недоступен для этой цели");
             stGitText.style.color = "var(--muted)";
             stGitText.style.fontWeight = "normal";
         } else if (active.git_conflict) {
             const conflictKind = String(active.git_conflict_kind || "да");
-            stGitText.textContent = `Конфликт: ${conflictKind}`;
+            stGitText.textContent = `${t("miniapp.status.git_conflict", "Конфликт:")} ${conflictKind}`;
             stGitText.style.color = "var(--danger)";
             stGitText.style.fontWeight = "bold";
         } else if (active.git_busy) {
-            stGitText.textContent = "Занят";
+            stGitText.textContent = t("miniapp.status.git_busy", "Занят");
             stGitText.style.color = "var(--tg-theme-link-color, #2481cc)";
             stGitText.style.fontWeight = "normal";
         } else {
-            stGitText.textContent = "Свободен";
+            stGitText.textContent = t("miniapp.status.git_free", "Свободен");
             stGitText.style.color = "var(--muted)";
             stGitText.style.fontWeight = "normal";
         }
@@ -3906,7 +3906,7 @@
 
     const stOrchLabel = document.getElementById("stOrchestratorLabel");
     if (stOrchLabel) {
-        stOrchLabel.textContent = active.advanced_orchestrator_enabled ? "вкл" : "выкл";
+        stOrchLabel.textContent = active.advanced_orchestrator_enabled ? t("miniapp.status.on", "вкл") : t("miniapp.status.off", "выкл");
         stOrchLabel.parentElement.style.color = active.advanced_orchestrator_enabled ? "var(--tg-theme-link-color, #2481cc)" : "var(--muted)";
     }
     
@@ -4039,7 +4039,7 @@
     disconnectLogsWs({ manual: false });
     state.logsShouldReconnect = true;
     clearLogsView();
-    setLogsStatus("Подключение к потоку логов...");
+    setLogsStatus(t("miniapp.logs.ws_connecting", "Подключение к потоку логов..."));
     let ticket = "";
     try {
       const payload = await api("/logs/ws_ticket");
@@ -4050,15 +4050,15 @@
       if (isAuthError) {
         state.logsShouldReconnect = false;
         state.logsReconnectAttempts = 0;
-        setLogsStatus(`Ошибка получения ws-токена: ${err.message || "unknown"}. Откройте MiniApp заново.`, false);
+        setLogsStatus(`${t("miniapp.logs.err_ws_token", "Ошибка получения ws-токена:")} ${err.message || "unknown"}. ${t("miniapp.logs.err_reopen", "Откройте MiniApp заново.")}`, false);
         return;
       }
-      setLogsStatus(`Ошибка получения ws-токена: ${err.message || "unknown"}`, false);
+      setLogsStatus(`${t("miniapp.logs.err_ws_token", "Ошибка получения ws-токена:")} ${err.message || "unknown"}`, false);
       scheduleLogsReconnect();
       return;
     }
     if (!ticket) {
-      setLogsStatus("ws-токен не получен", false);
+      setLogsStatus(t("miniapp.logs.err_no_ws_token", "ws-токен не получен"), false);
       scheduleLogsReconnect();
       return;
     }
@@ -4070,7 +4070,7 @@
       if (state.logsSocket !== ws) return;
       state.logsReconnectAttempts = 0;
       clearLogsReconnectTimer();
-      setLogsStatus("Поток логов подключен");
+      setLogsStatus(t("miniapp.logs.ws_connected", "Поток логов подключен"));
     };
 
     ws.onmessage = (event) => {
@@ -4091,7 +4091,7 @@
         return;
       }
       if (type === "error") {
-        setLogsStatus(String(payload.error || "Ошибка потока логов"), false);
+        setLogsStatus(String(payload.error || t("miniapp.logs.ws_error", "Ошибка потока логов")), false);
         return;
       }
       if (type === "keepalive") {
@@ -4101,7 +4101,7 @@
 
     ws.onerror = () => {
       if (state.logsSocket !== ws) return;
-      setLogsStatus("Ошибка websocket-подключения", false);
+      setLogsStatus(t("miniapp.logs.ws_conn_error", "Ошибка websocket-подключения"), false);
     };
 
     ws.onclose = (event) => {
@@ -4109,13 +4109,13 @@
       state.logsSocket = null;
       const isNormal = Boolean(event && event.wasClean && Number(event.code) === 1000);
       if (isNormal) {
-        setLogsStatus("Поток логов отключен", true);
+        setLogsStatus(t("miniapp.logs.ws_disconnected", "Поток логов отключен"), true);
         return;
       }
       const code = Number(event?.code || 0);
       const reason = String(event?.reason || "").trim();
       const details = reason ? ` (code=${code}, reason=${reason})` : ` (code=${code})`;
-      setLogsStatus(`Поток логов отключен с ошибкой${details}`, false);
+      setLogsStatus(`${t("miniapp.logs.ws_disconnected_error", "Поток логов отключен с ошибкой")}${details}`, false);
       scheduleLogsReconnect();
     };
   }
@@ -4123,7 +4123,7 @@
   async function connectStatusWs() {
     disconnectStatusWs({ manual: false });
     state.statusShouldReconnect = true;
-    setStatus("Подключение к потоку статуса...");
+    setStatus(t("miniapp.status.ws_connecting", "Подключение к потоку статуса..."));
     let ticket = "";
     try {
       const payload = await api("/status/ws_ticket");
@@ -4134,15 +4134,15 @@
       if (isAuthError) {
         state.statusShouldReconnect = false;
         state.statusReconnectAttempts = 0;
-        setStatus(`Ошибка получения status ws-токена: ${err.message || "unknown"}. Откройте MiniApp заново.`);
+        setStatus(`${t("miniapp.status.err_ws_token", "Ошибка получения status ws-токена:")} ${err.message || "unknown"}. ${t("miniapp.logs.err_reopen", "Откройте MiniApp заново.")}`);
         return;
       }
-      setStatus(`Ошибка получения status ws-токена: ${err.message || "unknown"}`);
+      setStatus(`${t("miniapp.status.err_ws_token", "Ошибка получения status ws-токена:")} ${err.message || "unknown"}`);
       scheduleStatusReconnect();
       return;
     }
     if (!ticket) {
-      setStatus("status ws-токен не получен");
+      setStatus(t("miniapp.status.err_no_ws_token", "status ws-токен не получен"));
       scheduleStatusReconnect();
       return;
     }
@@ -4155,7 +4155,7 @@
       state.statusReconnectAttempts = 0;
       clearStatusReconnectTimer();
       if (!state.statusLastPayload) {
-        setStatus("Поток статуса подключен, ожидание данных...");
+        setStatus(t("miniapp.status.ws_connected_waiting", "Поток статуса подключен, ожидание данных..."));
       }
     };
 
@@ -4173,7 +4173,7 @@
         return;
       }
       if (type === "error") {
-        setStatus(String(payload.error || "Ошибка потока статуса"));
+        setStatus(String(payload.error || t("miniapp.status.ws_error", "Ошибка потока статуса")));
         return;
       }
       if (type === "keepalive") {
@@ -4183,7 +4183,7 @@
 
     ws.onerror = () => {
       if (state.statusSocket !== ws) return;
-      setStatus("Ошибка websocket-подключения статуса");
+      setStatus(t("miniapp.status.ws_conn_error", "Ошибка websocket-подключения статуса"));
     };
 
     ws.onclose = (event) => {
@@ -4191,13 +4191,13 @@
       state.statusSocket = null;
       const isNormal = Boolean(event && event.wasClean && Number(event.code) === 1000);
       if (isNormal) {
-        setStatus("Поток статуса отключен");
+        setStatus(t("miniapp.status.ws_disconnected", "Поток статуса отключен"));
         return;
       }
       const code = Number(event?.code || 0);
       const reason = String(event?.reason || "").trim();
       const details = reason ? ` (code=${code}, reason=${reason})` : ` (code=${code})`;
-      setStatus(`Поток статуса отключен с ошибкой${details}`);
+      setStatus(`${t("miniapp.status.ws_disconnected_error", "Поток статуса отключен с ошибкой")}${details}`);
       scheduleStatusReconnect();
     };
   }
@@ -4223,7 +4223,7 @@
       }
     }
     if (session) {
-      const allLabel = state.me && state.me.is_admin ? "Все сессии" : "Все мои сессии";
+      const allLabel = state.me && state.me.is_admin ? t("miniapp.logs.all_sessions", "Все сессии") : t("miniapp.logs.my_sessions", "Все мои сессии");
       const sessions = Array.isArray(state.logsMeta.sessions) ? state.logsMeta.sessions : [];
       const options = sessions
         .map((item) => {
@@ -4320,83 +4320,83 @@
     const cfg = state.draft;
     const errors = [];
     if (!cfg || typeof cfg !== "object") {
-      return ["Черновик конфига не загружен"];
+      return [t("miniapp.cfg.err_draft_not_loaded", "Черновик конфига не загружен")];
     }
 
     if (!String(cfg.telegram?.token || "").trim()) {
-      errors.push("telegram.token обязателен");
+      errors.push(t("miniapp.cfg.err_telegram_token", "telegram.token обязателен"));
     }
     if (!String(cfg.defaults?.workdir || "").trim()) {
-      errors.push("defaults.workdir обязателен");
+      errors.push(t("miniapp.cfg.err_defaults_workdir", "defaults.workdir обязателен"));
     }
     if (!String(cfg.miniapp?.base_path || "").trim()) {
-      errors.push("miniapp.base_path обязателен");
+      errors.push(t("miniapp.cfg.err_miniapp_base_path", "miniapp.base_path обязателен"));
     }
     if (!String(cfg.miniapp?.bind_host || "").trim()) {
-      errors.push("miniapp.bind_host обязателен");
+      errors.push(t("miniapp.cfg.err_miniapp_bind_host", "miniapp.bind_host обязателен"));
     }
     if (!isFiniteNumber(cfg.miniapp?.bind_port) || Number(cfg.miniapp.bind_port) <= 0) {
-      errors.push("miniapp.bind_port должен быть числом > 0");
+      errors.push(t("miniapp.cfg.err_miniapp_bind_port", "miniapp.bind_port должен быть числом > 0"));
     }
     Object.entries(cfg.tools || {}).forEach(([toolName, tool]) => {
       if (!tool || typeof tool !== "object") {
-        errors.push(`tools.${toolName}: неверная структура`);
+        errors.push(`tools.${toolName}: ${t("miniapp.cfg.err_tool_bad_struct", "неверная структура")}`);
         return;
       }
       if (!["headless", "interactive"].includes(String(tool.mode || ""))) {
-        errors.push(`tools.${toolName}.mode должен быть headless или interactive`);
+        errors.push(`tools.${toolName}.mode ${t("miniapp.cfg.err_tool_mode", "должен быть headless или interactive")}`);
       }
       const cmd = Array.isArray(tool.cmd) ? tool.cmd.map((x) => String(x).trim()).filter(Boolean) : [];
       if (!cmd.length) {
-        errors.push(`tools.${toolName}.cmd не должен быть пустым`);
+        errors.push(`tools.${toolName}.cmd ${t("miniapp.cfg.err_tool_cmd_empty", "не должен быть пустым")}`);
       }
     });
 
     if (cfg.mcp && !isFiniteNumber(cfg.mcp.port)) {
-      errors.push("mcp.port должен быть числом");
+      errors.push(t("miniapp.cfg.err_mcp_port", "mcp.port должен быть числом"));
     }
 
     if (!["private", "group"].includes(String(cfg.thread_mode?.mode || "private"))) {
-      errors.push("thread_mode.mode должен быть private или group");
+      errors.push(t("miniapp.cfg.err_thread_mode", "thread_mode.mode должен быть private или group"));
     }
     const threadTopicsChatId = cfg.thread_mode?.topics_chat_id;
     if (
       String(cfg.thread_mode?.mode || "private") === "group"
       && (threadTopicsChatId === null || threadTopicsChatId === undefined || threadTopicsChatId === "" || !Number.isInteger(Number(threadTopicsChatId)))
     ) {
-      errors.push("thread_mode.topics_chat_id обязателен для mode=group");
+      errors.push(t("miniapp.cfg.err_thread_topics_chat_id", "thread_mode.topics_chat_id обязателен для mode=group"));
     }
     if (!String(cfg.webhooks?.path || "").trim()) {
-      errors.push("webhooks.path обязателен");
+      errors.push(t("miniapp.cfg.err_webhooks_path", "webhooks.path обязателен"));
     } else if (!String(cfg.webhooks.path).startsWith("/")) {
-      errors.push("webhooks.path должен начинаться с /");
+      errors.push(t("miniapp.cfg.err_webhooks_path_slash", "webhooks.path должен начинаться с /"));
     }
     if (!isFiniteNumber(cfg.webhooks?.request_timeout_sec) || Number(cfg.webhooks.request_timeout_sec) <= 0) {
-      errors.push("webhooks.request_timeout_sec должен быть > 0");
+      errors.push(t("miniapp.cfg.err_webhooks_timeout", "webhooks.request_timeout_sec должен быть > 0"));
     }
     if (!isFiniteNumber(cfg.webhooks?.max_payload_bytes) || Number(cfg.webhooks.max_payload_bytes) <= 0) {
-      errors.push("webhooks.max_payload_bytes должен быть > 0");
+      errors.push(t("miniapp.cfg.err_webhooks_max_payload", "webhooks.max_payload_bytes должен быть > 0"));
     }
     if (!String(cfg.scheduler?.timezone || "").trim()) {
-      errors.push("scheduler.timezone обязателен");
+      errors.push(t("miniapp.cfg.err_scheduler_timezone", "scheduler.timezone обязателен"));
     }
     ["tick_interval_sec", "max_concurrent_jobs", "job_timeout_sec"].forEach((field) => {
       if (!isFiniteNumber(cfg.scheduler?.[field]) || Number(cfg.scheduler[field]) <= 0) {
-        errors.push(`scheduler.${field} должен быть > 0`);
+        errors.push(`scheduler.${field} ${t("miniapp.cfg.err_must_be_positive", "должен быть > 0")}`);
       }
     });
     if (!isFiniteNumber(cfg.scheduler?.misfire_grace_sec) || Number(cfg.scheduler.misfire_grace_sec) < 0) {
-      errors.push("scheduler.misfire_grace_sec должен быть >= 0");
+      errors.push(t("miniapp.cfg.err_scheduler_misfire", "scheduler.misfire_grace_sec должен быть >= 0"));
     }
     const rateLimits = cfg.security?.rate_limits || {};
     if (!["sqlite"].includes(String(rateLimits.backend || "sqlite"))) {
-      errors.push("security.rate_limits.backend должен быть sqlite");
+      errors.push(t("miniapp.cfg.err_rate_limit_backend", "security.rate_limits.backend должен быть sqlite"));
     }
     if (rateLimits.enabled) {
       const hasDefault = !!(rateLimits.default && typeof rateLimits.default === "object");
       const hasPolicies = !!(rateLimits.policies && typeof rateLimits.policies === "object" && Object.keys(rateLimits.policies).length);
       if (!hasDefault && !hasPolicies) {
-        errors.push("security.rate_limits.default или security.rate_limits.policies обязателен при enabled=true");
+        errors.push(t("miniapp.cfg.err_rate_limit_policy", "security.rate_limits.default или security.rate_limits.policies обязателен при enabled=true"));
       }
     }
     const lintEvolution = cfg.lint_evolution || {};
@@ -4408,57 +4408,57 @@
       "fp_growth_threshold_pct",
     ].forEach((field) => {
       if (!isFiniteNumber(lintEvolution[field]) || Number(lintEvolution[field]) < 0) {
-        errors.push(`lint_evolution.${field} должен быть >= 0`);
+        errors.push(`lint_evolution.${field} ${t("miniapp.cfg.err_must_be_nonneg", "должен быть >= 0")}`);
       }
     });
     ["lock_ttl_minutes", "canary_rolling_days", "canary_baseline_days"].forEach((field) => {
       if (!isFiniteNumber(lintEvolution[field]) || Number(lintEvolution[field]) <= 0) {
-        errors.push(`lint_evolution.${field} должен быть > 0`);
+        errors.push(`lint_evolution.${field} ${t("miniapp.cfg.err_must_be_positive", "должен быть > 0")}`);
       }
     });
     if (
       !Number.isInteger(Number(lintEvolution.canary_max_schema_fields_per_180d))
       || Number(lintEvolution.canary_max_schema_fields_per_180d) < 0
     ) {
-      errors.push("lint_evolution.canary_max_schema_fields_per_180d должен быть целым >= 0");
+      errors.push(t("miniapp.cfg.err_lint_canary_max", "lint_evolution.canary_max_schema_fields_per_180d должен быть целым >= 0"));
     }
 
     (cfg.mcp_clients || []).forEach((client, idx) => {
       const prefix = `mcp_clients[${idx}]`;
       if (!String(client?.name || "").trim()) {
-        errors.push(`${prefix}.name обязателен`);
+        errors.push(`${prefix}.name ${t("miniapp.cfg.err_field_required", "обязателен")}`);
       }
       const transport = String(client?.transport || "stdio");
       if (!["stdio", "http"].includes(transport)) {
-        errors.push(`${prefix}.transport должен быть stdio или http`);
+        errors.push(`${prefix}.transport ${t("miniapp.cfg.err_transport", "должен быть stdio или http")}`);
       }
       if (!isFiniteNumber(client?.timeout_ms) || Number(client.timeout_ms) <= 0) {
-        errors.push(`${prefix}.timeout_ms должен быть > 0`);
+        errors.push(`${prefix}.timeout_ms ${t("miniapp.cfg.err_must_be_positive", "должен быть > 0")}`);
       }
       if (transport === "stdio") {
         const cmd = Array.isArray(client?.cmd) ? client.cmd.map((x) => String(x).trim()).filter(Boolean) : [];
         if (!cmd.length) {
-          errors.push(`${prefix}.cmd не должен быть пустым для transport=stdio`);
+          errors.push(`${prefix}.cmd ${t("miniapp.cfg.err_cmd_empty_stdio", "не должен быть пустым для transport=stdio")}`);
         }
       }
       if (transport === "http" && !String(client?.url || "").trim()) {
-        errors.push(`${prefix}.url обязателен для transport=http`);
+        errors.push(`${prefix}.url ${t("miniapp.cfg.err_url_required_http", "обязателен для transport=http")}`);
       }
     });
 
     (cfg.presets || []).forEach((preset, idx) => {
       if (!String(preset?.name || "").trim()) {
-        errors.push(`presets[${idx}].name обязателен`);
+        errors.push(`presets[${idx}].name ${t("miniapp.cfg.err_field_required", "обязателен")}`);
       }
       if (!String(preset?.prompt || "").trim()) {
-        errors.push(`presets[${idx}].prompt обязателен`);
+        errors.push(`presets[${idx}].prompt ${t("miniapp.cfg.err_field_required", "обязателен")}`);
       }
     });
 
     return errors;
   }
 
-  function renderValidationErrors(errors, source = "Локальная валидация") {
+  function renderValidationErrors(errors, source = t("miniapp.cfg.local_validation", "Локальная валидация")) {
     const el = document.getElementById("cfgValidation");
     if (!errors.length) {
       el.innerHTML = "";
@@ -4473,11 +4473,11 @@
     const el = document.getElementById("cfgDirty");
     const clientErrors = validateClientDraft();
     if (!sections.length) {
-      el.textContent = "Изменений нет";
+      el.textContent = t("miniapp.cfg.no_changes", "Изменений нет");
       document.getElementById("cfgSave").disabled = true;
       return;
     }
-    el.textContent = `Изменены секции: ${sections.join(", ")}`;
+    el.textContent = `${t("miniapp.cfg.changed_sections", "Изменены секции")}: ${sections.join(", ")}`;
     document.getElementById("cfgSave").disabled = clientErrors.length > 0;
   }
 
@@ -4654,7 +4654,7 @@
     if (!paths.length) {
       return true;
     }
-    return window.confirm(`Изменены или очищены secret-поля: ${paths.join(", ")}. Продолжить сохранение?`);
+    return window.confirm(t("miniapp.cfg.secret_changed_confirm", "Изменены или очищены secret-поля: {paths}. Продолжить сохранение?").replace("{paths}", paths.join(", ")));
   }
 
   function optionalMap(obj) {
@@ -4731,7 +4731,7 @@
     el.onchange = () => {
       const parsed = parseJsonObjectText(el.value);
       if (!parsed.ok) {
-        window.alert(`${label} должен быть JSON-объектом`);
+        window.alert(`${label} ${t("miniapp.cfg.err_must_be_json_object", "должен быть JSON-объектом")}`);
         el.value = jsonObjectToText(getter());
         return;
       }
@@ -4755,13 +4755,13 @@
     }
     const inputHtml = `<input id="${id}" type="${kind}" placeholder="${placeholder}" ${readonly ? "readonly" : ""} />`;
     if (clearable) {
-      return `<div class="field"><label>${label}</label><div class="secret-input-row">${inputHtml}<button type="button" id="${id}-clear" class="btn-sm">Очистить</button></div><small>${hint || ""}</small></div>`;
+      return `<div class="field"><label>${label}</label><div class="secret-input-row">${inputHtml}<button type="button" id="${id}-clear" class="btn-sm">${escapeHtml(t("miniapp.btn.clear", "Очистить"))}</button></div><small>${hint || ""}</small></div>`;
     }
     return `<div class="field"><label>${label}</label>${inputHtml}<small>${hint || ""}</small></div>`;
   }
 
   function sectionHtml({ key, title, inner, actions = "" }) {
-    return `<div class="section-header"><span>${title}</span><span class="section-actions">${actions}<button type="button" data-reset="${key}">Сбросить секцию</button></span></div><div class="section-body">${inner}</div>`;
+    return `<div class="section-header"><span>${title}</span><span class="section-actions">${actions}<button type="button" data-reset="${key}">${escapeHtml(t("miniapp.cfg.reset_section", "Сбросить секцию"))}</button></span></div><div class="section-body">${inner}</div>`;
   }
 
   function normalizeConfigRoot(config) {
@@ -4882,12 +4882,12 @@
         title: "defaults",
         inner: (() => {
           const subTabs = [
-            { key: "general", title: "Общие" },
-            { key: "paths", title: "Пути и хранение" },
-            { key: "apikeys", title: "API-ключи" },
-            { key: "orchestration", title: "Оркестрация" },
-            { key: "skills", title: "Навыки" },
-            { key: "runtime", title: "Runtime и LLM" },
+            { key: "general", title: t("miniapp.cfg.subtab_general", "Общие") },
+            { key: "paths", title: t("miniapp.cfg.subtab_paths", "Пути и хранение") },
+            { key: "apikeys", title: t("miniapp.cfg.subtab_apikeys", "API-ключи") },
+            { key: "orchestration", title: t("miniapp.cfg.subtab_orchestration", "Оркестрация") },
+            { key: "skills", title: t("miniapp.cfg.subtab_skills", "Навыки") },
+            { key: "runtime", title: t("miniapp.cfg.subtab_runtime", "Runtime и LLM") },
           ];
           const ast = state.activeDefaultsSubTab || "general";
           const tabsBar = `<div class="defaults-sub-tabs">${subTabs.map((t) =>
@@ -4986,7 +4986,7 @@
       {
         key: "tools",
         title: "tools",
-        actions: `<button type="button" data-tool-add="1">Добавить tool</button>`,
+        actions: `<button type="button" data-tool-add="1">${escapeHtml(t("miniapp.cfg.add_tool", "Добавить tool"))}</button>`,
         inner: toolNames.length
           ? toolNames
               .map((toolName, index) => {
@@ -5009,12 +5009,12 @@
                     ${fieldHtml({ id: `${idPrefix}-env`, label: "env", kind: "textarea", hint: "KEY=value" })}
                     ${fieldHtml({ id: `${idPrefix}-auto-commands`, label: "auto_commands", kind: "textarea", hint: "по одной команде в строке" })}
                     ${fieldHtml({ id: `${idPrefix}-separate-stderr`, label: "separate_stderr", kind: "checkbox" })}
-                    <button type="button" data-tool-remove="${escapeHtml(toolName)}">Удалить tool</button>
+                    <button type="button" data-tool-remove="${escapeHtml(toolName)}">${escapeHtml(t("miniapp.cfg.remove_tool", "Удалить tool"))}</button>
                   </div>
                 `;
               })
               .join("")
-          : `<div class="field"><label>tools</label><small>Нет инструментов, добавьте кнопку "Добавить tool".</small></div>`,
+          : `<div class="field"><label>tools</label><small>${escapeHtml(t("miniapp.cfg.no_tools", "Нет инструментов, добавьте кнопку \"Добавить tool\"."))} </small></div>`,
       },
       {
         key: "mcp",
@@ -5029,7 +5029,7 @@
       {
         key: "mcp_clients",
         title: "mcp_clients",
-        actions: `<button type="button" data-mcp-client-add="1">Добавить mcp_client</button>`,
+        actions: `<button type="button" data-mcp-client-add="1">${escapeHtml(t("miniapp.cfg.add_mcp_client", "Добавить mcp_client"))}</button>`,
         inner: (cfg.mcp_clients || []).length
           ? (cfg.mcp_clients || [])
               .map((client, index) => {
@@ -5047,17 +5047,17 @@
                     ${transport === "http" ? fieldHtml({ id: `${idPrefix}-url`, label: "url" }) : ""}
                     ${transport === "http" ? fieldHtml({ id: `${idPrefix}-headers`, label: "headers", kind: "textarea", hint: "Header=value" }) : ""}
                     ${fieldHtml({ id: `${idPrefix}-timeout-ms`, label: "timeout_ms", kind: "number" })}
-                    <button type="button" data-mcp-client-remove="${index}">Удалить mcp_client</button>
+                    <button type="button" data-mcp-client-remove="${index}">${escapeHtml(t("miniapp.cfg.remove_mcp_client", "Удалить mcp_client"))}</button>
                   </div>
                 `;
               })
               .join("")
-          : `<div class="field"><label>mcp_clients</label><small>Список пуст.</small></div>`,
+          : `<div class="field"><label>mcp_clients</label><small>${escapeHtml(t("miniapp.cfg.list_empty", "Список пуст."))}</small></div>`,
       },
       {
         key: "presets",
         title: "presets",
-        actions: `<button type="button" data-preset-add="1">Добавить preset</button>`,
+        actions: `<button type="button" data-preset-add="1">${escapeHtml(t("miniapp.cfg.add_preset", "Добавить preset"))}</button>`,
         inner: (cfg.presets || []).length
           ? (cfg.presets || [])
               .map((_, index) => {
@@ -5067,12 +5067,12 @@
                     <h4>preset #${index + 1}</h4>
                     ${fieldHtml({ id: `${idPrefix}-name`, label: "name" })}
                     ${fieldHtml({ id: `${idPrefix}-prompt`, label: "prompt", kind: "textarea" })}
-                    <button type="button" data-preset-remove="${index}">Удалить preset</button>
+                    <button type="button" data-preset-remove="${index}">${escapeHtml(t("miniapp.cfg.remove_preset", "Удалить preset"))}</button>
                   </div>
                 `;
               })
               .join("")
-          : `<div class="field"><label>presets</label><small>Список пуст.</small></div>`,
+          : `<div class="field"><label>presets</label><small>${escapeHtml(t("miniapp.cfg.list_empty", "Список пуст."))}</small></div>`,
       },
       {
         key: "miniapp",
@@ -5424,12 +5424,12 @@
     root.querySelectorAll("button[data-tool-add]").forEach((btn) => {
       btn.onclick = (e) => {
         e.preventDefault();
-        const name = window.prompt("Имя инструмента (ключ в tools)");
+        const name = window.prompt(t("miniapp.cfg.prompt_tool_name", "Имя инструмента (ключ в tools)"));
         if (!name) return;
         const toolName = name.trim();
         if (!toolName) return;
         if (cfg.tools[toolName]) {
-          window.alert("Инструмент с таким именем уже есть");
+          window.alert(t("miniapp.cfg.err_tool_exists", "Инструмент с таким именем уже есть"));
           return;
         }
         cfg.tools[toolName] = {
@@ -5447,7 +5447,7 @@
         e.preventDefault();
         const toolName = btn.dataset.toolRemove || "";
         if (!toolName || !cfg.tools[toolName]) return;
-        if (!window.confirm(`Удалить tool '${toolName}'?`)) return;
+        if (!window.confirm(t("miniapp.cfg.confirm_delete_tool", "Удалить tool '{name}'?").replace("{name}", toolName))) return;
         delete cfg.tools[toolName];
         renderConfigForm();
       };
@@ -5513,7 +5513,7 @@
     }
     const restartBanner = document.getElementById("cfgRestartBanner");
     if (restartBanner) {
-      restartBanner.textContent = "Требуется перезапуск для части изменений";
+      restartBanner.textContent = t("miniapp.cfg.restart_banner", "Требуется перезапуск для части изменений");
       restartBanner.classList.add("hidden");
     }
   }
@@ -5529,9 +5529,9 @@
     const result = await api("/config/validate", { method: "POST", body: JSON.stringify({ draft: state.draft }) });
     const el = document.getElementById("cfgValidation");
     if (result.ok) {
-      el.innerHTML = `<div class="status-ok">Валидация пройдена</div>`;
+      el.innerHTML = `<div class="status-ok">${escapeHtml(t("miniapp.cfg.validation_passed", "Валидация пройдена"))}</div>`;
     } else {
-      renderValidationErrors(result.errors || [], "Серверная валидация");
+      renderValidationErrors(result.errors || [], t("miniapp.cfg.server_validation", "Серверная валидация"));
     }
     document.getElementById("cfgSave").disabled = !result.ok || !dirtySections().length;
     return result.ok;
@@ -5546,11 +5546,11 @@
     if (restartBanner) {
       if (restartRequired.length > 0) {
         const listed = restartRequired.slice(0, 4).join(", ");
-        const suffix = restartRequired.length > 4 ? ` и ещё ${restartRequired.length - 4}` : "";
-        restartBanner.textContent = `Требуется перезапуск для применения: ${listed}${suffix}`;
+        const suffix = restartRequired.length > 4 ? ` ${t("miniapp.cfg.and_more", "и ещё")} ${restartRequired.length - 4}` : "";
+        restartBanner.textContent = `${t("miniapp.cfg.restart_required_for", "Требуется перезапуск для применения:")} ${listed}${suffix}`;
         restartBanner.classList.remove("hidden");
       } else {
-        restartBanner.textContent = "Требуется перезапуск для части изменений";
+        restartBanner.textContent = t("miniapp.cfg.restart_banner", "Требуется перезапуск для части изменений");
         restartBanner.classList.add("hidden");
       }
     }
@@ -5576,12 +5576,12 @@
     const restartRequired = Array.isArray(payload.restart_required) ? payload.restart_required : [];
     const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
     const sections = [
-      renderConfigDiffList("Изменено", changed, "нет"),
-      renderConfigDiffList("Hot-reload", reloadable, "нет live-изменений"),
-      renderConfigDiffList("Требует перезапуска", restartRequired, "нет"),
+      renderConfigDiffList(t("miniapp.cfg.diff_changed", "Изменено"), changed, t("miniapp.cfg.diff_none", "нет")),
+      renderConfigDiffList("Hot-reload", reloadable, t("miniapp.cfg.diff_no_live", "нет live-изменений")),
+      renderConfigDiffList(t("miniapp.cfg.diff_restart", "Требует перезапуска"), restartRequired, t("miniapp.cfg.diff_none", "нет")),
     ];
     if (warnings.length) {
-      sections.push(renderConfigDiffList("Warnings", warnings, "нет"));
+      sections.push(renderConfigDiffList("Warnings", warnings, t("miniapp.cfg.diff_none", "нет")));
     }
     return `<div class="kv-list">${sections.join("")}</div>`;
   }
@@ -5591,7 +5591,7 @@
     if (!ok) return;
     await previewDiff();
     if (!confirmSecretChangesBeforeSave()) return;
-    if (!window.confirm("Сохранить config.yaml и применить hot-reload?")) return;
+    if (!window.confirm(t("miniapp.cfg.save_confirm", "Сохранить config.yaml и применить hot-reload?"))) return;
     const result = await api("/config/save", {
       method: "POST",
       body: JSON.stringify({ draft: state.draft, expected_revision: state.revision }),
@@ -5605,32 +5605,32 @@
     if (restartBanner) {
       if (restartRequired.length > 0) {
         const listed = restartRequired.slice(0, 4).join(", ");
-        const suffix = restartRequired.length > 4 ? ` и ещё ${restartRequired.length - 4}` : "";
-        restartBanner.textContent = `Требуется перезапуск для применения: ${listed}${suffix}`;
+        const suffix = restartRequired.length > 4 ? ` ${t("miniapp.cfg.and_more", "и ещё")} ${restartRequired.length - 4}` : "";
+        restartBanner.textContent = `${t("miniapp.cfg.restart_required_for", "Требуется перезапуск для применения:")} ${listed}${suffix}`;
         restartBanner.classList.remove("hidden");
       } else {
-        restartBanner.textContent = "Требуется перезапуск для части изменений";
+        restartBanner.textContent = t("miniapp.cfg.restart_banner", "Требуется перезапуск для части изменений");
         restartBanner.classList.add("hidden");
       }
     }
     if (reloadResult) {
       if (String(reload.status || "") === "error") {
-        const text = warnings[0] || "Hot-reload не применил изменения.";
-        reloadResult.innerHTML = `<div class="status-error">${text}</div>`;
+        const text = warnings[0] || t("miniapp.cfg.reload_error", "Hot-reload не применил изменения.");
+        reloadResult.innerHTML = `<div class="status-error">${escapeHtml(text)}</div>`;
       } else if (restartRequired.length > 0) {
         reloadResult.innerHTML = (
-          `<div class="banner">Hot-reload применил только live-изменения. ` +
-          `Чтобы задействовать restart-only поля (${restartRequired.join(", ")}), перезапустите процесс.</div>`
+          `<div class="banner">${escapeHtml(t("miniapp.cfg.reload_live_only", "Hot-reload применил только live-изменения."))} ` +
+          `${escapeHtml(t("miniapp.cfg.reload_restart_hint", "Чтобы задействовать restart-only поля ({fields}), перезапустите процесс.").replace("{fields}", restartRequired.join(", ")))}</div>`
         );
       } else {
-        reloadResult.innerHTML = `<div class="status-ok">Изменения применены hot-reload без перезапуска.</div>`;
+        reloadResult.innerHTML = `<div class="status-ok">${escapeHtml(t("miniapp.cfg.reload_ok", "Изменения применены hot-reload без перезапуска."))}</div>`;
       }
     }
   }
 
   async function loadTree(path = state.currentDir || ".") {
     const status = document.getElementById("filesStatus");
-    status.textContent = "loading...";
+    status.textContent = t("miniapp.status.loading", "Загрузка…");
     try {
       const sessionUid = currentFilesSessionUid();
       if (!sessionUid) {
@@ -5642,9 +5642,9 @@
       const active = state.statusLastPayload?.active_session || {};
       if (active.execution_target === "remote") {
         const root = active.remote_project_root || "unknown";
-        document.getElementById("filesPath").textContent = `Текущий путь (Remote: ${root}): ${state.currentDir}`;
+        document.getElementById("filesPath").textContent = `${t("miniapp.files.path_remote", "Текущий путь (Remote: {root}):", ).replace("{root}", root)} ${state.currentDir}`;
       } else {
-        document.getElementById("filesPath").textContent = `Текущий путь: ${state.currentDir}`;
+        document.getElementById("filesPath").textContent = `${t("miniapp.files.path_local", "Текущий путь:")} ${state.currentDir}`;
       }
       const tree = document.getElementById("filesTree");
       tree.innerHTML = "";
@@ -5677,7 +5677,7 @@
   async function openFile(path) {
     const sessionUid = currentFilesSessionUid();
     if (!sessionUid) {
-      throw new Error("Сессия не выбрана");
+      throw new Error(t("miniapp.status.no_session", "Сессия не выбрана"));
     }
     const result = await api(`/files/read?path=${encodeURIComponent(path)}&session_uid=${encodeURIComponent(sessionUid)}`);
     state.openFile = path;
@@ -5698,7 +5698,7 @@
     if (!state.openFile) return;
     const sessionUid = currentFilesSessionUid();
     if (!sessionUid) {
-      throw new Error("Сессия не выбрана");
+      throw new Error(t("miniapp.status.no_session", "Сессия не выбрана"));
     }
     const content = editor.getValue();
     try {
@@ -5719,7 +5719,7 @@
       document.getElementById("editorForceSave").style.display = "none";
       document.getElementById("editorSave").style.display = "inline-block";
       
-      tg.showScanResult?.("Файл сохранён");
+      tg.showScanResult?.(t("miniapp.files.saved", "Файл сохранён"));
       await loadTree(state.currentDir);
     } catch (err) {
       if (err.status === 409 && err.body && err.body.diff_unified) {
@@ -5728,14 +5728,14 @@
         document.getElementById("editorSave").style.display = "none";
         document.getElementById("editorForceSave").style.display = "inline-block";
       } else {
-        window.alert(`Ошибка сохранения: ${err.message || "unknown"}`);
+        window.alert(`${t("miniapp.files.save_error_prefix", "Ошибка сохранения:")} ${err.message || "unknown"}`);
       }
     }
   }
 
   async function resetOpenFileBuffer() {
     if (!state.openFile) return;
-    const ok = window.confirm("Сбросить несохраненные изменения и перезагрузить файл с диска?");
+    const ok = window.confirm(t("miniapp.files.reset_confirm", "Сбросить несохраненные изменения и перезагрузить файл с диска?"));
     if (!ok) return;
     await openFile(state.openFile);
   }
@@ -5744,7 +5744,7 @@
     if (!state.openFile) return;
     const sessionUid = currentFilesSessionUid();
     if (!sessionUid) {
-      throw new Error("Сессия не выбрана");
+      throw new Error(t("miniapp.status.no_session", "Сессия не выбрана"));
     }
     const qs = new URLSearchParams({
       path: state.openFile,
@@ -5761,16 +5761,16 @@
         openDownloadUrl(downloadUrl);
       })
       .catch((err) => {
-        window.alert(`Ошибка скачивания: ${err.message || "unknown"}`);
+        window.alert(`${t("miniapp.files.download_error_prefix", "Ошибка скачивания:")} ${err.message || "unknown"}`);
       });
   }
 
   async function createPath(kind) {
     const sessionUid = currentFilesSessionUid();
     if (!sessionUid) {
-      throw new Error("Сессия не выбрана");
+      throw new Error(t("miniapp.status.no_session", "Сессия не выбрана"));
     }
-    const name = window.prompt(kind === "file" ? "Имя файла" : "Имя папки");
+    const name = window.prompt(kind === "file" ? t("miniapp.files.prompt_filename", "Имя файла") : t("miniapp.files.prompt_dirname", "Имя папки"));
     if (!name) return;
     const path = state.currentDir === "." ? name : `${state.currentDir}/${name}`;
     await api("/files/create", { method: "POST", body: JSON.stringify({ session_uid: sessionUid, path, kind }) });
@@ -5781,9 +5781,9 @@
     if (!state.selectedPath) return;
     const sessionUid = currentFilesSessionUid();
     if (!sessionUid) {
-      throw new Error("Сессия не выбрана");
+      throw new Error(t("miniapp.status.no_session", "Сессия не выбрана"));
     }
-    if (!window.confirm(`Удалить ${state.selectedPath}?`)) return;
+    if (!window.confirm(t("miniapp.files.delete_confirm", "Удалить {path}?").replace("{path}", state.selectedPath))) return;
     await api("/files/delete", { method: "POST", body: JSON.stringify({ session_uid: sessionUid, path: state.selectedPath }) });
     if (state.openFile === state.selectedPath) {
       state.openFile = null;
@@ -5882,15 +5882,15 @@
           method: "POST"
         });
         if (result?.preflight?.ok) {
-          tg.showScanResult?.("Preflight пройден успешно");
+          tg.showScanResult?.(t("miniapp.settings.preflight_ok", "Preflight пройден успешно"));
         } else {
           const pfeCode = result?.preflight?.error || result?.error || "unknown";
-          rcError.textContent = `Preflight error: ${t("errors." + pfeCode, pfeCode)}`;
+          rcError.textContent = `${t("miniapp.settings.preflight_error_prefix", "Ошибка перепроверки:")} ${t("errors." + pfeCode, pfeCode)}`;
           rcError.style.display = "block";
         }
         await fetchSessionSettings();
       } catch (err) {
-        rcError.textContent = `Ошибка перепроверки: ${err?.body?.preflight?.error || err.message || "unknown"}`;
+        rcError.textContent = `${t("miniapp.settings.preflight_error_prefix", "Ошибка перепроверки:")} ${err?.body?.preflight?.error || err.message || "unknown"}`;
         rcError.style.display = "block";
       }
     };
@@ -6143,9 +6143,9 @@
     const code = err && err.body && err.body.code;
     const msg = (err && err.message) || "";
     if (code === "checksum_mismatch") {
-      return `<div class="status-error"><strong>⚠ Integrity mismatch:</strong> ${autonomyEscape(msg)}<br><small>SHA1 расходится с зафиксированным в runbook — скрипт мог быть изменён. Выполнение остановлено.</small></div>`;
+      return `<div class="status-error"><strong>⚠ Integrity mismatch:</strong> ${autonomyEscape(msg)}<br><small>${escapeHtml(t("miniapp.autonomy.checksum_mismatch", "SHA1 расходится с зафиксированным в runbook — скрипт мог быть изменён. Выполнение остановлено."))}</small></div>`;
     }
-    return `<div class="status-error">Ошибка: ${autonomyEscape(msg)}</div>`;
+    return `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(msg)}</div>`;
   }
 
   async function autonomyRunWithLock(btn, asyncFn) {
@@ -6211,17 +6211,17 @@
   async function refreshAutonomy() {
     const sessionUid = autonomyCurrentSessionUid();
     if (!sessionUid) {
-      setAutonomyStatus("Сессия не выбрана.", false);
+      setAutonomyStatus(t("miniapp.autonomy.no_session", "Сессия не выбрана."), false);
       renderAutonomyDashboard(null, []);
       return;
     }
-    setAutonomyStatus("Загрузка…");
+    setAutonomyStatus(t("miniapp.status.loading", "Загрузка…"));
     try {
       const payload = await api(`/v1/admin/autonomy/dashboard?session_uid=${encodeURIComponent(sessionUid)}`);
       renderAutonomyDashboard(payload.global || null, Array.isArray(payload.servers) ? payload.servers : []);
       setAutonomyStatus("");
     } catch (err) {
-      setAutonomyStatus(`Ошибка загрузки: ${err.message || "unknown"}`, false);
+      setAutonomyStatus(`${t("miniapp.error.load_prefix", "Ошибка загрузки:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -6235,7 +6235,7 @@
         const parts = [];
         parts.push(`<strong>Servers:</strong> ${Number(globalSummary.server_count || 0)}`);
         const statusParts = Object.keys(statuses).map((k) => `${autonomyEscape(k)}: ${statuses[k]}`);
-        if (statusParts.length) parts.push(`<strong>Статусы:</strong> ${statusParts.join(", ")}`);
+        if (statusParts.length) parts.push(`<strong>${escapeHtml(t("miniapp.autonomy.statuses_label", "Статусы"))}</strong>: ${statusParts.join(", ")}`);
         const totalsParts = ["alarm", "warn", "info", "noise"].filter((k) => totals[k]).map((k) => `${k}: ${totals[k]}`);
         if (totalsParts.length) parts.push(`<strong>Open drifts:</strong> ${totalsParts.join(", ")}`);
         if (globalSummary.admin_root) parts.push(`<small>${autonomyEscape(globalSummary.admin_root)}</small>`);
@@ -6247,7 +6247,7 @@
     if (!grid) return;
     grid.innerHTML = "";
     if (!servers.length) {
-      grid.innerHTML = '<div class="status-empty">Нет серверов. Добавьте их в admin-конфиг.</div>';
+      grid.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_servers", "Нет серверов. Добавьте их в admin-конфиг."))}</div>`;
       return;
     }
     for (const s of servers) {
@@ -6274,7 +6274,7 @@
         ${tags ? `<span class="autonomy-server-tags">${autonomyEscape(tags)}</span>` : ""}
       </div>
       <div class="autonomy-server-card-drifts">
-        ${driftsParts.join(" ") || '<span class="autonomy-drift-none">нет открытых drift</span>'}
+        ${driftsParts.join(" ") || `<span class="autonomy-drift-none">${escapeHtml(t("miniapp.autonomy.no_open_drifts", "нет открытых drift"))}</span>`}
       </div>
       <div class="autonomy-server-card-footer">
         <span>memory: ${Number(server.memory_entries || 0)}</span>
@@ -6287,21 +6287,21 @@
 
   async function autonomyRescanAllAction() {
     const sessionUid = autonomyCurrentSessionUid();
-    if (!sessionUid) { setAutonomyStatus("Сессия не выбрана.", false); return; }
-    setAutonomyStatus("Rescan all запущен…");
+    if (!sessionUid) { setAutonomyStatus(t("miniapp.autonomy.no_session", "Сессия не выбрана."), false); return; }
+    setAutonomyStatus(t("miniapp.autonomy.rescan_all_started", "Rescan all запущен…"));
     try {
       await api(`/v1/admin/autonomy/rescan_all?session_uid=${encodeURIComponent(sessionUid)}`, { method: "POST" });
-      setAutonomyStatus("Rescan all завершён.");
+      setAutonomyStatus(t("miniapp.autonomy.rescan_all_done", "Rescan all завершён."));
       await refreshAutonomy();
     } catch (err) {
-      setAutonomyStatus(`Ошибка rescan all: ${err.message || "unknown"}`, false);
+      setAutonomyStatus(`${t("miniapp.autonomy.err_rescan_all", "Ошибка rescan all:")} ${err.message || "unknown"}`, false);
     }
   }
 
   async function autonomyRunDailyMaintenance() {
     const sessionUid = autonomyCurrentSessionUid();
-    if (!sessionUid) { setAutonomyStatus("Сессия не выбрана.", false); return; }
-    setAutonomyStatus("Daily maintenance запущен…");
+    if (!sessionUid) { setAutonomyStatus(t("miniapp.autonomy.no_session", "Сессия не выбрана."), false); return; }
+    setAutonomyStatus(t("miniapp.autonomy.maintenance_started", "Daily maintenance запущен…"));
     try {
       const payload = await api("/v1/admin/autonomy/maintenance/daily", {
         method: "POST",
@@ -6309,9 +6309,9 @@
       });
       const servers = (payload.report && payload.report.servers) || {};
       const count = Object.keys(servers).length;
-      setAutonomyStatus(`Daily maintenance готов (серверов: ${count}).`);
+      setAutonomyStatus(t("miniapp.autonomy.maintenance_done", "Daily maintenance готов (серверов: {count}).").replace("{count}", count));
     } catch (err) {
-      setAutonomyStatus(`Ошибка maintenance: ${err.message || "unknown"}`, false);
+      setAutonomyStatus(`${t("miniapp.autonomy.err_maintenance", "Ошибка maintenance:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -6322,14 +6322,14 @@
     if (!panel) return;
     panel.classList.remove("hidden");
     panel.dataset.serverId = serverId;
-    panel.innerHTML = `<div class="status-empty">Загрузка ${autonomyEscape(serverId)}…</div>`;
+    panel.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.loading_server", "Загрузка {server}…").replace("{server}", serverId))}</div>`;
     let detail;
     try {
       detail = await api(
         `/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}?session_uid=${encodeURIComponent(sessionUid)}`
       );
     } catch (err) {
-      panel.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+      panel.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       return;
     }
     renderAutonomyServerDetailShell(panel, serverId, detail.summary || {}, detail.dossier || {});
@@ -6350,7 +6350,7 @@
         </div>
         <div class="autonomy-detail-actions">
           <button type="button" data-autonomy-act="rescan" data-server-id="${sidSafe}">Rescan now</button>
-          <button type="button" data-autonomy-act="close">Закрыть</button>
+          <button type="button" data-autonomy-act="close">${escapeHtml(t("miniapp.btn.close", "Закрыть"))}</button>
         </div>
       </div>
       <nav class="autonomy-tabs" role="tablist">
@@ -6392,7 +6392,7 @@
     const sessionUid = autonomyCurrentSessionUid();
     const dossier = panel._autonomyDossier || {};
     const summary = panel._autonomySummary || {};
-    body.innerHTML = '<div class="status-empty">Загрузка…</div>';
+    body.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.status.loading", "Загрузка…"))}</div>`;
     if (tab === "overview") {
       renderAutonomyOverview(body, summary, dossier);
     } else if (tab === "baseline") {
@@ -6423,16 +6423,16 @@
       ? '<dl class="autonomy-facts-list">' + Object.keys(facts).map((k) => (
           `<dt>${autonomyEscape(k)}</dt><dd>${autonomyEscape(autonomyInlineValue(facts[k]))}</dd>`
         )).join("") + "</dl>"
-      : '<div class="status-empty">Нет facts.</div>';
+      : `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_facts", "Нет facts."))}</div>`;
     const notesHtml = notes.length
       ? notes.map((n) => `<div class="autonomy-note-row"><small>${autonomyEscape(n.ts || "")} • ${autonomyEscape(n.source || "")}</small><div>${autonomyEscape(n.text || "")}</div></div>`).join("")
-      : '<div class="status-empty">Нет notes.</div>';
+      : `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_notes", "Нет notes."))}</div>`;
     const rbHtml = runbooks.length
       ? '<ul class="autonomy-rb-list">' + runbooks.map((rb) => `<li><strong>${autonomyEscape(rb.title || rb.id || "")}</strong> <small>(${autonomyEscape((rb.tags || []).join(", "))})</small></li>`).join("") + "</ul>"
-      : '<div class="status-empty">Нет совпадающих runbooks.</div>';
+      : `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_runbooks", "Нет совпадающих runbooks."))}</div>`;
     const driftsHtml = recentDrifts.length
       ? '<ul class="autonomy-drift-list">' + recentDrifts.slice(0, 5).map((d) => `<li><span class="autonomy-drift-${autonomyEscape(d.severity || "")}">${autonomyEscape(d.severity || "")}</span> ${autonomyEscape(d.check_id || "")} <small>${autonomyEscape(d.ts || "")}</small></li>`).join("") + "</ul>"
-      : '<div class="status-empty">Нет drift.</div>';
+      : `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_drift", "Нет drift."))}</div>`;
     body.innerHTML = `
       <div class="autonomy-subgrid">
         <div class="autonomy-subcard">
@@ -6461,7 +6461,7 @@
       const res = await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/baseline?session_uid=${encodeURIComponent(sessionUid)}`);
       payload = res.baseline || {};
     } catch (err) {
-      body.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+      body.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       return;
     }
     const baselineYaml = autonomyYamlDump(payload.baseline || {}, 0);
@@ -6480,7 +6480,7 @@
           <div class="autonomy-baseline-cols">
             <div>
               <h4>Baseline</h4>
-              <pre class="autonomy-baseline-yaml">${autonomyEscape(baselineYaml || "(пусто)")}</pre>
+              <pre class="autonomy-baseline-yaml">${autonomyEscape(baselineYaml || t("miniapp.autonomy.empty", "(пусто)"))}</pre>
             </div>
             ${payload.has_proposed ? `<div><h4>Proposed</h4><pre class="autonomy-baseline-yaml autonomy-baseline-proposed">${autonomyEscape(proposedYaml)}</pre></div>` : ""}
           </div>
@@ -6510,11 +6510,11 @@
             method: "POST",
             body: JSON.stringify({ session_uid: sessionUid }),
           });
-          setAutonomyStatus(`Baseline accepted для ${serverId}.`);
+          setAutonomyStatus(t("miniapp.autonomy.baseline_accepted", "Baseline accepted для {server}.").replace("{server}", serverId));
           await renderAutonomyBaselineTab(body, serverId, sessionUid);
           await refreshAutonomy();
         } catch (err) {
-          setAutonomyStatus(`Ошибка accept: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_accept", "Ошибка accept:")} ${err.message || "unknown"}`, false);
         }
       };
     }
@@ -6523,11 +6523,11 @@
       discardBtn.onclick = async () => {
         try {
           await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/baseline/proposal?session_uid=${encodeURIComponent(sessionUid)}`, { method: "DELETE" });
-          setAutonomyStatus(`Proposal discarded для ${serverId}.`);
+          setAutonomyStatus(t("miniapp.autonomy.proposal_discarded", "Proposal discarded для {server}.").replace("{server}", serverId));
           await renderAutonomyBaselineTab(body, serverId, sessionUid);
           await refreshAutonomy();
         } catch (err) {
-          setAutonomyStatus(`Ошибка discard: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_discard", "Ошибка discard:")} ${err.message || "unknown"}`, false);
         }
       };
     }
@@ -6548,7 +6548,7 @@
           </select>
         </label>
         <label><input type="checkbox" id="autonomyDriftOpenOnly" ${prevOpenOnly ? "checked" : ""}/> open only</label>
-        <button type="button" id="autonomyDriftRefresh">Обновить</button>
+        <button type="button" id="autonomyDriftRefresh">${escapeHtml(t("miniapp.btn.refresh", "Обновить"))}</button>
       </div>
       <div id="autonomyDriftTableWrap"></div>
     `;
@@ -6570,7 +6570,7 @@
     if (!wrap) return;
     const severityMin = String(body._autonomySeverityMin || "");
     const openOnly = body._autonomyOpenOnly !== false;
-    wrap.innerHTML = '<div class="status-empty">Загрузка…</div>';
+    wrap.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.status.loading", "Загрузка…"))}</div>`;
     let drifts;
     try {
       const qs = new URLSearchParams({
@@ -6581,7 +6581,7 @@
       const res = await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/drifts?${qs.toString()}`);
       drifts = Array.isArray(res.drifts) ? res.drifts : [];
     } catch (err) {
-      wrap.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+      wrap.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       return;
     }
     if (severityMin) {
@@ -6590,7 +6590,7 @@
       drifts = drifts.filter((d) => (order[String(d.severity || "").toLowerCase()] || 0) >= threshold);
     }
     if (!drifts.length) {
-      wrap.innerHTML = '<div class="status-empty">Нет подходящих drift.</div>';
+      wrap.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_drifts_filtered", "Нет подходящих drift."))}</div>`;
       return;
     }
     const rows = drifts.map((d) => `
@@ -6620,7 +6620,7 @@
           setAutonomyStatus(`Drift #${driftId} acknowledged.`);
           await autonomyReloadDrifts(body, serverId, sessionUid);
         } catch (err) {
-          setAutonomyStatus(`Ошибка ack: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_ack", "Ошибка ack:")} ${err.message || "unknown"}`, false);
         }
       };
     });
@@ -6632,7 +6632,7 @@
       const res = await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/memory?session_uid=${encodeURIComponent(sessionUid)}`);
       payload = res.memory || {};
     } catch (err) {
-      body.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+      body.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       return;
     }
     const facts = payload.facts || {};
@@ -6655,7 +6655,7 @@
           <h4>Facts</h4>
           <table class="autonomy-facts-table">
             <thead><tr><th>key</th><th>value</th><th></th></tr></thead>
-            <tbody>${factRows || '<tr><td colspan="3" class="status-empty">Нет facts.</td></tr>'}</tbody>
+            <tbody>${factRows || `<tr><td colspan="3" class="status-empty">${escapeHtml(t("miniapp.autonomy.no_facts", "Нет facts."))}</td></tr>`}</tbody>
           </table>
           <div class="autonomy-fact-add">
             <input type="text" id="autonomyNewFactKey" placeholder="key">
@@ -6665,8 +6665,8 @@
         </div>
         <div class="autonomy-subcard">
           <h4>Notes</h4>
-          <pre class="autonomy-notes-text">${autonomyEscape(payload.notes_text || "(пусто)")}</pre>
-          <textarea id="autonomyNewNote" rows="3" placeholder="Новая заметка…"></textarea>
+          <pre class="autonomy-notes-text">${autonomyEscape(payload.notes_text || t("miniapp.autonomy.empty", "(пусто)"))}</pre>
+          <textarea id="autonomyNewNote" rows="3" placeholder="${escapeHtml(t("miniapp.autonomy.new_note_placeholder", "Новая заметка…"))}"></textarea>
           <div class="admin-state-actions">
             <button type="button" id="autonomyAppendNote">Append note</button>
             <button type="button" id="autonomyCompactNotes">Compact notes</button>
@@ -6687,7 +6687,7 @@
           });
           setAutonomyStatus(`Fact ${key} saved.`);
         } catch (err) {
-          setAutonomyStatus(`Ошибка save fact: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_save_fact", "Ошибка save fact:")} ${err.message || "unknown"}`, false);
         }
       };
     });
@@ -6701,7 +6701,7 @@
           setAutonomyStatus(`Fact ${key} deleted.`);
           await renderAutonomyMemoryTab(body, serverId, sessionUid);
         } catch (err) {
-          setAutonomyStatus(`Ошибка delete fact: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_delete_fact", "Ошибка delete fact:")} ${err.message || "unknown"}`, false);
         }
       };
     });
@@ -6719,7 +6719,7 @@
           setAutonomyStatus(`Fact ${key} added.`);
           await renderAutonomyMemoryTab(body, serverId, sessionUid);
         } catch (err) {
-          setAutonomyStatus(`Ошибка add fact: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_add_fact", "Ошибка add fact:")} ${err.message || "unknown"}`, false);
         }
       };
     }
@@ -6736,7 +6736,7 @@
           setAutonomyStatus("Note appended.");
           await renderAutonomyMemoryTab(body, serverId, sessionUid);
         } catch (err) {
-          setAutonomyStatus(`Ошибка append note: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_append_note", "Ошибка append note:")} ${err.message || "unknown"}`, false);
         }
       };
     }
@@ -6751,7 +6751,7 @@
           setAutonomyStatus("Notes compacted.");
           await renderAutonomyMemoryTab(body, serverId, sessionUid);
         } catch (err) {
-          setAutonomyStatus(`Ошибка compact: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_compact", "Ошибка compact:")} ${err.message || "unknown"}`, false);
         }
       };
     }
@@ -6763,11 +6763,11 @@
       const res = await api(`/v1/admin/autonomy/runbooks?session_uid=${encodeURIComponent(sessionUid)}&server_id=${encodeURIComponent(serverId)}`);
       runbooks = Array.isArray(res.runbooks) ? res.runbooks : [];
     } catch (err) {
-      body.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+      body.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       return;
     }
     if (!runbooks.length) {
-      body.innerHTML = '<div class="status-empty">Нет runbooks для этого сервера.</div>';
+      body.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_runbooks_server", "Нет runbooks для этого сервера."))}</div>`;
       return;
     }
     body.innerHTML = `
@@ -6777,7 +6777,7 @@
             <div class="autonomy-rb-row">
               <strong>${autonomyEscape(rb.title || rb.id)}</strong>
               <small>${autonomyEscape((rb.tags || []).join(", "))}</small>
-              <button type="button" data-rb-id="${autonomyEscape(rb.id || "")}">Открыть</button>
+              <button type="button" data-rb-id="${autonomyEscape(rb.id || "")}">${escapeHtml(t("miniapp.autonomy.open", "Открыть"))}</button>
             </div>
           </li>
         `).join("")}
@@ -6795,13 +6795,13 @@
   }
 
   async function renderAutonomyRunbookDetail(viewer, rbId, serverId, sessionUid) {
-    viewer.innerHTML = "Загрузка…";
+    viewer.innerHTML = escapeHtml(t("miniapp.status.loading", "Загрузка…"));
     let rb = {};
     try {
       const res = await api(`/v1/admin/autonomy/runbooks/${encodeURIComponent(rbId)}?session_uid=${encodeURIComponent(sessionUid)}&server_id=${encodeURIComponent(serverId)}`);
       rb = res.runbook || {};
     } catch (err) {
-      viewer.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+      viewer.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       return;
     }
     const meta = rb.metadata || {};
@@ -6818,9 +6818,9 @@
       <div><small>tags: ${autonomyEscape((rb.tags || []).join(", "))} • scope: ${autonomyEscape(rb.scope || "")} • servers: ${autonomyEscape((rb.servers || []).join(", "))}${confidence !== null ? ` • confidence: ${confidence}` : ""}</small></div>
       ${stepsHtml}
       <div class="autonomy-rb-actions">
-        <button type="button" data-rb-act="validate">Validate</button>
-        <button type="button" data-rb-act="promote">Promote…</button>
-        ${steps.length ? `<button type="button" data-rb-act="run-dry">Run first step (dry)</button>` : ""}
+        <button type="button" data-rb-act="validate">${escapeHtml(t("miniapp.autonomy.validate", "Проверить"))}</button>
+        <button type="button" data-rb-act="promote">${escapeHtml(t("miniapp.autonomy.promote_ellipsis", "Применить…"))}</button>
+        ${steps.length ? `<button type="button" data-rb-act="run-dry">${escapeHtml(t("miniapp.autonomy.run_first_step_dry", "Первый шаг (dry-run)"))}</button>` : ""}
       </div>
       <div id="autonomyRbReport" class="autonomy-rb-report"></div>
       <pre class="autonomy-rb-body">${autonomyEscape(rb.body || "")}</pre>
@@ -6830,7 +6830,7 @@
       const act = b.dataset.rbAct;
       if (act === "validate") {
         b.onclick = () => autonomyRunWithLock(b, async () => {
-          report.innerHTML = "Validating…";
+          report.innerHTML = escapeHtml(t("miniapp.autonomy.validating", "Проверка…"));
           try {
             const res = await api(`/v1/admin/autonomy/runbooks/${encodeURIComponent(rbId)}/validate`, {
               method: "POST",
@@ -6846,7 +6846,7 @@
       } else if (act === "run-dry") {
         b.onclick = () => autonomyRunWithLock(b, async () => {
           const firstStep = steps[0] || {};
-          report.innerHTML = "Running dry-run…";
+          report.innerHTML = escapeHtml(t("miniapp.autonomy.running_dry_run", "Dry-run…"));
           try {
             const res = await api(`/v1/admin/autonomy/runbooks/${encodeURIComponent(rbId)}/run-step`, {
               method: "POST",
@@ -6873,12 +6873,12 @@
     const status = report.ok ? '<span class="status-ok">OK</span>' : '<span class="status-error">FAIL</span>';
     return `
       <div class="autonomy-rb-validation">
-        <div>Validation: ${status}</div>
+        <div>${escapeHtml(t("miniapp.autonomy.validation_label", "Проверка:"))} ${status}</div>
         ${checks.length
           ? '<ul class="autonomy-rb-checks">' + checks.map((c) => `<li><strong>${autonomyEscape(c.step || "")}</strong> · checksum=${autonomyEscape(c.checksum || "?")} · bash -n=${autonomyEscape(c.bash_n || "?")} · shellcheck=${autonomyEscape(c.shellcheck || "?")}</li>`).join("") + "</ul>"
           : ""}
-        ${errors.length ? '<div class="status-error">Errors:<ul>' + errors.map((e) => `<li>${autonomyEscape(e)}</li>`).join("") + "</ul></div>" : ""}
-        ${warnings.length ? '<div class="status-warn">Warnings:<ul>' + warnings.map((w) => `<li>${autonomyEscape(w)}</li>`).join("") + "</ul></div>" : ""}
+        ${errors.length ? `<div class="status-error">${escapeHtml(t("miniapp.autonomy.errors_label", "Ошибки:"))}<ul>` + errors.map((e) => `<li>${autonomyEscape(e)}</li>`).join("") + "</ul></div>" : ""}
+        ${warnings.length ? `<div class="status-warn">${escapeHtml(t("miniapp.autonomy.warnings_label", "Предупреждения:"))}<ul>` + warnings.map((w) => `<li>${autonomyEscape(w)}</li>`).join("") + "</ul></div>" : ""}
       </div>
     `;
   }
@@ -6897,15 +6897,15 @@
   function renderAutonomyPromoteForm(container, rbId, sessionUid) {
     container.innerHTML = `
       <div class="autonomy-rb-promote">
-        <h5>Promote runbook</h5>
-        <label>Add servers (comma-separated):
+        <h5>${escapeHtml(t("miniapp.autonomy.promote_runbook_title", "Применить сценарий"))}</h5>
+        <label>${escapeHtml(t("miniapp.autonomy.promote_add_servers", "Добавить серверы (через запятую):"))}
           <input type="text" id="autonomyPromoteServers" placeholder="prod-01, prod-02" />
         </label>
-        <label>Confidence (0.0–1.0, optional):
+        <label>${escapeHtml(t("miniapp.autonomy.promote_confidence", "Уверенность (0.0–1.0, опц.):"))}
           <input type="number" id="autonomyPromoteConfidence" min="0" max="1" step="0.1" />
         </label>
-        <label><input type="checkbox" id="autonomyPromoteValidate" checked /> run validation first</label>
-        <button type="button" id="autonomyPromoteSubmit">Promote</button>
+        <label><input type="checkbox" id="autonomyPromoteValidate" checked /> ${escapeHtml(t("miniapp.autonomy.run_validation_first", "сначала запустите проверку"))}</label>
+        <button type="button" id="autonomyPromoteSubmit">${escapeHtml(t("miniapp.autonomy.promote", "Применить"))}</button>
         <div id="autonomyPromoteResult"></div>
       </div>
     `;
@@ -6917,19 +6917,19 @@
       const validate = container.querySelector("#autonomyPromoteValidate").checked;
       const add_servers = serversStr.split(",").map((s) => s.trim()).filter(Boolean);
       if (!add_servers.length) {
-        result.innerHTML = '<div class="status-error">Укажите хотя бы один server_id</div>';
+        result.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.autonomy.err_no_server_id", "Укажите хотя бы один server_id"))}</div>`;
         return;
       }
       const payload = { session_uid: sessionUid, add_servers, run_validation: validate };
       if (confidenceStr) {
         const conf = Number(confidenceStr);
         if (!Number.isFinite(conf) || conf < 0 || conf > 1) {
-          result.innerHTML = '<div class="status-error">Confidence должен быть числом в [0.0, 1.0]</div>';
+          result.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.autonomy.err_confidence_range", "Confidence должен быть числом в [0.0, 1.0]"))}</div>`;
           return;
         }
         payload.confidence = conf;
       }
-      result.innerHTML = "Promoting…";
+      result.innerHTML = escapeHtml(t("miniapp.autonomy.promoting", "Применение…"));
       try {
         const res = await api(`/v1/admin/autonomy/runbooks/${encodeURIComponent(rbId)}/promote`, {
           method: "POST",
@@ -6947,7 +6947,7 @@
     body.innerHTML = `
       <div class="autonomy-builder">
         <div class="autonomy-subcard">
-          <h4>1. Источник скриптов (admin.runbook_sources)</h4>
+          <h4>${escapeHtml(t("miniapp.autonomy.builder_sources_title", "1. Источник скриптов (admin.runbook_sources)"))}</h4>
           <div class="autonomy-builder-row">
             <input type="text" id="autonomyBuilderDir" placeholder="/path/to/scripts/dir" />
             <button type="button" id="autonomyBuilderScan">Scan</button>
@@ -6955,9 +6955,9 @@
           <div id="autonomyBuilderFiles" class="autonomy-builder-files"></div>
         </div>
         <div class="autonomy-subcard">
-          <h4>2. Параметры runbook</h4>
+          <h4>${escapeHtml(t("miniapp.autonomy.builder_params_title", "2. Параметры runbook"))}</h4>
           <label>Title: <input type="text" id="autonomyBuilderTitle" /></label>
-          <label>rb_id (опционально): <input type="text" id="autonomyBuilderRbId" /></label>
+          <label>rb_id (${escapeHtml(t("miniapp.label.optional", "опционально"))}): <input type="text" id="autonomyBuilderRbId" /></label>
           <label>Tags (comma): <input type="text" id="autonomyBuilderTags" /></label>
           <label>Dev server_id: <input type="text" id="autonomyBuilderDev" value="${autonomyEscape(serverId || "")}" /></label>
           <label>Target hint:
@@ -6971,10 +6971,10 @@
           </label>
         </div>
         <div class="autonomy-subcard">
-          <h4>3. Собрать и проверить</h4>
+          <h4>${escapeHtml(t("miniapp.autonomy.builder_build_title", "3. Собрать и проверить"))}</h4>
           <div class="admin-state-actions">
             <button type="button" id="autonomyBuilderBuild">Build runbook</button>
-            <button type="button" id="autonomyBuilderValidate" disabled>Validate</button>
+            <button type="button" id="autonomyBuilderValidate" disabled>${escapeHtml(t("miniapp.autonomy.validate", "Проверить"))}</button>
           </div>
           <div id="autonomyBuilderResult"></div>
         </div>
@@ -6990,10 +6990,10 @@
     scanBtn.onclick = () => autonomyRunWithLock(scanBtn, async () => {
       const dir = (body.querySelector("#autonomyBuilderDir").value || "").trim();
       if (!dir) {
-        filesBox.innerHTML = '<div class="status-error">Введите каталог.</div>';
+        filesBox.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.autonomy.err_enter_dir", "Введите каталог."))}</div>`;
         return;
       }
-      filesBox.innerHTML = "Сканируем…";
+      filesBox.innerHTML = escapeHtml(t("miniapp.autonomy.scanning", "Сканируем…"));
       try {
         const res = await api(`/v1/admin/autonomy/scripts/scan`, {
           method: "POST",
@@ -7005,7 +7005,7 @@
         return;
       }
       if (!scannedFiles.length) {
-        filesBox.innerHTML = '<div class="status-empty">Скрипты не найдены.</div>';
+        filesBox.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_scripts", "Скрипты не найдены."))}</div>`;
         return;
       }
       filesBox.innerHTML = '<ul class="autonomy-builder-file-list">' + scannedFiles.map((f, i) => `
@@ -7013,7 +7013,7 @@
           <label>
             <input type="checkbox" data-script-idx="${i}" checked />
             <strong>${autonomyEscape(f.name)}</strong>
-            <small>${f.size_bytes} байт · sha1:${autonomyEscape(String(f.sha1).slice(0, 8))}…</small>
+            <small>${f.size_bytes} ${escapeHtml(t("miniapp.autonomy.bytes", "байт"))} · sha1:${autonomyEscape(String(f.sha1).slice(0, 8))}…</small>
           </label>
         </li>
       `).join("") + "</ul>";
@@ -7033,15 +7033,15 @@
         const f = scannedFiles[Number(cb.dataset.scriptIdx)];
         if (f) picked.push(f);
       });
-      if (!title) { resultBox.innerHTML = '<div class="status-error">Title обязателен.</div>'; return; }
-      if (!devSid) { resultBox.innerHTML = '<div class="status-error">Dev server_id обязателен.</div>'; return; }
-      if (!picked.length) { resultBox.innerHTML = '<div class="status-error">Выберите хотя бы один скрипт.</div>'; return; }
+      if (!title) { resultBox.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.autonomy.err_title_required", "Title обязателен."))}</div>`; return; }
+      if (!devSid) { resultBox.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.autonomy.err_dev_server_required", "Dev server_id обязателен."))}</div>`; return; }
+      if (!picked.length) { resultBox.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.autonomy.err_select_script", "Выберите хотя бы один скрипт."))}</div>`; return; }
       const scripts = picked.map((f) => ({
         source_path: f.path,
         name: f.name,
         target_hint: target,
       }));
-      resultBox.innerHTML = "Собираем runbook…";
+      resultBox.innerHTML = escapeHtml(t("miniapp.autonomy.building_runbook", "Собираем runbook…"));
       try {
         const res = await api(`/v1/admin/autonomy/runbooks/build`, {
           method: "POST",
@@ -7058,7 +7058,7 @@
         const rb = res.runbook || {};
         builtRbId = rb.id;
         validateBtn.disabled = !builtRbId;
-        resultBox.innerHTML = `<div class="status-ok">Собран runbook <strong>${autonomyEscape(rb.id)}</strong> (${scripts.length} steps). Нажмите Validate, чтобы проверить.</div>`;
+        resultBox.innerHTML = `<div class="status-ok">${escapeHtml(t("miniapp.autonomy.runbook_built_prefix", "Собран runbook"))} <strong>${autonomyEscape(rb.id)}</strong> (${scripts.length} steps). ${escapeHtml(t("miniapp.autonomy.runbook_built_suffix", "Нажмите Validate, чтобы проверить."))}</div>`;
       } catch (err) {
         resultBox.innerHTML = autonomyFormatError(err);
       }
@@ -7066,7 +7066,7 @@
 
     validateBtn.onclick = () => autonomyRunWithLock(validateBtn, async () => {
       if (!builtRbId) return;
-      resultBox.innerHTML = "Validating…";
+      resultBox.innerHTML = escapeHtml(t("miniapp.autonomy.validating", "Проверка…"));
       try {
         const res = await api(`/v1/admin/autonomy/runbooks/${encodeURIComponent(builtRbId)}/validate`, {
           method: "POST",
@@ -7084,7 +7084,7 @@
     const recent = drifts.slice(0, 10);
     body.innerHTML = `
       <div class="autonomy-subcard">
-        <h4>Ручные действия</h4>
+        <h4>${escapeHtml(t("miniapp.autonomy.manual_actions", "Ручные действия"))}</h4>
         <div class="admin-state-actions">
           <button type="button" id="autonomyActionRescan">Rescan now</button>
           <button type="button" id="autonomyActionCompactMem">Compact memory</button>
@@ -7094,7 +7094,7 @@
         <h4>Recent drifts / actions</h4>
         ${recent.length
           ? '<ul class="autonomy-drift-list">' + recent.map((d) => `<li><span class="autonomy-drift-${autonomyEscape(d.severity || "")}">${autonomyEscape(d.severity || "")}</span> ${autonomyEscape(d.check_id || "")} <small>${autonomyEscape(d.ts || "")}</small></li>`).join("") + "</ul>"
-          : '<div class="status-empty">История пуста.</div>'}
+          : `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.history_empty", "История пуста."))}</div>`}
       </div>
     `;
     const rescanBtn = body.querySelector("#autonomyActionRescan");
@@ -7111,7 +7111,7 @@
           });
           setAutonomyStatus("Memory compacted.");
         } catch (err) {
-          setAutonomyStatus(`Ошибка compact: ${err.message || "unknown"}`, false);
+          setAutonomyStatus(`${t("miniapp.autonomy.err_compact", "Ошибка compact:")} ${err.message || "unknown"}`, false);
         }
       };
     }
@@ -7123,9 +7123,9 @@
         <label>check_id:
           <select id="autonomySnapCheck"><option value="">—</option></select>
         </label>
-        <button type="button" id="autonomySnapReload">Обновить список</button>
+        <button type="button" id="autonomySnapReload">${escapeHtml(t("miniapp.autonomy.refresh_list", "Обновить список"))}</button>
       </div>
-      <div id="autonomySnapBody" class="status-empty">Выберите check_id для просмотра истории.</div>
+      <div id="autonomySnapBody" class="status-empty">${escapeHtml(t("miniapp.autonomy.select_check_id", "Выберите check_id для просмотра истории."))}</div>
     `;
     const sel = body.querySelector("#autonomySnapCheck");
     const reloadList = async () => {
@@ -7136,14 +7136,14 @@
         sel.innerHTML = '<option value="">—</option>' + checks.map((c) => `<option value="${autonomyEscape(c)}">${autonomyEscape(c)}</option>`).join("");
         if (prev && checks.includes(prev)) sel.value = prev;
       } catch (err) {
-        body.querySelector("#autonomySnapBody").innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+        body.querySelector("#autonomySnapBody").innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       }
     };
     const loadData = async () => {
       const checkId = String(sel.value || "");
       const out = body.querySelector("#autonomySnapBody");
-      if (!checkId) { out.innerHTML = '<div class="status-empty">Выберите check_id.</div>'; return; }
-      out.innerHTML = "Загрузка…";
+      if (!checkId) { out.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.select_check_id_short", "Выберите check_id."))}</div>`; return; }
+      out.innerHTML = escapeHtml(t("miniapp.status.loading", "Загрузка…"));
       try {
         const qs = new URLSearchParams({
           session_uid: sessionUid,
@@ -7152,7 +7152,7 @@
         });
         const res = await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/snapshots?${qs.toString()}`);
         const rows = Array.isArray(res.snapshots) ? res.snapshots : [];
-        if (!rows.length) { out.innerHTML = '<div class="status-empty">Нет snapshots.</div>'; return; }
+        if (!rows.length) { out.innerHTML = `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.no_snapshots", "Нет snapshots."))}</div>`; return; }
         const trs = rows.map((r) => {
           const valueText = (typeof r.value === "object" && r.value !== null)
             ? autonomyYamlDump(r.value, 0)
@@ -7163,7 +7163,7 @@
         }).join("");
         out.innerHTML = `<table class="autonomy-snapshots-table"><thead><tr><th>ts</th><th>value</th><th>hash</th></tr></thead><tbody>${trs}</tbody></table>`;
       } catch (err) {
-        out.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+        out.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       }
     };
     body.querySelector("#autonomySnapReload").onclick = async () => { await reloadList(); };
@@ -7177,13 +7177,13 @@
         <button type="button" id="autonomyPrereqsCheck">Check prereqs</button>
         <button type="button" id="autonomyPrereqsBootstrap" disabled>Build bootstrap runbook</button>
       </div>
-      <div id="autonomyPrereqsBody" class="status-empty">Нажмите «Check prereqs» для запуска проверки.</div>
+      <div id="autonomyPrereqsBody" class="status-empty">${escapeHtml(t("miniapp.autonomy.prereqs_hint", "Нажмите «Check prereqs» для запуска проверки."))}</div>
     `;
     const bodyOut = body.querySelector("#autonomyPrereqsBody");
     const bootstrapBtn = body.querySelector("#autonomyPrereqsBootstrap");
     let lastReport = null;
     body.querySelector("#autonomyPrereqsCheck").onclick = async () => {
-      bodyOut.innerHTML = "Запрос…";
+      bodyOut.innerHTML = escapeHtml(t("miniapp.autonomy.requesting", "Запрос…"));
       bootstrapBtn.disabled = true;
       try {
         const res = await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/prereqs?session_uid=${encodeURIComponent(sessionUid)}`);
@@ -7193,12 +7193,12 @@
         const missing = [].concat(report.required_missing || [], report.recommended_missing || []);
         bootstrapBtn.disabled = !(missing.length > 0 && report.installable);
       } catch (err) {
-        bodyOut.innerHTML = `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`;
+        bodyOut.innerHTML = `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`;
       }
     };
     bootstrapBtn.onclick = async () => {
       if (!lastReport) return;
-      bodyOut.innerHTML += "\nСборка bootstrap-runbook…";
+      bodyOut.innerHTML += `\n${escapeHtml(t("miniapp.autonomy.building_bootstrap", "Сборка bootstrap-runbook…"))}`;
       try {
         const res = await api(`/v1/admin/autonomy/servers/${encodeURIComponent(serverId)}/prereqs/bootstrap`, {
           method: "POST",
@@ -7206,13 +7206,13 @@
         });
         const reason = String(res.reason || "");
         if (!res.runbook) {
-          bodyOut.insertAdjacentHTML("beforeend", `<div class="status-empty">Runbook не создан. Причина: ${autonomyEscape(reason || "unknown")}</div>`);
+          bodyOut.insertAdjacentHTML("beforeend", `<div class="status-empty">${escapeHtml(t("miniapp.autonomy.runbook_not_created", "Runbook не создан. Причина:"))} ${autonomyEscape(reason || "unknown")}</div>`);
           return;
         }
         const rb = res.runbook;
-        bodyOut.insertAdjacentHTML("beforeend", `<div class="status-ok">Создан runbook <strong>${autonomyEscape(rb.id || "")}</strong>. Путь: ${autonomyEscape(rb.path || "")}</div>`);
+        bodyOut.insertAdjacentHTML("beforeend", `<div class="status-ok">${escapeHtml(t("miniapp.autonomy.runbook_created_prefix", "Создан runbook"))} <strong>${autonomyEscape(rb.id || "")}</strong>. ${escapeHtml(t("miniapp.autonomy.path_label", "Путь:"))} ${autonomyEscape(rb.path || "")}</div>`);
       } catch (err) {
-        bodyOut.insertAdjacentHTML("beforeend", `<div class="status-error">Ошибка: ${autonomyEscape(err.message || "")}</div>`);
+        bodyOut.insertAdjacentHTML("beforeend", `<div class="status-error">${escapeHtml(t("miniapp.error.generic_prefix", "Ошибка:"))} ${autonomyEscape(err.message || "")}</div>`);
       }
     };
   }
@@ -7236,7 +7236,7 @@
         out.push(`<span class="autonomy-diff-add">+ ${autonomyEscape(line)}</span>`);
       }
     }
-    return out.join("\n") || "(нет различий)";
+    return out.join("\n") || t("miniapp.autonomy.no_diff", "(нет различий)");
   }
 
   async function autonomyRescanServer(serverId) {
@@ -7249,7 +7249,7 @@
       await refreshAutonomy();
       await showAutonomyServerDetail(serverId);
     } catch (err) {
-      setAutonomyStatus(`Ошибка rescan: ${err.message || "unknown"}`, false);
+      setAutonomyStatus(`${t("miniapp.autonomy.err_rescan", "Ошибка rescan:")} ${err.message || "unknown"}`, false);
     }
   }
 
@@ -7270,7 +7270,7 @@
       } catch (err) {
         setLogsControlsEnabled(false);
         clearLogsView();
-        setLogsStatus(`Ошибка загрузки логов: ${err.message || "unknown"}`, false);
+        setLogsStatus(`${t("miniapp.logs.load_error_prefix", "Ошибка загрузки логов:")} ${err.message || "unknown"}`, false);
       }
 
       if (state.me.is_admin) {
@@ -7285,8 +7285,8 @@
         blockUnauthorizedScreen();
         return;
       }
-      setAuthStatus("Ошибка инициализации", false);
-      setStatus(`Ошибка инициализации: ${err.message || "unknown"}`);
+      setAuthStatus(t("miniapp.error.init", "Ошибка инициализации"), false);
+      setStatus(`${t("miniapp.error.init", "Ошибка инициализации")}: ${err.message || "unknown"}`);
     }
   }
 

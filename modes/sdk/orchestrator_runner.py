@@ -748,7 +748,7 @@ class OrchestratorRunner:
 
     async def run(self, session: Any, user_text: str, bot: Any, context: Any, dest: Dict[str, Any]) -> str:
         chat_id = dest.get("chat_id")
-        _lang = resolve_user_lang(self._config, chat_id=chat_id)
+        _lang = resolve_user_lang(self._config, user_id=dest.get("user_id"), chat_id=chat_id)
         _lang_name = LANGUAGE_NAMES.get(_lang, "Russian")
         cwd = ensure_chat_workspace(self._config.defaults.workdir, chat_id)
         execution_context = self._get_run_execution_context(session)

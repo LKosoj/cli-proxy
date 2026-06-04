@@ -59,6 +59,10 @@ async def test_pending_git_commit_cancel_message_is_handled_before_cli_input() -
         buffer_calls.append("called")
 
     bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
         access_policy_service=_AccessPolicy(),
         context_by_chat={},
         metrics=_Metrics(),
@@ -136,6 +140,10 @@ async def test_plugin_awaiting_input_does_not_swallow_regular_message() -> None:
     ui_state = ChatUiState()
 
     bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
         access_policy_service=_AccessPolicy(),
         context_by_chat={},
         metrics=_Metrics(),
@@ -235,6 +243,10 @@ async def test_button_only_pending_question_does_not_block_active_session_input(
     }
 
     bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
         access_policy_service=_AccessPolicy(),
         context_by_chat={},
         metrics=_Metrics(),
@@ -290,6 +302,10 @@ async def test_custom_pending_question_supports_cancel_message() -> None:
         sent_messages.append(str(text))
 
     bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
         access_policy_service=_AccessPolicy(),
         context_by_chat={},
         metrics=_Metrics(),
@@ -362,6 +378,10 @@ async def test_plugin_awaiting_input_prefers_route_session_uid_over_legacy_fallb
     ui_state = ChatUiState()
 
     bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
         ensure_telegram_inbound_authorized=_authorize,
         access_policy_service=_AccessPolicy(),
         context_by_chat={},

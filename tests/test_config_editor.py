@@ -17,6 +17,7 @@ from app.config_runtime.field_paths import RUNTIME_CONFIG_FIELD_PATHS
 from app.services.config_apply_policy import classify_config_path
 from app.services.config_service import ConfigDraftSaveResult, ConfigService
 from config import AppConfig, TelegramConfig, DefaultsConfig, MCPConfig, MiniAppConfig
+from i18n import t
 from qasync import QEventLoop
 
 
@@ -270,12 +271,16 @@ async def test_config_editor_save_flow(qtbot, mock_config_service, mock_config):
         # 4. Проверка уведомления пользователя
         assert mock_info.called
         message = _message_text(mock_info)
-        assert _message_title(mock_info) == "Success"
-        assert "Changed: yes" in message
-        assert "Backup created" in message
-        assert "Restart required: miniapp.bind_host, miniapp.bind_port, telegram.token" in message
+        assert _message_title(mock_info) == t("desktop.cfgedit.success", "ru")
+        assert t("desktop.cfgedit.msg_changed", "ru", value=t("common.yes", "ru")) in message
+        assert t("desktop.cfgedit.msg_backup", "ru", path="").rstrip() in message
         assert (
-            "Reloadable: defaults.assistant_preview_enabled, "
+            t("desktop.cfgedit.msg_restart_required", "ru")
+            + ": miniapp.bind_host, miniapp.bind_port, telegram.token"
+        ) in message
+        assert (
+            t("desktop.cfgedit.msg_reloadable", "ru")
+            + ": defaults.assistant_preview_enabled, "
             "defaults.cli_json_stream_archive_enabled, "
             "defaults.pending_input_confirmation_enabled"
         ) in message
@@ -304,11 +309,11 @@ async def test_config_editor_save_result_reports_no_change(qtbot, mock_config_se
 
         assert not mock_dialog_class.called
         assert not mock_config_service.save_atomic.called
-        assert _message_title(mock_info) == "No Changes"
+        assert _message_title(mock_info) == t("desktop.cfgedit.no_changes", "ru")
         message = _message_text(mock_info)
-        assert "Changed: no" in message
-        assert "Restart required: none" in message
-        assert "Reloadable: none" in message
+        assert t("desktop.cfgedit.msg_changed", "ru", value=t("common.no", "ru")) in message
+        assert t("desktop.cfgedit.msg_restart_none", "ru") in message
+        assert t("desktop.cfgedit.msg_reloadable_none", "ru") in message
         assert widget._current_revision == "same-revision"
 
 
@@ -328,8 +333,8 @@ async def test_config_editor_save_result_reports_errors(qtbot, mock_config_servi
         await _wait_until(lambda: mock_config_service.save_config_draft_with_revision.called)
 
         assert not mock_config_service.save_atomic.called
-        assert _message_title(mock_warning) == "Save Failed"
-        assert "Configuration was not saved." in _message_text(mock_warning)
+        assert _message_title(mock_warning) == t("desktop.cfgedit.save_failed", "ru")
+        assert t("desktop.cfgedit.msg_not_saved", "ru") in _message_text(mock_warning)
         assert "revision mismatch" in _message_text(mock_warning)
         assert widget._current_revision == "loaded-revision"
 

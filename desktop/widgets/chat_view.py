@@ -56,6 +56,7 @@ class ChatViewWidget(QWidget):
         # QTextCursor со selection внутри document(), отслеживает границы progress-блока
         # (Qt автоматически сдвигает позиции при вставках/удалениях в документе)
         self._progress_cursor: Optional[QTextCursor] = None
+        self._lang: str = "ru"
         self._setup_ui()
         self._setup_quick_actions()
 
@@ -195,7 +196,7 @@ class ChatViewWidget(QWidget):
         # Многострочное поле ввода
         self.message_input = QTextEdit()
         self.message_input.setObjectName("message_input")
-        self.message_input.setPlaceholderText("Type your message... (Ctrl+Enter to send)")
+        self.message_input.setPlaceholderText(t("desktop.chat.input_placeholder", "ru"))
         self.message_input.setMaximumHeight(80)
         self.message_input.setMinimumHeight(36)
         # Обработка Ctrl+Enter и клавиш вверх/вниз для истории
@@ -208,11 +209,11 @@ class ChatViewWidget(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setSpacing(6)
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel(t("desktop.chat.status_ready", "ru"))
         self.status_label.setObjectName("status_label")
         btn_layout.addWidget(self.status_label)
         btn_layout.addStretch()
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = QPushButton(t("desktop.chat.btn_stop", "ru"))
         self.stop_button.setObjectName("stop_button")
         self.stop_button.setFixedWidth(80)
         self.stop_button.clicked.connect(lambda: self.taskCancelled.emit())
@@ -224,7 +225,7 @@ class ChatViewWidget(QWidget):
         self.attach_button.setFixedHeight(28)
         self.attach_button.clicked.connect(self._on_attach_clicked)
         btn_layout.addWidget(self.attach_button)
-        self.send_button = QPushButton("Send")
+        self.send_button = QPushButton(t("desktop.btn.send", "ru"))
         self.send_button.setObjectName("send_button")
         self.send_button.setFixedWidth(72)
         self.send_button.setFixedHeight(28)
@@ -324,9 +325,9 @@ class ChatViewWidget(QWidget):
         """Обработка нажатия кнопки вложений."""
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Select Files",
+            t("desktop.chat.select_files", self._lang),
             "",
-            "All Files (*)"
+            t("desktop.chat.all_files", self._lang)
         )
         if files:
             self._attachments.extend(files)
@@ -497,10 +498,10 @@ class ChatViewWidget(QWidget):
         accent_color = self._theme_colors.get("accent", "#3498db")
         success_color = self._theme_colors.get("success", "#27ae60")
         if role == "user":
-            prefix = f"<b style='color: {accent_color};'>You:</b>"
+            prefix = f"<b style='color: {accent_color};'>{t('desktop.chat.prefix_you', self._lang)}</b>"
             bg_color = self._theme_colors.get("chat_user_bg", "#e8f4fd")
         else:
-            prefix = f"<b style='color: {success_color};'>Agent:</b>"
+            prefix = f"<b style='color: {success_color};'>{t('desktop.chat.prefix_agent', self._lang)}</b>"
             bg_color = self._theme_colors.get("chat_agent_bg", "#f2f9f4")
         text_color = self._theme_colors.get("text_primary", "#2c3e50")
         html_content = ansi_to_html(text, theme_colors=self._theme_colors, fragment=True)
@@ -577,7 +578,7 @@ class ChatViewWidget(QWidget):
             )
             self._ask_options_layout.addWidget(btn)
         # Подсказка о возможности ввести свой вариант
-        hint = QLabel("или введите свой вариант ниже (Ctrl+Enter)")
+        hint = QLabel(t("desktop.chat.ask_hint", self._lang))
         hint.setObjectName("ask_options_hint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setStyleSheet(
@@ -592,7 +593,7 @@ class ChatViewWidget(QWidget):
         self.send_button.setEnabled(True)
         self.message_input.setEnabled(True)
         self.message_input.setFocus()
-        self.status_label.setText("Ожидание ответа...")
+        self.status_label.setText(t("desktop.chat.status_waiting_answer", self._lang))
 
     def hide_ask_options(self):
         """Скрыть и очистить панель кнопок ask_user."""
@@ -625,12 +626,15 @@ class ChatViewWidget(QWidget):
         self.attach_button.setEnabled(not loading)
         self.message_input.setEnabled(not loading)
         if loading:
-            self.status_label.setText("Thinking...")
+            self.status_label.setText(t("desktop.chat.status_thinking", self._lang))
             self.stop_button.show()
         else:
-            self.status_label.setText("Ready")
+            self.status_label.setText(t("desktop.chat.status_ready", self._lang))
             self.stop_button.hide()
 
     def retranslate_ui(self, lang: str) -> None:
+        self._lang = lang
         self.message_input.setPlaceholderText(t("desktop.chat.input_placeholder", lang))
         self.send_button.setText(t("desktop.btn.send", lang))
+        self.stop_button.setText(t("desktop.chat.btn_stop", lang))
+        self.status_label.setText(t("desktop.chat.status_ready", lang))

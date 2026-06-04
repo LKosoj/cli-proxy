@@ -1629,12 +1629,17 @@ class AnalystMode(BaseMode, RunArtifactsMixin):
     ) -> ToolResult:
         running = bool(self._mode_task_names(bot_app=bot_app, session=session))
         analyst_ctx = self._load_context(session=session, store=self._store(session))
+        try:
+            _lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
+        except Exception:
+            _lang = "ru"
         text = build_analyst_status_text(
             session,
             analyst_context=analyst_ctx,
             analyst_running=running,
             pending_questions=bot_app.ui_state.pending_questions,
             mode_id=self.mode_id,
+            lang=_lang,
         )
         await ms.send_or_edit(query=query, chat_id=chat_id, text=text, md2=True)
         return ToolResult.ok()

@@ -54,23 +54,24 @@ def _build_bot_app(tmp_path):
 class TestRemoteModeBanner:
     def test_init_shows_local(self):
         from desktop.widgets.remote_mode_banner import RemoteModeBanner
+        from i18n import t
         banner = RemoteModeBanner()
-        assert "Local" in banner.text
+        assert banner.text == t("desktop.files.exec_target_local", "ru")
 
     def test_update_to_remote(self):
         from desktop.widgets.remote_mode_banner import RemoteModeBanner
         banner = RemoteModeBanner()
         banner.update_state("remote", "prod", "/srv/app")
-        assert "Remote FS" in banner.text
         assert "prod" in banner.text
         assert "/srv/app" in banner.text
 
     def test_update_back_to_local(self):
         from desktop.widgets.remote_mode_banner import RemoteModeBanner
+        from i18n import t
         banner = RemoteModeBanner()
         banner.update_state("remote", "prod", "/srv/app")
         banner.update_state("local")
-        assert "Local" in banner.text
+        assert banner.text == t("desktop.files.exec_target_local", "ru")
         assert "prod" not in banner.text
 
 
@@ -123,10 +124,11 @@ class TestConflictDiffDialog:
 class TestGitPanelRemoteBanner:
     def test_git_panel_has_remote_banner(self):
         from desktop.widgets.git_panel import GitPanelWidget
+        from i18n import t
         facade = MagicMock()
         panel = GitPanelWidget(facade)
         assert hasattr(panel, "remote_banner")
-        assert "Local" in panel.remote_banner.text
+        assert panel.remote_banner.text == t("desktop.files.exec_target_local", "ru")
 
     def test_git_panel_banner_updates_on_set_session(self):
         from desktop.widgets.git_panel import GitPanelWidget
@@ -143,8 +145,8 @@ class TestGitPanelRemoteBanner:
         session = MagicMock()
         session.workdir = "/tmp/test"
         panel.set_session(session)
-        assert "Remote FS" in panel.remote_banner.text
         assert "staging" in panel.remote_banner.text
+        assert "/opt/proj" in panel.remote_banner.text
 
     def test_git_panel_banner_local_when_no_rc(self):
         from desktop.widgets.git_panel import GitPanelWidget
@@ -155,7 +157,8 @@ class TestGitPanelRemoteBanner:
         session = MagicMock()
         session.workdir = "/tmp/test"
         panel.set_session(session)
-        assert "Local" in panel.remote_banner.text
+        from i18n import t
+        assert panel.remote_banner.text == t("desktop.files.exec_target_local", "ru")
 
 
 # ---------------------------------------------------------------------------

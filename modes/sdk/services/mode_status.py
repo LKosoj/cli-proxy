@@ -87,6 +87,7 @@ class ModeStatusService:
         queue_suffix: Optional[str] = None,
         task_suffix: Optional[str] = None,
         extra_sections: Optional[list[tuple[str, str]]] = None,
+        lang: str = "ru",
     ) -> str:
         return _build_mode_status_text(
             session,
@@ -96,4 +97,5 @@ class ModeStatusService:
             queue_suffix=queue_suffix,
             task_suffix=task_suffix,
             extra_sections=extra_sections,
+            lang=lang,
         )

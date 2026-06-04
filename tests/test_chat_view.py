@@ -2,6 +2,7 @@ from unittest.mock import patch
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QPushButton
 from desktop.widgets.chat_view import ChatViewWidget
+from i18n import t
 
 
 def test_chat_view_init(qtbot):
@@ -9,7 +10,7 @@ def test_chat_view_init(qtbot):
     widget = ChatViewWidget()
     qtbot.addWidget(widget)
 
-    assert widget.status_label.text() == "Ready"
+    assert widget.status_label.text() == t("desktop.chat.status_ready", "ru")
     assert widget.send_button.isEnabled()
     assert widget.message_input.toPlainText() == ""
 
@@ -39,9 +40,9 @@ def test_chat_view_append_messages(qtbot):
     widget.append_message("agent", "Hi there")
 
     content = widget.history_browser.toHtml()
-    assert "You:" in content
+    assert t("desktop.chat.prefix_you", "ru") in content
     assert "Hello" in content
-    assert "Agent:" in content
+    assert t("desktop.chat.prefix_agent", "ru") in content
     assert "Hi there" in content
 
 
@@ -53,12 +54,12 @@ def test_chat_view_loading_state(qtbot):
     widget.set_loading(True)
     assert not widget.send_button.isEnabled()
     assert not widget.message_input.isEnabled()
-    assert widget.status_label.text() == "Thinking..."
+    assert widget.status_label.text() == t("desktop.chat.status_thinking", "ru")
 
     widget.set_loading(False)
     assert widget.send_button.isEnabled()
     assert widget.message_input.isEnabled()
-    assert widget.status_label.text() == "Ready"
+    assert widget.status_label.text() == t("desktop.chat.status_ready", "ru")
 
 
 def test_chat_view_clear(qtbot):

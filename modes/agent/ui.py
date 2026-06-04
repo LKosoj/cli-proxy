@@ -232,6 +232,7 @@ def build_agent_status_text(
     pending_questions: Optional[Dict[str, Dict[str, object]]] = None,
     active_plugin_flow: str = "",
     runtime_progress: Optional[Dict[str, Any]] = None,
+    lang: str = "ru",
 ) -> str:
     payload = build_agent_status_payload(
         session,
@@ -288,4 +289,5 @@ def build_agent_status_text(
             ("Template/override", template_line),
             ("Queue origin", format_queue_origin(payload["queue_origin"])),
         ],
+        lang=lang,
     )

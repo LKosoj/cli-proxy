@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, Optional
 from telegram.ext import ContextTypes
 
 from app.services.telegram_ui_scope import TelegramUiKey
+from i18n import t
+from utils.lang import resolve_user_lang
 
 if TYPE_CHECKING:
     from bot import BotApp
@@ -83,10 +85,11 @@ class FileUploadHandler:
                 return
             self._app.ui_state.files_pending_upload.pop(ui_key, None)
             self._app.ui_state.files_pending_upload_tasks.pop(ui_key, None)
+            lang = resolve_user_lang(self._app.config, chat_id=chat_id)
             await self._app._send_message(
                 context,
                 **ui_key.reply_kwargs(),
-                text="Режим сохранения файла сброшен: за 2 минуты файл не был отправлен.",
+                text=t("msg.files.upload_timeout", lang),
             )
         except asyncio.CancelledError:
             raise
@@ -136,10 +139,11 @@ class FileUploadHandler:
                 return
             self._app.ui_state.files_pending_rename.pop(ui_key, None)
             self._app.ui_state.files_pending_rename_tasks.pop(ui_key, None)
+            lang = resolve_user_lang(self._app.config, chat_id=chat_id)
             await self._app._send_message(
                 context,
                 **ui_key.reply_kwargs(),
-                text="Режим переименования отменен: за 2 минуты новое имя не введено.",
+                text=t("msg.files.rename_timeout", lang),
             )
         except asyncio.CancelledError:
             raise
@@ -185,12 +189,13 @@ class FileUploadHandler:
         if not pending:
             return False
         expires_at = float(pending.get("expires_at", 0.0))
+        lang = resolve_user_lang(self._app.config, chat_id=chat_id)
         if time.time() > expires_at:
             self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
             await self._app._send_message(
                 context,
                 **ui_key.reply_kwargs(),
-                text="Режим сохранения файла уже истек. Нажмите кнопку сохранения снова.",
+                text=t("msg.files.upload_expired", lang),
             )
             return False
         target_dir = str(pending.get("dir") or "")
@@ -200,7 +205,7 @@ class FileUploadHandler:
             await self._app._send_message(
                 context,
                 **ui_key.reply_kwargs(),
-                text="Целевой каталог больше недоступен. Режим сохранения отключен.",
+                text=t("msg.files.upload_dir_unavailable", lang),
             )
             return True
         if not self._app.is_within_root(target_dir, root_dir):
@@ -208,7 +213,7 @@ class FileUploadHandler:
             await self._app._send_message(
                 context,
                 **ui_key.reply_kwargs(),
-                text="Целевой каталог вне рабочей директории. Режим сохранения отключен.",
+                text=t("msg.files.upload_dir_outside_root", lang),
             )
             return True
         file_name = getattr(doc, "file_name", None) or "attachment.txt"
@@ -222,14 +227,14 @@ class FileUploadHandler:
             await self._app._send_message(
                 context,
                 **ui_key.reply_kwargs(),
-                text=f"Не удалось сохранить файл: {e}",
+                text=t("msg.files.save_failed", lang, e=e),
             )
             return True
         self._stop_files_upload_wait(chat_id, message_thread_id=ui_key.message_thread_id)
         await self._app._send_message(
             context,
             **ui_key.reply_kwargs(),
-            text=f"Файл сохранен: {out_path}",
+            text=t("msg.files.saved", lang, path=out_path),
         )
         return True
 

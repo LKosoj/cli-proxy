@@ -6,6 +6,7 @@ from typing import Any, Optional
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFrame
 
+from i18n import t
 from utils.ui import ensure_async
 
 
@@ -32,7 +33,7 @@ class ModeMenuWidget(QWidget):
         self._layout.setContentsMargins(10, 10, 10, 10)
         self._layout.setSpacing(8)
 
-        self.title = QLabel("Mode Menu")
+        self.title = QLabel(t("desktop.modemenu.title", "ru"))
         self.title.setObjectName("mode_menu_title")
         self._layout.addWidget(self.title)
 
@@ -120,6 +121,9 @@ class ModeMenuWidget(QWidget):
 
         self.setVisible(True)
         self.visibilityChanged.emit(True)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.title.setText(t("desktop.modemenu.title", lang))
 
     def closeEvent(self, event):
         try:

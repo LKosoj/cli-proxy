@@ -3,13 +3,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from i18n import t
+
 
 CLOSED_STATUSES = {"completed", "cancelled"}
 MAX_RENDERED_TASKS = 20
 MAX_TASK_CONTENT = 160
 
 
-def format_manage_tasks_progress(tasks: Sequence[Mapping[str, Any]]) -> str:
+def format_manage_tasks_progress(tasks: Sequence[Mapping[str, Any]], lang: str = "ru") -> str:
     normalized = [task for task in tasks if isinstance(task, Mapping)]
     if not normalized:
         return ""
@@ -19,8 +21,8 @@ def format_manage_tasks_progress(tasks: Sequence[Mapping[str, Any]]) -> str:
     closed_count = sum(1 for task in normalized if str(task.get("status") or "") in CLOSED_STATUSES)
     total = len(normalized)
     lines = [
-        "План выполнения",
-        f"Закрыто: {closed_count}/{total}",
+        t("desktop.managetasks.header", lang),
+        t("desktop.managetasks.closed_count", lang, closed=closed_count, total=total),
         "",
     ]
     for task in normalized[:MAX_RENDERED_TASKS]:
@@ -31,7 +33,7 @@ def format_manage_tasks_progress(tasks: Sequence[Mapping[str, Any]]) -> str:
         lines.append(f"{_status_prefix(status)} {label}".rstrip())
     remaining = total - min(total, MAX_RENDERED_TASKS)
     if remaining > 0:
-        lines.append(f"... еще {remaining}")
+        lines.append(t("desktop.managetasks.remaining", lang, count=remaining))
     return "\n".join(lines).strip()
 
 

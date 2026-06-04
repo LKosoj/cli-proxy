@@ -23,14 +23,14 @@ def test_miniapp_app_js_remote_banners_logic():
     js_path = Path("miniapp/static/app.js")
     js_content = js_path.read_text(encoding="utf-8")
 
-    # Banner assignments
-    assert "Execution Target: Remote" in js_content
-    assert "Execution Target: Local" in js_content
-    assert "Remote FS" in js_content
+    # Banner assignments (localized via i18n keys)
+    assert "miniapp.settings.exec_target_remote" in js_content
+    assert "miniapp.settings.exec_target_local" in js_content
+    assert "miniapp.banner.remote_fs" in js_content
 
     # Check that git semantics uses git_available
     assert "active.execution_target === \"remote\" && active.git_available === false" in js_content
-    assert "git unavailable for this target" in js_content
+    assert "miniapp.status.git_unavailable" in js_content
 
     # Path context showing remote path
     assert "Текущий путь (Remote:" in js_content

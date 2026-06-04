@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,12 +29,16 @@ class RemoteModeBanner(QWidget):
     mirroring the MiniApp Files/Editor banner.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None, lang: str = "ru") -> None:
         super().__init__(parent)
+        self._lang = lang
+        self._execution_target = "local"
+        self._host_alias: Optional[str] = None
+        self._remote_project_root: Optional[str] = None
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._label = QLabel("Execution Target: Local")
+        self._label = QLabel(t("desktop.files.exec_target_local", self._lang))
         self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.setStyleSheet(
             "font-weight: bold; padding: 6px; background-color: #444; border-radius: 4px;"
@@ -45,18 +51,30 @@ class RemoteModeBanner(QWidget):
         host_alias: Optional[str] = None,
         remote_project_root: Optional[str] = None,
     ) -> None:
-        if execution_target == "remote" and host_alias:
-            root = remote_project_root or "/"
-            self._label.setText(f"Remote FS \u00b7 {host_alias} \u00b7 {root}")
+        self._execution_target = execution_target
+        self._host_alias = host_alias
+        self._remote_project_root = remote_project_root
+        self._render()
+
+    def _render(self) -> None:
+        if self._execution_target == "remote" and self._host_alias:
+            root = self._remote_project_root or "/"
+            self._label.setText(
+                t("desktop.remotebanner.remote_fs", self._lang, host=self._host_alias, root=root)
+            )
             self._label.setStyleSheet(
                 "font-weight: bold; padding: 6px;"
                 " background-color: #005A9E; color: white; border-radius: 4px;"
             )
         else:
-            self._label.setText("Execution Target: Local")
+            self._label.setText(t("desktop.files.exec_target_local", self._lang))
             self._label.setStyleSheet(
                 "font-weight: bold; padding: 6px; background-color: #444; border-radius: 4px;"
             )
+
+    def retranslate_ui(self, lang: str) -> None:
+        self._lang = lang
+        self._render()
 
     @property
     def text(self) -> str:

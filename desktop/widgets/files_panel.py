@@ -47,7 +47,8 @@ class FilesPanelWidget(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        self.execution_banner = QLabel("Execution Target: Local")
+        lang = self.facade.ui_language
+        self.execution_banner = QLabel(t("desktop.files.exec_target_local", lang))
         self.execution_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.execution_banner.setStyleSheet(
             "font-weight: bold; padding: 8px; background-color: #444; border-radius: 4px;"
@@ -58,44 +59,44 @@ class FilesPanelWidget(QWidget):
         toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.setSpacing(8)
 
-        self.up_button = QPushButton("Up")
+        self.up_button = QPushButton(t("desktop.btn.up", lang))
         self.up_button.clicked.connect(self.go_up)
         toolbar.addWidget(self.up_button)
 
-        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button = QPushButton(t("desktop.btn.refresh", lang))
         self.refresh_button.clicked.connect(self.refresh)
         toolbar.addWidget(self.refresh_button)
 
-        self.create_file_button = QPushButton("New file")
+        self.create_file_button = QPushButton(t("desktop.btn.new_file", lang))
         self.create_file_button.clicked.connect(lambda: self.create_path("file"))
         toolbar.addWidget(self.create_file_button)
 
-        self.create_dir_button = QPushButton("New dir")
+        self.create_dir_button = QPushButton(t("desktop.btn.new_dir", lang))
         self.create_dir_button.clicked.connect(lambda: self.create_path("dir"))
         toolbar.addWidget(self.create_dir_button)
 
-        self.delete_button = QPushButton("Delete")
+        self.delete_button = QPushButton(t("desktop.btn.delete", lang))
         self.delete_button.clicked.connect(self.delete_selected)
         toolbar.addWidget(self.delete_button)
 
         toolbar.addStretch(1)
 
-        self.reload_file_button = QPushButton("Reload")
+        self.reload_file_button = QPushButton(t("desktop.btn.reload", lang))
         self.reload_file_button.clicked.connect(self.reload_open_file)
         toolbar.addWidget(self.reload_file_button)
 
-        self.save_button = QPushButton("Save")
+        self.save_button = QPushButton(t("desktop.btn.save", lang))
         self.save_button.clicked.connect(lambda: self.save_open_file(force=False))
         toolbar.addWidget(self.save_button)
 
-        self.force_save_button = QPushButton("Force save")
+        self.force_save_button = QPushButton(t("desktop.btn.force_save", lang))
         self.force_save_button.clicked.connect(lambda: self.save_open_file(force=True))
         self.force_save_button.hide()
         toolbar.addWidget(self.force_save_button)
 
         layout.addLayout(toolbar)
 
-        self.path_label = QLabel("Path: .")
+        self.path_label = QLabel(t("desktop.files.path_prefix", lang, path="."))
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.path_label)
 
@@ -114,7 +115,7 @@ class FilesPanelWidget(QWidget):
         editor_layout = QVBoxLayout(editor_box)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(8)
-        self.editor_path_label = QLabel("No file selected")
+        self.editor_path_label = QLabel(t("desktop.files.no_file", lang))
         self.editor_path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         editor_layout.addWidget(self.editor_path_label)
         self.editor_meta_label = QLabel("")
@@ -143,8 +144,9 @@ class FilesPanelWidget(QWidget):
             self.refresh()
         else:
             self.file_list.clear()
-            self.path_label.setText("Path: .")
-            self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
+            lang = self.facade.ui_language
+            self.path_label.setText(t("desktop.files.path_prefix", lang, path="."))
+            self.status_label.setText(t("desktop.files.select_session", lang))
 
     def refresh(self, checked: bool = False) -> None:
         _ = checked
@@ -173,7 +175,7 @@ class FilesPanelWidget(QWidget):
             if target == "remote":
                 host = str(ctx.get("host_alias") or "-")
                 root = str(ctx.get("remote_project_root") or "-")
-                self.execution_banner.setText(f"Execution Target: Remote ({host}: {root})")
+                self.execution_banner.setText(t("desktop.files.exec_target_remote", lang, host=host, root=root))
             else:
                 self.execution_banner.setText(t("desktop.files.exec_target_local", lang))
             self._render_tree(result)
@@ -242,7 +244,7 @@ class FilesPanelWidget(QWidget):
                 self.force_save_button.show()
                 self.save_button.hide()
                 self.status_label.setText(
-                    f"Revision conflict. Current revision: {exc.current_revision or '-'}."
+                    t("desktop.files.revision_conflict", lang, revision=str(exc.current_revision or "-"))
                 )
                 return
             except FilesServiceError as exc:
@@ -264,8 +266,9 @@ class FilesPanelWidget(QWidget):
         if not self._session_uid:
             self.status_label.setText(t("desktop.files.select_session", self.facade.ui_language))
             return
-        title = "New file" if kind == "file" else "New directory"
-        name, ok = QInputDialog.getText(self, title, "Name:")
+        lang = self.facade.ui_language
+        title = t("desktop.btn.new_file", lang) if kind == "file" else t("desktop.files.new_dir_title", lang)
+        name, ok = QInputDialog.getText(self, title, t("desktop.files.name_label", lang))
         if not ok or not str(name or "").strip():
             return
         rel_path = self._join_current(str(name).strip())
@@ -284,10 +287,11 @@ class FilesPanelWidget(QWidget):
     def delete_selected(self) -> None:
         if not self._selected_path:
             return
+        lang = self.facade.ui_language
         reply = QMessageBox.question(
             self,
-            "Delete",
-            f"Delete '{self._selected_path}'?",
+            t("desktop.btn.delete", lang),
+            t("desktop.files.delete_confirm", lang, path=self._selected_path),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -309,7 +313,7 @@ class FilesPanelWidget(QWidget):
     def _render_tree(self, result: dict[str, Any]) -> None:
         self.file_list.clear()
         self._selected_path = ""
-        self.path_label.setText(f"Path: {self._current_dir}")
+        self.path_label.setText(t("desktop.files.path_prefix", self.facade.ui_language, path=self._current_dir))
         for item in list(result.get("items") or []):
             if not isinstance(item, dict):
                 continue
@@ -344,7 +348,7 @@ class FilesPanelWidget(QWidget):
         self._open_revision = None
         self.editor.clear()
         self.editor.setEnabled(False)
-        self.editor_path_label.setText("No file selected")
+        self.editor_path_label.setText(t("desktop.files.no_file", self.facade.ui_language))
         self.editor_meta_label.clear()
         self.force_save_button.hide()
         self.save_button.show()
@@ -389,7 +393,11 @@ class FilesPanelWidget(QWidget):
         self.reload_file_button.setText(t("desktop.btn.reload", lang))
         self.save_button.setText(t("desktop.btn.save", lang))
         self.force_save_button.setText(t("desktop.btn.force_save", lang))
+        # Перерисовываем префикс пути и для активной директории (не только пустой сессии)
+        self.path_label.setText(t("desktop.files.path_prefix", lang, path=self._current_dir))
         if not self._session_uid:
             self.execution_banner.setText(t("desktop.files.exec_target_local", lang))
             self.status_label.setText(t("desktop.files.select_session", lang))
+            self.editor_path_label.setText(t("desktop.files.no_file", lang))
+        elif not self._open_path:
             self.editor_path_label.setText(t("desktop.files.no_file", lang))

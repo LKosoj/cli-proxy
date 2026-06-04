@@ -9,6 +9,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from desktop.widgets.scheduler_panel import SchedulerPanelWidget
+from i18n import t
 
 
 @pytest.fixture
@@ -111,7 +112,7 @@ class TestSchedulerPanelPayload:
         result = scheduler_widget._collect_form()
 
         assert result is None
-        assert "Invalid JSON" in scheduler_widget.status_label.text()
+        assert t("desktop.scheduler.err_payload_invalid_json", "ru", error="").rstrip() in scheduler_widget.status_label.text()
 
     def test_collect_form_with_non_dict_payload(self, scheduler_widget):
         """Verify _collect_form rejects non-dict JSON."""
@@ -125,7 +126,7 @@ class TestSchedulerPanelPayload:
         result = scheduler_widget._collect_form()
 
         assert result is None
-        assert "must be a JSON object" in scheduler_widget.status_label.text()
+        assert t("desktop.scheduler.err_payload_not_object", "ru") in scheduler_widget.status_label.text()
 
     def test_collect_form_with_empty_payload(self, scheduler_widget):
         """Verify _collect_form handles empty payload."""

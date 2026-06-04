@@ -25,6 +25,8 @@ from session import session_runtime_uid, session_scoped_key
 from sessions.session_state_access import get_active_mode
 from app.services.runtime_progress_service import build_runtime_progress_payload
 from modes.agent.ui import build_agent_menu, build_agent_status_payload, build_agent_status_text
+from i18n import t
+from utils.lang import resolve_user_lang
 from utils.paths import is_within_root
 
 _AGENT_RUN_RESUME_GUARD_SESSION_ATTR = "agent_run_resume_guard"
@@ -884,6 +886,10 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             queue_len=queue_len,
             runtime_progress=build_runtime_progress_payload(session, recent_limit=10),
         )
+        try:
+            _lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
+        except Exception:
+            _lang = "ru"
         text = build_agent_status_text(
             session,
             mode_id=self.mode_id,
@@ -891,8 +897,12 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             pending_questions=pending_questions,
             active_plugin_flow=str(status_payload.get("active_plugin_flow") or ""),
             runtime_progress=status_payload.get("runtime_progress"),
+            lang=_lang,
         )
-        text = f"{text}\nПлагины UI: {'доступны' if self.allows_agent_plugin_ui() else 'нет'}"
+        text = (
+            f"{text}\n{t('session_status.plugins_ui', _lang)}: "
+            f"{t('session_status.plugins_available', _lang) if self.allows_agent_plugin_ui() else t('session_status.none', _lang)}"
+        )
         await ms.send_or_edit(query=query, chat_id=chat_id, text=text, md2=True)
         return ToolResult.ok()
 

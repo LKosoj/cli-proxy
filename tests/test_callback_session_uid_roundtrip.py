@@ -326,6 +326,10 @@ async def test_session_menu_callback_roundtrip_parses_colon_bearing_session_uid(
             build_sessions_active_overview=lambda owner_chat_id, session: ("OVERVIEW", None),
         ),
         mode_registry_service=_ModeRegistryService(),
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
     )
     handler = CallbackHandler(bot_app)
     edited = {"text": None}
@@ -370,6 +374,10 @@ async def test_session_transfer_yes_callback_roundtrip_parses_colon_bearing_sess
     bot_app = types.SimpleNamespace(
         manager=manager,
         mode_session_control=types.SimpleNamespace(persist=lambda: None),
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
     )
     handler = CallbackHandler(bot_app)
     edited = {"text": None}

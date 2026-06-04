@@ -5,6 +5,7 @@ from typing import Dict, Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.services.telegram_ui_scope import TelegramUiKey
+from i18n import t
 from utils.paths import is_within_root
 
 
@@ -57,6 +58,7 @@ def build_dirs_keyboard(
     ui_key: TelegramUiKey,
     base: str,
     page: int,
+    lang: str = "ru",
 ) -> InlineKeyboardMarkup:
     dirs_base[ui_key] = base
     dirs_page[ui_key] = page
@@ -80,16 +82,16 @@ def build_dirs_keyboard(
     nav = []
     parent = os.path.dirname(base.rstrip(os.sep))
     if parent and parent != base:
-        nav.append(InlineKeyboardButton("⬆️ Вверх", callback_data="dir_up"))
+        nav.append(InlineKeyboardButton(t("msg.dirs.btn_up", lang), callback_data="dir_up"))
     if start > 0:
-        nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"dir_page:{page-1}"))
+        nav.append(InlineKeyboardButton(t("msg.dirs.btn_prev", lang), callback_data=f"dir_page:{page-1}"))
     if end < len(items):
-        nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"dir_page:{page+1}"))
+        nav.append(InlineKeyboardButton(t("msg.dirs.btn_next", lang), callback_data=f"dir_page:{page+1}"))
     if nav:
         rows.append(nav)
-    rows.append([InlineKeyboardButton("✅ Использовать этот каталог", callback_data="dir_use_current")])
-    rows.append([InlineKeyboardButton("📁 Создать каталог", callback_data="dir_create")])
-    rows.append([InlineKeyboardButton("📦 git clone", callback_data="dir_git_clone")])
-    rows.append([InlineKeyboardButton("✏️ Ввести путь", callback_data="dir_enter")])
-    rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+    rows.append([InlineKeyboardButton(t("msg.dirs.btn_use_current", lang), callback_data="dir_use_current")])
+    rows.append([InlineKeyboardButton(t("msg.dirs.btn_create", lang), callback_data="dir_create")])
+    rows.append([InlineKeyboardButton(t("msg.dirs.btn_git_clone", lang), callback_data="dir_git_clone")])
+    rows.append([InlineKeyboardButton(t("msg.dirs.btn_enter", lang), callback_data="dir_enter")])
+    rows.append([InlineKeyboardButton(t("msg.dirs.btn_cancel", lang), callback_data="agent_cancel")])
     return InlineKeyboardMarkup(rows)

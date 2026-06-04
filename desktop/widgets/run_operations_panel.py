@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from i18n import t
 from utils.ui import ensure_async
 
 if TYPE_CHECKING:
@@ -28,15 +29,15 @@ def _clean_text(value: Any, *, max_len: int = 256) -> str:
     return text[: max_len - 3] + "..."
 
 
-def _recommended_action_label(action: Any) -> str:
+def _recommended_action_label(action: Any, lang: str) -> str:
     token = _clean_text(action, max_len=64)
     if token == "rerun_same_operation":
-        return "Rerun"
+        return t("desktop.runops.btn_rerun", lang)
     if token == "run_validate":
-        return "Validate"
+        return t("desktop.runops.btn_validate", lang)
     if token == "run_repair":
-        return "Repair"
-    return "Apply Recommendation"
+        return t("desktop.runops.btn_repair", lang)
+    return t("desktop.runops.btn_apply_recommendation", lang)
 
 
 def _policy_operation(action: str) -> str:
@@ -104,11 +105,12 @@ class RunOperationsPanelWidget(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
-        title = QLabel("Runs")
-        title.setObjectName("run_operations_title")
-        layout.addWidget(title)
+        lang = self.facade.ui_language
+        self.title_label = QLabel(t("desktop.btn.runs", lang))
+        self.title_label.setObjectName("run_operations_title")
+        layout.addWidget(self.title_label)
 
-        self.summary_label = QLabel("Сессия не выбрана")
+        self.summary_label = QLabel(t("desktop.runops.no_session", lang))
         self.summary_label.setObjectName("run_operations_summary")
         layout.addWidget(self.summary_label)
 
@@ -144,23 +146,26 @@ class RunOperationsPanelWidget(QWidget):
             if widget is not None:
                 widget.deleteLater()
 
+        lang = self.facade.ui_language
         if not self._session_uid:
-            self.summary_label.setText("Сессия не выбрана")
+            self.summary_label.setText(t("desktop.runops.no_session", lang))
             return
 
         try:
             runs = list(self.facade.list_runs(self._session_uid))
         except Exception:
             self.logger.exception("desktop run panel failed to list runs session_uid=%s", self._session_uid)
-            self.summary_label.setText("Не удалось загрузить список запусков")
+            self.summary_label.setText(t("desktop.runops.load_error", lang))
             return
 
         active_count = sum(1 for item in runs if bool(item.get("active")))
         if not runs:
-            self.summary_label.setText("Запусков нет")
+            self.summary_label.setText(t("desktop.runops.no_runs", lang))
             return
 
-        self.summary_label.setText(f"Активных запусков: {active_count} · Всего: {len(runs)}")
+        self.summary_label.setText(
+            t("desktop.runops.summary", lang, active=active_count, total=len(runs))
+        )
         for record in runs:
             self.rows_layout.insertWidget(self.rows_layout.count() - 1, self._build_run_row(record))
 
@@ -207,7 +212,8 @@ class RunOperationsPanelWidget(QWidget):
         cli_work_type = _clean_text(record.get("cli_work_type"), max_len=64)
         if cli_work_type:
             meta_chunks.append(f"CLI: {cli_work_type}")
-        meta_label = QLabel(" · ".join(meta_chunks) if meta_chunks else "Нет recovery-метаданных")
+        lang = self.facade.ui_language
+        meta_label = QLabel(" · ".join(meta_chunks) if meta_chunks else t("desktop.runops.no_recovery_meta", lang))
         meta_label.setObjectName("run_operations_item_meta")
         meta_label.setWordWrap(True)
         layout.addWidget(meta_label)
@@ -217,7 +223,8 @@ class RunOperationsPanelWidget(QWidget):
             for item in list(record.get("skill_log") or [])
             if _clean_text(item, max_len=160)
         ]
-        skills_text = "Skills: " + (" | ".join(skill_log) if skill_log else "нет инъекций")
+        skills_suffix = " | ".join(skill_log) if skill_log else t("desktop.runops.no_injections", lang)
+        skills_text = t("desktop.runops.skills_prefix", lang) + skills_suffix
         skills_label = QLabel(skills_text)
         skills_label.setObjectName("run_operations_item_skills")
         skills_label.setWordWrap(True)
@@ -236,7 +243,7 @@ class RunOperationsPanelWidget(QWidget):
         if _policy_visible(doctor_policy):
             buttons_row.addWidget(
                 self._build_action_button(
-                    "Doctor",
+                    t("desktop.runops.btn_doctor", lang),
                     "doctor",
                     record,
                     enabled=_policy_enabled(doctor_policy, not pending),
@@ -248,7 +255,7 @@ class RunOperationsPanelWidget(QWidget):
         if _policy_visible(recover_policy):
             buttons_row.addWidget(
                 self._build_action_button(
-                    "Recover",
+                    t("desktop.runops.btn_recover", lang),
                     "recover",
                     record,
                     enabled=_policy_enabled(recover_policy, not pending and can_recover),
@@ -259,7 +266,7 @@ class RunOperationsPanelWidget(QWidget):
         if _policy_visible(resume_policy):
             buttons_row.addWidget(
                 self._build_action_button(
-                    "Resume",
+                    t("desktop.runops.btn_resume", lang),
                     "resume",
                     record,
                     enabled=_policy_enabled(resume_policy, not pending and can_resume),
@@ -269,7 +276,7 @@ class RunOperationsPanelWidget(QWidget):
         if can_apply_recommendation and _policy_visible(apply_policy):
             buttons_row.addWidget(
                 self._build_action_button(
-                    _recommended_action_label(record.get("recommended_action")),
+                    _recommended_action_label(record.get("recommended_action"), lang),
                     "apply_recommendation",
                     record,
                     enabled=_policy_enabled(apply_policy, not pending),
@@ -280,7 +287,7 @@ class RunOperationsPanelWidget(QWidget):
         if _policy_visible(promote_policy):
             buttons_row.addWidget(
                 self._build_action_button(
-                    "Promote Skills",
+                    t("desktop.runops.btn_promote_skills", lang),
                     "promote_run_skills",
                     record,
                     enabled=_policy_enabled(promote_policy, not pending and can_promote),
@@ -320,7 +327,7 @@ class RunOperationsPanelWidget(QWidget):
                 method_name = action_name if action_name.endswith("_run_skills") else f"{action_name}_run"
                 method = getattr(self.facade, method_name, None)
                 if not callable(method):
-                    self.last_action_label.setText("Run-операция недоступна в facade.")
+                    self.last_action_label.setText(t("desktop.runops.action_unavailable", self.facade.ui_language))
                     self.last_action_label.show()
                     return
                 result = await method(
@@ -338,7 +345,7 @@ class RunOperationsPanelWidget(QWidget):
                     action,
                     run_id,
                 )
-                self.last_action_label.setText("Операция завершилась ошибкой.")
+                self.last_action_label.setText(t("desktop.runops.action_failed", self.facade.ui_language))
                 self.last_action_label.show()
             finally:
                 self._pending_run_ids.discard(run_id)
@@ -360,6 +367,10 @@ class RunOperationsPanelWidget(QWidget):
             "task:cancelled",
         }:
             self.refresh()
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.title_label.setText(t("desktop.btn.runs", lang))
+        self.refresh()
 
     def closeEvent(self, event):  # type: ignore[override]
         if self._unsubscribe:

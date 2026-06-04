@@ -186,6 +186,7 @@ def build_analyst_status_text(
     analyst_running: Optional[bool] = None,
     pending_questions: Optional[Dict[str, Dict[str, object]]] = None,
     mode_id: str = "analyst",
+    lang: str = "ru",
 ) -> str:
     payload = build_analyst_status_payload(
         session,
@@ -219,6 +220,7 @@ def build_analyst_status_text(
             ("Template/override", template_line),
             ("Queue origin", format_queue_origin(payload["queue_origin"])),
         ],
+        lang=lang,
     )
 
 

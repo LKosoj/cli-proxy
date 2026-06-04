@@ -31,6 +31,8 @@ from sessions.session_state_access import (
     set_orchestrator_pending_input,
 )
 from app.services.core_orchestration_service import CoreOrchestrationService
+from i18n import t
+from utils.lang import resolve_user_lang
 from utils.text import build_preview, strip_ansi
 
 _SESSION_TASK_MODE_ID = "__session__"
@@ -71,6 +73,12 @@ class SessionRunService:
 
     def _is_shutting_down(self) -> bool:
         return bool(getattr(self.bot_app, "_shutdown_in_progress", False))
+
+    def _dest_lang(self, dest) -> str:
+        try:
+            return resolve_user_lang(self.bot_app.config, chat_id=dest.get("chat_id"))
+        except Exception:
+            return "ru"
 
     def _safe_create_task(self, coro, *, label: str) -> Optional[asyncio.Task]:
         if self._is_shutting_down():
@@ -341,16 +349,16 @@ class SessionRunService:
             return False
 
     @staticmethod
-    def _orchestrator_keyboard(session_uid: str, target_mode_id: str) -> InlineKeyboardMarkup:
+    def _orchestrator_keyboard(session_uid: str, target_mode_id: str, lang: str = "ru") -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        "✅ Передать дальше",
+                        t("btn.orch_transition.apply", lang),
                         callback_data=f"orch_transition:apply:{session_uid}:{target_mode_id}",
                     ),
                     InlineKeyboardButton(
-                        "⛔ Остановить процесс",
+                        t("btn.orch_transition.cancel", lang),
                         callback_data=f"orch_transition:cancel:{session_uid}",
                     ),
                 ]
@@ -412,16 +420,14 @@ class SessionRunService:
             "target_mode_id": str(proposal.target_mode_id),
             "disable_orchestrator_on_cancel": True,
         })
+        lang = self._dest_lang(dest)
         current_label = orch.current_mode_label(session=session, mode_registry=mode_registry)
-        confirm_text = "Результат текущего режима готов.\n" + orch.build_confirm_text(
+        confirm_text = t("run.orch_transition_ready", lang) + orch.build_confirm_text(
             current_mode_label=current_label,
             proposal=proposal,
         )
         if is_return_to_previous:
-            confirm_text += (
-                "\n\n⚠️ Предложен возврат в предыдущий режим цепочки. "
-                "Проверьте уверенность и подтвердите вручную."
-            )
+            confirm_text += t("run.orch_transition_return_warning", lang)
         session_uid = session_runtime_uid(session)
         await self.bot_app._send_message(
             context,
@@ -429,6 +435,7 @@ class SessionRunService:
             reply_markup=self._orchestrator_keyboard(
                 session_uid=session_uid,
                 target_mode_id=proposal.target_mode_id,
+                lang=lang,
             ),
             **reply_kwargs,
         )
@@ -457,7 +464,7 @@ class SessionRunService:
                 cli_switch = switch_session_active_cli_if_needed(session)
                 if cli_switch.switched:
                     self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
-                switch_notice = consume_session_cli_switch_notice_text(session)
+                switch_notice = consume_session_cli_switch_notice_text(session, lang=self._dest_lang(dest))
                 if switch_notice and dest.get("chat_id") is not None:
                     await self.bot_app._send_message(
                         context,
@@ -529,7 +536,7 @@ class SessionRunService:
                     forced = getattr(session, "headless_forced_stop", None)
                     if forced:
                         details = f"{session.id} ({session.name or session.tool.name}) @ {session.workdir}"
-                        msg = f"CLI для сессии {details} завершен не штатно."
+                        msg = t("run.cli_abnormal", self._dest_lang(dest), details=details)
                         if dest.get("chat_id") is not None:
                             await self.bot_app._send_message(
                                 context,
@@ -548,7 +555,7 @@ class SessionRunService:
                     if dest.get("chat_id") is not None:
                         await self.bot_app._send_message(
                             context,
-                            text=f"Ошибка выполнения: {e}",
+                            text=t("run.exec_error", self._dest_lang(dest), e=e),
                             **self._telegram_reply_kwargs(dest, session=session),
                         )
                     await self._clear_telegram_assistant_preview(session, dest, context)
@@ -706,7 +713,7 @@ class SessionRunService:
                     if dest.get("chat_id") is not None:
                         await self.bot_app._send_message(
                             context,
-                            text=f"Режим {mode_id} прерван.",
+                            text=t("run.mode_interrupted", self._dest_lang(dest), mode_id=mode_id),
                             **self._telegram_reply_kwargs(dest, session=session),
                         )
                     raise
@@ -725,7 +732,7 @@ class SessionRunService:
                     if dest.get("chat_id") is not None:
                         await self.bot_app._send_message(
                             context,
-                            text=f"Ошибка режима {mode_id}: {e}",
+                            text=t("run.mode_error", self._dest_lang(dest), mode_id=mode_id, e=e),
                             **self._telegram_reply_kwargs(dest, session=session),
                         )
                 finally:

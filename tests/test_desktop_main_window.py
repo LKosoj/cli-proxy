@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QLabel
 from desktop.main_window import MainWindow
+from i18n import t
 from desktop.services.application_facade import ApplicationFacade
 from desktop.services.desktop_state_service import DesktopUiStateService
 from modes.admin.state_store import AdminStateStore
@@ -171,11 +172,11 @@ async def test_main_window_init(qtbot, mock_facade, mock_ui_state):
         "plugins",
     }
     assert window.nav_chat.isChecked()
-    assert window.nav_config.toolTip() == "Config"
-    assert window.nav_files.toolTip() == "Files"
-    assert window.nav_status.toolTip() == "Status"
-    assert window.nav_scheduler.toolTip() == "Scheduler"
-    assert window.nav_session_settings.toolTip() == "Settings"
+    assert window.nav_config.toolTip() == t("desktop.nav.settings", "ru")
+    assert window.nav_files.toolTip() == t("desktop.nav.files", "ru")
+    assert window.nav_status.toolTip() == t("desktop.nav.status", "ru")
+    assert window.nav_scheduler.toolTip() == t("desktop.nav.scheduler", "ru")
+    assert window.nav_session_settings.toolTip() == t("desktop.nav.session_settings", "ru")
 
     # Test tab switching
     window.nav_config.click()
@@ -328,7 +329,7 @@ async def test_main_window_shows_admin_tab_when_admin_mode_enabled(qtbot, mock_f
     qtbot.addWidget(window)
 
     assert window.nav_admin is not None
-    assert window.nav_admin.toolTip() == "Admin"
+    assert window.nav_admin.toolTip() == t("desktop.nav.admin", "ru")
     assert window.admin_page is not None
     assert window.content_stack.count() == 10
     assert window.content_stack.currentWidget() == window.admin_page
@@ -465,9 +466,9 @@ async def test_main_window_admin_tab_shows_disabled_state_for_disabled_session(
 
     assert window.admin_page is not None
     assert window.admin_page.state_stack.currentWidget() == window.admin_page.disabled_page
-    assert window.admin_page.disabled_title_label.text() == "Admin disabled"
-    assert window.admin_page.enable_button.text() == "Enable"
-    assert window.admin_page.rescan_button.text() == "Rescan"
+    assert window.admin_page.disabled_title_label.text() == t("desktop.admin.label.disabled_title", "ru")
+    assert window.admin_page.enable_button.text() == t("desktop.admin.btn.enable", "ru")
+    assert window.admin_page.rescan_button.text() == t("desktop.admin.btn.rescan", "ru")
 
     window.admin_page.session_selector.setCurrentIndex(1)
 

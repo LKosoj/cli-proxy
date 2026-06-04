@@ -44,8 +44,8 @@ def test_miniapp_app_js_has_remote_control_logic():
     assert "settingsRemoteControlEnabled" in js_content
     assert "settingsRemoteControlHost" in js_content
     assert "settingsRemoteControlRecheck" in js_content
-    assert "Execution Target: Remote" in js_content
-    assert "Execution Target: Local" in js_content
+    assert "miniapp.settings.exec_target_remote" in js_content
+    assert "miniapp.settings.exec_target_local" in js_content
 
     # Verify busy session handling includes new elements
     assert re.search(r"rcEnabled\.disabled\s*=\s*isBusy", js_content) is not None

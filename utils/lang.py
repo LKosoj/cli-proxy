@@ -26,7 +26,7 @@ def resolve_user_lang(
     """
     from i18n.resolver import SUPPORTED_LANGS
 
-    user_languages: dict = getattr(config.telegram, "user_languages", {})
+    user_languages: dict = getattr(getattr(config, "telegram", None), "user_languages", None) or {}
 
     if user_id is not None:
         lang = user_languages.get(user_id)
@@ -38,7 +38,7 @@ def resolve_user_lang(
         if lang and lang in SUPPORTED_LANGS:
             return lang
 
-    default = getattr(config.defaults, "default_language", FALLBACK_LANG)
+    default = getattr(getattr(config, "defaults", None), "default_language", FALLBACK_LANG)
     if default and default in SUPPORTED_LANGS:
         return default
 

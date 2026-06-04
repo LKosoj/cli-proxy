@@ -352,7 +352,7 @@ class AdminPanel(QWidget):
         self.runs_table.setMinimumHeight(150)
         operations_layout.addWidget(self.runs_table)
 
-        self.run_detail_label = QLabel("Выберите run и нажмите «View run details».")
+        self.run_detail_label = QLabel(t("desktop.admin.msg.run_detail_hint", "ru"))
         self.run_detail_label.setObjectName("admin_panel_run_detail_label")
         self.run_detail_label.setWordWrap(True)
         operations_layout.addWidget(self.run_detail_label)
@@ -417,7 +417,8 @@ class AdminPanel(QWidget):
         self.monitor_enabled_checkbox = QCheckBox("Включён")
         self.monitor_enabled_checkbox.setObjectName("admin_panel_monitor_enabled_checkbox")
         monitor_meta.addWidget(self.monitor_enabled_checkbox)
-        monitor_meta.addWidget(QLabel("interval_sec:"))
+        self.monitor_interval_label = QLabel("interval_sec:")
+        monitor_meta.addWidget(self.monitor_interval_label)
         self.monitor_interval_spin = QDoubleSpinBox()
         self.monitor_interval_spin.setRange(1.0, 3600.0)
         self.monitor_interval_spin.setDecimals(0)
@@ -575,6 +576,32 @@ class AdminPanel(QWidget):
         self.config_editor.setPlaceholderText(t("desktop.admin.label.config_placeholder", lang))
         self.disabled_title_label.setText(t("desktop.admin.label.disabled_title", lang))
         self.disabled_hint_label.setText(t("desktop.admin.label.disabled_hint", lang))
+        self.run_detail_label.setText(t("desktop.admin.msg.run_detail_hint", lang))
+        self.monitor_interval_label.setText(t("desktop.admin.label.interval_sec", lang))
+        self.autonomy_panel.retranslate_ui(lang)
+        self.chat_section.retranslate_ui(lang)
+        if hasattr(self.scheduler_panel, "retranslate_ui"):
+            self.scheduler_panel.retranslate_ui(lang)
+        self.runs_table.setHorizontalHeaderLabels([
+            t("desktop.admin.col.run_id", lang),
+            t("desktop.admin.col.status", lang),
+            t("desktop.admin.col.phase", lang),
+            t("desktop.admin.col.started_at", lang),
+        ])
+        self.ssh_actions_table.setHorizontalHeaderLabels([
+            t("desktop.admin.col.action_id", lang),
+            t("desktop.admin.col.argv_per_line", lang),
+            t("desktop.admin.col.timeout_sec", lang),
+            t("desktop.admin.col.risk_level", lang),
+            t("desktop.admin.col.description", lang),
+            "",
+        ])
+        self.monitor_servers_table.setHorizontalHeaderLabels([
+            t("desktop.admin.col.server_alias", lang),
+            t("desktop.admin.col.action_id", lang),
+            t("desktop.admin.col.timeout_sec", lang),
+            "",
+        ])
 
     @property
     def active_session_uid(self) -> Optional[str]:
@@ -643,7 +670,10 @@ class AdminPanel(QWidget):
         self._pending_skill_install_actions.clear()
         self.skill_action_result_label.hide()
         self.skill_action_result_label.setText("")
-        self.session_state_label.setText(f"Session: {self._active_session_uid or 'None'}")
+        lang = self.facade.ui_language
+        self.session_state_label.setText(
+            t("desktop.admin.msg.session_state", lang, uid=self._active_session_uid or "None")
+        )
         self.scheduler_panel.set_context_session(self._active_session_uid)
         autonomy_panel = getattr(self, "autonomy_panel", None)
         if autonomy_panel is not None:
@@ -952,7 +982,9 @@ class AdminPanel(QWidget):
         selected_before = str(self.skill_approval_selector.currentData() or "").strip()
         self.skill_approval_selector.blockSignals(True)
         self.skill_approval_selector.clear()
-        self.skill_approval_selector.addItem("Выберите pending skill install", "")
+        self.skill_approval_selector.addItem(
+            t("desktop.admin.msg.select_skill_install", self.facade.ui_language), "",
+        )
         for item in items:
             if not isinstance(item, Mapping):
                 continue
@@ -1061,13 +1093,14 @@ class AdminPanel(QWidget):
 
     def _refresh_admin_runs(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         self.runs_table.setRowCount(0)
         if not session_uid:
-            self.run_detail_label.setText("Session не выбрана.")
+            self.run_detail_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         loader = getattr(self.facade, "list_admin_runs", None)
         if not callable(loader):
-            self.run_detail_label.setText("Artifact store недоступен.")
+            self.run_detail_label.setText(t("desktop.admin.msg.artifact_store_unavailable", lang))
             return
         try:
             rows = loader(session_uid, limit=20) or []
@@ -1076,10 +1109,10 @@ class AdminPanel(QWidget):
                 "desktop admin panel _refresh_admin_runs failed session_uid=%s",
                 session_uid,
             )
-            self.run_detail_label.setText("Ошибка загрузки runs.")
+            self.run_detail_label.setText(t("desktop.admin.msg.runs_load_error", lang))
             return
         if not rows:
-            self.run_detail_label.setText("Нет runs для этой сессии.")
+            self.run_detail_label.setText(t("desktop.admin.msg.no_runs", lang))
             return
         self.runs_table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
@@ -1091,25 +1124,26 @@ class AdminPanel(QWidget):
             self.runs_table.setItem(row_index, 1, QTableWidgetItem(status))
             self.runs_table.setItem(row_index, 2, QTableWidgetItem(phase))
             self.runs_table.setItem(row_index, 3, QTableWidgetItem(started))
-        self.run_detail_label.setText(f"Загружено runs: {len(rows)}")
+        self.run_detail_label.setText(t("desktop.admin.msg.runs_loaded", lang, count=len(rows)))
 
     def _view_admin_run_detail(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         if not session_uid:
-            self.run_detail_label.setText("Session не выбрана.")
+            self.run_detail_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         selected_row = self.runs_table.currentRow()
         if selected_row < 0:
-            self.run_detail_label.setText("Выберите строку в таблице runs.")
+            self.run_detail_label.setText(t("desktop.admin.msg.select_run_row", lang))
             return
         item = self.runs_table.item(selected_row, 0)
         run_id = str(item.text() if item else "").strip()
         if not run_id:
-            self.run_detail_label.setText("run_id не определён.")
+            self.run_detail_label.setText(t("desktop.admin.msg.run_id_undefined", lang))
             return
         loader = getattr(self.facade, "get_admin_run_detail", None)
         if not callable(loader):
-            self.run_detail_label.setText("Artifact store недоступен.")
+            self.run_detail_label.setText(t("desktop.admin.msg.artifact_store_unavailable", lang))
             return
         try:
             detail = loader(session_uid, run_id=run_id, events_limit=50)
@@ -1119,10 +1153,10 @@ class AdminPanel(QWidget):
                 session_uid,
                 run_id,
             )
-            self.run_detail_label.setText("Ошибка загрузки деталей run.")
+            self.run_detail_label.setText(t("desktop.admin.msg.run_detail_load_error", lang))
             return
         if not detail:
-            self.run_detail_label.setText(f"Run {run_id} не найден.")
+            self.run_detail_label.setText(t("desktop.admin.msg.run_not_found", lang, run_id=run_id))
             return
         lines: list[str] = []
         state = dict(detail.get("state") or {})
@@ -1145,12 +1179,13 @@ class AdminPanel(QWidget):
 
     def _reload_admin_config(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         if not session_uid:
-            self.config_status_label.setText("Session не выбрана.")
+            self.config_status_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         loader = getattr(self.facade, "get_admin_config_yaml", None)
         if not callable(loader):
-            self.config_status_label.setText("Config API недоступен.")
+            self.config_status_label.setText(t("desktop.admin.msg.config_api_unavailable", lang))
             return
         try:
             result = loader(session_uid)
@@ -1159,13 +1194,13 @@ class AdminPanel(QWidget):
                 "desktop admin panel _reload_admin_config failed session_uid=%s",
                 session_uid,
             )
-            self.config_status_label.setText("Ошибка загрузки config.")
+            self.config_status_label.setText(t("desktop.admin.msg.config_load_error", lang))
             return
         if not isinstance(result, dict):
-            self.config_status_label.setText("Config недоступен.")
+            self.config_status_label.setText(t("desktop.admin.msg.config_unavailable", lang))
             return
         self.config_editor.setPlainText(str(result.get("yaml") or ""))
-        self.config_status_label.setText(f"Loaded: {result.get('config_path') or '-'}")
+        self.config_status_label.setText(t("desktop.admin.msg.config_loaded", lang, path=result.get("config_path") or "-"))
 
     def _refresh_admin_hosts_cache(self, session_uid: str) -> list[dict]:
         loader = getattr(self.facade, "get_admin_hosts", None)
@@ -1210,10 +1245,11 @@ class AdminPanel(QWidget):
         timeout_raw = server.get("timeout_sec")
         if timeout_raw not in (None, ""):
             timeout_edit.setText(str(timeout_raw))
-        timeout_edit.setPlaceholderText("необязательно")
+        lang = self.facade.ui_language
+        timeout_edit.setPlaceholderText(t("desktop.admin.label.optional", lang))
         table.setCellWidget(row_idx, 2, timeout_edit)
 
-        del_button = QPushButton("Удалить")
+        del_button = QPushButton(t("desktop.btn.delete", lang))
         del_button.clicked.connect(lambda _checked=False, r=row_idx: self._remove_monitor_server_row(r))
         table.setCellWidget(row_idx, 3, del_button)
 
@@ -1259,12 +1295,13 @@ class AdminPanel(QWidget):
 
     def _reload_admin_monitor_servers(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         if not session_uid:
-            self.monitor_servers_status_label.setText("Session не выбрана.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         loader = getattr(self.facade, "get_admin_monitor_servers", None)
         if not callable(loader):
-            self.monitor_servers_status_label.setText("Monitor API недоступен.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.monitor_api_unavailable", lang))
             return
         self._refresh_admin_hosts_cache(session_uid)
         try:
@@ -1274,11 +1311,11 @@ class AdminPanel(QWidget):
                 "desktop admin panel _reload_admin_monitor_servers failed session_uid=%s",
                 session_uid,
             )
-            self.monitor_servers_status_label.setText("Ошибка загрузки.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.load_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
-            self.monitor_servers_status_label.setText(f"Ошибка: {error}")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.error_fmt", lang, error=error))
             return
         servers = list(result.get("servers") or [])
         self._render_monitor_servers_table(servers)
@@ -1304,12 +1341,13 @@ class AdminPanel(QWidget):
 
     def _save_admin_monitor_servers(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         if not session_uid:
-            self.monitor_servers_status_label.setText("Session не выбрана.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         saver = getattr(self.facade, "save_admin_monitor_servers", None)
         if not callable(saver):
-            self.monitor_servers_status_label.setText("Monitor API недоступен.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.monitor_api_unavailable", lang))
             return
         servers = self._collect_monitor_servers_from_ui()
         try:
@@ -1324,15 +1362,15 @@ class AdminPanel(QWidget):
                 "desktop admin panel _save_admin_monitor_servers failed session_uid=%s",
                 session_uid,
             )
-            self.monitor_servers_status_label.setText("Ошибка сохранения.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.save_error", lang))
             return
         if isinstance(result, dict) and result.get("ok"):
-            self.monitor_servers_status_label.setText("Сохранено.")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.saved", lang))
         else:
             error = "unknown"
             if isinstance(result, dict):
                 error = str(result.get("error") or "unknown")
-            self.monitor_servers_status_label.setText(f"Ошибка: {error}")
+            self.monitor_servers_status_label.setText(t("desktop.admin.msg.error_fmt", lang, error=error))
 
     def _render_ssh_action_row(self, row_idx: int, action: Mapping[str, Any]) -> None:
         table = self.ssh_actions_table
@@ -1365,7 +1403,7 @@ class AdminPanel(QWidget):
         desc_edit.setText(str(action.get("description") or ""))
         table.setCellWidget(row_idx, 4, desc_edit)
 
-        del_button = QPushButton("Удалить")
+        del_button = QPushButton(t("desktop.btn.delete", self.facade.ui_language))
         del_button.clicked.connect(lambda _checked=False, r=row_idx: self._remove_ssh_action_row(r))
         table.setCellWidget(row_idx, 5, del_button)
 
@@ -1419,12 +1457,13 @@ class AdminPanel(QWidget):
 
     def _reload_admin_ssh_actions(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         if not session_uid:
-            self.ssh_actions_status_label.setText("Session не выбрана.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         loader = getattr(self.facade, "get_admin_actions_ssh", None)
         if not callable(loader):
-            self.ssh_actions_status_label.setText("SSH actions API недоступен.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.ssh_api_unavailable", lang))
             return
         try:
             result = loader(session_uid)
@@ -1433,11 +1472,11 @@ class AdminPanel(QWidget):
                 "desktop admin panel _reload_admin_ssh_actions failed session_uid=%s",
                 session_uid,
             )
-            self.ssh_actions_status_label.setText("Ошибка загрузки.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.load_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
-            self.ssh_actions_status_label.setText(f"Ошибка: {error}")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.error_fmt", lang, error=error))
             return
         actions = list(result.get("actions") or [])
         self._render_ssh_actions_table(actions)
@@ -1456,12 +1495,13 @@ class AdminPanel(QWidget):
 
     def _save_admin_ssh_actions(self) -> None:
         session_uid = self._active_session_uid
+        lang = self.facade.ui_language
         if not session_uid:
-            self.ssh_actions_status_label.setText("Session не выбрана.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         saver = getattr(self.facade, "save_admin_actions_ssh", None)
         if not callable(saver):
-            self.ssh_actions_status_label.setText("SSH actions API недоступен.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.ssh_api_unavailable", lang))
             return
         actions = self._collect_ssh_actions_from_ui()
         try:
@@ -1471,15 +1511,15 @@ class AdminPanel(QWidget):
                 "desktop admin panel _save_admin_ssh_actions failed session_uid=%s",
                 session_uid,
             )
-            self.ssh_actions_status_label.setText("Ошибка сохранения.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.save_error", lang))
             return
         if isinstance(result, dict) and result.get("ok"):
-            self.ssh_actions_status_label.setText("Сохранено.")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.saved", lang))
         else:
             error = "unknown"
             if isinstance(result, dict):
                 error = str(result.get("error") or "unknown")
-            self.ssh_actions_status_label.setText(f"Ошибка: {error}")
+            self.ssh_actions_status_label.setText(t("desktop.admin.msg.error_fmt", lang, error=error))
 
     def closeEvent(self, event: Any) -> None:
         unsubscribe = getattr(self, "_unsubscribe", None)
@@ -1542,13 +1582,13 @@ class AdminAutonomyPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(4)
 
-        group = QGroupBox("Автономия")
-        group.setObjectName("admin_autonomy_group")
-        root = QVBoxLayout(group)
+        self._autonomy_group = QGroupBox(t("desktop.admin.autonomy.group_title", "ru"))
+        self._autonomy_group.setObjectName("admin_autonomy_group")
+        root = QVBoxLayout(self._autonomy_group)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
 
-        self.summary_label = QLabel("Сервера не загружены.")
+        self.summary_label = QLabel(t("desktop.admin.autonomy.servers_not_loaded", "ru"))
         self.summary_label.setObjectName("admin_autonomy_summary_label")
         self.summary_label.setWordWrap(True)
         root.addWidget(self.summary_label)
@@ -1556,40 +1596,37 @@ class AdminAutonomyPanel(QWidget):
         controls = QHBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(6)
-        self.refresh_button = QPushButton("Обновить список")
+        self.refresh_button = QPushButton(t("desktop.admin.autonomy.btn.refresh_list", "ru"))
         self.refresh_button.setObjectName("admin_autonomy_refresh_button")
         self.refresh_button.clicked.connect(self.refresh_servers)
         controls.addWidget(self.refresh_button)
 
-        self.rescan_button = QPushButton("Rescan выбранный")
+        self.rescan_button = QPushButton(t("desktop.admin.autonomy.btn.rescan_selected", "ru"))
         self.rescan_button.setObjectName("admin_autonomy_rescan_button")
         self.rescan_button.clicked.connect(self._rescan_selected)
         controls.addWidget(self.rescan_button)
 
-        self.rescan_all_button = QPushButton("Rescan all")
+        self.rescan_all_button = QPushButton(t("desktop.admin.autonomy.btn.rescan_all", "ru"))
         self.rescan_all_button.setObjectName("admin_autonomy_rescan_all_button")
         self.rescan_all_button.clicked.connect(self._rescan_all)
         controls.addWidget(self.rescan_all_button)
 
-        self.maintenance_button = QPushButton("Daily maintenance")
+        self.maintenance_button = QPushButton(t("desktop.admin.autonomy.btn.daily_maintenance", "ru"))
         self.maintenance_button.setObjectName("admin_autonomy_maintenance_button")
         self.maintenance_button.clicked.connect(self._run_daily_maintenance)
         controls.addWidget(self.maintenance_button)
 
-        self.details_button = QPushButton("Открыть детали")
+        self.details_button = QPushButton(t("desktop.admin.autonomy.btn.open_details", "ru"))
         self.details_button.setObjectName("admin_autonomy_details_button")
         self.details_button.clicked.connect(self._open_details)
         controls.addWidget(self.details_button)
         controls.addStretch(1)
         root.addLayout(controls)
 
-        headers = [
-            "Server ID", "Label", "Transport", "Host", "Status",
-            "Baseline", "Alarm", "Warn", "Memory", "Last Scan",
-        ]
-        self.servers_table = QTableWidget(0, len(headers))
+        self._autonomy_servers_headers = self._build_autonomy_headers("ru")
+        self.servers_table = QTableWidget(0, len(self._autonomy_servers_headers))
         self.servers_table.setObjectName("admin_autonomy_servers_table")
-        self.servers_table.setHorizontalHeaderLabels(headers)
+        self.servers_table.setHorizontalHeaderLabels(self._autonomy_servers_headers)
         self.servers_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.servers_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.servers_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1601,9 +1638,35 @@ class AdminAutonomyPanel(QWidget):
         self.servers_table.doubleClicked.connect(lambda *_: self._open_details())
         root.addWidget(self.servers_table)
 
-        outer.addWidget(group)
+        outer.addWidget(self._autonomy_group)
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_autonomy_headers(lang: str) -> list[str]:
+        return [
+            t("desktop.admin.autonomy.col.server_id", lang),
+            t("desktop.admin.autonomy.col.label", lang),
+            t("desktop.admin.autonomy.col.transport", lang),
+            t("desktop.admin.autonomy.col.host", lang),
+            t("desktop.admin.autonomy.col.status", lang),
+            t("desktop.admin.autonomy.col.baseline", lang),
+            t("desktop.admin.autonomy.col.alarm", lang),
+            t("desktop.admin.autonomy.col.warn", lang),
+            t("desktop.admin.autonomy.col.memory", lang),
+            t("desktop.admin.autonomy.col.last_scan", lang),
+        ]
+
+    def retranslate_ui(self, lang: str) -> None:
+        self._autonomy_group.setTitle(t("desktop.admin.autonomy.group_title", lang))
+        self.summary_label.setText(t("desktop.admin.autonomy.servers_not_loaded", lang))
+        self.refresh_button.setText(t("desktop.admin.autonomy.btn.refresh_list", lang))
+        self.rescan_button.setText(t("desktop.admin.autonomy.btn.rescan_selected", lang))
+        self.rescan_all_button.setText(t("desktop.admin.autonomy.btn.rescan_all", lang))
+        self.maintenance_button.setText(t("desktop.admin.autonomy.btn.daily_maintenance", lang))
+        self.details_button.setText(t("desktop.admin.autonomy.btn.open_details", lang))
+        self._autonomy_servers_headers = self._build_autonomy_headers(lang)
+        self.servers_table.setHorizontalHeaderLabels(self._autonomy_servers_headers)
 
     def set_session(self, session_uid: Optional[str]) -> None:
         self._session_uid = str(session_uid or "").strip() or None
@@ -1613,18 +1676,21 @@ class AdminAutonomyPanel(QWidget):
         self.servers_table.setRowCount(0)
         self._servers = []
         uid = self._session_uid
+        lang = self.facade.ui_language
+        self._autonomy_servers_headers = self._build_autonomy_headers(lang)
+        self.servers_table.setHorizontalHeaderLabels(self._autonomy_servers_headers)
         if not uid:
-            self.summary_label.setText("Session не выбрана.")
+            self.summary_label.setText(t("desktop.admin.msg.no_session", lang))
             return
         loader = getattr(self.facade, "admin_autonomy_list_servers", None)
         if not callable(loader):
-            self.summary_label.setText("Autonomy API недоступен.")
+            self.summary_label.setText(t("desktop.admin.msg.autonomy_api_unavailable", lang))
             return
         try:
             servers = list(loader(uid) or [])
         except Exception:
             self.logger.exception("autonomy refresh_servers failed session_uid=%s", uid)
-            self.summary_label.setText("Ошибка загрузки inventory.")
+            self.summary_label.setText(t("desktop.admin.msg.inventory_load_error", lang))
             return
         self._servers = servers
 
@@ -1638,7 +1704,9 @@ class AdminAutonomyPanel(QWidget):
         totals = dict(gs.get("totals") or {})
         statuses = dict(gs.get("statuses") or {})
         self.summary_label.setText(
-            "Сервера: {count} | статусы: {statuses} | drifts: {totals}".format(
+            t(
+                "desktop.admin.autonomy.servers_summary",
+                lang,
                 count=gs.get("server_count", len(servers)),
                 statuses=", ".join(f"{k}={v}" for k, v in statuses.items()) or "-",
                 totals=", ".join(f"{k}={v}" for k, v in totals.items()) or "-",
@@ -1680,58 +1748,66 @@ class AdminAutonomyPanel(QWidget):
     def _rescan_selected(self) -> None:
         uid = self._session_uid
         sid = self._selected_server_id()
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.rescan_title", lang)
         if not uid or not sid:
-            QMessageBox.information(self, "Rescan", "Выберите сервер.")
+            QMessageBox.information(self, title, t("desktop.admin.autonomy.msg.select_server", lang))
             return
         fn = getattr(self.facade, "admin_autonomy_rescan_server", None)
         if not callable(fn):
-            QMessageBox.warning(self, "Rescan", "API недоступен.")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.api_unavailable", lang))
             return
         self.rescan_button.setEnabled(False)
         try:
             result = fn(uid, sid)
         except Exception:
             self.logger.exception("autonomy rescan failed session_uid=%s server_id=%s", uid, sid)
-            QMessageBox.critical(self, "Rescan", "Ошибка rescan.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.rescan_error", lang))
             self.rescan_button.setEnabled(True)
             return
         self.rescan_button.setEnabled(True)
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            QMessageBox.warning(self, "Rescan", f"Ошибка: {err}")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.error_fmt", lang, error=err))
             self.refresh_servers()
             return
         QMessageBox.information(
             self,
-            "Rescan",
-            (
-                f"Rescan {sid}: drifts_written={result.get('drifts_written', 0)}, "
-                f"alarm={result.get('alarm_count', 0)}, warn={result.get('warn_count', 0)}"
+            title,
+            t(
+                "desktop.admin.autonomy.msg.rescan_result",
+                lang,
+                sid=sid,
+                drifts_written=result.get("drifts_written", 0),
+                alarm=result.get("alarm_count", 0),
+                warn=result.get("warn_count", 0),
             ),
         )
         self.refresh_servers()
 
     def _rescan_all(self) -> None:
         uid = self._session_uid
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.rescan_all_title", lang)
         if not uid:
-            QMessageBox.information(self, "Rescan all", "Session не выбрана.")
+            QMessageBox.information(self, title, t("desktop.admin.msg.no_session", lang))
             return
         fn = getattr(self.facade, "admin_autonomy_rescan_all", None)
         if not callable(fn):
-            QMessageBox.warning(self, "Rescan all", "API недоступен.")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.api_unavailable", lang))
             return
         self.rescan_all_button.setEnabled(False)
         try:
             result = fn(uid)
         except Exception:
             self.logger.exception("autonomy rescan_all failed session_uid=%s", uid)
-            QMessageBox.critical(self, "Rescan all", "Ошибка rescan_all.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.rescan_all_error", lang))
             self.rescan_all_button.setEnabled(True)
             return
         self.rescan_all_button.setEnabled(True)
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            QMessageBox.warning(self, "Rescan all", f"Ошибка: {err}")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.error_fmt", lang, error=err))
             self.refresh_servers()
             return
         servers = list(result.get("servers") or [])
@@ -1739,47 +1815,60 @@ class AdminAutonomyPanel(QWidget):
         total_alarm = sum(int(s.get("alarm_count", 0) or 0) for s in servers)
         QMessageBox.information(
             self,
-            "Rescan all",
-            f"Серверов: {len(servers)}, drifts: {total_drifts}, alarm: {total_alarm}",
+            title,
+            t(
+                "desktop.admin.autonomy.msg.rescan_all_result",
+                lang,
+                count=len(servers),
+                drifts=total_drifts,
+                alarm=total_alarm,
+            ),
         )
         self.refresh_servers()
 
     def _run_daily_maintenance(self) -> None:
         uid = self._session_uid
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.maintenance_title", lang)
         if not uid:
-            QMessageBox.information(self, "Daily maintenance", "Session не выбрана.")
+            QMessageBox.information(self, title, t("desktop.admin.msg.no_session", lang))
             return
         fn = getattr(self.facade, "admin_autonomy_run_daily_maintenance", None)
         if not callable(fn):
-            QMessageBox.warning(self, "Daily maintenance", "API недоступен.")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.api_unavailable", lang))
             return
         self.maintenance_button.setEnabled(False)
         try:
             result = fn(uid)
         except Exception:
             self.logger.exception("autonomy daily_maintenance failed session_uid=%s", uid)
-            QMessageBox.critical(self, "Daily maintenance", "Ошибка maintenance.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.maintenance_error", lang))
             self.maintenance_button.setEnabled(True)
             return
         self.maintenance_button.setEnabled(True)
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            QMessageBox.warning(self, "Daily maintenance", f"Ошибка: {err}")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         report = dict(result.get("report") or {})
         servers = dict(report.get("servers") or {})
         QMessageBox.information(
             self,
-            "Daily maintenance",
-            f"Готово. Серверов обработано: {len(servers)}.",
+            title,
+            t("desktop.admin.autonomy.msg.maintenance_done", lang, count=len(servers)),
         )
         self.refresh_servers()
 
     def _open_details(self) -> None:
         uid = self._session_uid
         sid = self._selected_server_id()
+        lang = self.facade.ui_language
         if not uid or not sid:
-            QMessageBox.information(self, "Детали", "Выберите сервер.")
+            QMessageBox.information(
+                self,
+                t("desktop.admin.autonomy.details_title", lang),
+                t("desktop.admin.autonomy.msg.select_server", lang),
+            )
             return
         dlg = AdminAutonomyDetailDialog(self.facade, uid, sid, parent=self)
         dlg.exec()
@@ -1804,7 +1893,10 @@ class AdminAutonomyDetailDialog(QDialog):
         self.server_id = str(server_id)
         self.logger = logging.getLogger(__name__ + ".AdminAutonomyDetailDialog")
         self.setObjectName("admin_autonomy_detail_dialog")
-        self.setWindowTitle(f"Автономия — {self.server_id}")
+        lang = self.facade.ui_language
+        self.setWindowTitle(
+            t("desktop.admin.autonomy.detail_title", lang, server_id=self.server_id)
+        )
         self.resize(900, 640)
 
         layout = QVBoxLayout(self)
@@ -1815,7 +1907,7 @@ class AdminAutonomyDetailDialog(QDialog):
         self.tabs.setObjectName("admin_autonomy_detail_tabs")
         layout.addWidget(self.tabs, 1)
 
-        self.tabs.addTab(self._build_overview_tab(), "Обзор")
+        self.tabs.addTab(self._build_overview_tab(), t("desktop.admin.tab.overview", lang))
         self.tabs.addTab(self._build_baseline_tab(), "Baseline")
         self.tabs.addTab(self._build_drifts_tab(), "Drifts")
         self.tabs.addTab(self._build_memory_tab(), "Memory")
@@ -1826,7 +1918,7 @@ class AdminAutonomyDetailDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        close_btn = QPushButton("Закрыть")
+        close_btn = QPushButton(t("desktop.admin.autonomy.btn.close", lang))
         close_btn.clicked.connect(self.accept)
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
@@ -1867,7 +1959,9 @@ class AdminAutonomyDetailDialog(QDialog):
             if gs:
                 lines.append("# Global summary")
                 lines.append(_dump_yaml_safe(gs))
-        self.overview_view.setPlainText("\n".join(lines).strip() or "Нет данных.")
+        self.overview_view.setPlainText(
+            "\n".join(lines).strip() or t("desktop.admin.autonomy.msg.no_data", self.facade.ui_language)
+        )
 
     # ---------- baseline ----------
 
@@ -1877,10 +1971,11 @@ class AdminAutonomyDetailDialog(QDialog):
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(4)
         btn_row = QHBoxLayout()
-        self.baseline_accept_btn = QPushButton("Accept proposed")
+        lang = self.facade.ui_language
+        self.baseline_accept_btn = QPushButton(t("desktop.admin.autonomy.btn.accept_proposed", lang))
         self.baseline_accept_btn.clicked.connect(self._accept_baseline)
         btn_row.addWidget(self.baseline_accept_btn)
-        self.baseline_discard_btn = QPushButton("Discard proposed")
+        self.baseline_discard_btn = QPushButton(t("desktop.admin.autonomy.btn.discard_proposed", lang))
         self.baseline_discard_btn.clicked.connect(self._discard_baseline)
         btn_row.addWidget(self.baseline_discard_btn)
         btn_row.addStretch(1)
@@ -1892,7 +1987,7 @@ class AdminAutonomyDetailDialog(QDialog):
         cur_wrap = QWidget()
         cv = QVBoxLayout(cur_wrap)
         cv.setContentsMargins(0, 0, 0, 0)
-        cv.addWidget(QLabel("Текущий baseline:"))
+        cv.addWidget(QLabel(t("desktop.admin.autonomy.label.current_baseline", lang)))
         self.baseline_current_view = QPlainTextEdit()
         self.baseline_current_view.setReadOnly(True)
         cv.addWidget(self.baseline_current_view, 1)
@@ -1901,7 +1996,7 @@ class AdminAutonomyDetailDialog(QDialog):
         prop_wrap = QWidget()
         pv = QVBoxLayout(prop_wrap)
         pv.setContentsMargins(0, 0, 0, 0)
-        pv.addWidget(QLabel("Proposed baseline:"))
+        pv.addWidget(QLabel(t("desktop.admin.autonomy.label.proposed_baseline", lang)))
         self.baseline_proposed_view = QPlainTextEdit()
         self.baseline_proposed_view.setReadOnly(True)
         pv.addWidget(self.baseline_proposed_view, 1)
@@ -1919,7 +2014,9 @@ class AdminAutonomyDetailDialog(QDialog):
         self.baseline_current_view.setPlainText(_dump_yaml_safe(data.get("baseline") or {}))
         proposed = data.get("proposed")
         if proposed is None:
-            self.baseline_proposed_view.setPlainText("(нет proposed baseline)")
+            self.baseline_proposed_view.setPlainText(
+                t("desktop.admin.autonomy.msg.no_proposed_baseline", self.facade.ui_language)
+            )
         else:
             self.baseline_proposed_view.setPlainText(_dump_yaml_safe(proposed))
         has_proposed = bool(data.get("has_proposed"))
@@ -1928,31 +2025,35 @@ class AdminAutonomyDetailDialog(QDialog):
 
     def _accept_baseline(self) -> None:
         fn = getattr(self.facade, "admin_autonomy_accept_baseline", None)
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.baseline_title", lang)
         if not callable(fn):
             return
         try:
             result = fn(self.session_uid, self.server_id)
         except Exception:
             self.logger.exception("baseline: accept failed")
-            QMessageBox.critical(self, "Baseline", "Ошибка accept.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.baseline_accept_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            QMessageBox.warning(self, "Baseline", f"Ошибка: {err}")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.error_fmt", lang, error=err))
         self._refresh_baseline()
 
     def _discard_baseline(self) -> None:
         fn = getattr(self.facade, "admin_autonomy_discard_baseline", None)
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.baseline_title", lang)
         if not callable(fn):
             return
         try:
             ok = bool(fn(self.session_uid, self.server_id))
         except Exception:
             self.logger.exception("baseline: discard failed")
-            QMessageBox.critical(self, "Baseline", "Ошибка discard.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.baseline_discard_error", lang))
             return
         if not ok:
-            QMessageBox.information(self, "Baseline", "Нечего отменять.")
+            QMessageBox.information(self, title, t("desktop.admin.autonomy.msg.nothing_to_discard", lang))
         self._refresh_baseline()
 
     # ---------- drifts ----------
@@ -1961,11 +2062,12 @@ class AdminAutonomyDetailDialog(QDialog):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(6, 6, 6, 6)
+        lang = self.facade.ui_language
         controls = QHBoxLayout()
-        self.drifts_refresh_btn = QPushButton("Обновить")
+        self.drifts_refresh_btn = QPushButton(t("desktop.btn.refresh", lang))
         self.drifts_refresh_btn.clicked.connect(self._refresh_drifts)
         controls.addWidget(self.drifts_refresh_btn)
-        self.drifts_open_only_btn = QPushButton("Показать все")
+        self.drifts_open_only_btn = QPushButton(t("desktop.admin.autonomy.btn.show_all", lang))
         self.drifts_open_only_btn.setCheckable(True)
         self.drifts_open_only_btn.toggled.connect(lambda _: self._refresh_drifts())
         controls.addWidget(self.drifts_open_only_btn)
@@ -2028,7 +2130,7 @@ class AdminAutonomyDetailDialog(QDialog):
             for col, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 self.drifts_table.setItem(row_idx, col, item)
-            ack_btn = QPushButton("Ack")
+            ack_btn = QPushButton(t("desktop.admin.autonomy.btn.ack", self.facade.ui_language))
             acknowledged = bool(row.get("acknowledged_at") or row.get("acknowledged"))
             ack_btn.setEnabled(not acknowledged)
 
@@ -2044,16 +2146,18 @@ class AdminAutonomyDetailDialog(QDialog):
         if drift_id <= 0:
             return
         fn = getattr(self.facade, "admin_autonomy_ack_drift", None)
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.drifts_title", lang)
         if not callable(fn):
             return
         try:
             ok = bool(fn(self.session_uid, self.server_id, drift_id))
         except Exception:
             self.logger.exception("drifts: ack failed")
-            QMessageBox.critical(self, "Drifts", "Ошибка ack.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.ack_error", lang))
             return
         if not ok:
-            QMessageBox.information(self, "Drifts", "Drift не изменён.")
+            QMessageBox.information(self, title, t("desktop.admin.autonomy.msg.drift_not_changed", lang))
         self._refresh_drifts()
 
     # ---------- memory ----------
@@ -2066,11 +2170,12 @@ class AdminAutonomyDetailDialog(QDialog):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         lay.addWidget(splitter, 1)
 
+        lang = self.facade.ui_language
         # Facts column
         facts_wrap = QWidget()
         fv = QVBoxLayout(facts_wrap)
         fv.setContentsMargins(0, 0, 0, 0)
-        fv.addWidget(QLabel("Facts:"))
+        fv.addWidget(QLabel(t("desktop.admin.autonomy.label.facts", lang)))
         self.facts_table = QTableWidget(0, 4)
         self.facts_table.setHorizontalHeaderLabels(["key", "value", "edit", "delete"])
         self.facts_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -2080,10 +2185,10 @@ class AdminAutonomyDetailDialog(QDialog):
         self.facts_table.horizontalHeader().setStretchLastSection(True)
         fv.addWidget(self.facts_table, 1)
         fact_btn_row = QHBoxLayout()
-        self.facts_add_btn = QPushButton("Добавить факт")
+        self.facts_add_btn = QPushButton(t("desktop.admin.autonomy.btn.add_fact", lang))
         self.facts_add_btn.clicked.connect(self._add_fact)
         fact_btn_row.addWidget(self.facts_add_btn)
-        self.memory_compact_btn = QPushButton("Compact memory")
+        self.memory_compact_btn = QPushButton(t("desktop.admin.autonomy.btn.compact_memory", lang))
         self.memory_compact_btn.clicked.connect(self._compact_memory)
         fact_btn_row.addWidget(self.memory_compact_btn)
         fact_btn_row.addStretch(1)
@@ -2094,15 +2199,15 @@ class AdminAutonomyDetailDialog(QDialog):
         notes_wrap = QWidget()
         nv = QVBoxLayout(notes_wrap)
         nv.setContentsMargins(0, 0, 0, 0)
-        nv.addWidget(QLabel("Notes:"))
+        nv.addWidget(QLabel(t("desktop.admin.autonomy.label.notes", lang)))
         self.notes_view = QPlainTextEdit()
         self.notes_view.setReadOnly(True)
         nv.addWidget(self.notes_view, 1)
         note_input_row = QHBoxLayout()
         self.note_input = QLineEdit()
-        self.note_input.setPlaceholderText("Добавить заметку...")
+        self.note_input.setPlaceholderText(t("desktop.admin.autonomy.placeholder.add_note", lang))
         note_input_row.addWidget(self.note_input, 1)
-        self.note_append_btn = QPushButton("Append note")
+        self.note_append_btn = QPushButton(t("desktop.admin.autonomy.btn.append_note", lang))
         self.note_append_btn.clicked.connect(self._append_note)
         note_input_row.addWidget(self.note_append_btn)
         nv.addLayout(note_input_row)
@@ -2148,45 +2253,70 @@ class AdminAutonomyDetailDialog(QDialog):
         self.notes_view.setPlainText(str(data.get("notes_text") or ""))
 
     def _add_fact(self) -> None:
-        key, ok = QInputDialog.getText(self, "Новый факт", "Key:")
+        lang = self.facade.ui_language
+        key, ok = QInputDialog.getText(
+            self,
+            t("desktop.admin.autonomy.dialog.new_fact_title", lang),
+            t("desktop.admin.autonomy.dialog.fact_key_prompt", lang),
+        )
         if not ok or not str(key).strip():
             return
-        value, ok = QInputDialog.getText(self, "Новый факт", f"Value для {key}:")
+        value, ok = QInputDialog.getText(
+            self,
+            t("desktop.admin.autonomy.dialog.new_fact_title", lang),
+            t("desktop.admin.autonomy.dialog.fact_value_prompt", lang, key=key),
+        )
         if not ok:
             return
         self._update_fact(str(key).strip(), str(value))
 
     def _edit_fact(self, key: str) -> None:
-        value, ok = QInputDialog.getText(self, "Редактировать факт", f"Value для {key}:")
+        lang = self.facade.ui_language
+        value, ok = QInputDialog.getText(
+            self,
+            t("desktop.admin.autonomy.dialog.edit_fact_title", lang),
+            t("desktop.admin.autonomy.dialog.fact_value_prompt", lang, key=key),
+        )
         if not ok:
             return
         self._update_fact(key, str(value))
 
     def _update_fact(self, key: str, value: str) -> None:
         fn = getattr(self.facade, "admin_autonomy_update_fact", None)
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.memory_title", lang)
         if not callable(fn):
             return
         try:
             result = fn(self.session_uid, self.server_id, key=key, value=value)
         except Exception:
             self.logger.exception("memory: update_fact failed")
-            QMessageBox.critical(self, "Memory", "Ошибка обновления факта.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.update_fact_error", lang))
             return
         if isinstance(result, dict) and not result.get("ok"):
-            QMessageBox.warning(self, "Memory", str(result.get("error") or "Ошибка."))
+            QMessageBox.warning(
+                self, title,
+                str(result.get("error") or t("desktop.admin.autonomy.msg.generic_error", lang)),
+            )
         self._refresh_memory()
 
     def _delete_fact(self, key: str) -> None:
-        if QMessageBox.question(self, "Удалить факт", f"Удалить {key}?") != QMessageBox.StandardButton.Yes:
+        lang = self.facade.ui_language
+        if QMessageBox.question(
+            self,
+            t("desktop.admin.autonomy.dialog.delete_fact_title", lang),
+            t("desktop.admin.autonomy.dialog.delete_fact_prompt", lang, key=key),
+        ) != QMessageBox.StandardButton.Yes:
             return
         fn = getattr(self.facade, "admin_autonomy_delete_fact", None)
+        title = t("desktop.admin.autonomy.memory_title", lang)
         if not callable(fn):
             return
         try:
             fn(self.session_uid, self.server_id, key)
         except Exception:
             self.logger.exception("memory: delete_fact failed")
-            QMessageBox.critical(self, "Memory", "Ошибка удаления факта.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.delete_fact_error", lang))
             return
         self._refresh_memory()
 
@@ -2201,23 +2331,32 @@ class AdminAutonomyDetailDialog(QDialog):
             fn(self.session_uid, self.server_id, text)
         except Exception:
             self.logger.exception("memory: append_note failed")
-            QMessageBox.critical(self, "Memory", "Ошибка добавления заметки.")
+            QMessageBox.critical(
+                self,
+                t("desktop.admin.autonomy.memory_title", self.facade.ui_language),
+                t("desktop.admin.autonomy.msg.append_note_error", self.facade.ui_language),
+            )
             return
         self.note_input.clear()
         self._refresh_memory()
 
     def _compact_memory(self) -> None:
         fn = getattr(self.facade, "admin_autonomy_compact_memory", None)
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.memory_title", lang)
         if not callable(fn):
             return
         try:
             result = fn(self.session_uid, self.server_id, force=False)
         except Exception:
             self.logger.exception("memory: compact failed")
-            QMessageBox.critical(self, "Memory", "Ошибка compact.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.compact_error", lang))
             return
         if isinstance(result, dict) and not result.get("ok"):
-            QMessageBox.warning(self, "Memory", str(result.get("error") or "Ошибка."))
+            QMessageBox.warning(
+                self, title,
+                str(result.get("error") or t("desktop.admin.autonomy.msg.generic_error", lang)),
+            )
         self._refresh_memory()
 
     # ---------- runbooks ----------
@@ -2255,7 +2394,7 @@ class AdminAutonomyDetailDialog(QDialog):
         self.runbook_body_view.setReadOnly(True)
         rv.addWidget(self.runbook_body_view, 2)
 
-        rv.addWidget(QLabel("Результат:"))
+        rv.addWidget(QLabel(t("desktop.admin.autonomy.label.result", self.facade.ui_language)))
         self.runbook_result_view = QPlainTextEdit()
         self.runbook_result_view.setReadOnly(True)
         self.runbook_result_view.setMaximumHeight(200)
@@ -2323,7 +2462,9 @@ class AdminAutonomyDetailDialog(QDialog):
             self.logger.exception("runbooks: get failed")
             return
         if not rb:
-            self.runbook_body_view.setPlainText(f"Runbook {rb_id} не найден.")
+            self.runbook_body_view.setPlainText(
+                t("desktop.admin.autonomy.msg.runbook_not_found", self.facade.ui_language, rb_id=rb_id)
+            )
             return
         self._current_runbook = dict(rb)
         header = (
@@ -2346,22 +2487,27 @@ class AdminAutonomyDetailDialog(QDialog):
 
     def _validate_runbook(self) -> None:
         rb_id = self._selected_runbook_id()
+        lang = self.facade.ui_language
         if not rb_id:
             return
         fn = getattr(self.facade, "admin_autonomy_validate_runbook", None)
         if not callable(fn):
-            QMessageBox.warning(self, "Validate", "API недоступен.")
+            QMessageBox.warning(
+                self,
+                t("desktop.admin.autonomy.validate_title", lang),
+                t("desktop.admin.msg.api_unavailable", lang),
+            )
             return
-        self.runbook_result_view.setPlainText("Validating…")
+        self.runbook_result_view.setPlainText(t("desktop.admin.autonomy.msg.validating", lang))
         try:
             result = fn(self.session_uid, rb_id)
         except Exception:
             self.logger.exception("runbook validate failed")
-            self.runbook_result_view.setPlainText("Ошибка validate.")
+            self.runbook_result_view.setPlainText(t("desktop.admin.autonomy.msg.validate_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.runbook_result_view.setPlainText(f"Ошибка: {err}")
+            self.runbook_result_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         report = dict(result.get("report") or {})
         lines: list[str] = []
@@ -2385,21 +2531,23 @@ class AdminAutonomyDetailDialog(QDialog):
 
     def _promote_runbook(self) -> None:
         rb_id = self._selected_runbook_id()
+        lang = self.facade.ui_language
         if not rb_id:
             return
-        dlg = RunbookPromoteDialog(default_server_id=self.server_id, parent=self)
+        dlg = RunbookPromoteDialog(default_server_id=self.server_id, lang=lang, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         payload = dlg.result_payload()
         add_servers = payload.get("add_servers") or []
+        title = t("desktop.admin.autonomy.promote_title", lang)
         if not add_servers:
-            QMessageBox.information(self, "Promote", "Укажите хотя бы один server_id.")
+            QMessageBox.information(self, title, t("desktop.admin.autonomy.msg.specify_server_id", lang))
             return
         fn = getattr(self.facade, "admin_autonomy_promote_runbook", None)
         if not callable(fn):
-            QMessageBox.warning(self, "Promote", "API недоступен.")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.api_unavailable", lang))
             return
-        self.runbook_result_view.setPlainText("Promoting…")
+        self.runbook_result_view.setPlainText(t("desktop.admin.autonomy.msg.promoting", lang))
         try:
             result = fn(
                 self.session_uid,
@@ -2410,11 +2558,11 @@ class AdminAutonomyDetailDialog(QDialog):
             )
         except Exception:
             self.logger.exception("runbook promote failed")
-            self.runbook_result_view.setPlainText("Ошибка promote.")
+            self.runbook_result_view.setPlainText(t("desktop.admin.autonomy.msg.promote_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.runbook_result_view.setPlainText(f"Ошибка: {err}")
+            self.runbook_result_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         r = dict(result.get("result") or {})
         lines = [
@@ -2430,26 +2578,31 @@ class AdminAutonomyDetailDialog(QDialog):
     def _run_runbook_step(self) -> None:
         rb_id = self._selected_runbook_id()
         rb = self._current_runbook or {}
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.run_step_title", lang)
         if not rb_id:
             return
         metadata = dict(rb.get("metadata") or {})
         steps = list(metadata.get("steps") or [])
         if not steps:
-            QMessageBox.information(self, "Run step", "У runbook нет шагов.")
+            QMessageBox.information(self, title, t("desktop.admin.autonomy.msg.no_steps", lang))
             return
         step_names = [str(s.get("name") or "") for s in steps if s.get("name")]
         if not step_names:
-            QMessageBox.information(self, "Run step", "Шаги без имён.")
+            QMessageBox.information(self, title, t("desktop.admin.autonomy.msg.steps_no_names", lang))
             return
         step_name, ok = QInputDialog.getItem(
-            self, "Выбор шага", "Шаг для выполнения:", step_names, 0, False,
+            self,
+            t("desktop.admin.autonomy.dialog.select_step_title", lang),
+            t("desktop.admin.autonomy.dialog.select_step_prompt", lang),
+            step_names, 0, False,
         )
         if not ok or not step_name:
             return
         dry_run = QMessageBox.question(
             self,
-            "Run step",
-            "Выполнить в режиме DRY-RUN?\n(Нет — выполнить реально на сервере)",
+            title,
+            t("desktop.admin.autonomy.msg.dry_run_question", lang),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
@@ -2459,8 +2612,8 @@ class AdminAutonomyDetailDialog(QDialog):
         if not is_dry:
             confirm = QMessageBox.warning(
                 self,
-                "Run step",
-                f"Запустить LIVE выполнение шага '{step_name}' на {self.server_id}?",
+                title,
+                t("desktop.admin.autonomy.msg.live_run_confirm", lang, step=step_name, server=self.server_id),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -2468,10 +2621,11 @@ class AdminAutonomyDetailDialog(QDialog):
                 return
         fn = getattr(self.facade, "admin_autonomy_run_step", None)
         if not callable(fn):
-            QMessageBox.warning(self, "Run step", "API недоступен.")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.api_unavailable", lang))
             return
+        mode = "DRY" if is_dry else "LIVE"
         self.runbook_result_view.setPlainText(
-            f"{'DRY' if is_dry else 'LIVE'}-run {step_name} на {self.server_id}…"
+            t("desktop.admin.autonomy.msg.running_step", lang, mode=mode, step=step_name, server=self.server_id)
         )
         try:
             result = fn(
@@ -2483,11 +2637,11 @@ class AdminAutonomyDetailDialog(QDialog):
             )
         except Exception:
             self.logger.exception("runbook run_step failed")
-            self.runbook_result_view.setPlainText("Ошибка выполнения.")
+            self.runbook_result_view.setPlainText(t("desktop.admin.autonomy.msg.run_step_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.runbook_result_view.setPlainText(f"Ошибка: {err}")
+            self.runbook_result_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         r = dict(result.get("result") or {})
         dry_marker = "DRY-RUN" if r.get("dry_run") else f"rc={r.get('exit_code')}"
@@ -2515,15 +2669,16 @@ class AdminAutonomyDetailDialog(QDialog):
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(4)
 
+        lang = self.facade.ui_language
         # Source scan
-        src_grp = QGroupBox("1. Источник скриптов (admin.runbook_sources)")
+        src_grp = QGroupBox(t("desktop.admin.autonomy.builder.src_group", lang))
         sv = QVBoxLayout(src_grp)
         sv.setContentsMargins(6, 6, 6, 6)
         dir_row = QHBoxLayout()
         self.builder_dir_edit = QLineEdit()
         self.builder_dir_edit.setPlaceholderText("/path/to/scripts/dir")
         dir_row.addWidget(self.builder_dir_edit, 1)
-        self.builder_browse_btn = QPushButton("Обзор…")
+        self.builder_browse_btn = QPushButton(t("desktop.admin.autonomy.btn.browse", lang))
         self.builder_browse_btn.clicked.connect(self._builder_browse_dir)
         dir_row.addWidget(self.builder_browse_btn)
         self.builder_scan_btn = QPushButton("Scan")
@@ -2539,16 +2694,16 @@ class AdminAutonomyDetailDialog(QDialog):
         lay.addWidget(src_grp)
 
         # Metadata
-        meta_grp = QGroupBox("2. Параметры runbook")
+        meta_grp = QGroupBox(t("desktop.admin.autonomy.builder.meta_group", lang))
         mf = QFormLayout(meta_grp)
         mf.setContentsMargins(6, 6, 6, 6)
         self.builder_title_edit = QLineEdit()
         mf.addRow("Title:", self.builder_title_edit)
         self.builder_rb_id_edit = QLineEdit()
-        self.builder_rb_id_edit.setPlaceholderText("опционально")
+        self.builder_rb_id_edit.setPlaceholderText(t("desktop.admin.label.optional2", lang))
         mf.addRow("rb_id:", self.builder_rb_id_edit)
         self.builder_tags_edit = QLineEdit()
-        self.builder_tags_edit.setPlaceholderText("через запятую")
+        self.builder_tags_edit.setPlaceholderText(t("desktop.admin.autonomy.placeholder.comma_separated", lang))
         mf.addRow("Tags:", self.builder_tags_edit)
         self.builder_dev_edit = QLineEdit(self.server_id)
         mf.addRow("Dev server_id:", self.builder_dev_edit)
@@ -2584,52 +2739,63 @@ class AdminAutonomyDetailDialog(QDialog):
 
     def _builder_browse_dir(self) -> None:
         directory = QFileDialog.getExistingDirectory(
-            self, "Каталог скриптов", self.builder_dir_edit.text() or str(Path.home()),
+            self,
+            t("desktop.admin.autonomy.dialog.scripts_dir_title", self.facade.ui_language),
+            self.builder_dir_edit.text() or str(Path.home()),
         )
         if directory:
             self.builder_dir_edit.setText(directory)
 
     def _builder_scan(self) -> None:
         directory = self.builder_dir_edit.text().strip()
+        lang = self.facade.ui_language
         if not directory:
-            self.builder_result_view.setPlainText("Укажите каталог.")
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.specify_dir", lang))
             return
         fn = getattr(self.facade, "admin_autonomy_scan_scripts", None)
         if not callable(fn):
-            self.builder_result_view.setPlainText("API недоступен.")
+            self.builder_result_view.setPlainText(t("desktop.admin.msg.api_unavailable", lang))
             return
-        self.builder_result_view.setPlainText("Сканируем…")
+        lang = self.facade.ui_language
+        self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.scanning", lang))
         try:
             result = fn(self.session_uid, directory)
         except Exception:
             self.logger.exception("builder scan failed")
-            self.builder_result_view.setPlainText("Ошибка сканирования.")
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.scan_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.builder_result_view.setPlainText(f"Ошибка: {err}")
+            self.builder_result_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         files = list(result.get("files") or [])
         self._builder_scanned_files = files
         self.builder_files_list.clear()
         for f in files:
-            label = f"{f.get('name')}  ({f.get('size_bytes', 0)} байт · sha1:{str(f.get('sha1') or '')[:8]}…)"
+            label = t(
+                "desktop.admin.autonomy.builder.file_item",
+                lang,
+                name=f.get("name"),
+                size=f.get("size_bytes", 0),
+                sha1=str(f.get("sha1") or "")[:8],
+            )
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, f)
             item.setSelected(True)
             self.builder_files_list.addItem(item)
         self.builder_result_view.setPlainText(
-            f"Найдено файлов: {len(files)}. Отметьте нужные в списке."
+            t("desktop.admin.autonomy.msg.scan_done", lang, count=len(files))
         )
 
     def _builder_build(self) -> None:
-        title = self.builder_title_edit.text().strip()
+        title_text = self.builder_title_edit.text().strip()
         dev_sid = self.builder_dev_edit.text().strip()
-        if not title:
-            self.builder_result_view.setPlainText("Title обязателен.")
+        lang = self.facade.ui_language
+        if not title_text:
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.title_required", lang))
             return
         if not dev_sid:
-            self.builder_result_view.setPlainText("Dev server_id обязателен.")
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.dev_server_required", lang))
             return
         selected_files: list[dict[str, Any]] = []
         for item in self.builder_files_list.selectedItems():
@@ -2637,7 +2803,7 @@ class AdminAutonomyDetailDialog(QDialog):
             if isinstance(meta, dict):
                 selected_files.append(meta)
         if not selected_files:
-            self.builder_result_view.setPlainText("Выберите хотя бы один скрипт.")
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.select_script", lang))
             return
         target = str(self.builder_target_combo.currentData() or "local")
         scripts_payload = [
@@ -2648,16 +2814,16 @@ class AdminAutonomyDetailDialog(QDialog):
             }
             for f in selected_files
         ]
-        tags = [t.strip() for t in self.builder_tags_edit.text().split(",") if t.strip()]
+        tags = [tg.strip() for tg in self.builder_tags_edit.text().split(",") if tg.strip()]
         fn = getattr(self.facade, "admin_autonomy_build_runbook", None)
         if not callable(fn):
-            self.builder_result_view.setPlainText("API недоступен.")
+            self.builder_result_view.setPlainText(t("desktop.admin.msg.api_unavailable", lang))
             return
-        self.builder_result_view.setPlainText("Сборка runbook…")
+        self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.building", lang))
         try:
             result = fn(
                 self.session_uid,
-                title=title,
+                title=title_text,
                 dev_server_id=dev_sid,
                 scripts=scripts_payload,
                 rb_id=self.builder_rb_id_edit.text().strip() or None,
@@ -2666,40 +2832,44 @@ class AdminAutonomyDetailDialog(QDialog):
             )
         except Exception:
             self.logger.exception("builder build failed")
-            self.builder_result_view.setPlainText("Ошибка сборки.")
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.build_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.builder_result_view.setPlainText(f"Ошибка: {err}")
+            self.builder_result_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         rb = dict(result.get("runbook") or {})
         self._builder_last_rb_id = str(rb.get("id") or "") or None
         self.builder_validate_btn.setEnabled(bool(self._builder_last_rb_id))
         self.builder_result_view.setPlainText(
-            f"Собран runbook {rb.get('id')}\n"
-            f"path: {rb.get('path')}\n"
-            f"servers: {', '.join(rb.get('servers') or [])}\n"
-            "Нажмите Validate для проверки."
+            t(
+                "desktop.admin.autonomy.msg.build_done",
+                lang,
+                rb_id=rb.get("id"),
+                path=rb.get("path"),
+                servers=", ".join(rb.get("servers") or []),
+            )
         )
 
     def _builder_validate(self) -> None:
         rb_id = self._builder_last_rb_id
+        lang = self.facade.ui_language
         if not rb_id:
             return
         fn = getattr(self.facade, "admin_autonomy_validate_runbook", None)
         if not callable(fn):
-            self.builder_result_view.setPlainText("API недоступен.")
+            self.builder_result_view.setPlainText(t("desktop.admin.msg.api_unavailable", lang))
             return
-        self.builder_result_view.setPlainText("Validating…")
+        self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.validating", lang))
         try:
             result = fn(self.session_uid, rb_id)
         except Exception:
             self.logger.exception("builder validate failed")
-            self.builder_result_view.setPlainText("Ошибка validate.")
+            self.builder_result_view.setPlainText(t("desktop.admin.autonomy.msg.validate_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.builder_result_view.setPlainText(f"Ошибка: {err}")
+            self.builder_result_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         report = dict(result.get("report") or {})
         lines = [f"Validation: {'OK' if report.get('ok') else 'FAIL'}"]
@@ -2729,7 +2899,7 @@ class AdminAutonomyDetailDialog(QDialog):
             lambda _: self._load_snapshots(),
         )
         top.addWidget(self.snapshots_check_combo, 1)
-        self.snapshots_reload_btn = QPushButton("Обновить список")
+        self.snapshots_reload_btn = QPushButton(t("desktop.admin.autonomy.btn.refresh_list", self.facade.ui_language))
         self.snapshots_reload_btn.clicked.connect(self._refresh_snapshot_checks)
         top.addWidget(self.snapshots_reload_btn)
         top.addStretch(1)
@@ -2793,10 +2963,11 @@ class AdminAutonomyDetailDialog(QDialog):
         lay.setContentsMargins(6, 6, 6, 6)
 
         ctr = QHBoxLayout()
-        self.prereqs_check_btn = QPushButton("Check prereqs")
+        lang = self.facade.ui_language
+        self.prereqs_check_btn = QPushButton(t("desktop.admin.autonomy.btn.check_prereqs", lang))
         self.prereqs_check_btn.clicked.connect(self._refresh_prereqs)
         ctr.addWidget(self.prereqs_check_btn)
-        self.prereqs_bootstrap_btn = QPushButton("Build bootstrap runbook")
+        self.prereqs_bootstrap_btn = QPushButton(t("desktop.admin.autonomy.btn.build_bootstrap", lang))
         self.prereqs_bootstrap_btn.clicked.connect(self._build_prereqs_bootstrap)
         self.prereqs_bootstrap_btn.setEnabled(False)
         ctr.addWidget(self.prereqs_bootstrap_btn)
@@ -2810,18 +2981,19 @@ class AdminAutonomyDetailDialog(QDialog):
 
     def _refresh_prereqs(self) -> None:
         fn = getattr(self.facade, "admin_autonomy_check_prereqs", None)
+        lang = self.facade.ui_language
         if not callable(fn):
-            self.prereqs_view.setPlainText("API недоступен.")
+            self.prereqs_view.setPlainText(t("desktop.admin.msg.api_unavailable", lang))
             return
         try:
             result = fn(self.session_uid, self.server_id)
         except Exception:
             self.logger.exception("prereqs: check failed")
-            self.prereqs_view.setPlainText("Ошибка проверки.")
+            self.prereqs_view.setPlainText(t("desktop.admin.autonomy.msg.prereqs_check_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            self.prereqs_view.setPlainText(f"Ошибка: {err}")
+            self.prereqs_view.setPlainText(t("desktop.admin.msg.error_fmt", lang, error=err))
             self.prereqs_bootstrap_btn.setEnabled(False)
             return
         report = dict(result.get("report") or {})
@@ -2833,29 +3005,32 @@ class AdminAutonomyDetailDialog(QDialog):
 
     def _build_prereqs_bootstrap(self) -> None:
         fn = getattr(self.facade, "admin_autonomy_build_prereqs_bootstrap", None)
+        lang = self.facade.ui_language
+        title = t("desktop.admin.autonomy.bootstrap_title", lang)
         if not callable(fn):
             return
         try:
             result = fn(self.session_uid, self.server_id, force=False)
         except Exception:
             self.logger.exception("prereqs: bootstrap failed")
-            QMessageBox.critical(self, "Bootstrap", "Ошибка.")
+            QMessageBox.critical(self, title, t("desktop.admin.autonomy.msg.generic_error", lang))
             return
         if not isinstance(result, dict) or not result.get("ok"):
             err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
-            QMessageBox.warning(self, "Bootstrap", f"Ошибка: {err}")
+            QMessageBox.warning(self, title, t("desktop.admin.msg.error_fmt", lang, error=err))
             return
         reason = str(result.get("reason") or "")
         rb = result.get("runbook")
         if rb is None:
             QMessageBox.information(
-                self, "Bootstrap", f"Runbook не создан. Причина: {reason or 'unknown'}",
+                self, title,
+                t("desktop.admin.autonomy.msg.bootstrap_no_runbook", lang, reason=reason or "unknown"),
             )
             return
         QMessageBox.information(
             self,
-            "Bootstrap",
-            f"Создан runbook {rb.get('id')}. Путь: {rb.get('path')}",
+            title,
+            t("desktop.admin.autonomy.msg.bootstrap_done", lang, rb_id=rb.get("id"), path=rb.get("path")),
         )
         self._refresh_runbooks()
 
@@ -2877,6 +3052,7 @@ class RunbookPromoteDialog(QDialog):
         self,
         *,
         default_server_id: str,
+        lang: str = "ru",
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -2893,10 +3069,10 @@ class RunbookPromoteDialog(QDialog):
         self.confidence_spin.setDecimals(2)
         self.confidence_spin.setSingleStep(0.1)
         self.confidence_spin.setValue(-1.0)
-        self.confidence_spin.setSpecialValueText("— (не менять)")
+        self.confidence_spin.setSpecialValueText(t("desktop.admin.autonomy.dialog.confidence_no_change", lang))
         layout.addRow("Confidence:", self.confidence_spin)
 
-        self.validate_check = QCheckBox("Run validation first")
+        self.validate_check = QCheckBox(t("desktop.admin.autonomy.dialog.run_validation_label", lang))
         self.validate_check.setChecked(True)
         layout.addRow("", self.validate_check)
 
@@ -2905,7 +3081,7 @@ class RunbookPromoteDialog(QDialog):
         ok_btn = QPushButton("Promote")
         ok_btn.clicked.connect(self.accept)
         btn_row.addWidget(ok_btn)
-        cancel_btn = QPushButton("Отмена")
+        cancel_btn = QPushButton(t("common.cancel", lang))
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
         layout.addRow(btn_row)

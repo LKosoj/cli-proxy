@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QLabel, QScrollArea, QGroupBox
 )
 
+from i18n import t
 from utils.ui import ensure_async
 
 if TYPE_CHECKING:
@@ -32,12 +33,12 @@ class PluginMenuWidget(QWidget):
         layout.setSpacing(10)
 
         # Заголовок
-        title = QLabel("Plugins")
-        title.setObjectName("plugin_menu_title")
-        layout.addWidget(title)
+        self.title_label = QLabel(t("desktop.pluginmenu.title", "ru"))
+        self.title_label.setObjectName("plugin_menu_title")
+        layout.addWidget(self.title_label)
 
         # Кнопка обновления
-        self.refresh_btn = QPushButton("Refresh Plugins")
+        self.refresh_btn = QPushButton(t("desktop.pluginmenu.btn.refresh", "ru"))
         self.refresh_btn.clicked.connect(self.refresh_plugins)
         layout.addWidget(self.refresh_btn)
 
@@ -88,14 +89,14 @@ class PluginMenuWidget(QWidget):
 
         except Exception as e:
             self.logger.exception("Failed to refresh plugins")
-            error_label = QLabel(f"Error loading plugins: {str(e)}")
+            error_label = QLabel(t("desktop.pluginmenu.msg.load_error", self.facade.ui_language, error=str(e)))
             error_label.setStyleSheet("color: red;")
             self.plugins_layout.addWidget(error_label)
 
     def _display_plugin_menu(self, plugin_menu: List[Dict[str, Any]]):
         """Отображает двухуровневое меню плагинов."""
         if not plugin_menu:
-            no_plugins_label = QLabel("No plugins available")
+            no_plugins_label = QLabel(t("desktop.pluginmenu.msg.no_plugins", self.facade.ui_language))
             no_plugins_label.setStyleSheet("color: gray;")
             self.plugins_layout.addWidget(no_plugins_label)
             return
@@ -120,11 +121,16 @@ class PluginMenuWidget(QWidget):
                     )
                     group_layout.addWidget(action_btn)
             else:
-                no_actions_label = QLabel("No actions available")
+                no_actions_label = QLabel(t("desktop.pluginmenu.msg.no_actions", self.facade.ui_language))
                 no_actions_label.setStyleSheet("color: gray; font-style: italic;")
                 group_layout.addWidget(no_actions_label)
 
             self.plugins_layout.addWidget(group_box)
+
+    def retranslate_ui(self, lang: str) -> None:
+        self.title_label.setText(t("desktop.pluginmenu.title", lang))
+        self.refresh_btn.setText(t("desktop.pluginmenu.btn.refresh", lang))
+        self.refresh_plugins()
 
     def _on_plugin_action_clicked(self, plugin_id: str, action: str):
         """Обработка клика по действию плагина."""

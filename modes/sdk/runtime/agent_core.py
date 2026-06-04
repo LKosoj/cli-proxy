@@ -527,7 +527,11 @@ class ReActAgent:
         base_port = 4000 + (user_index * 10)
         user_ports = f"{base_port}-{base_port + 9}"
         tool_names = ", ".join(self._allowed_tool_names(allowed_tools))
-        lang = resolve_user_lang(self.config, user_id=user_id)
+        # Language must follow the real chat owner (chat_id == telegram user_id in private
+        # chats), NOT the cwd-derived user_id above — cwd is the project root in production,
+        # so its last path segment is not the telegram id. The cwd-derived user_id stays for
+        # port allocation only.
+        lang = resolve_user_lang(self.config, chat_id=chat_id)
         response_language = LANGUAGE_NAMES.get(lang, "Russian")
         prompt = (
             prompt.replace("{{cwd}}", cwd)
