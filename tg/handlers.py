@@ -7,6 +7,7 @@ import copy
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -89,6 +90,9 @@ def format_session_state(st: SessionState, updated_at_str: str, lang: str = "ru"
         f"Summary: {st.summary or no}",
         f"Updated: {updated_at_str}",
     ])
+
+
+_GIT_REF_RE = re.compile(r"^[A-Za-z0-9_@/.{}^~][A-Za-z0-9_@/.{}^~-]{0,99}$")
 
 
 class TelegramRuntimePayload(BaseModel):
@@ -2314,6 +2318,8 @@ class BotHandlers:
         chat_id = update.effective_chat.id
         if not await self._ensure_allowed(chat_id, context, update=update):
             return
+        if not await self._require_admin(chat_id, context, scope="git", update=update):
+            return
         try:
             lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
         except Exception:
@@ -2360,6 +2366,8 @@ class BotHandlers:
     async def cmd_git_checkout(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="git", update=update):
             return
         try:
             lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
@@ -2408,6 +2416,8 @@ class BotHandlers:
         chat_id = update.effective_chat.id
         if not await self._ensure_allowed(chat_id, context, update=update):
             return
+        if not await self._require_admin(chat_id, context, scope="git", update=update):
+            return
         try:
             lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
         except Exception:
@@ -2447,11 +2457,20 @@ class BotHandlers:
         chat_id = update.effective_chat.id
         if not await self._ensure_allowed(chat_id, context, update=update):
             return
+        if not await self._require_admin(chat_id, context, scope="git", update=update):
+            return
         try:
             lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
         except Exception:
             lang = "ru"
         ref = context.args[0].strip() if context.args else "HEAD"
+        if not _GIT_REF_RE.match(ref) or ".." in ref:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.show_invalid_ref", lang),
+                **self._reply_kwargs(update),
+            )
+            return
         route = self.bot_app.resolve_telegram_inbound_route(update)
         session = await self.bot_app.git.ensure_git_session(
             chat_id, context, message_thread_id=route.message_thread_id

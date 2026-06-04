@@ -792,6 +792,7 @@
       "stash_pop_done": "Stash pop 完成。",
       "show_usage": "用法：/git_show [<commit>]",
       "show_done": "Git show {ref}:",
+      "show_invalid_ref": "无效的 git ref。允许字母、数字和 _./@{}^~-",
       "remote_pull_usage": "用法：/remote_git_pull <host> [ff|merge|rebase]",
       "remote_pull_done": "远程 git pull（{host}）：完成。",
       "remote_pull_error": "远程 git pull（{host}）：错误 — {error}",

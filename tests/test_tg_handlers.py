@@ -164,6 +164,7 @@ async def test_cmd_git_branch_sends_usage_when_no_args() -> None:
     )
     handlers = BotHandlers(bot_app)
     handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._require_admin = AsyncMock(return_value=True)  # type: ignore[method-assign]
     handlers._reply_kwargs = lambda _upd, _s=None: {}  # type: ignore[method-assign]
 
     update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
@@ -197,6 +198,7 @@ async def test_cmd_git_show_uses_head_by_default() -> None:
     )
     handlers = BotHandlers(bot_app)
     handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._require_admin = AsyncMock(return_value=True)  # type: ignore[method-assign]
     handlers._reply_kwargs = lambda _upd, _s=None: {}  # type: ignore[method-assign]
 
     route = types.SimpleNamespace(message_thread_id=None)
@@ -210,6 +212,42 @@ async def test_cmd_git_show_uses_head_by_default() -> None:
     git_mock.git_show.assert_awaited_once()
     call_args = git_mock.git_show.call_args
     assert call_args[0][1] == "HEAD"
+    assert len(sent) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_ref", ["-rf", "HEAD:path", "..", "../etc/passwd", "HEAD..main"])
+async def test_cmd_git_show_rejects_invalid_ref(bad_ref: str) -> None:
+    sent: list[str] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        sent.append(str(text))
+
+    git_mock = types.SimpleNamespace(
+        ensure_git_session=AsyncMock(return_value=types.SimpleNamespace(workdir="/tmp")),
+        ensure_git_repo=AsyncMock(return_value=True),
+        git_show=AsyncMock(return_value=(0, "")),
+    )
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        git=git_mock,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(lang="ru"),
+        ),
+        resolve_telegram_inbound_route=lambda _upd: types.SimpleNamespace(message_thread_id=None),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._require_admin = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _upd, _s=None: {}  # type: ignore[method-assign]
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=[bad_ref])
+
+    await handlers.cmd_git_show(update, context)
+
+    git_mock.git_show.assert_not_awaited()
     assert len(sent) == 1
 
 

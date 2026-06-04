@@ -34,7 +34,7 @@
 | `tests/` | 547 | Unit/integration/smoke coverage |
 | `desktop/` | 32 | PySide6 Desktop UI, facade, widgets, desktop services |
 | `tg/` | 17 | Telegram commands, callbacks, message processing, markdown/entities |
-| `miniapp/` | 21 | aiohttp MiniApp backend and static frontend |
+| `miniapp/` | 22 | aiohttp MiniApp backend and static frontend |
 | `sessions/` | 10 | Session-facing helpers around core `session.py` |
 | `utils/` | 8 | Shared CLI/path/text/UI/html helpers |
 

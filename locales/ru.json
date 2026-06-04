@@ -792,6 +792,7 @@
       "stash_pop_done": "Stash pop выполнен.",
       "show_usage": "Использование: /git_show [<commit>]",
       "show_done": "Git show {ref}:",
+      "show_invalid_ref": "Недопустимый git-ref. Допускаются буквы, цифры и символы _./@{}^~-",
       "remote_pull_usage": "Использование: /remote_git_pull <host> [ff|merge|rebase]",
       "remote_pull_done": "Remote git pull ({host}): готово.",
       "remote_pull_error": "Remote git pull ({host}): ошибка — {error}",

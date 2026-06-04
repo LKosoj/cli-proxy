@@ -7,7 +7,7 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `miniapp/**`
-- Current files: 21 under `miniapp/**` as of last review.
+- Current files: 22 under `miniapp/**` as of last review.
 - Подкаталоги: `miniapp/services/` (бекенд-сервисы UI: config draft, файлы, логи), `miniapp/static/` (SPA на vanilla JS: `index.html`, `app.js`, `styles.css`).
 
 ## Instructions for agent
@@ -32,6 +32,8 @@ Generated: 2026-06-03T02:24:29Z
 - `miniapp/routes_ssh.py` — SSH-хосты/секреты (`SshRouteServices`).
 - `miniapp/routes_json.py` — парсинг/валидация JSON-тел (`JsonRouteServices`).
 - `miniapp/routes_tasks.py` — Task Progress (`TasksRouteServices`): list/cancel активных SDK-задач.
+- `miniapp/routes_reports.py` — отчёты менеджера (`ReportsRouteServices`): list/content/download `.md` под `<workdir>/.cli-proxy/.manager_reports/`.
+- `miniapp/session_visibility.py` — `collect_visible_sessions(bot_app, user_id, is_admin)`: общий гард для route-модулей, фильтрует сессии по правам пользователя.
 - `miniapp/routes_foundation.py` — шаблон route-модуля (`FoundationRouteServices`).
 - `miniapp/services/config_service.py` — валидация/диф/редактирование секретов config-черновика.
 - `miniapp/services/files_service.py` — compat-реэкспорт `app/services/session_files_service.py`.

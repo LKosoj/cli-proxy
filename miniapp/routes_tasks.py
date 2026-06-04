@@ -5,9 +5,8 @@ from typing import Any, Awaitable, Callable, Dict, List
 
 from aiohttp import web
 
-from session import session_runtime_uid
-
 from .route_context import MiniAppRouteContext
+from .session_visibility import collect_visible_sessions
 
 
 RequireAccess = Callable[[web.Request], Awaitable[Dict[str, Any]]]
@@ -18,32 +17,6 @@ JsonError = Callable[[int, Any], Awaitable[web.Response]]
 class TasksRouteServices:
     require_access: RequireAccess
     json_error: JsonError
-
-
-def _collect_visible_sessions(bot_app: Any, *, user_id: int, is_admin: bool) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    manager = getattr(bot_app, "manager", None)
-    if manager is None:
-        return out
-    if is_admin:
-        by_chat = dict(getattr(manager, "sessions_by_chat", {}) or {})
-        for by_id in by_chat.values():
-            if not isinstance(by_id, dict):
-                continue
-            for session in by_id.values():
-                suid = session_runtime_uid(session)
-                if suid:
-                    out[suid] = session
-        return out
-    try:
-        by_id = dict(manager.sessions_for_chat(int(user_id)) or {})
-    except Exception:
-        return out
-    for session in by_id.values():
-        suid = session_runtime_uid(session)
-        if suid:
-            out[suid] = session
-    return out
 
 
 def _list_tasks(bot_app: Any, *, sessions: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -81,7 +54,7 @@ def register_tasks_routes(
             return await services.json_error(int(exc.status), str(exc.reason or "unauthorized"))
         try:
             session_uid_filter = str(request.query.get("session_uid", "") or "").strip() or None
-            sessions = _collect_visible_sessions(
+            sessions = collect_visible_sessions(
                 ctx.bot_app,
                 user_id=int(user["user_id"]),
                 is_admin=bool(user.get("is_admin", False)),
@@ -105,7 +78,7 @@ def register_tasks_routes(
         if not session_uid:
             return await services.json_error(400, "session_uid is required")
         try:
-            sessions = _collect_visible_sessions(
+            sessions = collect_visible_sessions(
                 ctx.bot_app,
                 user_id=int(user["user_id"]),
                 is_admin=bool(user.get("is_admin", False)),

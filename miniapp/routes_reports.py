@@ -3,15 +3,17 @@ from __future__ import annotations
 import asyncio
 import datetime
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+from urllib.parse import quote
 
 from aiohttp import web
 
-from session import session_runtime_uid
 from utils.paths import cli_proxy_artifact_path
 
 from .route_context import MiniAppRouteContext
+from .session_visibility import collect_visible_sessions
 
 
 RequireAccess = Callable[[web.Request], Awaitable[Dict[str, Any]]]
@@ -19,6 +21,7 @@ JsonError = Callable[[int, Any], Awaitable[web.Response]]
 
 _REPORTS_ARTIFACT = ".manager_reports"
 _ALLOWED_EXTS = {".md"}
+_ATTACH_FALLBACK_RE = re.compile(r'[^A-Za-z0-9._-]')
 
 
 @dataclass(frozen=True)
@@ -27,32 +30,12 @@ class ReportsRouteServices:
     json_error: JsonError
 
 
-def _collect_visible_sessions(
-    bot_app: Any, *, user_id: int, is_admin: bool
-) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    manager = getattr(bot_app, "manager", None)
-    if manager is None:
-        return out
-    if is_admin:
-        by_chat = dict(getattr(manager, "sessions_by_chat", {}) or {})
-        for by_id in by_chat.values():
-            if not isinstance(by_id, dict):
-                continue
-            for session in by_id.values():
-                suid = session_runtime_uid(session)
-                if suid:
-                    out[suid] = session
-        return out
-    try:
-        by_id = dict(manager.sessions_for_chat(int(user_id)) or {})
-    except Exception:
-        return out
-    for session in by_id.values():
-        suid = session_runtime_uid(session)
-        if suid:
-            out[suid] = session
-    return out
+def _content_disposition_attachment(filename: str) -> str:
+    """Build RFC 5987-safe Content-Disposition for attachment downloads."""
+    safe = filename or 'report.md'
+    ascii_fallback = _ATTACH_FALLBACK_RE.sub('_', safe) or 'report.md'
+    encoded = quote(safe, safe='')
+    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def _reports_dir(session: Any) -> Optional[str]:
@@ -116,7 +99,7 @@ def register_reports_routes(
 
         session_uid_filter = str(request.query.get("session_uid", "") or "").strip() or None
         try:
-            sessions = _collect_visible_sessions(
+            sessions = collect_visible_sessions(
                 ctx.bot_app,
                 user_id=int(user["user_id"]),
                 is_admin=bool(user.get("is_admin", False)),
@@ -155,7 +138,7 @@ def register_reports_routes(
             return await services.json_error(400, "session_uid is required")
 
         try:
-            sessions = _collect_visible_sessions(
+            sessions = collect_visible_sessions(
                 ctx.bot_app,
                 user_id=int(user["user_id"]),
                 is_admin=bool(user.get("is_admin", False)),
@@ -200,7 +183,7 @@ def register_reports_routes(
             fmt = "md"
 
         try:
-            sessions = _collect_visible_sessions(
+            sessions = collect_visible_sessions(
                 ctx.bot_app,
                 user_id=int(user["user_id"]),
                 is_admin=bool(user.get("is_admin", False)),
@@ -236,7 +219,7 @@ def register_reports_routes(
                 body=data,
                 content_type="text/markdown",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{report_id}"',
+                    "Content-Disposition": _content_disposition_attachment(report_id),
                     "Cache-Control": "no-store",
                 },
             )
