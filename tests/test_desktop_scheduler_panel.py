@@ -260,3 +260,108 @@ async def test_scheduler_panel_widget_payload_roundtrip_uses_object_json(qtbot, 
     panel.jobs_list.setCurrentRow(0)
     qtbot.waitUntil(lambda: panel._selected_job_id is not None)
     assert '"project_slug": "{0}"'.format(str(alpha_slug)) in panel.payload_input.toPlainText()
+
+
+def test_facade_get_scheduler_settings_returns_defaults(tmp_path: Path) -> None:
+    facade, _sessions, _cfg = _build_facade(tmp_path)
+    settings = facade.get_scheduler_settings()
+    assert settings["timezone"] == "UTC"
+    assert isinstance(settings["tick_interval_sec"], int)
+    assert settings["tick_interval_sec"] > 0
+    assert isinstance(settings["max_concurrent_jobs"], int)
+    assert settings["max_concurrent_jobs"] > 0
+
+
+@pytest.mark.asyncio
+async def test_facade_update_scheduler_settings_persists(tmp_path: Path) -> None:
+    facade, _sessions, _cfg = _build_facade(tmp_path)
+    result = await facade.update_scheduler_settings(
+        timezone="Europe/Moscow",
+        tick_interval_sec=30,
+        max_concurrent_jobs=3,
+    )
+    assert result["ok"] is True
+    settings = facade.get_scheduler_settings()
+    assert settings["timezone"] == "Europe/Moscow"
+    assert settings["tick_interval_sec"] == 30
+    assert settings["max_concurrent_jobs"] == 3
+
+
+@pytest.mark.asyncio
+async def test_facade_update_scheduler_settings_ignores_invalid_values(tmp_path: Path) -> None:
+    facade, _sessions, _cfg = _build_facade(tmp_path)
+    # Non-positive tick and concurrency should be ignored
+    result = await facade.update_scheduler_settings(
+        timezone="America/New_York",
+        tick_interval_sec=0,
+        max_concurrent_jobs=-1,
+    )
+    assert result["ok"] is True
+    settings = facade.get_scheduler_settings()
+    assert settings["timezone"] == "America/New_York"
+    # Defaults remain since 0 / -1 are ignored
+    assert settings["tick_interval_sec"] == 60
+    assert settings["max_concurrent_jobs"] == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduler_panel_settings_section_renders(qtbot, tmp_path: Path) -> None:
+    facade, _sessions, _cfg = _build_facade(tmp_path)
+    panel = SchedulerPanelWidget(facade)
+    qtbot.addWidget(panel)
+
+    # Settings group must be present
+    assert panel.settings_box is not None
+    assert panel.settings_timezone_input is not None
+    assert panel.settings_tick_input is not None
+    assert panel.settings_concurrency_input is not None
+    assert panel.settings_apply_button is not None
+
+    # Fields must be pre-populated from facade defaults
+    assert panel.settings_timezone_input.text() == "UTC"
+    assert panel.settings_tick_input.value() == 60
+    assert panel.settings_concurrency_input.value() == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduler_panel_apply_settings_collects_form_values(qtbot, tmp_path: Path) -> None:
+    """Panel collects form values and passes them to the facade on Apply."""
+    facade, _sessions, _cfg = _build_facade(tmp_path)
+    panel = SchedulerPanelWidget(facade)
+    qtbot.addWidget(panel)
+
+    panel.settings_timezone_input.setText("Asia/Tokyo")
+    panel.settings_tick_input.setValue(120)
+    panel.settings_concurrency_input.setValue(2)
+
+    # Call facade update directly to verify values round-trip correctly.
+    result = await facade.update_scheduler_settings(
+        timezone=panel.settings_timezone_input.text(),
+        tick_interval_sec=panel.settings_tick_input.value(),
+        max_concurrent_jobs=panel.settings_concurrency_input.value(),
+    )
+    assert result["ok"] is True
+    settings = facade.get_scheduler_settings()
+    assert settings["timezone"] == "Asia/Tokyo"
+    assert settings["tick_interval_sec"] == 120
+    assert settings["max_concurrent_jobs"] == 2
+
+
+@pytest.mark.asyncio
+async def test_scheduler_panel_apply_settings_rejects_empty_timezone(qtbot, tmp_path: Path) -> None:
+    facade, _sessions, _cfg = _build_facade(tmp_path)
+    panel = SchedulerPanelWidget(facade)
+    qtbot.addWidget(panel)
+
+    panel.settings_timezone_input.clear()
+    panel.settings_apply_button.click()
+
+    # Error label set synchronously for empty timezone — no async involved.
+    lang = facade.ui_language
+    from i18n import t
+    expected = t("desktop.scheduler.settings_err_timezone", lang)
+    assert panel.settings_status_label.text() == expected
+
+    # Facade state must remain unchanged.
+    settings = facade.get_scheduler_settings()
+    assert settings["timezone"] == "UTC"

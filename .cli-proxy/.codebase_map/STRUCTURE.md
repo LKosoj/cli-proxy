@@ -28,13 +28,13 @@
 
 | Путь | Файлов по `rg --files` | Роль |
 |---|---:|---|
-| `app/` | 153 | Shared application services, config runtime, security, events, bootstrap |
+| `app/` | 154 | Shared application services, config runtime, security, events, bootstrap |
 | `modes/` | 220 | Mode plugins, SDK, runtime executor/dispatcher, validation/tooling |
 | `agent/` | 61 | CLI routing, manager core, tool plugins, Telegram plugin wiring |
-| `tests/` | 540 | Unit/integration/smoke coverage |
+| `tests/` | 547 | Unit/integration/smoke coverage |
 | `desktop/` | 32 | PySide6 Desktop UI, facade, widgets, desktop services |
 | `tg/` | 17 | Telegram commands, callbacks, message processing, markdown/entities |
-| `miniapp/` | 19 | aiohttp MiniApp backend and static frontend |
+| `miniapp/` | 21 | aiohttp MiniApp backend and static frontend |
 | `sessions/` | 10 | Session-facing helpers around core `session.py` |
 | `utils/` | 8 | Shared CLI/path/text/UI/html helpers |
 

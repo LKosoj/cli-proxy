@@ -202,6 +202,7 @@ def test_main_window_exposes_miniapp_navigation_tabs(qtbot, mock_facade, mock_ui
     tab_map = {
         "config": "settings",
         "settings": "session_settings",
+        "tasks": "chat",
     }
     expected_desktop_tabs = {tab_map.get(tab, tab) for tab in miniapp_tabs}
 

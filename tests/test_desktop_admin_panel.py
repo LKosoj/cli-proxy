@@ -125,6 +125,7 @@ def test_admin_panel_renders_admin_status_payload_for_selected_session(qtbot, tm
         "Chat",
         "Autonomy",
         "Scheduler",
+        "Lint Evolution",
     ]
     assert panel.active_session_uid == session_runtime_uid(session_a)
     assert panel.session_selector.itemText(0) == f"{session_a.id} | {session_a.name}"

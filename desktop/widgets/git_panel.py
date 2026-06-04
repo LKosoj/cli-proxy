@@ -187,6 +187,24 @@ class GitPanelWidget(QWidget):
 
         layout.addWidget(self.remote_ops_group)
 
+        # Группа merge / rebase / fetch
+        self.rebase_merge_ops_group = QGroupBox(t("desktop.git.group.rebase_merge_ops", lang))
+        rm_layout = QHBoxLayout(self.rebase_merge_ops_group)
+
+        self.fetch_btn = QPushButton(t("desktop.git.btn.fetch", lang))
+        self.fetch_btn.clicked.connect(self._on_fetch_clicked)
+        rm_layout.addWidget(self.fetch_btn)
+
+        self.merge_btn = QPushButton(t("desktop.git.btn.merge", lang))
+        self.merge_btn.clicked.connect(self._on_merge_clicked)
+        rm_layout.addWidget(self.merge_btn)
+
+        self.rebase_btn = QPushButton(t("desktop.git.btn.rebase", lang))
+        self.rebase_btn.clicked.connect(self._on_rebase_clicked)
+        rm_layout.addWidget(self.rebase_btn)
+
+        layout.addWidget(self.rebase_merge_ops_group)
+
         # Группа других операций
         self.other_ops_group = QGroupBox(t("desktop.git.group.other_ops", lang))
         other_layout = QVBoxLayout(self.other_ops_group)
@@ -460,6 +478,64 @@ class GitPanelWidget(QWidget):
 
         ensure_async(_do_push(), parent=self)
 
+    def _on_fetch_clicked(self):
+        self._set_busy(True)
+
+        async def _do_fetch():
+            try:
+                res = await self.facade.git_service.fetch(self._active_session)
+                self._on_operation_finished(res)
+            except Exception as e:
+                self._on_error(str(e))
+            finally:
+                self._set_busy(False)
+
+        ensure_async(_do_fetch(), parent=self)
+
+    def _on_merge_clicked(self):
+        from PySide6.QtWidgets import QInputDialog
+        lang = self.facade.ui_language
+        branch, ok = QInputDialog.getText(
+            self, t("desktop.git.dialog.merge_branch_title", lang),
+            t("desktop.git.dialog.merge_branch_prompt", lang)
+        )
+        if not ok or not branch:
+            return
+        self._set_busy(True)
+
+        async def _do_merge():
+            try:
+                res = await self.facade.git_service.merge(self._active_session, branch)
+                self._on_git_op_result(res)
+            except Exception as e:
+                self._on_error(str(e))
+            finally:
+                self._set_busy(False)
+
+        ensure_async(_do_merge(), parent=self)
+
+    def _on_rebase_clicked(self):
+        from PySide6.QtWidgets import QInputDialog
+        lang = self.facade.ui_language
+        branch, ok = QInputDialog.getText(
+            self, t("desktop.git.dialog.rebase_branch_title", lang),
+            t("desktop.git.dialog.rebase_branch_prompt", lang)
+        )
+        if not ok or not branch:
+            return
+        self._set_busy(True)
+
+        async def _do_rebase():
+            try:
+                res = await self.facade.git_service.rebase(self._active_session, branch)
+                self._on_git_op_result(res)
+            except Exception as e:
+                self._on_error(str(e))
+            finally:
+                self._set_busy(False)
+
+        ensure_async(_do_rebase(), parent=self)
+
     def _on_stash_clicked(self):
         self._set_busy(True)
 
@@ -533,6 +609,33 @@ class GitPanelWidget(QWidget):
             ensure_async(_do_branch_switch(), parent=self)
 
     @Slot(object)
+    def _on_git_op_result(self, result: dict) -> None:
+        """Handle structured result from merge/rebase (dict with 'status' key)."""
+        def _show():
+            lang = self.facade.ui_language
+            status = result.get("status", "error")
+            output = result.get("output", "")
+            if status == "ok":
+                QMessageBox.information(
+                    self, "Git", output if output else t("desktop.git.msg.success", lang)
+                )
+                self.refresh_status()
+                self.refresh_history()
+            elif status == "conflict":
+                files = result.get("files", [])
+                files_str = "\n".join(files[:10]) if files else output
+                QMessageBox.warning(
+                    self, "Git", t("desktop.git.msg.conflict", lang, files=files_str)
+                )
+                self.refresh_status()
+            else:
+                QMessageBox.critical(
+                    self, "Git",
+                    t("desktop.git.msg.error", lang) + (f"\n{output}" if output else "")
+                )
+        QTimer.singleShot(0, _show)
+
+    @Slot(object)
     def _on_operation_finished(self, result: tuple[int, str]):
         code, output = result
         # Отложить UI-обновление, чтобы избежать конфликта с qasync (Cannot enter into task)
@@ -571,6 +674,9 @@ class GitPanelWidget(QWidget):
         self.generate_msg_btn.setEnabled(not busy)
         self.pull_btn.setEnabled(not busy)
         self.push_btn.setEnabled(not busy)
+        self.fetch_btn.setEnabled(not busy)
+        self.merge_btn.setEnabled(not busy)
+        self.rebase_btn.setEnabled(not busy)
         self.stash_btn.setEnabled(not busy)
         self.stash_pop_btn.setEnabled(not busy)
         self.branch_create_btn.setEnabled(not busy)
@@ -605,6 +711,10 @@ class GitPanelWidget(QWidget):
         self.remote_ops_group.setTitle(t("desktop.git.group.remote_ops", lang))
         self.pull_btn.setText(t("desktop.git.btn.pull", lang))
         self.push_btn.setText(t("desktop.git.btn.push", lang))
+        self.rebase_merge_ops_group.setTitle(t("desktop.git.group.rebase_merge_ops", lang))
+        self.fetch_btn.setText(t("desktop.git.btn.fetch", lang))
+        self.merge_btn.setText(t("desktop.git.btn.merge", lang))
+        self.rebase_btn.setText(t("desktop.git.btn.rebase", lang))
         self.other_ops_group.setTitle(t("desktop.git.group.other_ops", lang))
         self.stash_btn.setText(t("desktop.git.btn.stash", lang))
         self.stash_pop_btn.setText(t("desktop.git.btn.stash_pop", lang))

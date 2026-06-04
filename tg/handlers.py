@@ -38,6 +38,7 @@ from session import Session, session_runtime_uid
 from sessions.session_state_access import get_active_mode, is_orchestrator_enabled, is_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
 from tg.command_registry import build_command_registry
+from tg.markdown import escape_markdown_v2_all
 from sessions.session_status import build_session_status_text, visible_modes
 from tg.files_service_adapter import (
     files_display_path,
@@ -2307,4 +2308,402 @@ class BotHandlers:
             lines.append(t("msg.lint.more_findings", lang, n=len(result.findings) - 10))
         await self.bot_app._send_message(
             context, text="\n".join(lines), **self._reply_kwargs(update)
+        )
+
+    async def cmd_git_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.branch_usage", lang),
+                **self._reply_kwargs(update),
+            )
+            return
+        branch_name = context.args[0].strip()
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        session = await self.bot_app.git.ensure_git_session(
+            chat_id, context, message_thread_id=route.message_thread_id
+        )
+        if not session:
+            return
+        if not await self.bot_app.git.ensure_git_repo(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        if not await self.bot_app.git.ensure_git_not_busy(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        try:
+            _code, output = await self.bot_app.git.git_branch_create(session, branch_name)
+            text = t("msg.git.branch_created", lang, branch=escape_markdown_v2_all(branch_name))
+            if output.strip():
+                text += f"\n`{escape_markdown_v2_all(output.strip()[:2000])}`"
+            await self.bot_app._send_message(
+                context, text=text, parse_mode="MarkdownV2", **self._reply_kwargs(update)
+            )
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.exception("cmd_git_branch failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+
+    async def cmd_git_checkout(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.checkout_usage", lang),
+                **self._reply_kwargs(update),
+            )
+            return
+        branch_name = context.args[0].strip()
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        session = await self.bot_app.git.ensure_git_session(
+            chat_id, context, message_thread_id=route.message_thread_id
+        )
+        if not session:
+            return
+        if not await self.bot_app.git.ensure_git_repo(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        if not await self.bot_app.git.ensure_git_not_busy(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        try:
+            _code, output = await self.bot_app.git.git_checkout(session, branch_name)
+            text = t("msg.git.checkout_done", lang, branch=escape_markdown_v2_all(branch_name))
+            if output.strip():
+                text += f"\n`{escape_markdown_v2_all(output.strip()[:2000])}`"
+            await self.bot_app._send_message(
+                context, text=text, parse_mode="MarkdownV2", **self._reply_kwargs(update)
+            )
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.exception("cmd_git_checkout failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+
+    async def cmd_git_stash_pop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        session = await self.bot_app.git.ensure_git_session(
+            chat_id, context, message_thread_id=route.message_thread_id
+        )
+        if not session:
+            return
+        if not await self.bot_app.git.ensure_git_repo(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        if not await self.bot_app.git.ensure_git_not_busy(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        try:
+            _code, output = await self.bot_app.git.git_stash_pop(session)
+            text = t("msg.git.stash_pop_done", lang)
+            if output.strip():
+                text += f"\n`{escape_markdown_v2_all(output.strip()[:2000])}`"
+            await self.bot_app._send_message(
+                context, text=text, parse_mode="MarkdownV2", **self._reply_kwargs(update)
+            )
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.exception("cmd_git_stash_pop failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+
+    async def cmd_git_show(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        ref = context.args[0].strip() if context.args else "HEAD"
+        route = self.bot_app.resolve_telegram_inbound_route(update)
+        session = await self.bot_app.git.ensure_git_session(
+            chat_id, context, message_thread_id=route.message_thread_id
+        )
+        if not session:
+            return
+        if not await self.bot_app.git.ensure_git_repo(
+            session, chat_id, context, message_thread_id=route.message_thread_id
+        ):
+            return
+        try:
+            _code, output = await self.bot_app.git.git_show(session, ref)
+            header = t("msg.git.show_done", lang, ref=escape_markdown_v2_all(ref))
+            body = escape_markdown_v2_all(output.strip()[:3800]) if output.strip() else ""
+            text = f"{header}\n`{body}`" if body else header
+            await self.bot_app._send_message(
+                context, text=text, parse_mode="MarkdownV2", **self._reply_kwargs(update)
+            )
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.exception("cmd_git_show failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+
+    async def cmd_sessions_search(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update, allow_outside_topic=True):
+            return
+        owner_chat_id = self._owner_chat_id(update)
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
+        except Exception:
+            lang = "ru"
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text=t("cmd.sessions_search.usage", lang),
+                **self._reply_kwargs(update),
+            )
+            return
+        query = " ".join(context.args).strip().lower()
+        sessions = self._visible_sessions_for_chat(owner_chat_id)
+        matched = [
+            s for s in sessions
+            if query in s.id.lower()
+            or query in str(s.name or "").lower()
+            or query in str(s.workdir or "").lower()
+        ]
+        if not matched:
+            await self.bot_app._send_message(
+                context,
+                text=t("cmd.sessions_search.not_found", lang, query=query),
+                **self._reply_kwargs(update),
+            )
+            return
+        lines = [t("cmd.sessions_search.header", lang, n=len(matched))]
+        for s in matched:
+            name_str = str(s.name or "").strip() or "—"
+            tool_str = str(getattr(s.tool, "name", "") or "").strip() or "—"
+            workdir_str = str(s.workdir or "").strip() or "—"
+            lines.append(
+                f"• *{escape_markdown_v2_all(s.id)}*"
+                f" \\[{escape_markdown_v2_all(tool_str)}\\]"
+                f" {escape_markdown_v2_all(name_str)}"
+                f"\n  `{escape_markdown_v2_all(workdir_str)}`"
+            )
+        await self.bot_app._send_message(
+            context,
+            text="\n".join(lines),
+            parse_mode="MarkdownV2",
+            **self._reply_kwargs(update),
+        )
+
+    # ------------------------------------------------------------------
+    # Remote git commands (admin-only, run git on remote SSH hosts)
+    # ------------------------------------------------------------------
+
+    def _remote_git_workdir(self) -> str:
+        """Return the bot's primary workdir for SSH config lookup."""
+        return str(self.bot_app.config.defaults.workdir or "")
+
+    async def _remote_git_send(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        update: Update,
+        lang: str,
+        host: str,
+        output: str,
+        done_key: str,
+        error_key: str,
+        error: str = "",
+    ) -> None:
+        """Send a remote git result to the user in MarkdownV2."""
+        if error:
+            text = t(error_key, lang, host=host, error=error[:800])
+            if output.strip():
+                text += f"\n{t('msg.git.remote_output_prefix', lang)}\n" \
+                        f"`{escape_markdown_v2_all(output.strip()[:2000])}`"
+        else:
+            text = t(done_key, lang, host=host)
+            if output.strip():
+                text += f"\n`{escape_markdown_v2_all(output.strip()[:2000])}`"
+        await self.bot_app._send_message(
+            context,
+            text=text,
+            parse_mode="MarkdownV2",
+            **self._reply_kwargs(update),
+        )
+
+    async def cmd_remote_git_pull(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handler for /remote_git_pull <host> [ff|merge|rebase]."""
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="remote_git_pull", update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.remote_pull_usage", lang),
+                **self._reply_kwargs(update),
+            )
+            return
+        host = context.args[0].strip()
+        strategy = context.args[1].strip() if len(context.args) > 1 else "ff"
+        workdir = self._remote_git_workdir()
+        try:
+            result = await self.bot_app.remote_git.pull(
+                workdir, host, strategy=strategy
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).exception("cmd_remote_git_pull failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+            return
+        if not result.git_available:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.remote_not_git", lang, host=host),
+                **self._reply_kwargs(update),
+            )
+            return
+        await self._remote_git_send(
+            context, update, lang, host,
+            output=result.output,
+            done_key="msg.git.remote_pull_done",
+            error_key="msg.git.remote_pull_error",
+            error=result.error or "",
+        )
+
+    async def cmd_remote_git_push(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handler for /remote_git_push <host>."""
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="remote_git_push", update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.remote_push_usage", lang),
+                **self._reply_kwargs(update),
+            )
+            return
+        host = context.args[0].strip()
+        workdir = self._remote_git_workdir()
+        try:
+            result = await self.bot_app.remote_git.push(workdir, host)
+        except Exception as exc:
+            logging.getLogger(__name__).exception("cmd_remote_git_push failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+            return
+        if not result.git_available:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.remote_not_git", lang, host=host),
+                **self._reply_kwargs(update),
+            )
+            return
+        await self._remote_git_send(
+            context, update, lang, host,
+            output=result.output,
+            done_key="msg.git.remote_push_done",
+            error_key="msg.git.remote_push_error",
+            error=result.error or "",
+        )
+
+    async def cmd_remote_git_fetch(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handler for /remote_git_fetch <host>."""
+        chat_id = update.effective_chat.id
+        if not await self._ensure_allowed(chat_id, context, update=update):
+            return
+        if not await self._require_admin(chat_id, context, scope="remote_git_fetch", update=update):
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        except Exception:
+            lang = "ru"
+        if not context.args:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.remote_fetch_usage", lang),
+                **self._reply_kwargs(update),
+            )
+            return
+        host = context.args[0].strip()
+        workdir = self._remote_git_workdir()
+        try:
+            result = await self.bot_app.remote_git.fetch(workdir, host)
+        except Exception as exc:
+            logging.getLogger(__name__).exception("cmd_remote_git_fetch failed: %s", exc)
+            await self.bot_app._send_message(
+                context,
+                text=escape_markdown_v2_all(str(exc)),
+                **self._reply_kwargs(update),
+            )
+            return
+        if not result.git_available:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.git.remote_not_git", lang, host=host),
+                **self._reply_kwargs(update),
+            )
+            return
+        await self._remote_git_send(
+            context, update, lang, host,
+            output=result.output,
+            done_key="msg.git.remote_fetch_done",
+            error_key="msg.git.remote_fetch_error",
+            error=result.error or "",
         )

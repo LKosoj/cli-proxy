@@ -453,6 +453,22 @@ class GitOps:
             self._git_clear_conflict(session)
         return files
 
+    async def git_branch_create(self, session: Session, branch_name: str) -> tuple[int, str]:
+        """Создаёт новую ветку и переключается на неё."""
+        return await self._run_git(session, ["checkout", "-b", branch_name])
+
+    async def git_checkout(self, session: Session, branch_name: str) -> tuple[int, str]:
+        """Переключается на существующую ветку."""
+        return await self._run_git(session, ["checkout", branch_name])
+
+    async def git_stash_pop(self, session: Session) -> tuple[int, str]:
+        """Применяет последний stash."""
+        return await self._run_git(session, ["stash", "pop"])
+
+    async def git_show(self, session: Session, ref: str = "HEAD") -> tuple[int, str]:
+        """Показывает diff и мета-информацию коммита."""
+        return await self._run_git(session, ["--no-pager", "show", "--stat", ref])
+
     async def _git_status_text(self, session: Session) -> str:
         branch = await self._git_current_branch(session) or "неизвестно"
         code, output = await self._run_git(session, ["status", "--porcelain"])

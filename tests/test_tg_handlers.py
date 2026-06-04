@@ -82,8 +82,8 @@ def test_is_session_visible_fails_closed_without_visibility_checker() -> None:
     assert handlers._is_session_visible_for_chat(101, types.SimpleNamespace(id="s1")) is False
 
 
-def test_command_registry_registers_limits_command() -> None:
-    app = types.SimpleNamespace(
+def _make_full_app() -> types.SimpleNamespace:
+    return types.SimpleNamespace(
         cmd_start=object(),
         cmd_sessions=object(),
         cmd_interrupt=object(),
@@ -111,8 +111,20 @@ def test_command_registry_registers_limits_command() -> None:
         cmd_lint_autopause_resume=object(),
         cmd_lint_schema_history=object(),
         cmd_lint_gate_dry_run=object(),
+        cmd_sessions_search=object(),
+        cmd_git_branch=object(),
+        cmd_git_checkout=object(),
+        cmd_git_stash_pop=object(),
+        cmd_git_show=object(),
+        cmd_remote_git_pull=object(),
+        cmd_remote_git_push=object(),
+        cmd_remote_git_fetch=object(),
         mode_registry_service=None,
     )
+
+
+def test_command_registry_registers_limits_command() -> None:
+    app = _make_full_app()
 
     registry = build_command_registry(app)
     names = {str(item.get("name") or "") for item in registry}
@@ -120,6 +132,85 @@ def test_command_registry_registers_limits_command() -> None:
     assert "limits" in names
     limits_entry = next(item for item in registry if str(item.get("name") or "") == "limits")
     assert limits_entry["menu"] is True
+
+
+def test_command_registry_registers_git_subcommands() -> None:
+    app = _make_full_app()
+
+    registry = build_command_registry(app)
+    names = {str(item.get("name") or "") for item in registry}
+
+    for cmd in ("git_branch", "git_checkout", "git_stash_pop", "git_show"):
+        assert cmd in names, f"Command '{cmd}' not registered"
+
+    for cmd in ("git_branch", "git_checkout", "git_stash_pop", "git_show"):
+        entry = next(item for item in registry if str(item.get("name") or "") == cmd)
+        assert entry["menu"] is False, f"Command '{cmd}' should not appear in menu"
+
+
+@pytest.mark.asyncio
+async def test_cmd_git_branch_sends_usage_when_no_args() -> None:
+    sent: list[str] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        sent.append(str(text))
+
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(lang="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _upd, _s=None: {}  # type: ignore[method-assign]
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=[])
+
+    await handlers.cmd_git_branch(update, context)
+
+    assert len(sent) == 1
+    assert "/git_branch" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_cmd_git_show_uses_head_by_default() -> None:
+    sent: list[str] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        sent.append(str(text))
+
+    git_mock = types.SimpleNamespace(
+        ensure_git_session=AsyncMock(return_value=types.SimpleNamespace(workdir="/tmp")),
+        ensure_git_repo=AsyncMock(return_value=True),
+        git_show=AsyncMock(return_value=(0, "commit abc\n stat: 1 file")),
+    )
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        git=git_mock,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(lang="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _upd, _s=None: {}  # type: ignore[method-assign]
+
+    route = types.SimpleNamespace(message_thread_id=None)
+    bot_app.resolve_telegram_inbound_route = lambda _upd: route
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=[])
+
+    await handlers.cmd_git_show(update, context)
+
+    git_mock.git_show.assert_awaited_once()
+    call_args = git_mock.git_show.call_args
+    assert call_args[0][1] == "HEAD"
+    assert len(sent) == 1
 
 
 def test_cmd_setprompt_does_not_use_legacy_save_config() -> None:
@@ -550,6 +641,160 @@ async def test_cmd_newpath_forum_uses_owner_scope_and_replies_in_ui_topic() -> N
             "message_thread_id": 101,
         }
     ]
+
+
+def test_command_registry_registers_sessions_search() -> None:
+    app = _make_full_app()
+
+    registry = build_command_registry(app)
+    names = {str(item.get("name") or "") for item in registry}
+
+    assert "sessions_search" in names
+    entry = next(item for item in registry if str(item.get("name") or "") == "sessions_search")
+    assert entry["menu"] is False
+    assert not entry.get("admin_only")
+
+
+@pytest.mark.asyncio
+async def test_cmd_sessions_search_no_args_sends_usage() -> None:
+    sent: list[str] = []
+
+    async def _send_message(_context, *, text: str, **_kwargs):
+        sent.append(str(text))
+
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}, language="ru"),
+            defaults=types.SimpleNamespace(language="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._owner_chat_id = lambda _update: 101  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _update, _session=None: {"chat_id": 101}  # type: ignore[method-assign]
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=[])
+
+    await handlers.cmd_sessions_search(update, context)
+
+    assert len(sent) == 1
+    assert "/sessions_search" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_cmd_sessions_search_returns_matching_sessions() -> None:
+    sent: list[dict] = []
+
+    async def _send_message(_context, *, text: str, **kwargs):
+        sent.append({"text": str(text), **kwargs})
+
+    s1 = types.SimpleNamespace(id="abc-123", name="my project", workdir="/srv/proj-a", tool=types.SimpleNamespace(name="claude"))
+    s2 = types.SimpleNamespace(id="xyz-456", name=None, workdir="/home/user/work", tool=types.SimpleNamespace(name="codex"))
+    s3 = types.SimpleNamespace(id="def-789", name="other", workdir="/srv/proj-b", tool=types.SimpleNamespace(name="gemini"))
+
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}, language="ru"),
+            defaults=types.SimpleNamespace(language="ru"),
+        ),
+        manager=types.SimpleNamespace(
+            sessions_for_chat=lambda owner_chat_id: {"s1": s1, "s2": s2, "s3": s3},
+        ),
+        access_policy_service=types.SimpleNamespace(is_admin=lambda chat_id: True),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._owner_chat_id = lambda _update: 101  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _update, _session=None: {"chat_id": 101}  # type: ignore[method-assign]
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["proj"])
+
+    await handlers.cmd_sessions_search(update, context)
+
+    assert len(sent) == 1
+    text = sent[0]["text"]
+    # s1 (workdir /srv/proj-a) and s3 (workdir /srv/proj-b) match "proj"; s2 does not
+    # IDs are MarkdownV2-escaped: hyphens become \-
+    assert "abc\\-123" in text
+    assert "def\\-789" in text
+    assert "xyz" not in text
+    assert sent[0].get("parse_mode") == "MarkdownV2"
+
+
+@pytest.mark.asyncio
+async def test_cmd_sessions_search_not_found_message() -> None:
+    sent: list[str] = []
+
+    async def _send_message(_context, *, text: str, **_kwargs):
+        sent.append(str(text))
+
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}, language="ru"),
+            defaults=types.SimpleNamespace(language="ru"),
+        ),
+        manager=types.SimpleNamespace(
+            sessions_for_chat=lambda owner_chat_id: {},
+        ),
+        access_policy_service=types.SimpleNamespace(is_admin=lambda chat_id: True),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._owner_chat_id = lambda _update: 101  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _update, _session=None: {"chat_id": 101}  # type: ignore[method-assign]
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["nonexistent"])
+
+    await handlers.cmd_sessions_search(update, context)
+
+    assert len(sent) == 1
+    assert "nonexistent" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_cmd_sessions_search_filters_by_name_and_id() -> None:
+    sent: list[dict] = []
+
+    async def _send_message(_context, *, text: str, **kwargs):
+        sent.append({"text": str(text), **kwargs})
+
+    s_by_id = types.SimpleNamespace(id="target-id", name="something", workdir="/home/x", tool=types.SimpleNamespace(name="codex"))
+    s_by_name = types.SimpleNamespace(id="other-id", name="target name", workdir="/home/y", tool=types.SimpleNamespace(name="codex"))
+    s_no_match = types.SimpleNamespace(id="unrelated", name="unrelated", workdir="/home/z", tool=types.SimpleNamespace(name="codex"))
+
+    bot_app = types.SimpleNamespace(
+        _send_message=_send_message,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}, language="ru"),
+            defaults=types.SimpleNamespace(language="ru"),
+        ),
+        manager=types.SimpleNamespace(
+            sessions_for_chat=lambda _: {"a": s_by_id, "b": s_by_name, "c": s_no_match},
+        ),
+        access_policy_service=types.SimpleNamespace(is_admin=lambda chat_id: True),
+    )
+    handlers = BotHandlers(bot_app)
+    handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    handlers._owner_chat_id = lambda _update: 101  # type: ignore[method-assign]
+    handlers._reply_kwargs = lambda _update, _session=None: {"chat_id": 101}  # type: ignore[method-assign]
+
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["target"])
+
+    await handlers.cmd_sessions_search(update, context)
+
+    assert len(sent) == 1
+    text = sent[0]["text"]
+    # IDs are MarkdownV2-escaped: hyphens become \-
+    assert "target\\-id" in text
+    assert "other\\-id" in text
+    assert "unrelated" not in text
 
 
 @pytest.mark.asyncio

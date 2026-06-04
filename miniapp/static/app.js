@@ -24,6 +24,7 @@
     logsEntries: [],
     logsEntryIds: new Set(),
     logsType: "main",
+    logsLevel: "",
     logsSessionKey: "",
     logsSessionUid: "",
     logsSessionId: "",
@@ -77,7 +78,11 @@
     tickHistoryItems: [],
     tickHistoryKeys: new Set(),
     lastRenderedSessionId: null,
-    redaction: null
+    redaction: null,
+    reportsSessionUid: "",
+    reportsSessionsSignature: "",
+    reportsSelectedId: null,
+    reportsSelectedSessionUid: null
   };
 
   const i18n = { catalog: {}, lang: "ru" };
@@ -342,7 +347,7 @@
   }
 
   function setLogsControlsEnabled(enabled) {
-    ["logsType", "logsHistory", "logsSession", "logsApply", "logsClear", "logsDownload", "logsAutoScroll"].forEach((id) => {
+    ["logsType", "logsLevel", "logsHistory", "logsSession", "logsApply", "logsClear", "logsDownload", "logsAutoScroll"].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
       el.disabled = !enabled;
@@ -360,9 +365,11 @@
 
   function applyLogsStateFromControls() {
     const type = document.getElementById("logsType");
+    const level = document.getElementById("logsLevel");
     const history = document.getElementById("logsHistory");
     const session = document.getElementById("logsSession");
     state.logsType = String(type?.value || "main");
+    state.logsLevel = String(level?.value || "");
     state.logsHistory = Number(history?.value || 0);
     const selected = parseLogsSessionSelection(session ? session.value : state.logsSessionKey);
     state.logsSessionKey = selected.key;
@@ -1724,12 +1731,23 @@
     return out;
   }
 
+  function logEntryMatchesLevel(entryText, levelFilter) {
+    const level = String(levelFilter || "").trim().toUpperCase();
+    if (!level) return true;
+    // Match Python-style log lines: "2024-01-01 12:00:00,000 LEVEL ..."
+    // or "2024-01-01T12:00:00 LEVEL ..." etc.
+    const match = /^\d{4}-\d{2}-\d{2}[\sT]\S+\s+(\w+)/.exec(String(entryText || ""));
+    if (!match) return true; // Non-standard lines pass through
+    return match[1].toUpperCase() === level;
+  }
+
   function renderLogsEntries(entries, { replace = false } = {}) {
     if (replace) {
       state.logsEntries = [];
       state.logsEntryIds.clear();
     }
     const newNormalized = [];
+    const levelFilter = String(state.logsLevel || "").trim().toUpperCase();
     (entries || []).forEach((entry) => {
       const eid = String(entry?.id || "");
       if (eid && state.logsEntryIds.has(eid)) {
@@ -1739,9 +1757,9 @@
         state.logsEntryIds.add(eid);
       }
       const text = compactLogText(entry?.text || "").trimEnd();
-      if (text) {
-        newNormalized.push(text);
-      }
+      if (!text) return;
+      if (levelFilter && !logEntryMatchesLevel(text, levelFilter)) return;
+      newNormalized.push(text);
     });
 
     if (!newNormalized.length && !replace) {
@@ -3047,7 +3065,8 @@
     const nextSignature = values
       .map((item) => `${String(item?.telegram_session_uid || "")}\u0000${String(item?.label || "")}`)
       .join("\u0001");
-    const desiredSelected = String(selectedSessionUid || state.schedulerSessionUid || "");
+    // Auto-bind to active admin session if no explicit selection is available
+    const desiredSelected = String(selectedSessionUid || state.schedulerSessionUid || state.adminSessionUid || "");
     if (!select.options.length || state.schedulerSessionsSignature !== nextSignature) {
       const items = values
         .map((item) => `<option value="${escapeHtml(item.telegram_session_uid)}">${escapeHtml(item.label || item.telegram_session_uid)}</option>`)
@@ -3070,6 +3089,8 @@
     const saveButton = document.getElementById("schedulerSave");
     const deleteButton = document.getElementById("schedulerDelete");
     const runNowButton = document.getElementById("schedulerRunNow");
+    const pauseButton = document.getElementById("schedulerPause");
+    const resumeButton = document.getElementById("schedulerResume");
     state.schedulerSelectedJobId = "";
     document.getElementById("schedulerJobName").value = "";
     document.getElementById("schedulerCron").value = "";
@@ -3087,6 +3108,8 @@
     if (saveButton) saveButton.textContent = t("miniapp.btn.create", "Создать");
     if (deleteButton) deleteButton.disabled = true;
     if (runNowButton) runNowButton.disabled = true;
+    if (pauseButton) pauseButton.disabled = true;
+    if (resumeButton) resumeButton.disabled = true;
   }
 
   function selectSchedulerJob(jobId) {
@@ -3112,6 +3135,7 @@
     if (saveButton) saveButton.textContent = t("miniapp.btn.refresh", "Обновить");
     if (deleteButton) deleteButton.disabled = false;
     if (runNowButton) runNowButton.disabled = false;
+    updateSchedulerPauseResumeButtons();
   }
 
   function renderSchedulerJobs(jobs) {
@@ -3307,6 +3331,66 @@
     } catch (err) {
       setSchedulerStatus(`${t("miniapp.scheduler.err_run_now", "Ошибка scheduler run_now:")} ${err.message || "unknown"}`, false);
     }
+  }
+
+  async function pauseSchedulerJob() {
+    applySchedulerStateFromControls();
+    const jobId = String(state.schedulerSelectedJobId || "").trim();
+    if (!jobId) {
+      setSchedulerStatus(t("miniapp.scheduler.no_job_selected", "Job не выбрана"), false);
+      return;
+    }
+    try {
+      await api("/v1/scheduler/jobs/pause", {
+        method: "POST",
+        body: JSON.stringify({
+          project_slug: String(state.schedulerProjectSlug || ""),
+          job_id: jobId,
+        }),
+      });
+      setSchedulerStatus(t("miniapp.scheduler.job_paused", "Job приостановлена."));
+      await fetchSchedulerJobs();
+    } catch (err) {
+      setSchedulerStatus(`${t("miniapp.scheduler.err_pause", "Ошибка scheduler pause:")} ${err.message || "unknown"}`, false);
+    }
+  }
+
+  async function resumeSchedulerJob() {
+    applySchedulerStateFromControls();
+    const jobId = String(state.schedulerSelectedJobId || "").trim();
+    if (!jobId) {
+      setSchedulerStatus(t("miniapp.scheduler.no_job_selected", "Job не выбрана"), false);
+      return;
+    }
+    try {
+      await api("/v1/scheduler/jobs/resume", {
+        method: "POST",
+        body: JSON.stringify({
+          project_slug: String(state.schedulerProjectSlug || ""),
+          job_id: jobId,
+        }),
+      });
+      setSchedulerStatus(t("miniapp.scheduler.job_resumed", "Job возобновлена."));
+      await fetchSchedulerJobs();
+    } catch (err) {
+      setSchedulerStatus(`${t("miniapp.scheduler.err_resume", "Ошибка scheduler resume:")} ${err.message || "unknown"}`, false);
+    }
+  }
+
+  function updateSchedulerPauseResumeButtons() {
+    const pauseButton = document.getElementById("schedulerPause");
+    const resumeButton = document.getElementById("schedulerResume");
+    if (!pauseButton || !resumeButton) return;
+    const jobId = String(state.schedulerSelectedJobId || "").trim();
+    if (!jobId) {
+      pauseButton.disabled = true;
+      resumeButton.disabled = true;
+      return;
+    }
+    const job = findSchedulerJob(jobId);
+    const isPaused = job ? !job.enabled : false;
+    pauseButton.disabled = isPaused;
+    resumeButton.disabled = !isPaused;
   }
 
   function tickTimeText(tsValue) {
@@ -3774,6 +3858,7 @@
     renderStatusSessionOptions(payload || {});
     renderFilesSessionOptions(payload || {});
     renderSettingsSessionOptions(payload || {});
+    renderReportsSessionOptions(payload || {});
     if (state.me?.is_admin) {
       renderAdminSessionOptions(payload || {});
     }
@@ -4289,6 +4374,12 @@
     }
     if (tab === "settings") {
       void fetchSessionSettings();
+    }
+    if (tab === "tasks") {
+      void fetchTasks();
+    }
+    if (tab === "reports") {
+      void fetchReports();
     }
   }
 
@@ -5944,6 +6035,12 @@
     document.getElementById("schedulerRunNow").onclick = () => {
       void runSchedulerJobNow();
     };
+    document.getElementById("schedulerPause").onclick = () => {
+      void pauseSchedulerJob();
+    };
+    document.getElementById("schedulerResume").onclick = () => {
+      void resumeSchedulerJob();
+    };
     document.getElementById("schedulerReset").onclick = () => {
       resetSchedulerForm();
     };
@@ -6112,6 +6209,26 @@
       stopAdminPolling();
       stopRunsPolling();
     });
+
+    document.getElementById("tasksRefresh").onclick = () => {
+      void fetchTasks();
+    };
+
+    document.getElementById("reportsRefresh").onclick = () => {
+      state.reportsSessionUid = String(document.getElementById("reportsSession")?.value || "");
+      void fetchReports();
+    };
+    document.getElementById("reportsSession").onchange = () => {
+      state.reportsSessionUid = String(document.getElementById("reportsSession")?.value || "");
+      state.reportsSelectedId = null;
+      state.reportsSelectedSessionUid = null;
+      const dlBtn = document.getElementById("reportsDownloadMd");
+      if (dlBtn) dlBtn.disabled = true;
+      void fetchReports();
+    };
+    document.getElementById("reportsDownloadMd").onclick = () => {
+      void downloadReportMd();
+    };
   }
 
   // ==================================================================
@@ -7250,6 +7367,197 @@
       await showAutonomyServerDetail(serverId);
     } catch (err) {
       setAutonomyStatus(`${t("miniapp.autonomy.err_rescan", "Ошибка rescan:")} ${err.message || "unknown"}`, false);
+    }
+  }
+
+  function renderTasks(tasks) {
+    const emptyEl = document.getElementById("tasksEmpty");
+    const panel = document.getElementById("tasksPanel");
+    const list = document.getElementById("tasksList");
+    if (!emptyEl || !panel || !list) return;
+    if (!tasks || tasks.length === 0) {
+      emptyEl.textContent = t("miniapp.tasks.empty", "Нет активных задач.");
+      emptyEl.classList.remove("hidden");
+      panel.classList.add("hidden");
+      return;
+    }
+    emptyEl.classList.add("hidden");
+    panel.classList.remove("hidden");
+    list.innerHTML = "";
+    tasks.forEach((task) => {
+      const li = document.createElement("li");
+      li.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid var(--border)";
+      const info = document.createElement("span");
+      info.textContent = `[${task.session_uid || ""}] ${task.mode_id || ""}: ${task.name || ""}`;
+      info.style.flex = "1";
+      li.appendChild(info);
+      const btn = document.createElement("button");
+      btn.textContent = t("miniapp.tasks.btn_cancel", "Отменить");
+      btn.style.marginLeft = "8px";
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          await api(`/tasks/${encodeURIComponent(task.session_uid)}/cancel`, { method: "POST" });
+          void fetchTasks();
+        } catch (err) {
+          btn.disabled = false;
+          alert(`${t("miniapp.tasks.err_cancel", "Ошибка отмены:")} ${err.message || "unknown"}`);
+        }
+      };
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+  }
+
+  async function fetchTasks() {
+    try {
+      const data = await api("/tasks");
+      renderTasks(data.tasks || []);
+    } catch (err) {
+      const emptyEl = document.getElementById("tasksEmpty");
+      if (emptyEl) {
+        emptyEl.textContent = `${t("miniapp.tasks.err_load", "Ошибка загрузки задач:")} ${err.message || "unknown"}`;
+        emptyEl.classList.remove("hidden");
+      }
+      const panel = document.getElementById("tasksPanel");
+      if (panel) panel.classList.add("hidden");
+    }
+  }
+
+  // ==================================================================
+  // Reports tab
+  // ==================================================================
+
+  function renderReportsSessionOptions(payload) {
+    const select = document.getElementById("reportsSession");
+    if (!select) return;
+    const sessions = Array.isArray(payload?.available_sessions) ? payload.available_sessions : [];
+    const defaultLabel = t("miniapp.label.choose_session", "Выберите сессию");
+    const signatureParts = sessions.map((item) => {
+      const uid = String(item?.session_uid || "");
+      const label = String(item?.label || uid);
+      return `${uid} ${label}`;
+    });
+    const nextSignature = `${defaultLabel}${signatureParts.join("")}`;
+    const fallbackSelected = String(payload?.selected_session_uid || "");
+    const desiredSelected = state.reportsSessionUid || fallbackSelected;
+    if (!select.options.length || state.reportsSessionsSignature !== nextSignature) {
+      const options = sessions
+        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${escapeHtml(item.label || item.session_uid)}</option>`)
+        .join("");
+      select.innerHTML = `<option value="">${escapeHtml(defaultLabel)}</option>${options}`;
+      if (desiredSelected) {
+        select.value = desiredSelected;
+      }
+      if (select.value !== desiredSelected && fallbackSelected) {
+        select.value = fallbackSelected;
+      }
+      state.reportsSessionsSignature = nextSignature;
+    }
+    state.reportsSessionUid = String(select.value || "");
+  }
+
+  function _reportsSetEmpty(msg) {
+    const empty = document.getElementById("reportsEmpty");
+    const panel = document.getElementById("reportsPanel");
+    if (empty) {
+      empty.textContent = msg;
+      empty.classList.remove("hidden");
+    }
+    if (panel) panel.classList.add("hidden");
+  }
+
+  function _reportsShowPanel() {
+    const empty = document.getElementById("reportsEmpty");
+    const panel = document.getElementById("reportsPanel");
+    if (empty) empty.classList.add("hidden");
+    if (panel) panel.classList.remove("hidden");
+  }
+
+  function renderReportsList(reports) {
+    const list = document.getElementById("reportsList");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!reports || reports.length === 0) {
+      _reportsSetEmpty(t("miniapp.reports.no_reports", "Отчётов нет."));
+      return;
+    }
+    _reportsShowPanel();
+    reports.forEach((rep) => {
+      const li = document.createElement("li");
+      li.style.cssText = "padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;";
+      const name = document.createElement("div");
+      name.textContent = rep.name || rep.id;
+      name.style.fontWeight = "bold";
+      name.style.fontSize = "0.9em";
+      const meta = document.createElement("div");
+      meta.textContent = rep.date || "";
+      meta.style.fontSize = "0.78em";
+      meta.style.color = "var(--muted, #888)";
+      li.appendChild(name);
+      li.appendChild(meta);
+      li.onclick = () => {
+        list.querySelectorAll("li").forEach((el) => el.classList.remove("active"));
+        li.classList.add("active");
+        void loadReportContent(rep.id, rep.session_uid);
+        state.reportsSelectedId = rep.id;
+        state.reportsSelectedSessionUid = rep.session_uid;
+        const dlBtn = document.getElementById("reportsDownloadMd");
+        if (dlBtn) dlBtn.disabled = false;
+      };
+      list.appendChild(li);
+    });
+  }
+
+  async function loadReportContent(reportId, sessionUid) {
+    const viewerEmpty = document.getElementById("reportsViewerEmpty");
+    const viewerContent = document.getElementById("reportsViewerContent");
+    if (!viewerEmpty || !viewerContent) return;
+    viewerEmpty.classList.remove("hidden");
+    viewerContent.classList.add("hidden");
+    viewerEmpty.textContent = t("miniapp.reports.loading", "Загрузка...");
+    try {
+      const data = await api(
+        `/reports/${encodeURIComponent(reportId)}?session_uid=${encodeURIComponent(sessionUid)}`
+      );
+      viewerEmpty.classList.add("hidden");
+      viewerContent.classList.remove("hidden");
+      viewerContent.textContent = data.content || "";
+    } catch (err) {
+      viewerEmpty.textContent = `${t("miniapp.reports.err_load", "Ошибка загрузки:")} ${err.message || "unknown"}`;
+    }
+  }
+
+  async function fetchReports() {
+    const sessionUid = state.reportsSessionUid || "";
+    if (!sessionUid) {
+      _reportsSetEmpty(t("miniapp.reports.empty", "Выберите сессию для просмотра отчётов."));
+      return;
+    }
+    try {
+      const data = await api(`/reports?session_uid=${encodeURIComponent(sessionUid)}`);
+      renderReportsList(data.reports || []);
+    } catch (err) {
+      _reportsSetEmpty(
+        `${t("miniapp.reports.err_load", "Ошибка загрузки:")} ${err.message || "unknown"}`
+      );
+    }
+  }
+
+  async function downloadReportMd() {
+    const reportId = state.reportsSelectedId;
+    const sessionUid = state.reportsSelectedSessionUid;
+    if (!reportId || !sessionUid) return;
+    try {
+      const url = `/api/reports/${encodeURIComponent(reportId)}/download?session_uid=${encodeURIComponent(sessionUid)}&format=md`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = reportId;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(`${t("miniapp.reports.err_download", "Ошибка скачивания:")} ${err.message || "unknown"}`);
     }
   }
 

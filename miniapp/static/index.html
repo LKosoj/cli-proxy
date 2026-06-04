@@ -20,6 +20,8 @@
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-logs" data-tab="logs" data-i18n-key="miniapp.tab.logs">Логи</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-status" data-tab="status" data-i18n-key="miniapp.tab.status">Статус</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-scheduler" data-tab="scheduler" data-i18n-key="miniapp.tab.scheduler">Scheduler</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-tasks" data-tab="tasks" data-i18n-key="miniapp.tab.tasks">Задачи</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="tab-reports" data-tab="reports" data-i18n-key="miniapp.tab.reports">Отчёты</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" data-i18n-key="miniapp.tab.settings">Настройки</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-admin" data-tab="admin" data-i18n-key="miniapp.tab.admin">Админ</button>
   </nav>
@@ -88,6 +90,14 @@
       <div class="toolbar logs-toolbar">
         <label for="logsType" data-i18n-key="miniapp.label.log">Лог</label>
         <select id="logsType"></select>
+        <label for="logsLevel" data-i18n-key="miniapp.label.log_level">Уровень</label>
+        <select id="logsLevel">
+          <option value="" data-i18n-key="miniapp.logs.level_all">Все</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
         <label for="logsHistory" data-i18n-key="miniapp.label.history">История</label>
         <select id="logsHistory">
           <option value="0" data-i18n-key="miniapp.logs.only_new">Только новые</option>
@@ -303,6 +313,8 @@
                 <button id="schedulerSave" data-i18n-key="miniapp.btn.create">Создать</button>
                 <button id="schedulerDelete" data-i18n-key="miniapp.btn.delete">Удалить</button>
                 <button id="schedulerRunNow" data-i18n-key="miniapp.scheduler.run_now">Run now</button>
+                <button id="schedulerPause" data-i18n-key="miniapp.scheduler.pause" disabled>Pause</button>
+                <button id="schedulerResume" data-i18n-key="miniapp.scheduler.resume" disabled>Resume</button>
                 <button id="schedulerReset" data-i18n-key="miniapp.btn.reset">Сбросить</button>
               </div>
             </div>
@@ -312,6 +324,43 @@
             <div class="status-card-body">
               <div id="schedulerSelectedMeta" class="pre-wrap"></div>
               <ul id="schedulerJobsList" class="tree"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-tasks" class="tab">
+      <div class="toolbar status-toolbar">
+        <button id="tasksRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
+      </div>
+      <div id="tasksEmpty" class="status-empty" data-i18n-key="miniapp.tasks.empty">Нет активных задач.</div>
+      <div id="tasksPanel" class="hidden">
+        <ul id="tasksList" class="tree"></ul>
+      </div>
+    </section>
+
+    <section id="tab-reports" class="tab">
+      <div class="toolbar status-toolbar">
+        <label for="reportsSession" data-i18n-key="miniapp.label.session">Сессия</label>
+        <select id="reportsSession"></select>
+        <button id="reportsRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
+        <button id="reportsDownloadMd" disabled data-i18n-key="miniapp.reports.btn_download_md">Скачать MD</button>
+      </div>
+      <div id="reportsEmpty" class="status-empty" data-i18n-key="miniapp.reports.empty">Выберите сессию для просмотра отчётов.</div>
+      <div id="reportsPanel" class="hidden">
+        <div class="status-cards-grid" style="margin-top: 12px;">
+          <div class="status-card" style="max-width: 260px; flex: 0 0 260px;">
+            <div class="status-card-header" data-i18n-key="miniapp.reports.history_title">История отчётов</div>
+            <div class="status-card-body" style="padding: 0;">
+              <ul id="reportsList" class="tree" style="margin: 0; padding: 0;"></ul>
+            </div>
+          </div>
+          <div class="status-card" style="flex: 1; min-width: 0;">
+            <div class="status-card-header" data-i18n-key="miniapp.reports.viewer_title">Просмотр</div>
+            <div class="status-card-body">
+              <div id="reportsViewerEmpty" class="status-empty" data-i18n-key="miniapp.reports.select_report">Выберите отчёт из списка.</div>
+              <pre id="reportsViewerContent" class="log-output hidden" style="white-space: pre-wrap; word-break: break-word;"></pre>
             </div>
           </div>
         </div>

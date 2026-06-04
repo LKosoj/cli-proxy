@@ -7,7 +7,7 @@ Generated: 2026-06-03T02:24:29Z
 
 ## Scope
 - Source glob: `miniapp/**`
-- Current files: 19 under `miniapp/**` as of last review.
+- Current files: 21 under `miniapp/**` as of last review.
 - Подкаталоги: `miniapp/services/` (бекенд-сервисы UI: config draft, файлы, логи), `miniapp/static/` (SPA на vanilla JS: `index.html`, `app.js`, `styles.css`).
 
 ## Instructions for agent
@@ -31,11 +31,13 @@ Generated: 2026-06-03T02:24:29Z
 - `miniapp/routes_logs.py` — чтение/стрим логов, WS (`LogsRouteServices`).
 - `miniapp/routes_ssh.py` — SSH-хосты/секреты (`SshRouteServices`).
 - `miniapp/routes_json.py` — парсинг/валидация JSON-тел (`JsonRouteServices`).
+- `miniapp/routes_tasks.py` — Task Progress (`TasksRouteServices`): list/cancel активных SDK-задач.
 - `miniapp/routes_foundation.py` — шаблон route-модуля (`FoundationRouteServices`).
 - `miniapp/services/config_service.py` — валидация/диф/редактирование секретов config-черновика.
 - `miniapp/services/files_service.py` — compat-реэкспорт `app/services/session_files_service.py`.
 - `miniapp/services/logs_service.py` — чтение и парсинг логов сессий.
-- `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css` — SPA на vanilla JS; вкладки: config, files, logs, status, scheduler, settings, admin. Внешние зависимости с CDN: Telegram WebApp JS SDK (`telegram.org/js/telegram-web-app.js`) и Ace editor `1.43.6` (jsdelivr).
+- `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css` — SPA на vanilla JS; вкладки: config, files, logs, status, scheduler, tasks, settings, admin. Внешние зависимости с CDN: Telegram WebApp JS SDK (`telegram.org/js/telegram-web-app.js`) и Ace editor `1.43.6` (jsdelivr).
+- `miniapp/routes_tasks.py` — панель Task Progress: GET `/api/tasks` (список активных задач из `bot_app.mode_tasks`), POST `/api/tasks/{session_uid}/cancel` (`TasksRouteServices`).
 - `start_miniapp.py` — standalone dev-лаунчер.
 
 ## Module API
@@ -84,4 +86,4 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03T02:37:00Z
+- 2026-06-04T01:55:00Z

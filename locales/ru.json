@@ -37,7 +37,9 @@
       "status": "Статус",
       "scheduler": "Scheduler",
       "settings": "Настройки",
-      "admin": "Админ"
+      "admin": "Админ",
+      "tasks": "Задачи",
+      "reports": "Отчёты"
     },
     "btn": {
       "refresh": "Обновить",
@@ -491,6 +493,23 @@
       "run_validation_first": "сначала запустите проверку",
       "promote": "Применить",
       "promoting": "Применение…"
+    },
+    "tasks": {
+      "empty": "Нет активных задач.",
+      "btn_cancel": "Отменить",
+      "err_cancel": "Ошибка отмены:",
+      "err_load": "Ошибка загрузки задач:"
+    },
+    "reports": {
+      "empty": "Выберите сессию для просмотра отчётов.",
+      "no_reports": "Отчётов нет.",
+      "loading": "Загрузка...",
+      "select_report": "Выберите отчёт из списка.",
+      "history_title": "История отчётов",
+      "viewer_title": "Просмотр",
+      "btn_download_md": "Скачать MD",
+      "err_load": "Ошибка загрузки:",
+      "err_download": "Ошибка скачивания:"
     }
   },
   "btn": {
@@ -765,7 +784,27 @@
       "clone_error": "Ошибка git clone:\\n{output}",
       "clone_launch_error": "Ошибка запуска git clone: {e}",
       "clone_starting": "Запускаю git clone…",
-      "operations_menu": "Git-операции:"
+      "operations_menu": "Git-операции:",
+      "branch_created": "Ветка создана: {branch}",
+      "branch_usage": "Использование: /git_branch <name>",
+      "checkout_done": "Переключено на ветку: {branch}",
+      "checkout_usage": "Использование: /git_checkout <branch>",
+      "stash_pop_done": "Stash pop выполнен.",
+      "show_usage": "Использование: /git_show [<commit>]",
+      "show_done": "Git show {ref}:",
+      "remote_pull_usage": "Использование: /remote_git_pull <host> [ff|merge|rebase]",
+      "remote_pull_done": "Remote git pull ({host}): готово.",
+      "remote_pull_error": "Remote git pull ({host}): ошибка — {error}",
+      "remote_push_usage": "Использование: /remote_git_push <host>",
+      "remote_push_done": "Remote git push ({host}): готово.",
+      "remote_push_error": "Remote git push ({host}): ошибка — {error}",
+      "remote_fetch_usage": "Использование: /remote_git_fetch <host>",
+      "remote_fetch_done": "Remote git fetch ({host}): готово.",
+      "remote_fetch_error": "Remote git fetch ({host}): ошибка — {error}",
+      "remote_host_not_found": "SSH-хост '{host}' не найден.",
+      "remote_no_root": "Для хоста '{host}' не задан remote_project_root и cwd не указан.",
+      "remote_not_git": "Каталог на хосте '{host}' не является git-репозиторием.",
+      "remote_output_prefix": "Вывод:"
     },
     "lint": {
       "autopause_not_active": "Lint Evolution L{level}: пауза не была активна — изменений нет.",
@@ -893,6 +932,33 @@
     },
     "mode": {
       "desc": "Меню режима: {label}."
+    },
+    "sessions_search": {
+      "desc": "Поиск сессий по подстроке в имени, ID или рабочей директории.",
+      "usage": "Использование: /sessions_search <запрос>",
+      "not_found": "Сессий по запросу «{query}» не найдено.",
+      "header": "Найдено сессий: {n}"
+    },
+    "git_branch": {
+      "desc": "Создать ветку git."
+    },
+    "git_checkout": {
+      "desc": "Переключиться на ветку git."
+    },
+    "git_stash_pop": {
+      "desc": "Применить последний git stash pop."
+    },
+    "git_show": {
+      "desc": "Показать diff коммита (по умолчанию HEAD)."
+    },
+    "remote_git_pull": {
+      "desc": "Git pull на удалённом SSH-хосте. Использование: /remote_git_pull <host> [ff|merge|rebase]"
+    },
+    "remote_git_push": {
+      "desc": "Git push на удалённом SSH-хосте. Использование: /remote_git_push <host>"
+    },
+    "remote_git_fetch": {
+      "desc": "Git fetch на удалённом SSH-хосте. Использование: /remote_git_fetch <host>"
     }
   },
   "desktop": {
@@ -909,6 +975,9 @@
       "refresh": "Обновить",
       "new_file": "Новый файл",
       "new_dir": "Новая папка",
+      "rename": "Переименовать",
+      "upload": "Загрузить",
+      "download": "Скачать",
       "reload": "Перезагрузить",
       "force_save": "Принудительно сохранить",
       "send": "Отправить",
@@ -971,7 +1040,10 @@
         "stash": "Stash",
         "stash_pop": "Stash Pop",
         "create_branch": "Создать ветку",
-        "switch_branch": "Переключить ветку"
+        "switch_branch": "Переключить ветку",
+        "fetch": "Fetch",
+        "merge": "Merge",
+        "rebase": "Rebase"
       },
       "msg": {
         "select_commit": "Выберите коммит для просмотра diff.",
@@ -983,14 +1055,22 @@
         "unexpected_error": "Произошла непредвиденная ошибка:\n{error}",
         "fetching_status": "Получение статуса git...",
         "generate_msg_failed": "Не удалось сгенерировать сообщение. Введите его вручную или настройте openai_api_key в config.yaml.",
-        "generate_msg_failed_check": "Не удалось сгенерировать сообщение. Проверьте настройки openai_api_key в config.yaml."
+        "generate_msg_failed_check": "Не удалось сгенерировать сообщение. Проверьте настройки openai_api_key в config.yaml.",
+        "conflict": "Обнаружены конфликты:\n{files}",
+        "merge_ok": "Merge выполнен успешно.",
+        "rebase_ok": "Rebase выполнен успешно.",
+        "fetch_ok": "Fetch выполнен успешно."
       },
       "dialog": {
         "create_branch_title": "Создать ветку",
         "create_branch_prompt": "Введите имя новой ветки:",
         "switch_branch_title": "Переключить ветку",
         "switch_branch_prompt": "Введите имя ветки для переключения:",
-        "diff_title": "Diff коммита {hash}"
+        "diff_title": "Diff коммита {hash}",
+        "merge_branch_title": "Merge ветки",
+        "merge_branch_prompt": "Введите имя ветки для merge:",
+        "rebase_branch_title": "Rebase на ветку",
+        "rebase_branch_prompt": "Введите имя целевой ветки для rebase:"
       },
       "history": {
         "col_date": "Дата",
@@ -1000,7 +1080,8 @@
       },
       "group": {
         "other_ops": "Прочие операции",
-        "remote_ops": "Удалённые операции"
+        "remote_ops": "Удалённые операции",
+        "rebase_merge_ops": "Merge / Rebase"
       }
     },
     "log": {
@@ -1018,12 +1099,16 @@
       "tasks_monitor_title": "Монитор активных задач",
       "btn": {
         "apply_filters": "Применить фильтры",
-        "refresh_tasks": "Обновить задачи"
+        "refresh_tasks": "Обновить задачи",
+        "download": "Скачать"
       },
       "group": {
         "module_filters": "Фильтры по модулям",
         "level_filters": "Фильтры по уровню лога"
-      }
+      },
+      "type_label": "Тип:",
+      "not_found": "Файл лога не найден",
+      "no_log_path": "Путь к логу не настроен"
     },
     "session": {
       "search_placeholder": "Поиск сессий...",
@@ -1055,6 +1140,22 @@
       "revision_conflict": "Конфликт версий. Текущая версия: {revision}.",
       "name_label": "Название:",
       "delete_confirm": "Удалить '{path}'?",
+      "delete_recursive_title": "Удалить папку",
+      "delete_recursive_confirm": "Папка '{path}' будет удалена рекурсивно вместе со всем содержимым. Продолжить?",
+      "rename_title": "Переименовать",
+      "rename_label": "Новое имя:",
+      "renaming": "Переименование...",
+      "renamed": "Переименовано: {name}",
+      "rename_error": "Не удалось переименовать: {error}",
+      "upload_title": "Загрузить файл",
+      "all_files_filter": "Все файлы (*)",
+      "uploading": "Загрузка...",
+      "uploaded": "Загружено: {filename}",
+      "upload_error": "Не удалось загрузить файл: {error}",
+      "download_title": "Сохранить файл",
+      "downloading": "Скачивание...",
+      "downloaded": "Сохранено: {path}",
+      "download_error": "Не удалось скачать файл: {error}",
       "path_prefix": "Путь: {path}"
     },
     "chat": {
@@ -1067,7 +1168,13 @@
       "status_ready": "Готово",
       "btn_stop": "Стоп",
       "status_thinking": "Думаю...",
-      "status_waiting_answer": "Ожидание ответа..."
+      "status_waiting_answer": "Ожидание ответа...",
+      "btn_clear_queue": "Очередь: очистить",
+      "btn_presets": "Пресеты",
+      "msg_queue_cleared": "Очередь задач очищена.",
+      "msg_no_presets": "Пресеты не настроены. Добавьте их в config.yaml → presets.",
+      "presets_dialog_title": "Выбор пресета",
+      "presets_dialog_hint": "Выберите пресет для запуска:"
     },
     "status": {
       "ready": "Готово"
@@ -1080,7 +1187,8 @@
         "config": "Конфиг",
         "chat": "Чат",
         "autonomy": "Автономность",
-        "scheduler": "Планировщик"
+        "scheduler": "Планировщик",
+        "lint_evolution": "Lint Evolution"
       },
       "btn": {
         "enable": "Включить",
@@ -1093,7 +1201,8 @@
         "reload": "Перезагрузить",
         "add_row": "Добавить",
         "save_rows": "Сохранить",
-        "reload_config": "Перезагрузить конфиг"
+        "reload_config": "Перезагрузить конфиг",
+        "refresh": "Обновить"
       },
       "label": {
         "session": "Сессия:",
@@ -1293,6 +1402,38 @@
         "select_skill_install": "Выберите pending skill install",
         "no_session": "Session не выбрана.",
         "api_unavailable": "API недоступен."
+      },
+      "lint": {
+        "status_group": "Статус",
+        "autopause_group": "Autopause",
+        "schema_group": "История схемы",
+        "gate_group": "Gate dry-run",
+        "btn": {
+          "pause": "Пауза",
+          "resume": "Снять паузу",
+          "run": "Запустить"
+        },
+        "msg": {
+          "api_unavailable": "Lint Evolution API недоступен",
+          "load_error": "Ошибка загрузки",
+          "paused": "L{level} поставлен на паузу",
+          "resumed": "L{level} пауза снята",
+          "not_paused": "L{level} не был на паузе"
+        }
+      },
+      "state_dialog": {
+        "title": "State.json сессии",
+        "api_unavailable": "API состояния недоступен",
+        "load_error": "Ошибка загрузки состояния"
+      },
+      "selfupdate": {
+        "confirm_title": "Подтверждение self-update",
+        "confirm_msg": "Выполнить git pull и перезапустить приложение?",
+        "pulling": "Выполняется git pull...",
+        "error": "Ошибка selfupdate",
+        "failed": "Self-update не выполнен: {error}",
+        "failed_title": "Ошибка self-update",
+        "api_unavailable": "Self-update API недоступен"
       }
     },
     "msg": {
@@ -1474,6 +1615,22 @@
         "open_admin": {
           "subtitle": "Панель администрирования",
           "title": "Открыть админ-панель"
+        },
+        "clear_queue": {
+          "title": "Очистить очередь задач",
+          "subtitle": "Удалить все ожидающие задачи из очереди"
+        },
+        "presets": {
+          "title": "Пресеты задач",
+          "subtitle": "Выбрать и запустить задачу из пресетов"
+        },
+        "show_state": {
+          "title": "Показать state.json",
+          "subtitle": "Просмотреть состояние активной сессии"
+        },
+        "selfupdate": {
+          "title": "Self-update",
+          "subtitle": "git pull и перезапуск приложения"
         }
       },
       "hint": "Введите для поиска команд, Enter для запуска",
@@ -1481,7 +1638,8 @@
         "navigation": "Навигация",
         "git": "Git",
         "panels": "Панели",
-        "session": "Сессия"
+        "session": "Сессия",
+        "admin": "Администрирование"
       },
       "footer_reopen": "Ctrl+K: открыть снова",
       "title": "Палитра команд",
@@ -1524,7 +1682,15 @@
       "err_resume": "Не удалось возобновить задание планировщика: {error}",
       "project_label": "Проект:",
       "no_sessions": "У проекта нет открытых desktop-сессий для получения уведомлений.",
-      "no_projects": "Нет доступных собственных проектов."
+      "no_projects": "Нет доступных собственных проектов.",
+      "settings_group": "Настройки планировщика",
+      "settings_timezone_label": "Часовой пояс:",
+      "settings_tick_label": "Интервал опроса (сек):",
+      "settings_concurrency_label": "Макс. одновременных задач:",
+      "settings_apply": "Применить",
+      "settings_saved": "Настройки планировщика сохранены.",
+      "settings_err_save": "Не удалось сохранить настройки планировщика: {error}",
+      "settings_err_timezone": "Укажите корректный часовой пояс."
     },
     "modepanel": {
       "label": {
@@ -1619,7 +1785,13 @@
       "read_timeout": "Таймаут чтения (с)",
       "tab": {
         "tools": "Инструменты",
-        "defaults": "Параметры по умолчанию"
+        "defaults": "Параметры по умолчанию",
+        "presets": "Пресеты",
+        "thread_mode": "Thread Mode",
+        "webhooks": "Webhooks",
+        "scheduler": "Планировщик",
+        "security": "Безопасность",
+        "lint_evolution": "Lint Evolution"
       },
       "msg_restart_required": "Требуется перезапуск",
       "host": "Хост",
@@ -1657,7 +1829,125 @@
       "no_changes": "Нет изменений",
       "admin_ids": "ID администраторов",
       "msg_errors": "Ошибки",
-      "tool_mode": "Режим"
+      "tool_mode": "Режим",
+      "reload_runtime_btn": "Применить конфиг",
+      "reload_runtime_ok": "Конфиг применён: {applied}",
+      "reload_runtime_err": "Ошибка применения конфига",
+      "btn_add": "Добавить",
+      "btn_delete": "Удалить",
+      "btn_edit_json": "Редактировать JSON",
+      "btn_edit_presets": "Редактировать пресеты",
+      "presets_title": "Пресеты",
+      "preset_name": "Название",
+      "preset_prompt": "Промпт",
+      "mcp_token": "MCP токен",
+      "mcp_clients_dialog_title": "MCP-клиенты (JSON)",
+      "mcp_clients_json_hint": "Редактируйте список MCP-клиентов в формате JSON:",
+      "write_timeout": "Таймаут записи (с)",
+      "pool_timeout": "Таймаут пула (с)",
+      "polling_timeout": "Таймаут поллинга (с)",
+      "poll_interval": "Интервал поллинга (с)",
+      "connection_pool_size": "Размер пула соединений",
+      "user_access": "Доступ пользователей",
+      "user_workdirs": "Рабочие каталоги пользователей (JSON)",
+      "user_modes": "Режимы пользователей (JSON)",
+      "paths_section": "Пути",
+      "images_section": "Изображения",
+      "api_keys_extra": "Дополнительные API-ключи",
+      "agent_behaviour": "Поведение агента",
+      "context_section": "Контекст и токены",
+      "skills_section": "Навыки (Skills)",
+      "manager_section": "Manager / Analyst / Webmaster",
+      "state_path": "Путь к state.json",
+      "desktop_state_path": "Путь к desktop_state.json",
+      "toolhelp_path": "Путь к toolhelp.json",
+      "image_temp_dir": "Временная папка для изображений",
+      "html_filename_prefix": "Префикс HTML-файлов",
+      "image_max_mb": "Макс. размер изображения (МиБ)",
+      "summary_max_chars": "Макс. размер сводки (симв.)",
+      "openai_big_model": "OpenAI большая модель",
+      "openai_base_url": "OpenAI Base URL",
+      "tavily_api_key": "Tavily API-ключ",
+      "jina_api_key": "Jina API-ключ",
+      "clarification_enabled": "Уточнение запросов",
+      "clarification_keywords": "Ключевые слова уточнения",
+      "default_cli": "CLI по умолчанию",
+      "codebase_mapper_usage": "Использование Codebase Mapper",
+      "run_artifacts_enabled": "Хранить артефакты запусков",
+      "run_artifacts_retention_days": "Хранение артефактов (дней)",
+      "run_doctor_enabled": "Проверки Doctor/Recover",
+      "run_boundary_validation_enabled": "Валидация границ фаз",
+      "run_metrics_enabled": "Метрики запусков",
+      "llm_trace_enabled": "LLM trace в EVENTS.jsonl",
+      "tool_disclosure": "Раскрытие инструментов",
+      "context_window_tokens": "Окно контекста (токены)",
+      "context_reserve_tokens": "Резерв токенов",
+      "summarization_threshold": "Порог суммаризации",
+      "skill_discovery_mode": "Режим поиска навыков",
+      "skill_install_policy": "Политика установки навыков",
+      "skill_registry_paths": "Пути реестра навыков",
+      "skill_allowlisted_sources": "Разрешённые источники навыков",
+      "manager_max_tasks": "Макс. задач менеджера",
+      "manager_max_attempts": "Макс. попыток менеджера",
+      "manager_decompose_timeout": "Таймаут декомпозиции (с)",
+      "manager_dev_timeout": "Таймаут разработки (с)",
+      "manager_review_timeout": "Таймаут ревью (с)",
+      "manager_dev_report_max_chars": "Макс. размер отчёта (симв.)",
+      "manager_auto_resume": "Авто-возобновление",
+      "manager_auto_commit": "Авто-коммит",
+      "manager_response_archive": "Архив ответов",
+      "analyst_use_cli_timeout": "Таймаут CLI аналитика (с)",
+      "webmaster_use_cli_timeout": "Таймаут CLI веб-мастера (с)",
+      "webmaster_max_fix_iterations": "Макс. итераций исправления",
+      "cli_routing": "CLI-роутинг (JSON)",
+      "interactive_command": "Интерактивная команда",
+      "resume_command": "Команда возобновления",
+      "image_command": "Команда изображения",
+      "auto_commands": "Авто-команды",
+      "resume_regex": "Regex возобновления",
+      "help_cmd": "Команда помощи",
+      "tool_env": "Переменные среды (JSON)",
+      "separate_stderr": "Отдельный stderr",
+      "no_session_persistence": "Без сохранения сессии при старте",
+      "tool_name_dialog_title": "Новый инструмент",
+      "tool_name_label": "Имя инструмента:",
+      "err_tool_name_exists": "Инструмент '{name}' уже существует.",
+      "confirm_delete_tool": "Удалить инструмент '{name}'?",
+      "memory_max_kb": "Макс. размер памяти (КиБ)",
+      "memory_compact_target_kb": "Целевой размер памяти (КиБ)",
+      "base_path": "Базовый путь",
+      "max_edit_file_size_kb": "Макс. размер редактируемого файла (КиБ)",
+      "enable_delete": "Разрешить удаление",
+      "thread_mode_mode": "Режим тредов",
+      "topics_chat_id": "ID чата тем",
+      "topic_title_prefix": "Префикс заголовков тем",
+      "inactivity_ttl_sec": "TTL неактивности (с)",
+      "webhooks_path": "Путь webhook",
+      "webhooks_public_url": "Публичный URL webhook",
+      "webhooks_secret_token": "Секретный токен webhook",
+      "webhooks_request_timeout": "Таймаут запроса webhook (с)",
+      "webhooks_max_payload_bytes": "Макс. размер payload webhook (байт)",
+      "scheduler_timezone": "Часовой пояс",
+      "scheduler_tick_interval": "Интервал тиков (с)",
+      "scheduler_max_jobs": "Макс. параллельных задач",
+      "scheduler_job_timeout": "Таймаут задачи (с)",
+      "scheduler_misfire_grace": "Допуск опоздания (с)",
+      "rl_backend": "Backend ограничений",
+      "rl_sqlite_path": "Путь к sqlite (rate limits)",
+      "rl_default_policy": "Политика по умолчанию (JSON)",
+      "rl_policies": "Именованные политики (JSON)",
+      "lint_level1_cooldown": "Cooldown уровня 1 (ч)",
+      "lint_level2_cooldown": "Cooldown уровня 2 (ч)",
+      "lint_level3_cooldown": "Cooldown уровня 3 (ч)",
+      "lint_lock_ttl": "TTL блокировки (мин)",
+      "lint_error_retry": "Повтор после ошибки (ч)",
+      "lint_fp_threshold": "Порог FP-роста (%)",
+      "lint_canary_rolling": "Скользящее окно canary (дней)",
+      "lint_canary_baseline": "Базовое окно canary (дней)",
+      "lint_canary_max_fields": "Макс. полей за 180 дней",
+      "err_json_invalid": "Неверный JSON: {error}",
+      "err_json_field_invalid": "Поле '{field}': неверный JSON — {error}",
+      "err_mcp_clients_must_be_list": "MCP-клиенты должны быть списком (JSON array)."
     },
     "sessmgr": {
       "transfer_msg": "CLI переключён: {source} → {target}.\nПеренести контекст предыдущей сессии ({source})?",
@@ -1669,7 +1959,10 @@
       "transfer_fail_title": "Перенос контекста",
       "rename": "Переименовать",
       "reset": "Сбросить",
-      "resume_token": "Resume Token"
+      "resume_token": "Resume Token",
+      "pick_title": "Выбор проекта",
+      "pick_label": "Выберите зарегистрированный проект:",
+      "pick_browse": "Обзор..."
     },
     "statuspanel": {
       "mode": "Режим",

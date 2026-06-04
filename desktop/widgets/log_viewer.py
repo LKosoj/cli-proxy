@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 from typing import TYPE_CHECKING, Optional, List
 
 from i18n import t
@@ -21,14 +23,28 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QListWidget,
     QListWidgetItem,
-    QAbstractItemView
+    QAbstractItemView,
+    QFileDialog,
 )
 
 if TYPE_CHECKING:
     from app.services.task_service import TaskService
 
+from app.services.logging_service import resolve_log_paths
+
+logger = logging.getLogger(__name__)
 
 VERBOSE_LEVEL = 10
+
+# Ordered list of log type identifiers matching miniapp/services/logs_service.py
+_LOG_TYPES = ("main", "error", "agent", "cli_dialog", "miniapp")
+_LOG_TYPE_LABELS = {
+    "main": "Основной",
+    "error": "Ошибки",
+    "agent": "Agent",
+    "cli_dialog": "CLI диалог",
+    "miniapp": "MiniApp",
+}
 
 
 class LogSignalEmitter(QObject):
@@ -42,10 +58,12 @@ class LogViewerWidget(QWidget):
     def __init__(
         self,
         task_service: TaskService,
-        parent: Optional[QWidget] = None
+        log_path: str = "",
+        parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self.task_service = task_service
+        self._log_path: str = log_path
         self.emitter = LogSignalEmitter()
         self.emitter.record_received.connect(self._on_record_emitted)
 
@@ -110,6 +128,14 @@ class LogViewerWidget(QWidget):
         toolbar.addWidget(self.level_label)
         toolbar.addWidget(self.level_filter)
 
+        self.type_label = QLabel("Type:")
+        self.type_filter = QComboBox()
+        for key in _LOG_TYPES:
+            self.type_filter.addItem(_LOG_TYPE_LABELS[key], userData=key)
+        self.type_filter.currentIndexChanged.connect(self._on_log_type_changed)
+        toolbar.addWidget(self.type_label)
+        toolbar.addWidget(self.type_filter)
+
         self.auto_scroll_cb = QCheckBox("Auto-scroll")
         self.auto_scroll_cb.setChecked(True)
         toolbar.addWidget(self.auto_scroll_cb)
@@ -126,6 +152,10 @@ class LogViewerWidget(QWidget):
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.clicked.connect(self._on_clear_clicked)
         toolbar.addWidget(self.clear_btn)
+
+        self.download_btn = QPushButton("Download")
+        self.download_btn.clicked.connect(self._on_download_clicked)
+        toolbar.addWidget(self.download_btn)
 
         layout.addLayout(toolbar)
 
@@ -345,6 +375,56 @@ class LogViewerWidget(QWidget):
     def _on_clear_clicked(self):
         self.log_display.clear()
 
+    def set_log_path(self, log_path: str) -> None:
+        """Обновляет путь к лог-файлу. Может вызываться после инициализации виджета."""
+        self._log_path = log_path
+
+    def _current_log_file_path(self) -> Optional[str]:
+        """Возвращает путь к выбранному лог-файлу или None, если log_path не задан."""
+        if not self._log_path:
+            return None
+        log_type = self.type_filter.currentData()
+        if not log_type:
+            return None
+        paths = resolve_log_paths(self._log_path)
+        return paths.get(log_type)
+
+    @Slot(int)
+    def _on_log_type_changed(self, _index: int) -> None:
+        """Переключает отображение логов при смене типа в комбобоксе."""
+        path = self._current_log_file_path()
+        if not path:
+            self.log_display.setPlainText(t("desktop.log.no_log_path", "ru"))
+            return
+        if not os.path.exists(path):
+            self.log_display.setPlainText(t("desktop.log.not_found", "ru"))
+            return
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+            self.log_display.setPlainText(content)
+            if self.auto_scroll_cb.isChecked():
+                self.log_display.verticalScrollBar().setValue(
+                    self.log_display.verticalScrollBar().maximum()
+                )
+        except OSError:
+            logger.exception("Failed to read log file: %s", path)
+
+    @Slot()
+    def _on_download_clicked(self) -> None:
+        """Открывает диалог сохранения файла и копирует выбранный лог."""
+        path = self._current_log_file_path()
+        if not path or not os.path.exists(path):
+            return
+        default_name = os.path.basename(path)
+        target, _ = QFileDialog.getSaveFileName(self, "Save Log File", default_name)
+        if not target:
+            return
+        try:
+            shutil.copy2(path, target)
+        except OSError:
+            logger.exception("Failed to copy log file: %s -> %s", path, target)
+
     def closeEvent(self, event):
         self._flush_timer.stop()
         if hasattr(self, "_unsubscribe"):
@@ -358,10 +438,12 @@ class LogViewerWidget(QWidget):
         self.filter_input.setPlaceholderText(t("desktop.log.filter_placeholder", lang))
         self.filter_label.setText(t("desktop.log.filter_label", lang))
         self.level_label.setText(t("desktop.log.level_label", lang))
+        self.type_label.setText(t("desktop.log.type_label", lang))
         self.auto_scroll_cb.setText(t("desktop.log.auto_scroll", lang))
         self.wrap_text_cb.setText(t("desktop.log.wrap_text", lang))
         self.copy_btn.setText(t("desktop.btn.copy", lang))
         self.clear_btn.setText(t("desktop.btn.clear", lang))
+        self.download_btn.setText(t("desktop.log.btn.download", lang))
         self.level_group.setTitle(t("desktop.log.group.level_filters", lang))
         self.module_group.setTitle(t("desktop.log.group.module_filters", lang))
         self.module_filter_input.setPlaceholderText(t("desktop.log.module_filter_placeholder", lang))

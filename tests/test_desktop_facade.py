@@ -567,4 +567,38 @@ def test_ask_user_transport_contract(tmp_path) -> None:
             unsubscribe()
             await facade.shutdown()
 
-    asyncio.run(_run())
+
+@pytest.mark.asyncio
+async def test_facade_reload_runtime_config_delegates_to_bot_app(tmp_path: Path) -> None:
+    """ApplicationFacade.reload_runtime_config() delegates to bot_app.reload_runtime_config."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="reload_runtime")
+    facade: ApplicationFacade = runtime["facade"]
+
+    expected = {"status": "ok", "applied": ["defaults.idle_timeout_sec"], "restart_required": []}
+    fake_bot_app = MagicMock()
+    fake_bot_app.reload_runtime_config = AsyncMock(return_value=expected)
+
+    with patch.object(facade, "_desktop_bot_app", return_value=fake_bot_app):
+        result = await facade.reload_runtime_config()
+
+    fake_bot_app.reload_runtime_config.assert_awaited_once()
+    assert result == expected
+
+
+@pytest.mark.asyncio
+async def test_facade_reload_runtime_config_returns_error_when_unavailable(tmp_path: Path) -> None:
+    """ApplicationFacade.reload_runtime_config() returns error dict when bot_app lacks the method."""
+    from unittest.mock import MagicMock, patch
+
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="reload_runtime_unavail")
+    facade: ApplicationFacade = runtime["facade"]
+
+    fake_bot_app = MagicMock(spec=[])  # no reload_runtime_config attribute
+
+    with patch.object(facade, "_desktop_bot_app", return_value=fake_bot_app):
+        result = await facade.reload_runtime_config()
+
+    assert result.get("status") == "error"
+    assert "reload_runtime_config not available" in result.get("warnings", [""])[0]

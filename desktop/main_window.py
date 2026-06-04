@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import Qt, QByteArray, QSize
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
     QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QVBoxLayout as _QVBoxLayout,
     QWidget,
     QHBoxLayout,
     QVBoxLayout,
@@ -50,6 +56,35 @@ from utils.ui import ensure_async
 if TYPE_CHECKING:
     from desktop.services.application_facade import ApplicationFacade, AppNotification
     from desktop.services.desktop_state_service import DesktopUiStateService
+
+
+class StateJsonDialog(QDialog):
+    """Диалог просмотра state.json активной Desktop-сессии (read-only)."""
+
+    def __init__(self, payload: dict, *, lang: str = "ru", parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setModal(True)
+        self.setMinimumSize(640, 480)
+        self.setWindowTitle(t("desktop.admin.state_dialog.title", lang))
+
+        root = _QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(8)
+
+        self._editor = QPlainTextEdit()
+        self._editor.setObjectName("state_json_dialog_editor")
+        self._editor.setReadOnly(True)
+        try:
+            text = json.dumps(payload, ensure_ascii=False, indent=2)
+        except Exception:
+            text = str(payload)
+        self._editor.setPlainText(text)
+        root.addWidget(self._editor, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        root.addWidget(buttons)
 
 
 class MainWindow(QMainWindow):
@@ -270,6 +305,8 @@ class MainWindow(QMainWindow):
         self.chat_view.messageSentWithAttachments.connect(self._on_message_sent)
         self.chat_view.taskCancelled.connect(self._on_task_cancelled)
         self.chat_view.askOptionSelected.connect(self._on_ask_option_selected)
+        self.chat_view.clearQueueRequested.connect(self._on_clear_queue_requested)
+        self.chat_view.presetsRequested.connect(self._on_presets_requested)
         self.chat_view.setEnabled(False)  # Disabled until session is selected
         chat_v_layout.addWidget(self.chat_view)
         # В тестах ModeMenuWidget может быть пропатчен до обычного QWidget без этого сигнала.
@@ -303,7 +340,7 @@ class MainWindow(QMainWindow):
         chat_layout.addWidget(self.workspace_splitter, 1)
 
         # Другие страницы
-        self.settings_page = ConfigEditorWidget(self.facade.config_service)
+        self.settings_page = ConfigEditorWidget(self.facade.config_service, facade=self.facade)
         self.settings_page.load_config()
         self.settings_page.configSaved.connect(self._on_config_saved)
 
@@ -316,7 +353,10 @@ class MainWindow(QMainWindow):
         self.task_queue = TaskQueueWidget(self.facade)
         self.task_queue.hide()  # доступен через Tasks в контекстной панели
         logs_layout.addWidget(self.task_queue, 0)
-        self.log_viewer = LogViewerWidget(self.facade.task_service)
+        _initial_log_path = ""
+        if self.facade.runtime_params is not None:
+            _initial_log_path = self.facade.runtime_params.log_path
+        self.log_viewer = LogViewerWidget(self.facade.task_service, log_path=_initial_log_path)
         logs_layout.addWidget(self.log_viewer, 1)
 
         self.status_page = StatusPanelWidget(self.facade)
@@ -655,6 +695,68 @@ class MainWindow(QMainWindow):
 
         ensure_async(_do_cancel(), parent=self)
 
+    def _on_clear_queue_requested(self) -> None:
+        """Очищает очередь задач активной сессии."""
+        session_uid = self._current_session_uid
+        if not session_uid:
+            self.statusBar().showMessage(
+                t("desktop.msg.select_session_first", self.facade.ui_language)
+            )
+            return
+        ok = self.facade.clear_session_queue(session_uid)
+        lang = self.facade.ui_language
+        if ok:
+            msg = t("desktop.chat.msg_queue_cleared", lang)
+            self.chat_view.append_message("agent", msg)
+            self._persist_chat_message(session_uid, "agent", msg)
+        else:
+            self.statusBar().showMessage(t("desktop.msg.select_session_first", lang))
+
+    def _on_presets_requested(self) -> None:
+        """Открывает диалог выбора пресета и отправляет выбранный prompt."""
+        if not self._current_session_uid:
+            self.statusBar().showMessage(
+                t("desktop.msg.select_session_first", self.facade.ui_language)
+            )
+            return
+        presets = self.facade.get_presets()
+        lang = self.facade.ui_language
+        self._show_presets_dialog(presets, lang)
+
+    def _show_presets_dialog(self, presets: dict, lang: str) -> None:
+        """Показывает диалог выбора пресета."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QDialogButtonBox, QLabel
+        if not presets:
+            self.chat_view.append_message("agent", t("desktop.chat.msg_no_presets", lang))
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("desktop.chat.presets_dialog_title", lang))
+        dialog.setMinimumWidth(420)
+        layout = QVBoxLayout(dialog)
+        hint = QLabel(t("desktop.chat.presets_dialog_hint", lang))
+        layout.addWidget(hint)
+        list_widget = QListWidget()
+        preset_items = list(presets.items())
+        for name, prompt in preset_items:
+            item = QListWidgetItem(name)
+            item.setToolTip(prompt)
+            list_widget.addItem(item)
+        if preset_items:
+            list_widget.setCurrentRow(0)
+        list_widget.itemDoubleClicked.connect(lambda _: dialog.accept())
+        layout.addWidget(list_widget)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            idx = list_widget.currentRow()
+            if 0 <= idx < len(preset_items):
+                _name, prompt = preset_items[idx]
+                self._on_message_sent(prompt, attachments=None)
+
     def _persist_chat_message(self, session_id: str, role: str, text: str, attachments: Optional[list[dict]] = None) -> None:
         sid = str(session_id)
         r = str(role or "").strip()
@@ -690,6 +792,12 @@ class MainWindow(QMainWindow):
         event = note.event
         payload = note.payload
         session_uid = payload.get("session_id") or payload.get("session_uid")
+
+        if event == "startup:runtime_params_ready":
+            log_path = str(payload.get("log_path") or "")
+            if log_path:
+                self.log_viewer.set_log_path(log_path)
+            return
 
         # UI-level messaging from modes (menus, dialogs, etc.)
         if event == "ui:theme_changed":
@@ -1093,10 +1201,40 @@ class MainWindow(QMainWindow):
                     ("limits", "quota", "tokens", "usage"), session_section, "",
                 ),
                 CommandPaletteItem(
+                    "session:clear_queue",
+                    t("desktop.palette.cmd.clear_queue.title", lang),
+                    t("desktop.palette.cmd.clear_queue.subtitle", lang),
+                    ("clear", "queue", "задачи"), session_section, "",
+                ),
+                CommandPaletteItem(
+                    "session:presets",
+                    t("desktop.palette.cmd.presets.title", lang),
+                    t("desktop.palette.cmd.presets.subtitle", lang),
+                    ("presets", "пресеты", "задачи"), session_section, "",
+                ),
+                CommandPaletteItem(
                     "git:refresh",
                     t("desktop.palette.cmd.refresh_git.title", lang),
                     t("desktop.palette.cmd.refresh_git.subtitle", lang),
                     ("git", "refresh"), git_section, "",
+                ),
+            ]
+        )
+        # Admin commands (Фичи A и B)
+        admin_section = t("desktop.palette.section.admin", lang)
+        commands.extend(
+            [
+                CommandPaletteItem(
+                    "admin:show_state",
+                    t("desktop.palette.cmd.show_state.title", lang),
+                    t("desktop.palette.cmd.show_state.subtitle", lang),
+                    ("state", "json", "debug"), admin_section, "",
+                ),
+                CommandPaletteItem(
+                    "admin:selfupdate",
+                    t("desktop.palette.cmd.selfupdate.title", lang),
+                    t("desktop.palette.cmd.selfupdate.subtitle", lang),
+                    ("update", "git", "pull", "restart"), admin_section, "",
                 ),
             ]
         )
@@ -1166,9 +1304,79 @@ class MainWindow(QMainWindow):
 
             ensure_async(_show_limits(), parent=self)
             return
+        if command_id == "session:clear_queue":
+            self._on_clear_queue_requested()
+            return
+        if command_id == "session:presets":
+            self._on_presets_requested()
+            return
         if command_id == "git:refresh":
             self.git_panel.refresh_status()
             self.git_panel.refresh_history()
+            return
+        if command_id == "admin:show_state":
+            self._show_state_json_dialog()
+            return
+        if command_id == "admin:selfupdate":
+            self._confirm_and_selfupdate()
+
+    def _show_state_json_dialog(self) -> None:
+        """Показать state.json активной сессии в QDialog (Фича A)."""
+        lang = self.facade.ui_language
+        session_uid = self._current_session_uid
+        if not session_uid:
+            self.statusBar().showMessage(t("desktop.msg.select_session_first", lang))
+            return
+        loader = getattr(self.facade, "get_session_state_json", None)
+        if not callable(loader):
+            self.statusBar().showMessage(t("desktop.admin.state_dialog.api_unavailable", lang))
+            return
+        try:
+            result = loader(session_uid)
+        except Exception:
+            self.logger.exception("_show_state_json_dialog failed session_uid=%s", session_uid)
+            self.statusBar().showMessage(t("desktop.admin.state_dialog.load_error", lang))
+            return
+        if not isinstance(result, dict) or not result.get("ok"):
+            error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
+            self.statusBar().showMessage(
+                t("desktop.admin.msg.error_fmt", lang, error=error)
+            )
+            return
+        payload = result.get("payload") or {}
+        dlg = StateJsonDialog(payload, lang=lang, parent=self)
+        dlg.exec()
+
+    def _confirm_and_selfupdate(self) -> None:
+        """Подтверждение и выполнение selfupdate (Фича B)."""
+        lang = self.facade.ui_language
+        reply = QMessageBox.warning(
+            self,
+            t("desktop.admin.selfupdate.confirm_title", lang),
+            t("desktop.admin.selfupdate.confirm_msg", lang),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        caller = getattr(self.facade, "selfupdate_desktop", None)
+        if not callable(caller):
+            self.statusBar().showMessage(t("desktop.admin.selfupdate.api_unavailable", lang))
+            return
+        self.statusBar().showMessage(t("desktop.admin.selfupdate.pulling", lang))
+        try:
+            result = caller()
+        except Exception:
+            self.logger.exception("_confirm_and_selfupdate failed")
+            self.statusBar().showMessage(t("desktop.admin.selfupdate.error", lang))
+            return
+        if isinstance(result, dict) and not result.get("ok"):
+            error = str(result.get("error") or "unknown")
+            output = str(result.get("output") or "")
+            msg = t("desktop.admin.selfupdate.failed", lang, error=error)
+            if output:
+                msg += f"\n{output}"
+            QMessageBox.warning(self, t("desktop.admin.selfupdate.failed_title", lang), msg)
 
     def _record_palette_command(self, command_id: str) -> None:
         existing = list(getattr(self.ui_state_service.state, "command_palette_recent", []) or [])

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -84,6 +85,45 @@ class SchedulerPanelWidget(QWidget):
         self.refresh_button.clicked.connect(self.refresh)
         controls_layout.addWidget(self.refresh_button)
         layout.addLayout(controls_layout)
+
+        self.settings_box = QGroupBox(t("desktop.scheduler.settings_group", lang))
+        self.settings_box.setObjectName("scheduler_settings_box")
+        settings_layout = QFormLayout(self.settings_box)
+        settings_layout.setContentsMargins(8, 8, 8, 8)
+        settings_layout.setSpacing(8)
+
+        self.settings_timezone_label = QLabel(t("desktop.scheduler.settings_timezone_label", lang))
+        self.settings_timezone_input = QLineEdit()
+        self.settings_timezone_input.setObjectName("scheduler_settings_timezone")
+        self.settings_timezone_input.setPlaceholderText("UTC")
+        settings_layout.addRow(self.settings_timezone_label, self.settings_timezone_input)
+
+        self.settings_tick_label = QLabel(t("desktop.scheduler.settings_tick_label", lang))
+        self.settings_tick_input = QSpinBox()
+        self.settings_tick_input.setObjectName("scheduler_settings_tick")
+        self.settings_tick_input.setRange(1, 86400)
+        self.settings_tick_input.setValue(60)
+        settings_layout.addRow(self.settings_tick_label, self.settings_tick_input)
+
+        self.settings_concurrency_label = QLabel(t("desktop.scheduler.settings_concurrency_label", lang))
+        self.settings_concurrency_input = QSpinBox()
+        self.settings_concurrency_input.setObjectName("scheduler_settings_concurrency")
+        self.settings_concurrency_input.setRange(1, 100)
+        self.settings_concurrency_input.setValue(1)
+        settings_layout.addRow(self.settings_concurrency_label, self.settings_concurrency_input)
+
+        self.settings_apply_button = QPushButton(t("desktop.scheduler.settings_apply", lang))
+        self.settings_apply_button.setObjectName("scheduler_settings_apply_button")
+        self.settings_apply_button.clicked.connect(self._apply_settings)
+        settings_layout.addRow("", self.settings_apply_button)
+
+        self.settings_status_label = QLabel("")
+        self.settings_status_label.setObjectName("scheduler_settings_status")
+        self.settings_status_label.setWordWrap(True)
+        settings_layout.addRow("", self.settings_status_label)
+
+        layout.addWidget(self.settings_box)
+        self._load_settings()
 
         body_layout = QHBoxLayout()
         body_layout.setContentsMargins(0, 0, 0, 0)
@@ -578,11 +618,60 @@ class SchedulerPanelWidget(QWidget):
             task.add_done_callback(lambda done: self._background_tasks.discard(done))
         return task
 
+    def _load_settings(self) -> None:
+        try:
+            settings = self.facade.get_scheduler_settings()
+        except Exception:
+            self.logger.exception("desktop scheduler _load_settings failed")
+            return
+        self.settings_timezone_input.setText(str(settings.get("timezone", "") or ""))
+        tick = int(settings.get("tick_interval_sec", 60) or 60)
+        self.settings_tick_input.setValue(max(1, tick))
+        concurrency = int(settings.get("max_concurrent_jobs", 1) or 1)
+        self.settings_concurrency_input.setValue(max(1, concurrency))
+
+    def _apply_settings(self) -> None:
+        lang = self.facade.ui_language
+        timezone = str(self.settings_timezone_input.text() or "").strip()
+        if not timezone:
+            self.settings_status_label.setText(
+                t("desktop.scheduler.settings_err_timezone", lang)
+            )
+            return
+
+        async def _save() -> None:
+            try:
+                result = await self.facade.update_scheduler_settings(
+                    timezone=timezone,
+                    tick_interval_sec=int(self.settings_tick_input.value()),
+                    max_concurrent_jobs=int(self.settings_concurrency_input.value()),
+                )
+                if result.get("ok"):
+                    self.settings_status_label.setText(
+                        t("desktop.scheduler.settings_saved", lang)
+                    )
+                else:
+                    self.settings_status_label.setText(
+                        t("desktop.scheduler.settings_err_save", lang, error=str(result.get("error", "")))
+                    )
+            except Exception as exc:
+                self.logger.exception("desktop scheduler apply_settings failed")
+                self.settings_status_label.setText(
+                    t("desktop.scheduler.settings_err_save", lang, error=exc)
+                )
+
+        self._schedule_async(_save)
+
     def retranslate_ui(self, lang: str) -> None:
         self.title_label.setText(t("desktop.scheduler.title", lang))
         self.project_label.setText(t("desktop.scheduler.project_label", lang))
         self.session_label.setText(t("desktop.scheduler.session_uid_label", lang))
         self.refresh_button.setText(t("desktop.btn.refresh", lang))
+        self.settings_box.setTitle(t("desktop.scheduler.settings_group", lang))
+        self.settings_timezone_label.setText(t("desktop.scheduler.settings_timezone_label", lang))
+        self.settings_tick_label.setText(t("desktop.scheduler.settings_tick_label", lang))
+        self.settings_concurrency_label.setText(t("desktop.scheduler.settings_concurrency_label", lang))
+        self.settings_apply_button.setText(t("desktop.scheduler.settings_apply", lang))
         self.jobs_box.setTitle(t("desktop.scheduler.jobs_group", lang))
         self.form_box.setTitle(t("desktop.scheduler.editor_group", lang))
         self.job_name_row_label.setText(t("desktop.scheduler.name_label", lang))

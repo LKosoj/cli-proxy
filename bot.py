@@ -33,6 +33,8 @@ from tg.command_registry import build_command_registry
 from sessions.conversation_scope import ConversationScope
 from sessions.session_ui import SessionUI
 from app.services.git_ops_service import GitOps
+from app.services.remote_git_service import RemoteGitService
+from app.services.remote_shell_service import RemoteShellService
 from app.services.metrics_service import Metrics
 from app.services.mcp_bridge_service import MCPBridge
 from miniapp import MiniAppServer
@@ -278,6 +280,8 @@ class BotApp:
             self._short_label,
             self._handle_cli_input,
         )
+        _remote_shell = RemoteShellService(self.ssh_service)
+        self.remote_git = RemoteGitService(_remote_shell)
         self.mcp = MCPBridge(self.config, self)
         self.miniapp_server = MiniAppServer(self)
         self._html_process_pool = concurrent.futures.ProcessPoolExecutor(max_workers=1)
@@ -2613,6 +2617,30 @@ class BotApp:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         await self.handlers.cmd_lint_gate_dry_run(update, context)
+
+    async def cmd_sessions_search(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_sessions_search(update, context)
+
+    async def cmd_git_branch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_git_branch(update, context)
+
+    async def cmd_git_checkout(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_git_checkout(update, context)
+
+    async def cmd_git_stash_pop(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_git_stash_pop(update, context)
+
+    async def cmd_git_show(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_git_show(update, context)
+
+    async def cmd_remote_git_pull(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_remote_git_pull(update, context)
+
+    async def cmd_remote_git_push(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_remote_git_push(update, context)
+
+    async def cmd_remote_git_fetch(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_remote_git_fetch(update, context)
 
     async def run_prompt_raw(
         self,

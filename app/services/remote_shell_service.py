@@ -406,6 +406,183 @@ class RemoteShellService:
 
         return GitResult(git_available=True, output=r.stdout or "", entries=entries)
 
+    async def git_fetch(
+        self,
+        workdir: str,
+        host_alias: str,
+        cwd: str,
+        *,
+        remote: str = "origin",
+        timeout: int = 60,
+    ) -> GitResult:
+        """Run ``git fetch --prune <remote>`` on the remote target."""
+        if not await self._git_check(workdir, host_alias, cwd):
+            return GitResult(git_available=False, error="not a git repository")
+
+        r = await self._ssh.exec(
+            workdir, host_alias,
+            f"cd {_shell_quote(cwd)} && git fetch --prune {_shell_quote(remote)}",
+            timeout_sec=timeout,
+        )
+        if r.exit_code != 0:
+            return GitResult(git_available=True, error=(r.stderr or "").strip())
+        return GitResult(git_available=True, output=(r.stdout or "") + (r.stderr or ""))
+
+    async def git_pull(
+        self,
+        workdir: str,
+        host_alias: str,
+        cwd: str,
+        *,
+        strategy: str = "ff",
+        remote: str = "origin",
+        timeout: int = 60,
+    ) -> GitResult:
+        """Run ``git pull`` on the remote target.
+
+        strategy:
+          - "ff"     — ``--ff-only`` (default, safe)
+          - "merge"  — regular merge pull
+          - "rebase" — ``--rebase``
+        """
+        if not await self._git_check(workdir, host_alias, cwd):
+            return GitResult(git_available=False, error="not a git repository")
+
+        strategy_flags: dict[str, list[str]] = {
+            "ff": ["--ff-only"],
+            "merge": [],
+            "rebase": ["--rebase"],
+        }
+        flags = strategy_flags.get(strategy, ["--ff-only"])
+        flags_str = " ".join(flags)
+        cmd = f"cd {_shell_quote(cwd)} && git pull {flags_str} {_shell_quote(remote)}".strip()
+        r = await self._ssh.exec(workdir, host_alias, cmd, timeout_sec=timeout)
+        if r.exit_code != 0:
+            return GitResult(
+                git_available=True,
+                output=(r.stdout or "").strip(),
+                error=(r.stderr or "").strip(),
+            )
+        return GitResult(git_available=True, output=(r.stdout or "") + (r.stderr or ""))
+
+    async def git_push(
+        self,
+        workdir: str,
+        host_alias: str,
+        cwd: str,
+        *,
+        remote: str = "origin",
+        timeout: int = 60,
+    ) -> GitResult:
+        """Run ``git push`` on the remote target, setting upstream when needed."""
+        if not await self._git_check(workdir, host_alias, cwd):
+            return GitResult(git_available=False, error="not a git repository")
+
+        # Determine current branch and upstream
+        rb = await self._ssh.exec(
+            workdir, host_alias,
+            f"cd {_shell_quote(cwd)} && git rev-parse --abbrev-ref HEAD",
+            timeout_sec=10,
+        )
+        branch = (rb.stdout or "").strip() if rb.exit_code == 0 else ""
+        ru = await self._ssh.exec(
+            workdir, host_alias,
+            f"cd {_shell_quote(cwd)} && "
+            "git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null",
+            timeout_sec=10,
+        )
+        has_upstream = ru.exit_code == 0 and (ru.stdout or "").strip()
+        if branch and not has_upstream:
+            cmd = (
+                f"cd {_shell_quote(cwd)} && "
+                f"git push -u {_shell_quote(remote)} {_shell_quote(branch)}"
+            )
+        else:
+            cmd = f"cd {_shell_quote(cwd)} && git push {_shell_quote(remote)}"
+
+        r = await self._ssh.exec(workdir, host_alias, cmd, timeout_sec=timeout)
+        if r.exit_code != 0:
+            return GitResult(
+                git_available=True,
+                output=(r.stdout or "").strip(),
+                error=(r.stderr or "").strip(),
+            )
+        return GitResult(git_available=True, output=(r.stdout or "") + (r.stderr or ""))
+
+    async def git_checkout(
+        self,
+        workdir: str,
+        host_alias: str,
+        cwd: str,
+        branch: str,
+        *,
+        timeout: int = 30,
+    ) -> GitResult:
+        """Run ``git checkout <branch>`` on the remote target."""
+        if not await self._git_check(workdir, host_alias, cwd):
+            return GitResult(git_available=False, error="not a git repository")
+
+        r = await self._ssh.exec(
+            workdir, host_alias,
+            f"cd {_shell_quote(cwd)} && git checkout {_shell_quote(branch)}",
+            timeout_sec=timeout,
+        )
+        if r.exit_code != 0:
+            return GitResult(git_available=True, error=(r.stderr or "").strip())
+        return GitResult(git_available=True, output=(r.stdout or "") + (r.stderr or ""))
+
+    async def git_merge(
+        self,
+        workdir: str,
+        host_alias: str,
+        cwd: str,
+        branch: str,
+        *,
+        timeout: int = 60,
+    ) -> GitResult:
+        """Run ``git merge <branch>`` on the remote target."""
+        if not await self._git_check(workdir, host_alias, cwd):
+            return GitResult(git_available=False, error="not a git repository")
+
+        r = await self._ssh.exec(
+            workdir, host_alias,
+            f"cd {_shell_quote(cwd)} && git merge {_shell_quote(branch)}",
+            timeout_sec=timeout,
+        )
+        if r.exit_code != 0:
+            return GitResult(
+                git_available=True,
+                output=(r.stdout or "").strip(),
+                error=(r.stderr or "").strip(),
+            )
+        return GitResult(git_available=True, output=(r.stdout or "") + (r.stderr or ""))
+
+    async def git_rebase(
+        self,
+        workdir: str,
+        host_alias: str,
+        cwd: str,
+        branch: str,
+        *,
+        timeout: int = 60,
+    ) -> GitResult:
+        """Run ``git rebase <branch>`` on the remote target."""
+        if not await self._git_check(workdir, host_alias, cwd):
+            return GitResult(git_available=False, error="not a git repository")
+
+        r = await self._ssh.exec(
+            workdir, host_alias,
+            f"cd {_shell_quote(cwd)} && git rebase {_shell_quote(branch)}",
+            timeout_sec=timeout,
+        )
+        if r.exit_code != 0:
+            return GitResult(
+                git_available=True,
+                output=(r.stdout or "").strip(),
+                error=(r.stderr or "").strip(),
+            )
+        return GitResult(git_available=True, output=(r.stdout or "") + (r.stderr or ""))
+
 
 def _shell_quote(s: str) -> str:
     """Quote a string for safe use in a shell command."""

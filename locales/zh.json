@@ -37,7 +37,9 @@
       "status": "状态",
       "scheduler": "调度器",
       "settings": "设置",
-      "admin": "管理"
+      "admin": "管理",
+      "tasks": "任务",
+      "reports": "报告"
     },
     "btn": {
       "refresh": "刷新",
@@ -491,6 +493,23 @@
       "run_validation_first": "先运行校验",
       "promote": "应用",
       "promoting": "应用中…"
+    },
+    "tasks": {
+      "empty": "没有活动任务。",
+      "btn_cancel": "取消",
+      "err_cancel": "取消错误:",
+      "err_load": "加载任务错误:"
+    },
+    "reports": {
+      "empty": "请选择会话以查看报告。",
+      "no_reports": "暂无报告。",
+      "loading": "加载中...",
+      "select_report": "请从列表中选择报告。",
+      "history_title": "报告历史",
+      "viewer_title": "查看",
+      "btn_download_md": "下载 MD",
+      "err_load": "加载错误：",
+      "err_download": "下载错误："
     }
   },
   "btn": {
@@ -765,7 +784,27 @@
       "clone_error": "git clone 出错:\\n{output}",
       "clone_launch_error": "无法启动 git clone: {e}",
       "clone_starting": "正在启动 git clone...",
-      "operations_menu": "Git 操作:"
+      "operations_menu": "Git 操作:",
+      "branch_created": "分支已创建：{branch}",
+      "branch_usage": "用法：/git_branch <name>",
+      "checkout_done": "已切换到分支：{branch}",
+      "checkout_usage": "用法：/git_checkout <branch>",
+      "stash_pop_done": "Stash pop 完成。",
+      "show_usage": "用法：/git_show [<commit>]",
+      "show_done": "Git show {ref}:",
+      "remote_pull_usage": "用法：/remote_git_pull <host> [ff|merge|rebase]",
+      "remote_pull_done": "远程 git pull（{host}）：完成。",
+      "remote_pull_error": "远程 git pull（{host}）：错误 — {error}",
+      "remote_push_usage": "用法：/remote_git_push <host>",
+      "remote_push_done": "远程 git push（{host}）：完成。",
+      "remote_push_error": "远程 git push（{host}）：错误 — {error}",
+      "remote_fetch_usage": "用法：/remote_git_fetch <host>",
+      "remote_fetch_done": "远程 git fetch（{host}）：完成。",
+      "remote_fetch_error": "远程 git fetch（{host}）：错误 — {error}",
+      "remote_host_not_found": "未找到 SSH 主机\"{host}\"。",
+      "remote_no_root": "主机\"{host}\"未配置 remote_project_root。",
+      "remote_not_git": "主机\"{host}\"上的目录不是 git 仓库。",
+      "remote_output_prefix": "输出："
     },
     "lint": {
       "autopause_not_active": "Lint Evolution L{level}：暂停未激活——无变更。",
@@ -893,6 +932,33 @@
     },
     "mode": {
       "desc": "模式菜单：{label}。"
+    },
+    "sessions_search": {
+      "desc": "按名称、ID 或工作目录中的子字符串搜索会话。",
+      "usage": "用法：/sessions_search <查询>",
+      "not_found": "未找到与查询「{query}」匹配的会话。",
+      "header": "找到会话数：{n}"
+    },
+    "git_branch": {
+      "desc": "创建 git 分支。"
+    },
+    "git_checkout": {
+      "desc": "切换到 git 分支。"
+    },
+    "git_stash_pop": {
+      "desc": "应用最近的 git stash pop。"
+    },
+    "git_show": {
+      "desc": "显示提交差异（默认: HEAD）。"
+    },
+    "remote_git_pull": {
+      "desc": "在远程 SSH 主机上执行 git pull。用法：/remote_git_pull <host> [ff|merge|rebase]"
+    },
+    "remote_git_push": {
+      "desc": "在远程 SSH 主机上执行 git push。用法：/remote_git_push <host>"
+    },
+    "remote_git_fetch": {
+      "desc": "在远程 SSH 主机上执行 git fetch。用法：/remote_git_fetch <host>"
     }
   },
   "desktop": {
@@ -909,6 +975,9 @@
       "refresh": "刷新",
       "new_file": "新建文件",
       "new_dir": "新建文件夹",
+      "rename": "重命名",
+      "upload": "上传",
+      "download": "下载",
       "reload": "重新加载",
       "force_save": "强制保存",
       "send": "发送",
@@ -971,7 +1040,10 @@
         "stash": "暂存",
         "stash_pop": "弹出暂存",
         "create_branch": "创建分支",
-        "switch_branch": "切换分支"
+        "switch_branch": "切换分支",
+        "fetch": "Fetch",
+        "merge": "合并",
+        "rebase": "Rebase"
       },
       "msg": {
         "select_commit": "请选择一个提交以查看差异。",
@@ -983,14 +1055,22 @@
         "unexpected_error": "发生了意外错误：\n{error}",
         "fetching_status": "正在获取 git 状态...",
         "generate_msg_failed": "消息生成失败。请手动输入或在 config.yaml 中配置 openai_api_key。",
-        "generate_msg_failed_check": "消息生成失败。请检查 config.yaml 中的 openai_api_key 设置。"
+        "generate_msg_failed_check": "消息生成失败。请检查 config.yaml 中的 openai_api_key 设置。",
+        "conflict": "检测到冲突:\n{files}",
+        "merge_ok": "合并成功。",
+        "rebase_ok": "变基成功。",
+        "fetch_ok": "Fetch 成功。"
       },
       "dialog": {
         "create_branch_title": "创建分支",
         "create_branch_prompt": "输入新分支名称:",
         "switch_branch_title": "切换分支",
         "switch_branch_prompt": "输入要切换到的分支名称:",
-        "diff_title": "提交 {hash} 的差异"
+        "diff_title": "提交 {hash} 的差异",
+        "merge_branch_title": "合并分支",
+        "merge_branch_prompt": "请输入要合并的分支名:",
+        "rebase_branch_title": "变基到分支",
+        "rebase_branch_prompt": "请输入目标分支名:"
       },
       "history": {
         "col_date": "日期",
@@ -1000,7 +1080,8 @@
       },
       "group": {
         "other_ops": "其他操作",
-        "remote_ops": "远程操作"
+        "remote_ops": "远程操作",
+        "rebase_merge_ops": "合并 / 变基"
       }
     },
     "log": {
@@ -1018,12 +1099,16 @@
       "tasks_monitor_title": "活动任务监视器",
       "btn": {
         "apply_filters": "应用过滤器",
-        "refresh_tasks": "刷新任务"
+        "refresh_tasks": "刷新任务",
+        "download": "下载"
       },
       "group": {
         "module_filters": "模块过滤器",
         "level_filters": "日志级别过滤器"
-      }
+      },
+      "type_label": "类型：",
+      "not_found": "日志文件未找到",
+      "no_log_path": "日志路径未配置"
     },
     "session": {
       "search_placeholder": "搜索会话...",
@@ -1055,7 +1140,23 @@
       "revision_conflict": "版本冲突。当前版本: {revision}。",
       "name_label": "名称：",
       "delete_confirm": "删除 '{path}'?",
-      "path_prefix": "路径: {path}"
+      "path_prefix": "路径: {path}",
+      "delete_recursive_title": "删除文件夹",
+      "delete_recursive_confirm": "文件夹 '{path}' 将被递归删除，包括所有内容。是否继续？",
+      "rename_title": "重命名",
+      "rename_label": "新名称：",
+      "renaming": "重命名中...",
+      "renamed": "已重命名：{name}",
+      "rename_error": "重命名失败：{error}",
+      "upload_title": "上传文件",
+      "all_files_filter": "所有文件 (*)",
+      "uploading": "上传中...",
+      "uploaded": "已上传：{filename}",
+      "upload_error": "上传失败：{error}",
+      "download_title": "保存文件",
+      "downloading": "下载中...",
+      "downloaded": "已保存：{path}",
+      "download_error": "下载失败：{error}"
     },
     "chat": {
       "input_placeholder": "输入消息...（Ctrl+Enter 发送）",
@@ -1067,7 +1168,13 @@
       "status_ready": "就绪",
       "btn_stop": "停止",
       "status_thinking": "思考中...",
-      "status_waiting_answer": "等待回答..."
+      "status_waiting_answer": "等待回答...",
+      "btn_clear_queue": "清空队列",
+      "btn_presets": "预设",
+      "msg_queue_cleared": "任务队列已清空。",
+      "msg_no_presets": "未配置预设。请在 config.yaml → presets 中添加。",
+      "presets_dialog_title": "选择预设",
+      "presets_dialog_hint": "选择要运行的预设："
     },
     "status": {
       "ready": "就绪"
@@ -1080,7 +1187,8 @@
         "config": "配置",
         "chat": "聊天",
         "autonomy": "自主性",
-        "scheduler": "调度器"
+        "scheduler": "调度器",
+        "lint_evolution": "Lint 演进"
       },
       "btn": {
         "enable": "启用",
@@ -1093,7 +1201,8 @@
         "reload": "重新加载",
         "add_row": "添加",
         "save_rows": "保存",
-        "reload_config": "重新加载配置"
+        "reload_config": "重新加载配置",
+        "refresh": "刷新"
       },
       "label": {
         "session": "会话：",
@@ -1293,6 +1402,38 @@
         "select_skill_install": "选择待安装技能",
         "no_session": "未选择会话。",
         "api_unavailable": "API 不可用。"
+      },
+      "lint": {
+        "status_group": "状态",
+        "autopause_group": "自动暂停",
+        "schema_group": "模式历史",
+        "gate_group": "Gate 试运行",
+        "btn": {
+          "pause": "暂停",
+          "resume": "恢复",
+          "run": "运行"
+        },
+        "msg": {
+          "api_unavailable": "Lint Evolution API 不可用",
+          "load_error": "加载错误",
+          "paused": "L{level} 已暂停",
+          "resumed": "L{level} 暂停已解除",
+          "not_paused": "L{level} 未处于暂停状态"
+        }
+      },
+      "state_dialog": {
+        "title": "会话 state.json",
+        "api_unavailable": "状态 API 不可用",
+        "load_error": "加载状态失败"
+      },
+      "selfupdate": {
+        "confirm_title": "确认自我更新",
+        "confirm_msg": "执行 git pull 并重启应用？",
+        "pulling": "正在执行 git pull...",
+        "error": "自我更新错误",
+        "failed": "自我更新失败：{error}",
+        "failed_title": "自我更新错误",
+        "api_unavailable": "自我更新 API 不可用"
       }
     },
     "msg": {
@@ -1474,6 +1615,22 @@
         "open_admin": {
           "subtitle": "管理面板",
           "title": "打开管理面板"
+        },
+        "clear_queue": {
+          "title": "清空任务队列",
+          "subtitle": "从队列中删除所有待处理任务"
+        },
+        "presets": {
+          "title": "任务预设",
+          "subtitle": "选择并运行预设任务"
+        },
+        "show_state": {
+          "title": "显示 state.json",
+          "subtitle": "查看当前会话状态"
+        },
+        "selfupdate": {
+          "title": "自我更新",
+          "subtitle": "git pull 并重启应用"
         }
       },
       "hint": "输入以搜索命令，回车执行",
@@ -1481,7 +1638,8 @@
         "navigation": "导航",
         "git": "Git",
         "panels": "面板",
-        "session": "会话"
+        "session": "会话",
+        "admin": "管理"
       },
       "footer_reopen": "Ctrl+K：重新打开",
       "title": "命令面板",
@@ -1524,7 +1682,15 @@
       "err_resume": "恢复调度任务失败：{error}",
       "project_label": "项目：",
       "no_sessions": "该项目没有用于通知目标的打开的桌面会话。",
-      "no_projects": "没有可用的项目。"
+      "no_projects": "没有可用的项目。",
+      "settings_group": "调度器设置",
+      "settings_timezone_label": "时区：",
+      "settings_tick_label": "轮询间隔（秒）：",
+      "settings_concurrency_label": "最大并发任务数：",
+      "settings_apply": "应用",
+      "settings_saved": "调度器设置已保存。",
+      "settings_err_save": "保存调度器设置失败：{error}",
+      "settings_err_timezone": "请输入有效的时区。"
     },
     "modepanel": {
       "label": {
@@ -1619,7 +1785,13 @@
       "read_timeout": "读取超时（秒）",
       "tab": {
         "tools": "工具",
-        "defaults": "默认设置"
+        "defaults": "默认设置",
+        "presets": "预设",
+        "thread_mode": "线程模式",
+        "webhooks": "Webhooks",
+        "scheduler": "调度器",
+        "security": "安全",
+        "lint_evolution": "Lint 演进"
       },
       "msg_restart_required": "需要重启",
       "host": "主机",
@@ -1657,7 +1829,125 @@
       "no_changes": "无更改",
       "admin_ids": "管理员 ID",
       "msg_errors": "错误",
-      "tool_mode": "模式"
+      "tool_mode": "模式",
+      "reload_runtime_btn": "应用配置",
+      "reload_runtime_ok": "配置已应用: {applied}",
+      "reload_runtime_err": "应用配置失败",
+      "btn_add": "添加",
+      "btn_delete": "删除",
+      "btn_edit_json": "编辑 JSON",
+      "btn_edit_presets": "编辑预设",
+      "presets_title": "预设",
+      "preset_name": "名称",
+      "preset_prompt": "提示词",
+      "mcp_token": "MCP 令牌",
+      "mcp_clients_dialog_title": "MCP 客户端（JSON）",
+      "mcp_clients_json_hint": "以 JSON 格式编辑 MCP 客户端列表：",
+      "write_timeout": "写入超时（秒）",
+      "pool_timeout": "连接池超时（秒）",
+      "polling_timeout": "轮询超时（秒）",
+      "poll_interval": "轮询间隔（秒）",
+      "connection_pool_size": "连接池大小",
+      "user_access": "用户访问",
+      "user_workdirs": "用户工作目录（JSON）",
+      "user_modes": "用户模式（JSON）",
+      "paths_section": "路径",
+      "images_section": "图片",
+      "api_keys_extra": "附加 API 密钥",
+      "agent_behaviour": "代理行为",
+      "context_section": "上下文和 Token",
+      "skills_section": "技能",
+      "manager_section": "Manager / Analyst / Webmaster",
+      "state_path": "State 路径",
+      "desktop_state_path": "Desktop State 路径",
+      "toolhelp_path": "Tool Help 路径",
+      "image_temp_dir": "图片临时目录",
+      "html_filename_prefix": "HTML 文件名前缀",
+      "image_max_mb": "最大图片大小（MiB）",
+      "summary_max_chars": "最大摘要大小（字符）",
+      "openai_big_model": "OpenAI 大模型",
+      "openai_base_url": "OpenAI 基础 URL",
+      "tavily_api_key": "Tavily API 密钥",
+      "jina_api_key": "Jina API 密钥",
+      "clarification_enabled": "启用澄清提示",
+      "clarification_keywords": "澄清关键词",
+      "default_cli": "默认 CLI",
+      "codebase_mapper_usage": "Codebase Mapper 使用方式",
+      "run_artifacts_enabled": "存储运行产物",
+      "run_artifacts_retention_days": "产物保留天数",
+      "run_doctor_enabled": "Doctor/Recover 检查",
+      "run_boundary_validation_enabled": "阶段边界验证",
+      "run_metrics_enabled": "运行指标",
+      "llm_trace_enabled": "LLM 跟踪至 EVENTS.jsonl",
+      "tool_disclosure": "工具披露模式",
+      "context_window_tokens": "上下文窗口（Token）",
+      "context_reserve_tokens": "保留 Token",
+      "summarization_threshold": "摘要阈值",
+      "skill_discovery_mode": "技能发现模式",
+      "skill_install_policy": "技能安装策略",
+      "skill_registry_paths": "技能注册表路径",
+      "skill_allowlisted_sources": "允许的技能来源",
+      "manager_max_tasks": "最大任务数",
+      "manager_max_attempts": "最大尝试次数",
+      "manager_decompose_timeout": "分解超时（秒）",
+      "manager_dev_timeout": "开发超时（秒）",
+      "manager_review_timeout": "评审超时（秒）",
+      "manager_dev_report_max_chars": "开发报告最大字符数",
+      "manager_auto_resume": "自动恢复",
+      "manager_auto_commit": "自动提交",
+      "manager_response_archive": "归档响应",
+      "analyst_use_cli_timeout": "分析师 CLI 超时（秒）",
+      "webmaster_use_cli_timeout": "网站管理员 CLI 超时（秒）",
+      "webmaster_max_fix_iterations": "最大修复迭代次数",
+      "cli_routing": "CLI 路由（JSON）",
+      "interactive_command": "交互式命令",
+      "resume_command": "恢复命令",
+      "image_command": "图片命令",
+      "auto_commands": "自动命令",
+      "resume_regex": "恢复正则",
+      "help_cmd": "帮助命令",
+      "tool_env": "环境变量（JSON）",
+      "separate_stderr": "分离 Stderr",
+      "no_session_persistence": "新建时不持久化会话",
+      "tool_name_dialog_title": "新工具",
+      "tool_name_label": "工具名称：",
+      "err_tool_name_exists": "工具 '{name}' 已存在。",
+      "confirm_delete_tool": "删除工具 '{name}'？",
+      "memory_max_kb": "最大内存大小（KiB）",
+      "memory_compact_target_kb": "内存压缩目标（KiB）",
+      "base_path": "基础路径",
+      "max_edit_file_size_kb": "最大可编辑文件大小（KiB）",
+      "enable_delete": "允许删除",
+      "thread_mode_mode": "线程模式策略",
+      "topics_chat_id": "主题聊天 ID",
+      "topic_title_prefix": "主题标题前缀",
+      "inactivity_ttl_sec": "不活跃 TTL（秒）",
+      "webhooks_path": "Webhook 路径",
+      "webhooks_public_url": "Webhook 公共基础 URL",
+      "webhooks_secret_token": "Webhook 密钥令牌",
+      "webhooks_request_timeout": "Webhook 请求超时（秒）",
+      "webhooks_max_payload_bytes": "Webhook 最大负载（字节）",
+      "scheduler_timezone": "时区",
+      "scheduler_tick_interval": "Tick 间隔（秒）",
+      "scheduler_max_jobs": "最大并发任务数",
+      "scheduler_job_timeout": "任务超时（秒）",
+      "scheduler_misfire_grace": "错误触发宽限期（秒）",
+      "rl_backend": "限速后端",
+      "rl_sqlite_path": "SQLite 路径（限速）",
+      "rl_default_policy": "默认策略（JSON）",
+      "rl_policies": "命名策略（JSON）",
+      "lint_level1_cooldown": "Level 1 冷却时间（小时）",
+      "lint_level2_cooldown": "Level 2 冷却时间（小时）",
+      "lint_level3_cooldown": "Level 3 冷却时间（小时）",
+      "lint_lock_ttl": "锁定 TTL（分钟）",
+      "lint_error_retry": "错误重试冷却（小时）",
+      "lint_fp_threshold": "FP 增长阈值（%）",
+      "lint_canary_rolling": "Canary 滚动窗口（天）",
+      "lint_canary_baseline": "Canary 基线窗口（天）",
+      "lint_canary_max_fields": "每 180 天最大 Schema 字段数",
+      "err_json_invalid": "JSON 无效：{error}",
+      "err_json_field_invalid": "字段 '{field}'：JSON 无效 — {error}",
+      "err_mcp_clients_must_be_list": "MCP 客户端必须是 JSON 数组。"
     },
     "sessmgr": {
       "transfer_msg": "CLI 已切换: {source} → {target}。\n是否迁移上一个会话 ({source}) 的上下文?",
@@ -1669,7 +1959,10 @@
       "transfer_fail_title": "上下文迁移",
       "rename": "重命名",
       "reset": "重置",
-      "resume_token": "Resume Token"
+      "resume_token": "Resume Token",
+      "pick_title": "选择项目",
+      "pick_label": "选择已注册的项目:",
+      "pick_browse": "浏览..."
     },
     "statuspanel": {
       "mode": "模式",

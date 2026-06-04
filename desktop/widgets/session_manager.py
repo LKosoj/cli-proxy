@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+import os
 from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import Qt, Signal
@@ -20,6 +21,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMenu,
     QToolButton,
+    QDialog,
+    QDialogButtonBox,
 )
 
 from i18n import t
@@ -29,6 +32,65 @@ from utils.ui import ensure_async, format_session_title
 if TYPE_CHECKING:
     from desktop.services.application_facade import ApplicationFacade
     from session import Session
+
+
+class ProjectPickerDialog(QDialog):
+    """Диалог выбора зарегистрированного проекта или открытия файлового менеджера."""
+
+    BROWSE_SENTINEL = "__browse__"
+
+    def __init__(self, projects: list[str], lang: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(t("desktop.sessmgr.pick_title", lang))
+        self._chosen: str | None = None
+
+        layout = QVBoxLayout(self)
+
+        label = QLabel(t("desktop.sessmgr.pick_label", lang))
+        layout.addWidget(label)
+
+        self._list = QListWidget()
+        for path in projects:
+            item = QListWidgetItem(path)
+            item.setData(Qt.ItemDataRole.UserRole, path)
+            self._list.addItem(item)
+        if self._list.count():
+            self._list.setCurrentRow(0)
+        self._list.itemDoubleClicked.connect(self._accept_selection)
+        layout.addWidget(self._list)
+
+        btn_box = QDialogButtonBox()
+        ok_btn = btn_box.addButton(QDialogButtonBox.StandardButton.Ok)
+        browse_btn = btn_box.addButton(
+            t("desktop.sessmgr.pick_browse", lang),
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
+        cancel_btn = btn_box.addButton(QDialogButtonBox.StandardButton.Cancel)
+
+        ok_btn.clicked.connect(self._accept_selection)
+        browse_btn.clicked.connect(self._accept_browse)
+        cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(btn_box)
+
+    def _accept_selection(self) -> None:
+        item = self._list.currentItem()
+        if item is None:
+            return
+        self._chosen = str(item.data(Qt.ItemDataRole.UserRole))
+        self.accept()
+
+    def _accept_browse(self) -> None:
+        self._chosen = self.BROWSE_SENTINEL
+        self.accept()
+
+    def chosen_path(self) -> str | None:
+        """Выбранный путь или BROWSE_SENTINEL; None если отменено."""
+        return self._chosen
+
+
+# Module-level sentinel — used in _pick_workdir to avoid referencing the class
+# through a potentially-mocked name.
+_BROWSE_SENTINEL: str = ProjectPickerDialog.BROWSE_SENTINEL
 
 
 class SessionItemWidget(QWidget):
@@ -249,6 +311,75 @@ class SessionManagerWidget(QWidget):
                     lambda: self.facade.ui_state_service.save(last_session_id=session_uid)
                 )
 
+    def _registered_projects(self) -> list[str]:
+        """Возвращает дедублицированный список существующих путей из config.telegram.user_workdirs."""
+        try:
+            cfg = getattr(self.facade.config_service, "config", None)
+            tg = getattr(cfg, "telegram", None)
+            raw: dict = getattr(tg, "user_workdirs", {}) or {}
+        except Exception:
+            return []
+        seen: set[str] = set()
+        result: list[str] = []
+        for paths in raw.values():
+            if isinstance(paths, str):
+                paths = [paths]
+            for p in (paths or []):
+                sp = str(p or "").strip()
+                if not sp:
+                    continue
+                rp = os.path.realpath(os.path.expanduser(sp))
+                if rp in seen or not os.path.isdir(rp):
+                    continue
+                seen.add(rp)
+                result.append(rp)
+        return result
+
+    def _pick_workdir(self, lang: str, root_dir: str) -> str | None:
+        """Показывает диалог выбора рабочей директории.
+
+        Если есть зарегистрированные проекты — сначала показывает список.
+        Возвращает абсолютный путь или None если пользователь отменил.
+        """
+        projects = self._registered_projects()
+        if projects:
+            dlg = ProjectPickerDialog(projects, lang, parent=self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return None
+            chosen = dlg.chosen_path()
+            if chosen is None:
+                return None
+            if chosen != _BROWSE_SENTINEL:
+                return os.path.abspath(chosen)
+
+        # Fallback: QFileDialog
+        default_dir = os.path.abspath(os.path.expanduser(root_dir or os.getcwd()))
+        workdir = QFileDialog.getExistingDirectory(
+            self,
+            t("desktop.sessmgr.select_workdir", lang),
+            default_dir,
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if not workdir:
+            return None
+        workdir = os.path.abspath(os.path.expanduser(str(workdir)))
+
+        if root_dir:
+            root_abs = os.path.abspath(os.path.expanduser(root_dir))
+            try:
+                valid = os.path.commonpath([workdir, root_abs]) == root_abs
+            except ValueError:
+                valid = False
+            if not valid:
+                QMessageBox.warning(
+                    self,
+                    t("desktop.sessmgr.invalid_dir_title", lang),
+                    t("desktop.sessmgr.invalid_dir_msg", lang, root=root_abs),
+                )
+                return None
+
+        return workdir
+
     def _on_new_session(self):
         """Создание новой сессии."""
         # Выбор инструмента (CLI)
@@ -267,8 +398,6 @@ class SessionManagerWidget(QWidget):
         if not ok or not tool:
             return
 
-        import os
-
         root_dir = ""
         try:
             cfg = getattr(self.facade.config_service, "config", None)
@@ -278,34 +407,9 @@ class SessionManagerWidget(QWidget):
             self.logger.exception("failed to read defaults.workdir for new session dialog")
             root_dir = ""
 
-        default_dir = os.path.abspath(os.path.expanduser(root_dir or os.getcwd()))
-        workdir = QFileDialog.getExistingDirectory(
-            self,
-            t("desktop.sessmgr.select_workdir", lang),
-            default_dir,
-            QFileDialog.Option.ShowDirsOnly,
-        )
-        if not workdir:
+        workdir = self._pick_workdir(lang, root_dir)
+        if workdir is None:
             return
-        workdir = os.path.abspath(os.path.expanduser(str(workdir)))
-
-        if root_dir:
-            root_abs = os.path.abspath(os.path.expanduser(root_dir))
-            try:
-                if os.path.commonpath([workdir, root_abs]) != root_abs:
-                    QMessageBox.warning(
-                        self,
-                        t("desktop.sessmgr.invalid_dir_title", lang),
-                        t("desktop.sessmgr.invalid_dir_msg", lang, root=root_abs),
-                    )
-                    return
-            except ValueError:
-                QMessageBox.warning(
-                    self,
-                    t("desktop.sessmgr.invalid_dir_title", lang),
-                    t("desktop.sessmgr.invalid_dir_msg", lang, root=root_abs),
-                )
-                return
 
         try:
             session = self.session_service.create_desktop_session(tool, workdir)

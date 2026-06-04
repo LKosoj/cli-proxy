@@ -448,6 +448,33 @@ class ApplicationFacade:
             return True
         return False
 
+    def clear_session_queue(self, session_uid: str) -> bool:
+        """Очищает очередь задач активной сессии. Аналог cmd_clearqueue в tg/handlers.py."""
+        session = self.session_service.get_session_by_uid(session_uid)
+        if session is None:
+            return False
+        queue = getattr(session, "queue", None)
+        if queue is not None:
+            try:
+                queue.clear()
+            except AttributeError:
+                # fallback for list-based queue
+                del queue[:]
+        try:
+            self.session_service._manager._persist_sessions()
+        except Exception:
+            self.logger.exception("desktop clear_session_queue failed to persist session_uid=%s", session_uid)
+        self.notify("ui:session_updated", session_uid=session_uid)
+        return True
+
+    def get_presets(self) -> Dict[str, str]:
+        """Возвращает словарь пресетов {name: prompt} из config.presets."""
+        config = getattr(self, "config", None)
+        presets = getattr(config, "presets", None) if config is not None else None
+        if presets:
+            return {p.name: p.prompt for p in presets}
+        return {}
+
     async def update_session_setting(self, session_uid: str, key: str, value: Any) -> bool:
         """Update a specific session setting and persist changes."""
         session = self.session_service.get_session_by_uid(session_uid)
@@ -868,11 +895,104 @@ class ApplicationFacade:
             )
         )
 
-    async def files_delete(self, session_uid: str, path: str) -> Dict[str, Any]:
+    async def files_delete(self, session_uid: str, path: str, *, recursive: bool = False) -> Dict[str, Any]:
         svc = self._desktop_files_service()
         return await self._resolve_files_result(
-            svc.delete(self._desktop_files_actor_id(), str(session_uid), str(path or ""))
+            svc.delete(self._desktop_files_actor_id(), str(session_uid), str(path or ""), recursive=recursive)
         )
+
+    async def files_rename(self, session_uid: str, rel_path: str, new_name: str) -> Dict[str, Any]:
+        """Rename a file or directory within the session root.
+
+        *new_name* must be a plain basename (no path separators).  Both the
+        old and new resolved paths are validated to stay within the session root.
+        """
+        svc = self._desktop_files_service()
+        actor = self._desktop_files_actor_id()
+        try:
+            src = svc._resolve_path(actor, str(session_uid), str(rel_path or ""), protect_sensitive=False)
+        except FilesServiceError as exc:
+            return {"ok": False, "error": str(exc)}
+        name = str(new_name or "").strip()
+        if not name:
+            return {"ok": False, "error": "new_name is empty"}
+        if os.path.basename(name) != name:
+            return {"ok": False, "error": "new_name must not contain path separators"}
+        src_dir = os.path.dirname(src)
+        provider = svc._provider(str(session_uid), user_id=actor)
+        root = str(getattr(provider, "root", None) or "")
+        dst = os.path.join(src_dir, name)
+        if root and not (dst == root or dst.startswith(root + os.sep)):
+            return {"ok": False, "error": "new_name escapes session root"}
+        if dst == src:
+            return {"ok": False, "error": "name is unchanged"}
+        if os.path.exists(dst):
+            return {"ok": False, "error": "target already exists"}
+        try:
+            os.rename(src, dst)
+        except OSError as exc:
+            self.logger.exception(
+                "files_rename failed session_uid=%s rel_path=%s new_name=%s", session_uid, rel_path, new_name
+            )
+            return {"ok": False, "error": str(exc)}
+        self.logger.info("files_rename ok session_uid=%s %s -> %s", session_uid, rel_path, name)
+        return {"ok": True, "new_name": name}
+
+    async def files_download_bytes(self, session_uid: str, path: str) -> Dict[str, Any]:
+        """Download file content as bytes dict: {"content": bytes, "filename": str}."""
+        svc = self._desktop_files_service()
+        return await self._resolve_files_result(
+            svc.download(
+                self._desktop_files_actor_id(),
+                str(session_uid),
+                str(path or ""),
+                allow_binary=True,
+                protect_sensitive=False,
+            )
+        )
+
+    async def files_upload(self, session_uid: str, target_dir_rel: str, local_src_path: str) -> Dict[str, Any]:
+        """Copy a local file into *target_dir_rel* inside the session root.
+
+        Validates that *target_dir_rel* is a directory within the session root,
+        then copies the source file using shutil.copy2.  Returns the final
+        relative path of the uploaded file.
+        """
+        svc = self._desktop_files_service()
+        actor = self._desktop_files_actor_id()
+        try:
+            resolved_dir = svc._resolve_path(actor, str(session_uid), str(target_dir_rel or "."), protect_sensitive=False)
+        except FilesServiceError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not os.path.isdir(resolved_dir):
+            return {"ok": False, "error": "target is not a directory"}
+        src = str(local_src_path or "").strip()
+        if not src or not os.path.isfile(src):
+            return {"ok": False, "error": "source file not found"}
+        filename = os.path.basename(src)
+        dst = os.path.join(resolved_dir, filename)
+        if os.path.exists(dst):
+            base, ext = os.path.splitext(filename)
+            i = 1
+            while True:
+                candidate = os.path.join(resolved_dir, f"{base}_{i}{ext}")
+                if not os.path.exists(candidate):
+                    dst = candidate
+                    filename = os.path.basename(dst)
+                    break
+                i += 1
+        try:
+            shutil.copy2(src, dst)
+        except OSError as exc:
+            self.logger.exception(
+                "files_upload copy failed session_uid=%s src=%s dst=%s", session_uid, src, dst
+            )
+            return {"ok": False, "error": str(exc)}
+        provider = svc._provider(str(session_uid), user_id=actor)
+        root = getattr(provider, "root", None) or resolved_dir
+        rel = os.path.relpath(dst, root)
+        self.logger.info("files_upload ok session_uid=%s dst_rel=%s", session_uid, rel)
+        return {"ok": True, "filename": filename, "rel_path": rel}
 
     async def test_ssh_connection(self, workdir: str, alias: str) -> Any:
         """Verify SSH connectivity to a host."""
@@ -961,6 +1081,14 @@ class ApplicationFacade:
         sessions = self.session_service._manager.sessions_for_chat(1)
         total_tokens = sum(getattr(s, "tokens_used", 0) or 0 for s in sessions.values())
         return f"Total sessions: {len(sessions)}\nTotal tokens used: {total_tokens}"
+
+    async def reload_runtime_config(self) -> Dict[str, Any]:
+        """Apply changes from config.yaml to the running process without restart."""
+        bot_app = self._desktop_bot_app()
+        fn = getattr(bot_app, "reload_runtime_config", None)
+        if callable(fn):
+            return await fn()
+        return {"status": "error", "applied": [], "restart_required": [], "warnings": ["reload_runtime_config not available"]}
 
     def get_session_mode(self, session_uid: Any) -> Optional[str]:
         session_uid = str(session_uid or "").strip()
@@ -1621,6 +1749,56 @@ class ApplicationFacade:
             "notification_target": dict(event.notification_target or {}),
             "payload": dict(event.payload or {}),
         }
+
+    def get_scheduler_settings(self) -> Dict[str, Any]:
+        """Return current scheduler config parameters (timezone, tick_interval_sec, max_concurrent_jobs)."""
+        cfg = self._require_desktop_config()
+        sched = getattr(cfg, "scheduler", None)
+        return {
+            "timezone": str(getattr(sched, "timezone", "UTC") or "UTC"),
+            "tick_interval_sec": int(getattr(sched, "tick_interval_sec", 60) or 60),
+            "max_concurrent_jobs": int(getattr(sched, "max_concurrent_jobs", 1) or 1),
+        }
+
+    async def update_scheduler_settings(
+        self,
+        *,
+        timezone: Optional[str] = None,
+        tick_interval_sec: Optional[int] = None,
+        max_concurrent_jobs: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Persist scheduler parameters to config file and update in-memory config."""
+        from copy import deepcopy
+        cfg = self._require_desktop_config()
+        new_cfg = deepcopy(cfg)
+        sched = getattr(new_cfg, "scheduler", None)
+        if sched is None:
+            return {"ok": False, "error": "scheduler config not available"}
+        changed = False
+        if timezone is not None:
+            token = str(timezone).strip()
+            if token:
+                sched.timezone = token
+                changed = True
+        if tick_interval_sec is not None:
+            value = int(tick_interval_sec)
+            if value > 0:
+                sched.tick_interval_sec = value
+                changed = True
+        if max_concurrent_jobs is not None:
+            value = int(max_concurrent_jobs)
+            if value > 0:
+                sched.max_concurrent_jobs = value
+                changed = True
+        if not changed:
+            return {"ok": True, "changed": False}
+        try:
+            result = await self.config_service.save_atomic(new_cfg)
+            self.config = new_cfg
+            return {"ok": True, "changed": result.changed}
+        except Exception as exc:
+            self.logger.exception("desktop update_scheduler_settings failed")
+            return {"ok": False, "error": str(exc)}
 
     def set_theme(self, theme_name: str) -> bool:
         """Меняет тему приложения и уведомляет подписчиков."""
@@ -5874,3 +6052,277 @@ class ApplicationFacade:
             )
             return {"ok": False, "error": str(exc)}
         return {"ok": True, **(result or {})}
+
+    # ------------------------------------------------------------------
+    # Фича A: state.json dump для активной Desktop-сессии
+    # ------------------------------------------------------------------
+
+    def get_session_state_json(self, session_uid: str) -> Dict[str, Any]:
+        """Вернуть сырой payload сессии из state-репозитория.
+
+        Returns {"ok": True, "payload": dict} или {"ok": False, "error": str}.
+        """
+        uid = str(session_uid or "").strip()
+        if not uid:
+            return {"ok": False, "error": "session_uid_empty"}
+        session = self.session_service.get_session_by_uid(uid)
+        if session is None:
+            return {"ok": False, "error": "session_not_found"}
+        config = getattr(self, "config", None)
+        try:
+            from app.services.path_normalization import normalize_optional_state_path
+            state_path = normalize_optional_state_path(
+                getattr(getattr(config, "defaults", None), "state_path", None)
+            )
+        except Exception:
+            state_path = None
+        if not state_path:
+            return {"ok": False, "error": "state_path_not_configured"}
+        try:
+            from app.services.state_repository import get_state_repository
+            repo = get_state_repository(state_path)
+            by_chat = repo.load_sessions_by_chat()
+        except Exception as exc:
+            self.logger.exception(
+                "get_session_state_json: failed to load state session_uid=%s", uid
+            )
+            return {"ok": False, "error": str(exc)}
+        # Search through all chats for the matching session_uid
+        for _chat_id, chat_entry in by_chat.items():
+            sessions = chat_entry.get("sessions") if isinstance(chat_entry, dict) else {}
+            if not isinstance(sessions, dict):
+                continue
+            for _sid, payload in sessions.items():
+                if not isinstance(payload, dict):
+                    continue
+                if str(payload.get("session_uid") or "").strip() == uid:
+                    return {"ok": True, "payload": payload}
+        return {"ok": False, "error": "session_state_not_found"}
+
+    # ------------------------------------------------------------------
+    # Фича B: selfupdate (git pull + restart Desktop)
+    # ------------------------------------------------------------------
+
+    def selfupdate_desktop(self) -> Dict[str, Any]:
+        """Выполнить git pull --ff-only и перезапустить Desktop-процесс.
+
+        Returns {"ok": True, "output": str} или {"ok": False, "error": str}.
+        Перезапуск через os.execv не возвращает управление при успехе.
+        """
+        import os
+        import subprocess
+        import sys
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if not os.path.isdir(os.path.join(repo_root, ".git")):
+            return {"ok": False, "error": "not_a_git_repo", "repo_root": repo_root}
+
+        try:
+            result = subprocess.run(
+                ["git", "pull", "--ff-only"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except Exception as exc:
+            self.logger.exception("selfupdate_desktop: git pull failed")
+            return {"ok": False, "error": f"git_pull_failed:{exc}"}
+
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode != 0:
+            return {"ok": False, "error": "git_pull_nonzero", "output": output.strip()}
+
+        # Restart the desktop process
+        try:
+            python = sys.executable
+            args = [python] + sys.argv
+            self.logger.info("selfupdate_desktop: restarting via os.execv python=%s argv=%s", python, args)
+            os.execv(python, args)
+        except Exception as exc:
+            self.logger.exception("selfupdate_desktop: os.execv failed")
+            return {"ok": False, "error": f"restart_failed:{exc}", "output": output.strip()}
+        # os.execv replaces the process — code below is unreachable on success
+        return {"ok": True, "output": output.strip()}  # pragma: no cover
+
+    # ------------------------------------------------------------------
+    # Фича C: Lint Evolution proxy-методы для Desktop
+    # ------------------------------------------------------------------
+
+    def _lint_evolution_workdir(self, session_uid: str) -> Optional[str]:
+        """Вернуть workdir сессии или defaults.workdir."""
+        _, workdir = self._require_session_workdir(session_uid)
+        if workdir:
+            return workdir
+        config = getattr(self, "config", None)
+        defaults = getattr(config, "defaults", None)
+        fallback = str(getattr(defaults, "workdir", "") or "").strip()
+        return fallback or None
+
+    def get_lint_evolution_status(self, session_uid: str) -> Dict[str, Any]:
+        """Статус Lint Evolution: уровни L1/L2/L3, autopause, schema-version.
+
+        Returns {"ok": True, "lines": list[str]} или {"ok": False, "error": str}.
+        """
+        workdir = self._lint_evolution_workdir(session_uid)
+        if not workdir:
+            return {"ok": False, "error": "workdir_not_set"}
+        try:
+            from app.services.lint_evolution import (
+                autopause as _ap,
+                rules_store as _rs,
+                schema_store as _ss,
+                state as _state_store,
+                weights_store as _ws,
+            )
+            from app.services.lint_evolution.paths import lint_root, project_id_for
+
+            pid = project_id_for(workdir)
+            st = _state_store.load_state(workdir)
+            project = st.projects.get(pid)
+            ap = _ap.status(workdir)
+
+            lines = [
+                f"workdir: {workdir}",
+                f"project_id: {pid}",
+                f"lint_root: {lint_root(workdir)}",
+                f"active_rules: {sum(1 for r in _rs.load_rules(workdir) if r.state == 'active')}",
+                f"schema_version: {_ss.load_state(workdir).active_version}",
+                f"weights_history: {_ws.history_count(workdir)}",
+            ]
+            if project is not None:
+                for level_name, lvl in (
+                    ("L1", project.level1),
+                    ("L2", project.level2),
+                    ("L3", project.level3),
+                ):
+                    lines.append(
+                        f"{level_name}: last_run={int(lvl.last_run_ts)} "
+                        f"fails={lvl.consecutive_failures} lock={lvl.lock_owner or '-'}"
+                    )
+            for key in ("1", "2", "3"):
+                entry = ap.get(key)
+                if entry and entry.paused:
+                    lines.append(f"autopause L{key}: PAUSED ({entry.reason})")
+                else:
+                    lines.append(f"autopause L{key}: ok")
+
+            return {"ok": True, "lines": lines}
+        except Exception as exc:
+            self.logger.exception(
+                "get_lint_evolution_status failed session_uid=%s", session_uid
+            )
+            return {"ok": False, "error": str(exc)}
+
+    def resume_lint_autopause(self, session_uid: str, level: int) -> Dict[str, Any]:
+        """Снять autopause с уровня (1, 2 или 3).
+
+        Returns {"ok": True, "resumed": bool} или {"ok": False, "error": str}.
+        """
+        if level not in (1, 2, 3):
+            return {"ok": False, "error": "level_out_of_range"}
+        workdir = self._lint_evolution_workdir(session_uid)
+        if not workdir:
+            return {"ok": False, "error": "workdir_not_set"}
+        try:
+            from app.services.lint_evolution import autopause as _ap
+            resumed = _ap.resume(workdir, level)
+            return {"ok": True, "resumed": resumed}
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        except Exception as exc:
+            self.logger.exception(
+                "resume_lint_autopause failed session_uid=%s level=%s", session_uid, level
+            )
+            return {"ok": False, "error": str(exc)}
+
+    def pause_lint_autopause(self, session_uid: str, level: int) -> Dict[str, Any]:
+        """Установить autopause на уровень (1, 2 или 3).
+
+        Returns {"ok": True} или {"ok": False, "error": str}.
+        """
+        if level not in (1, 2, 3):
+            return {"ok": False, "error": "level_out_of_range"}
+        workdir = self._lint_evolution_workdir(session_uid)
+        if not workdir:
+            return {"ok": False, "error": "workdir_not_set"}
+        try:
+            from app.services.lint_evolution import autopause as _ap
+            _ap.pause(workdir, level, reason="desktop_manual")
+            return {"ok": True}
+        except Exception as exc:
+            self.logger.exception(
+                "pause_lint_autopause failed session_uid=%s level=%s", session_uid, level
+            )
+            return {"ok": False, "error": str(exc)}
+
+    def get_lint_schema_history(self, session_uid: str) -> Dict[str, Any]:
+        """Схема Lint Evolution: версия, поля, pending proposals, deprecated.
+
+        Returns {"ok": True, "lines": list[str]} или {"ok": False, "error": str}.
+        """
+        workdir = self._lint_evolution_workdir(session_uid)
+        if not workdir:
+            return {"ok": False, "error": "workdir_not_set"}
+        try:
+            from app.services.lint_evolution import schema_store as _ss
+            state = _ss.load_state(workdir)
+            fields = _ss.existing_field_names(workdir)
+            proposals = _ss.load_proposals(workdir)
+            deprecated = _ss.load_deprecated(workdir)
+            lines = [
+                f"active_version: {state.active_version}",
+                f"last_bump_ts: {int(state.last_bump_ts)}",
+                f"fields ({len(fields)}): {', '.join(fields) or '-'}",
+                f"pending proposals: {len(proposals)}",
+                f"deprecated fields: {len(deprecated)}",
+            ]
+            for p in proposals[:5]:
+                name = p.get("proposed_name") or "?"
+                decision = p.get("decision") or "?"
+                lines.append(f"  · {name} → {decision}")
+            return {"ok": True, "lines": lines}
+        except Exception as exc:
+            self.logger.exception(
+                "get_lint_schema_history failed session_uid=%s", session_uid
+            )
+            return {"ok": False, "error": str(exc)}
+
+    def run_lint_gate_dry_run(self, session_uid: str) -> Dict[str, Any]:
+        """Прогон lint-gate по активным правилам.
+
+        Returns {"ok": True, "lines": list[str]} или {"ok": False, "error": str}.
+        """
+        workdir = self._lint_evolution_workdir(session_uid)
+        if not workdir:
+            return {"ok": False, "error": "workdir_not_set"}
+        try:
+            from pathlib import Path as _Path
+            from app.services.lint_evolution import rules_store as _rs
+            from app.services.lint_evolution.gate_service import LintGateService
+
+            project_root = _Path(workdir)
+            active = [r for r in _rs.load_rules(workdir) if r.state == "active"]
+            if not active:
+                return {"ok": True, "lines": ["no active rules"]}
+
+            py_files = sorted(project_root.rglob("*.py"))[:200]
+            gate = LintGateService(workdir=workdir, project_root=project_root)
+            result = gate.run_on_files(py_files)
+            lines = [
+                f"rules_evaluated: {result.rules_evaluated}",
+                f"files_scanned: {result.files_scanned}",
+                f"skipped_rules: {result.skipped_rules}",
+                f"findings: {len(result.findings)}",
+            ]
+            for f in result.findings[:10]:
+                rule = f.get("rule_id") or "?"
+                path = f.get("path") or "?"
+                msg = f.get("message") or ""
+                lines.append(f"  [{rule}] {path}: {msg}")
+            return {"ok": True, "lines": lines}
+        except Exception as exc:
+            self.logger.exception(
+                "run_lint_gate_dry_run failed session_uid=%s", session_uid
+            )
+            return {"ok": False, "error": str(exc)}

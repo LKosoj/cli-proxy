@@ -37,7 +37,9 @@
       "status": "Status",
       "scheduler": "Scheduler",
       "settings": "Einstellungen",
-      "admin": "Admin"
+      "admin": "Admin",
+      "tasks": "Aufgaben",
+      "reports": "Berichte"
     },
     "btn": {
       "refresh": "Aktualisieren",
@@ -491,6 +493,23 @@
       "run_validation_first": "zuerst Prüfung ausführen",
       "promote": "Anwenden",
       "promoting": "Wird angewendet…"
+    },
+    "tasks": {
+      "empty": "Keine aktiven Aufgaben.",
+      "btn_cancel": "Abbrechen",
+      "err_cancel": "Abbruchfehler:",
+      "err_load": "Fehler beim Laden der Aufgaben:"
+    },
+    "reports": {
+      "empty": "Session auswählen, um Berichte anzuzeigen.",
+      "no_reports": "Keine Berichte vorhanden.",
+      "loading": "Laden...",
+      "select_report": "Bericht aus der Liste auswählen.",
+      "history_title": "Berichtsverlauf",
+      "viewer_title": "Vorschau",
+      "btn_download_md": "MD herunterladen",
+      "err_load": "Ladefehler:",
+      "err_download": "Downloadfehler:"
     }
   },
   "btn": {
@@ -765,7 +784,27 @@
       "clone_error": "git-clone-Fehler:\\n{output}",
       "clone_launch_error": "git clone konnte nicht gestartet werden: {e}",
       "clone_starting": "git clone wird gestartet...",
-      "operations_menu": "Git-Operationen:"
+      "operations_menu": "Git-Operationen:",
+      "branch_created": "Branch erstellt: {branch}",
+      "branch_usage": "Verwendung: /git_branch <name>",
+      "checkout_done": "Zu Branch gewechselt: {branch}",
+      "checkout_usage": "Verwendung: /git_checkout <branch>",
+      "stash_pop_done": "Stash pop abgeschlossen.",
+      "show_usage": "Verwendung: /git_show [<commit>]",
+      "show_done": "Git show {ref}:",
+      "remote_pull_usage": "Verwendung: /remote_git_pull <host> [ff|merge|rebase]",
+      "remote_pull_done": "Remote git pull ({host}): erledigt.",
+      "remote_pull_error": "Remote git pull ({host}): Fehler — {error}",
+      "remote_push_usage": "Verwendung: /remote_git_push <host>",
+      "remote_push_done": "Remote git push ({host}): erledigt.",
+      "remote_push_error": "Remote git push ({host}): Fehler — {error}",
+      "remote_fetch_usage": "Verwendung: /remote_git_fetch <host>",
+      "remote_fetch_done": "Remote git fetch ({host}): erledigt.",
+      "remote_fetch_error": "Remote git fetch ({host}): Fehler — {error}",
+      "remote_host_not_found": "SSH-Host '{host}' nicht gefunden.",
+      "remote_no_root": "Kein remote_project_root für Host '{host}' konfiguriert.",
+      "remote_not_git": "Verzeichnis auf Host '{host}' ist kein git-Repository.",
+      "remote_output_prefix": "Ausgabe:"
     },
     "lint": {
       "autopause_not_active": "Lint Evolution L{level}: Pause war nicht aktiv — keine Änderungen.",
@@ -893,6 +932,33 @@
     },
     "mode": {
       "desc": "Modusmenü: {label}."
+    },
+    "sessions_search": {
+      "desc": "Sitzungen nach Teilstring in Name, ID oder Arbeitsverzeichnis suchen.",
+      "usage": "Verwendung: /sessions_search <Abfrage>",
+      "not_found": "Keine Sitzungen für Abfrage «{query}» gefunden.",
+      "header": "Gefundene Sitzungen: {n}"
+    },
+    "git_branch": {
+      "desc": "Git-Branch erstellen."
+    },
+    "git_checkout": {
+      "desc": "Zu einem Git-Branch wechseln."
+    },
+    "git_stash_pop": {
+      "desc": "Letzten git stash pop anwenden."
+    },
+    "git_show": {
+      "desc": "Commit-Diff anzeigen (Standard: HEAD)."
+    },
+    "remote_git_pull": {
+      "desc": "Git pull auf einem entfernten SSH-Host. Verwendung: /remote_git_pull <host> [ff|merge|rebase]"
+    },
+    "remote_git_push": {
+      "desc": "Git push auf einem entfernten SSH-Host. Verwendung: /remote_git_push <host>"
+    },
+    "remote_git_fetch": {
+      "desc": "Git fetch auf einem entfernten SSH-Host. Verwendung: /remote_git_fetch <host>"
     }
   },
   "desktop": {
@@ -909,6 +975,9 @@
       "refresh": "Aktualisieren",
       "new_file": "Neue Datei",
       "new_dir": "Neuer Ordner",
+      "rename": "Umbenennen",
+      "upload": "Hochladen",
+      "download": "Herunterladen",
       "reload": "Neu laden",
       "force_save": "Erzwungenes Speichern",
       "send": "Senden",
@@ -971,7 +1040,10 @@
         "stash": "Stash",
         "stash_pop": "Stash Pop",
         "create_branch": "Branch erstellen",
-        "switch_branch": "Branch wechseln"
+        "switch_branch": "Branch wechseln",
+        "fetch": "Fetch",
+        "merge": "Merge",
+        "rebase": "Rebase"
       },
       "msg": {
         "select_commit": "Bitte einen Commit auswählen, um den Diff anzuzeigen.",
@@ -983,14 +1055,22 @@
         "unexpected_error": "Ein unerwarteter Fehler ist aufgetreten:\n{error}",
         "fetching_status": "Git-Status wird abgerufen...",
         "generate_msg_failed": "Nachricht konnte nicht generiert werden. Bitte manuell eingeben oder openai_api_key in config.yaml konfigurieren.",
-        "generate_msg_failed_check": "Nachricht konnte nicht generiert werden. Prüfen Sie die openai_api_key-Einstellungen in config.yaml."
+        "generate_msg_failed_check": "Nachricht konnte nicht generiert werden. Prüfen Sie die openai_api_key-Einstellungen in config.yaml.",
+        "conflict": "Konflikte gefunden:\n{files}",
+        "merge_ok": "Merge erfolgreich abgeschlossen.",
+        "rebase_ok": "Rebase erfolgreich abgeschlossen.",
+        "fetch_ok": "Fetch erfolgreich abgeschlossen."
       },
       "dialog": {
         "create_branch_title": "Branch erstellen",
         "create_branch_prompt": "Namen des neuen Branches eingeben:",
         "switch_branch_title": "Branch wechseln",
         "switch_branch_prompt": "Namen des Branches eingeben, zu dem gewechselt werden soll:",
-        "diff_title": "Diff für Commit {hash}"
+        "diff_title": "Diff für Commit {hash}",
+        "merge_branch_title": "Branch mergen",
+        "merge_branch_prompt": "Branch-Namen zum Mergen eingeben:",
+        "rebase_branch_title": "Rebase auf Branch",
+        "rebase_branch_prompt": "Ziel-Branch-Namen für Rebase eingeben:"
       },
       "history": {
         "col_date": "Datum",
@@ -1000,7 +1080,8 @@
       },
       "group": {
         "other_ops": "Weitere Operationen",
-        "remote_ops": "Remote-Operationen"
+        "remote_ops": "Remote-Operationen",
+        "rebase_merge_ops": "Merge / Rebase"
       }
     },
     "log": {
@@ -1018,12 +1099,16 @@
       "tasks_monitor_title": "Aktive Aufgabenübersicht",
       "btn": {
         "apply_filters": "Filter anwenden",
-        "refresh_tasks": "Aufgaben aktualisieren"
+        "refresh_tasks": "Aufgaben aktualisieren",
+        "download": "Herunterladen"
       },
       "group": {
         "module_filters": "Modul-Filter",
         "level_filters": "Protokollebenen-Filter"
-      }
+      },
+      "type_label": "Typ:",
+      "not_found": "Log-Datei nicht gefunden",
+      "no_log_path": "Log-Pfad nicht konfiguriert"
     },
     "session": {
       "search_placeholder": "Sitzungen suchen...",
@@ -1055,6 +1140,22 @@
       "revision_conflict": "Versionskonflikt. Aktuelle Version: {revision}.",
       "name_label": "Name:",
       "delete_confirm": "'{path}' löschen?",
+      "delete_recursive_title": "Ordner löschen",
+      "delete_recursive_confirm": "Ordner '{path}' wird rekursiv mit allen Inhalten gelöscht. Fortfahren?",
+      "rename_title": "Umbenennen",
+      "rename_label": "Neuer Name:",
+      "renaming": "Umbenennen...",
+      "renamed": "Umbenannt: {name}",
+      "rename_error": "Umbenennen fehlgeschlagen: {error}",
+      "upload_title": "Datei hochladen",
+      "all_files_filter": "Alle Dateien (*)",
+      "uploading": "Hochladen...",
+      "uploaded": "Hochgeladen: {filename}",
+      "upload_error": "Hochladen fehlgeschlagen: {error}",
+      "download_title": "Datei speichern",
+      "downloading": "Herunterladen...",
+      "downloaded": "Gespeichert: {path}",
+      "download_error": "Herunterladen fehlgeschlagen: {error}",
       "path_prefix": "Pfad: {path}"
     },
     "chat": {
@@ -1067,7 +1168,13 @@
       "status_ready": "Bereit",
       "btn_stop": "Stopp",
       "status_thinking": "Denke nach...",
-      "status_waiting_answer": "Warte auf Antwort..."
+      "status_waiting_answer": "Warte auf Antwort...",
+      "btn_clear_queue": "Warteschlange leeren",
+      "btn_presets": "Vorlagen",
+      "msg_queue_cleared": "Aufgabenwarteschlange geleert.",
+      "msg_no_presets": "Keine Vorlagen konfiguriert. Fügen Sie sie in config.yaml → presets hinzu.",
+      "presets_dialog_title": "Vorlage auswählen",
+      "presets_dialog_hint": "Vorlage zum Ausführen auswählen:"
     },
     "status": {
       "ready": "Bereit"
@@ -1080,7 +1187,8 @@
         "config": "Konfiguration",
         "chat": "Chat",
         "autonomy": "Autonomie",
-        "scheduler": "Scheduler"
+        "scheduler": "Scheduler",
+        "lint_evolution": "Lint Evolution"
       },
       "btn": {
         "enable": "Aktivieren",
@@ -1093,7 +1201,8 @@
         "reload": "Neu laden",
         "add_row": "Hinzufügen",
         "save_rows": "Speichern",
-        "reload_config": "Konfiguration neu laden"
+        "reload_config": "Konfiguration neu laden",
+        "refresh": "Aktualisieren"
       },
       "label": {
         "session": "Sitzung:",
@@ -1293,6 +1402,38 @@
         "select_skill_install": "Ausstehende Skill-Installation auswählen",
         "no_session": "Keine Sitzung ausgewählt.",
         "api_unavailable": "API nicht verfügbar."
+      },
+      "lint": {
+        "status_group": "Status",
+        "autopause_group": "Autopause",
+        "schema_group": "Schemaverlauf",
+        "gate_group": "Gate dry-run",
+        "btn": {
+          "pause": "Pause",
+          "resume": "Pause aufheben",
+          "run": "Ausführen"
+        },
+        "msg": {
+          "api_unavailable": "Lint Evolution API nicht verfügbar",
+          "load_error": "Ladefehler",
+          "paused": "L{level} pausiert",
+          "resumed": "L{level} Pause aufgehoben",
+          "not_paused": "L{level} war nicht pausiert"
+        }
+      },
+      "state_dialog": {
+        "title": "Sitzung state.json",
+        "api_unavailable": "Status-API nicht verfügbar",
+        "load_error": "Status konnte nicht geladen werden"
+      },
+      "selfupdate": {
+        "confirm_title": "Self-update bestätigen",
+        "confirm_msg": "git pull ausführen und Anwendung neu starten?",
+        "pulling": "git pull wird ausgeführt...",
+        "error": "Self-update Fehler",
+        "failed": "Self-update fehlgeschlagen: {error}",
+        "failed_title": "Self-update Fehler",
+        "api_unavailable": "Self-update API nicht verfügbar"
       }
     },
     "msg": {
@@ -1474,6 +1615,22 @@
         "open_admin": {
           "subtitle": "Admin-Bereich",
           "title": "Admin öffnen"
+        },
+        "clear_queue": {
+          "title": "Warteschlange leeren",
+          "subtitle": "Alle ausstehenden Aufgaben aus der Warteschlange entfernen"
+        },
+        "presets": {
+          "title": "Aufgabenvorlagen",
+          "subtitle": "Eine Vorlage auswählen und ausführen"
+        },
+        "show_state": {
+          "title": "state.json anzeigen",
+          "subtitle": "Aktiven Sitzungsstatus anzeigen"
+        },
+        "selfupdate": {
+          "title": "Self-update",
+          "subtitle": "git pull und Anwendung neu starten"
         }
       },
       "hint": "Tippen zum Suchen, Enter zum Ausführen",
@@ -1481,7 +1638,8 @@
         "navigation": "Navigation",
         "git": "Git",
         "panels": "Bereiche",
-        "session": "Sitzung"
+        "session": "Sitzung",
+        "admin": "Verwaltung"
       },
       "footer_reopen": "Ctrl+K: Erneut öffnen",
       "title": "Befehlspalette",
@@ -1524,7 +1682,15 @@
       "err_resume": "Scheduler-Auftrag konnte nicht fortgesetzt werden: {error}",
       "project_label": "Projekt:",
       "no_sessions": "Das Projekt hat keine offenen Desktop-Sitzungen als Benachrichtigungsziel.",
-      "no_projects": "Keine eigenen Projekte verfügbar."
+      "no_projects": "Keine eigenen Projekte verfügbar.",
+      "settings_group": "Scheduler-Einstellungen",
+      "settings_timezone_label": "Zeitzone:",
+      "settings_tick_label": "Abfrageintervall (Sek.):",
+      "settings_concurrency_label": "Max. gleichzeitige Aufgaben:",
+      "settings_apply": "Anwenden",
+      "settings_saved": "Scheduler-Einstellungen gespeichert.",
+      "settings_err_save": "Scheduler-Einstellungen konnten nicht gespeichert werden: {error}",
+      "settings_err_timezone": "Gültige Zeitzone eingeben."
     },
     "modepanel": {
       "label": {
@@ -1619,7 +1785,13 @@
       "read_timeout": "Lese-Timeout (s)",
       "tab": {
         "tools": "Werkzeuge",
-        "defaults": "Standardwerte"
+        "defaults": "Standardwerte",
+        "presets": "Presets",
+        "thread_mode": "Thread-Modus",
+        "webhooks": "Webhooks",
+        "scheduler": "Planer",
+        "security": "Sicherheit",
+        "lint_evolution": "Lint-Evolution"
       },
       "msg_restart_required": "Neustart erforderlich",
       "host": "Host",
@@ -1657,7 +1829,125 @@
       "no_changes": "Keine Änderungen",
       "admin_ids": "Admin-IDs",
       "msg_errors": "Fehler",
-      "tool_mode": "Modus"
+      "tool_mode": "Modus",
+      "reload_runtime_btn": "Konfiguration anwenden",
+      "reload_runtime_ok": "Konfiguration angewendet: {applied}",
+      "reload_runtime_err": "Fehler beim Anwenden der Konfiguration",
+      "btn_add": "Hinzufügen",
+      "btn_delete": "Löschen",
+      "btn_edit_json": "JSON bearbeiten",
+      "btn_edit_presets": "Presets bearbeiten",
+      "presets_title": "Presets",
+      "preset_name": "Name",
+      "preset_prompt": "Prompt",
+      "mcp_token": "MCP-Token",
+      "mcp_clients_dialog_title": "MCP-Clients (JSON)",
+      "mcp_clients_json_hint": "MCP-Client-Liste als JSON bearbeiten:",
+      "write_timeout": "Schreib-Timeout (s)",
+      "pool_timeout": "Pool-Timeout (s)",
+      "polling_timeout": "Polling-Timeout (s)",
+      "poll_interval": "Poll-Intervall (s)",
+      "connection_pool_size": "Verbindungspool-Größe",
+      "user_access": "Benutzerzugriff",
+      "user_workdirs": "Benutzer-Arbeitsverzeichnisse (JSON)",
+      "user_modes": "Benutzermodi (JSON)",
+      "paths_section": "Pfade",
+      "images_section": "Bilder",
+      "api_keys_extra": "Weitere API-Schlüssel",
+      "agent_behaviour": "Agentenverhalten",
+      "context_section": "Kontext & Tokens",
+      "skills_section": "Skills",
+      "manager_section": "Manager / Analyst / Webmaster",
+      "state_path": "State-Pfad",
+      "desktop_state_path": "Desktop-State-Pfad",
+      "toolhelp_path": "Toolhelp-Pfad",
+      "image_temp_dir": "Bild-Temp-Verzeichnis",
+      "html_filename_prefix": "HTML-Dateiname-Präfix",
+      "image_max_mb": "Max. Bildgröße (MiB)",
+      "summary_max_chars": "Max. Zusammenfassungsgröße (Zeichen)",
+      "openai_big_model": "OpenAI Großes Modell",
+      "openai_base_url": "OpenAI-Basis-URL",
+      "tavily_api_key": "Tavily API-Schlüssel",
+      "jina_api_key": "Jina API-Schlüssel",
+      "clarification_enabled": "Klärungsanfragen",
+      "clarification_keywords": "Klärungsschlüsselwörter",
+      "default_cli": "Standard-CLI",
+      "codebase_mapper_usage": "Codebase-Mapper-Nutzung",
+      "run_artifacts_enabled": "Run-Artefakte speichern",
+      "run_artifacts_retention_days": "Artefakt-Aufbewahrung (Tage)",
+      "run_doctor_enabled": "Doctor/Recover-Prüfungen",
+      "run_boundary_validation_enabled": "Phasengrenz-Validierung",
+      "run_metrics_enabled": "Run-Metriken",
+      "llm_trace_enabled": "LLM-Trace in EVENTS.jsonl",
+      "tool_disclosure": "Tool-Offenlegungsmodus",
+      "context_window_tokens": "Kontextfenster (Tokens)",
+      "context_reserve_tokens": "Reservierte Tokens",
+      "summarization_threshold": "Zusammenfassungsschwelle",
+      "skill_discovery_mode": "Skill-Erkennungsmodus",
+      "skill_install_policy": "Skill-Installationsrichtlinie",
+      "skill_registry_paths": "Skill-Registrierungspfade",
+      "skill_allowlisted_sources": "Erlaubte Skill-Quellen",
+      "manager_max_tasks": "Max. Manager-Aufgaben",
+      "manager_max_attempts": "Max. Manager-Versuche",
+      "manager_decompose_timeout": "Zerlegungs-Timeout (s)",
+      "manager_dev_timeout": "Entwicklungs-Timeout (s)",
+      "manager_review_timeout": "Review-Timeout (s)",
+      "manager_dev_report_max_chars": "Max. Berichtsgröße (Zeichen)",
+      "manager_auto_resume": "Auto-Wiederaufnahme",
+      "manager_auto_commit": "Auto-Commit",
+      "manager_response_archive": "Antworten archivieren",
+      "analyst_use_cli_timeout": "Analyst CLI-Timeout (s)",
+      "webmaster_use_cli_timeout": "Webmaster CLI-Timeout (s)",
+      "webmaster_max_fix_iterations": "Max. Fix-Iterationen",
+      "cli_routing": "CLI-Routing (JSON)",
+      "interactive_command": "Interaktiver Befehl",
+      "resume_command": "Wiederaufnahme-Befehl",
+      "image_command": "Bild-Befehl",
+      "auto_commands": "Auto-Befehle",
+      "resume_regex": "Wiederaufnahme-Regex",
+      "help_cmd": "Hilfe-Befehl",
+      "tool_env": "Umgebungsvariablen (JSON)",
+      "separate_stderr": "Getrennter Stderr",
+      "no_session_persistence": "Keine Sitzungspersistenz bei Neustart",
+      "tool_name_dialog_title": "Neues Werkzeug",
+      "tool_name_label": "Werkzeugname:",
+      "err_tool_name_exists": "Werkzeug '{name}' existiert bereits.",
+      "confirm_delete_tool": "Werkzeug '{name}' löschen?",
+      "memory_max_kb": "Max. Speichergröße (KiB)",
+      "memory_compact_target_kb": "Speicher-Kompakt-Ziel (KiB)",
+      "base_path": "Basispfad",
+      "max_edit_file_size_kb": "Max. bearbeitbare Dateigröße (KiB)",
+      "enable_delete": "Löschen erlauben",
+      "thread_mode_mode": "Thread-Modus-Strategie",
+      "topics_chat_id": "Themen-Chat-ID",
+      "topic_title_prefix": "Thementitel-Präfix",
+      "inactivity_ttl_sec": "Inaktivitäts-TTL (s)",
+      "webhooks_path": "Webhook-Pfad",
+      "webhooks_public_url": "Öffentliche Webhook-Basis-URL",
+      "webhooks_secret_token": "Webhook-Geheimtoken",
+      "webhooks_request_timeout": "Webhook-Anforderungs-Timeout (s)",
+      "webhooks_max_payload_bytes": "Webhook Max-Payload (Bytes)",
+      "scheduler_timezone": "Zeitzone",
+      "scheduler_tick_interval": "Tick-Intervall (s)",
+      "scheduler_max_jobs": "Max. gleichzeitige Jobs",
+      "scheduler_job_timeout": "Job-Timeout (s)",
+      "scheduler_misfire_grace": "Fehlzündungs-Toleranz (s)",
+      "rl_backend": "Rate-Limit-Backend",
+      "rl_sqlite_path": "SQLite-Pfad (Rate-Limits)",
+      "rl_default_policy": "Standardrichtlinie (JSON)",
+      "rl_policies": "Benannte Richtlinien (JSON)",
+      "lint_level1_cooldown": "Level-1-Abkühlung (h)",
+      "lint_level2_cooldown": "Level-2-Abkühlung (h)",
+      "lint_level3_cooldown": "Level-3-Abkühlung (h)",
+      "lint_lock_ttl": "Sperr-TTL (min)",
+      "lint_error_retry": "Fehler-Wiederholungs-Abkühlung (h)",
+      "lint_fp_threshold": "FP-Wachstumsschwelle (%)",
+      "lint_canary_rolling": "Canary-Rollenfenster (Tage)",
+      "lint_canary_baseline": "Canary-Basislinienfenster (Tage)",
+      "lint_canary_max_fields": "Max. Schema-Felder pro 180 Tage",
+      "err_json_invalid": "Ungültiges JSON: {error}",
+      "err_json_field_invalid": "Feld '{field}': ungültiges JSON — {error}",
+      "err_mcp_clients_must_be_list": "MCP-Clients müssen ein JSON-Array sein."
     },
     "sessmgr": {
       "transfer_msg": "CLI gewechselt: {source} → {target}.\nKontext der vorherigen Sitzung ({source}) übertragen?",
@@ -1669,7 +1959,10 @@
       "transfer_fail_title": "Kontextübertragung",
       "rename": "Umbenennen",
       "reset": "Zurücksetzen",
-      "resume_token": "Resume Token"
+      "resume_token": "Resume Token",
+      "pick_title": "Projekt auswählen",
+      "pick_label": "Registriertes Projekt auswählen:",
+      "pick_browse": "Durchsuchen..."
     },
     "statuspanel": {
       "mode": "Modus",

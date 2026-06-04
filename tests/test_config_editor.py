@@ -16,7 +16,10 @@ from desktop.widgets.config_editor import (
 from app.config_runtime.field_paths import RUNTIME_CONFIG_FIELD_PATHS
 from app.services.config_apply_policy import classify_config_path
 from app.services.config_service import ConfigDraftSaveResult, ConfigService
-from config import AppConfig, TelegramConfig, DefaultsConfig, MCPConfig, MiniAppConfig
+from config import (
+    AppConfig, TelegramConfig, DefaultsConfig, MCPConfig, MiniAppConfig,
+    ThreadModeConfig, WebhooksConfig, SchedulerConfig, SecurityConfig, LintEvolutionConfig,
+)
 from i18n import t
 from qasync import QEventLoop
 
@@ -76,6 +79,11 @@ def mock_config(temp_dir):
     cfg.mcp_clients = []
     cfg.presets = []
     cfg.miniapp = MiniAppConfig(enabled=False)
+    cfg.thread_mode = ThreadModeConfig()
+    cfg.webhooks = WebhooksConfig()
+    cfg.scheduler = SchedulerConfig()
+    cfg.security = SecurityConfig()
+    cfg.lint_evolution = LintEvolutionConfig()
     return cfg
 
 
@@ -372,3 +380,54 @@ def test_config_editor_does_not_own_restart_policy():
     assert "RESTART_REQUIRED_FIELDS" not in source
     assert "RELOADABLE_FIELDS" not in source
     assert "AppRuntimeService" not in source
+
+
+@pytest.mark.asyncio
+async def test_config_editor_reload_runtime_no_facade(qtbot, mock_config_service):
+    """Reload runtime button shows error when no facade is provided."""
+    widget = ConfigEditorWidget(mock_config_service)
+    qtbot.addWidget(widget)
+
+    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warn:
+        widget._on_reload_runtime_clicked()
+        assert mock_warn.called
+
+
+@pytest.mark.asyncio
+async def test_config_editor_reload_runtime_success(qtbot, mock_config_service):
+    """Reload runtime button calls facade.reload_runtime_config and shows result."""
+    facade = MagicMock()
+    facade.reload_runtime_config = AsyncMock(return_value={"status": "ok", "applied": ["defaults.idle_timeout_sec"]})
+    widget = ConfigEditorWidget(mock_config_service, facade=facade)
+    qtbot.addWidget(widget)
+
+    with patch("PySide6.QtWidgets.QMessageBox.information") as mock_info:
+        widget._on_reload_runtime_clicked()
+        await _wait_until(lambda: facade.reload_runtime_config.called)
+        assert facade.reload_runtime_config.called
+        assert mock_info.called
+        message = _message_text(mock_info)
+        assert "defaults.idle_timeout_sec" in message
+
+
+@pytest.mark.asyncio
+async def test_config_editor_reload_runtime_error_status(qtbot, mock_config_service):
+    """Reload runtime button shows warning when facade returns error status."""
+    facade = MagicMock()
+    facade.reload_runtime_config = AsyncMock(return_value={"status": "error", "applied": []})
+    widget = ConfigEditorWidget(mock_config_service, facade=facade)
+    qtbot.addWidget(widget)
+
+    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warn:
+        widget._on_reload_runtime_clicked()
+        await _wait_until(lambda: facade.reload_runtime_config.called)
+        assert facade.reload_runtime_config.called
+        assert mock_warn.called
+
+
+def test_config_editor_reload_runtime_btn_retranslate(qapp, mock_config_service):
+    """retranslate_ui updates the reload_runtime_btn text."""
+    widget = ConfigEditorWidget(mock_config_service)
+    widget.retranslate_ui("ru")
+    from i18n import t as t_fn
+    assert widget.reload_runtime_btn.text() == t_fn("desktop.cfgedit.reload_runtime_btn", "ru")

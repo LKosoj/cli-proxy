@@ -439,6 +439,14 @@ def _make_registry_app():
         cmd_lint_autopause_resume=object(),
         cmd_lint_schema_history=object(),
         cmd_lint_gate_dry_run=object(),
+        cmd_sessions_search=object(),
+        cmd_git_branch=object(),
+        cmd_git_checkout=object(),
+        cmd_git_stash_pop=object(),
+        cmd_git_show=object(),
+        cmd_remote_git_pull=object(),
+        cmd_remote_git_push=object(),
+        cmd_remote_git_fetch=object(),
         mode_registry_service=None,
     )
 

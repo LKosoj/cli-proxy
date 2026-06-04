@@ -32,6 +32,8 @@ class ChatViewWidget(QWidget):
     quickActionTriggered = Signal(str)  # Сигнал для быстрых действий
     askOptionSelected = Signal(str)  # Сигнал выбора варианта ask_user
     progressMessageId = Signal(str, str)  # (session_uid, role) — id обновлённого progress-сообщения
+    clearQueueRequested = Signal()  # Сигнал запроса на очистку очереди задач
+    presetsRequested = Signal()  # Сигнал открытия диалога выбора пресета
 
     def __init__(
         self,
@@ -219,6 +221,16 @@ class ChatViewWidget(QWidget):
         self.stop_button.clicked.connect(lambda: self.taskCancelled.emit())
         self.stop_button.hide()
         btn_layout.addWidget(self.stop_button)
+        self.clear_queue_button = QPushButton(t("desktop.chat.btn_clear_queue", "ru"))
+        self.clear_queue_button.setObjectName("clear_queue_button")
+        self.clear_queue_button.setFixedHeight(28)
+        self.clear_queue_button.clicked.connect(lambda: self.clearQueueRequested.emit())
+        btn_layout.addWidget(self.clear_queue_button)
+        self.presets_button = QPushButton(t("desktop.chat.btn_presets", "ru"))
+        self.presets_button.setObjectName("presets_button")
+        self.presets_button.setFixedHeight(28)
+        self.presets_button.clicked.connect(lambda: self.presetsRequested.emit())
+        btn_layout.addWidget(self.presets_button)
         self.attach_button = QPushButton("+")
         self.attach_button.setObjectName("attach_button")
         self.attach_button.setFixedWidth(36)
@@ -637,4 +649,6 @@ class ChatViewWidget(QWidget):
         self.message_input.setPlaceholderText(t("desktop.chat.input_placeholder", lang))
         self.send_button.setText(t("desktop.btn.send", lang))
         self.stop_button.setText(t("desktop.chat.btn_stop", lang))
+        self.clear_queue_button.setText(t("desktop.chat.btn_clear_queue", lang))
+        self.presets_button.setText(t("desktop.chat.btn_presets", lang))
         self.status_label.setText(t("desktop.chat.status_ready", lang))

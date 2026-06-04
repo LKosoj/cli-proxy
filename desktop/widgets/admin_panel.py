@@ -486,6 +486,104 @@ class AdminPanel(QWidget):
         self.scheduler_panel = SchedulerPanelWidget(self.facade, actor_id=self.actor_id)
         self.scheduler_panel.setObjectName("admin_panel_scheduler_panel")
 
+        # ------------------------------------------------------------------
+        # Lint Evolution tab (Фича C)
+        # ------------------------------------------------------------------
+        lint_tab = QWidget()
+        lint_layout = QVBoxLayout(lint_tab)
+        lint_layout.setContentsMargins(6, 6, 6, 6)
+        lint_layout.setSpacing(8)
+
+        # Section: Status
+        self.lint_status_grp = QGroupBox("Status")
+        self.lint_status_grp.setObjectName("admin_panel_lint_status_grp")
+        lint_status_layout = QVBoxLayout(self.lint_status_grp)
+        lint_status_layout.setContentsMargins(6, 6, 6, 6)
+        lint_status_controls = QHBoxLayout()
+        lint_status_controls.setContentsMargins(0, 0, 0, 0)
+        self.lint_status_refresh_btn = QPushButton("Refresh")
+        self.lint_status_refresh_btn.setObjectName("admin_panel_lint_status_refresh_btn")
+        self.lint_status_refresh_btn.clicked.connect(self._refresh_lint_status)
+        lint_status_controls.addWidget(self.lint_status_refresh_btn)
+        lint_status_controls.addStretch(1)
+        lint_status_layout.addLayout(lint_status_controls)
+        self.lint_status_view = QPlainTextEdit()
+        self.lint_status_view.setObjectName("admin_panel_lint_status_view")
+        self.lint_status_view.setReadOnly(True)
+        self.lint_status_view.setMaximumHeight(130)
+        lint_status_layout.addWidget(self.lint_status_view)
+        lint_layout.addWidget(self.lint_status_grp)
+
+        # Section: Autopause
+        self.lint_autopause_grp = QGroupBox("Autopause")
+        self.lint_autopause_grp.setObjectName("admin_panel_lint_autopause_grp")
+        lint_autopause_layout = QVBoxLayout(self.lint_autopause_grp)
+        lint_autopause_layout.setContentsMargins(6, 6, 6, 6)
+        lint_autopause_controls = QHBoxLayout()
+        lint_autopause_controls.setContentsMargins(0, 0, 0, 0)
+        lint_autopause_controls.setSpacing(6)
+        self.lint_autopause_level_combo = QComboBox()
+        self.lint_autopause_level_combo.setObjectName("admin_panel_lint_autopause_level_combo")
+        for lvl in (1, 2, 3):
+            self.lint_autopause_level_combo.addItem(f"L{lvl}", lvl)
+        lint_autopause_controls.addWidget(self.lint_autopause_level_combo)
+        self.lint_autopause_pause_btn = QPushButton("Pause")
+        self.lint_autopause_pause_btn.setObjectName("admin_panel_lint_autopause_pause_btn")
+        self.lint_autopause_pause_btn.clicked.connect(self._trigger_lint_autopause_pause)
+        lint_autopause_controls.addWidget(self.lint_autopause_pause_btn)
+        self.lint_autopause_resume_btn = QPushButton("Resume")
+        self.lint_autopause_resume_btn.setObjectName("admin_panel_lint_autopause_resume_btn")
+        self.lint_autopause_resume_btn.clicked.connect(self._trigger_lint_autopause_resume)
+        lint_autopause_controls.addWidget(self.lint_autopause_resume_btn)
+        lint_autopause_controls.addStretch(1)
+        lint_autopause_layout.addLayout(lint_autopause_controls)
+        self.lint_autopause_status_label = QLabel("")
+        self.lint_autopause_status_label.setObjectName("admin_panel_lint_autopause_status")
+        self.lint_autopause_status_label.setWordWrap(True)
+        lint_autopause_layout.addWidget(self.lint_autopause_status_label)
+        lint_layout.addWidget(self.lint_autopause_grp)
+
+        # Section: Schema history
+        self.lint_schema_grp = QGroupBox("Schema history")
+        self.lint_schema_grp.setObjectName("admin_panel_lint_schema_grp")
+        lint_schema_layout = QVBoxLayout(self.lint_schema_grp)
+        lint_schema_layout.setContentsMargins(6, 6, 6, 6)
+        lint_schema_controls = QHBoxLayout()
+        lint_schema_controls.setContentsMargins(0, 0, 0, 0)
+        self.lint_schema_refresh_btn = QPushButton("Refresh")
+        self.lint_schema_refresh_btn.setObjectName("admin_panel_lint_schema_refresh_btn")
+        self.lint_schema_refresh_btn.clicked.connect(self._refresh_lint_schema)
+        lint_schema_controls.addWidget(self.lint_schema_refresh_btn)
+        lint_schema_controls.addStretch(1)
+        lint_schema_layout.addLayout(lint_schema_controls)
+        self.lint_schema_view = QPlainTextEdit()
+        self.lint_schema_view.setObjectName("admin_panel_lint_schema_view")
+        self.lint_schema_view.setReadOnly(True)
+        self.lint_schema_view.setMaximumHeight(120)
+        lint_schema_layout.addWidget(self.lint_schema_view)
+        lint_layout.addWidget(self.lint_schema_grp)
+
+        # Section: Gate dry-run
+        self.lint_gate_grp = QGroupBox("Gate dry-run")
+        self.lint_gate_grp.setObjectName("admin_panel_lint_gate_grp")
+        lint_gate_layout = QVBoxLayout(self.lint_gate_grp)
+        lint_gate_layout.setContentsMargins(6, 6, 6, 6)
+        lint_gate_controls = QHBoxLayout()
+        lint_gate_controls.setContentsMargins(0, 0, 0, 0)
+        self.lint_gate_run_btn = QPushButton("Run")
+        self.lint_gate_run_btn.setObjectName("admin_panel_lint_gate_run_btn")
+        self.lint_gate_run_btn.clicked.connect(self._trigger_lint_gate_dry_run)
+        lint_gate_controls.addWidget(self.lint_gate_run_btn)
+        lint_gate_controls.addStretch(1)
+        lint_gate_layout.addLayout(lint_gate_controls)
+        self.lint_gate_view = QPlainTextEdit()
+        self.lint_gate_view.setObjectName("admin_panel_lint_gate_view")
+        self.lint_gate_view.setReadOnly(True)
+        self.lint_gate_view.setMaximumHeight(130)
+        lint_gate_layout.addWidget(self.lint_gate_view)
+        lint_layout.addWidget(self.lint_gate_grp)
+        lint_layout.addStretch(1)
+
         self.admin_tabs.addTab(overview_tab, "Обзор")
         self.admin_tabs.addTab(operations_tab, "Операции")
         self.admin_tabs.addTab(monitor_tab, "Мониторинг")
@@ -493,6 +591,7 @@ class AdminPanel(QWidget):
         self.admin_tabs.addTab(chat_tab, "Chat")
         self.admin_tabs.addTab(self.autonomy_panel, "Autonomy")
         self.admin_tabs.addTab(self.scheduler_panel, "Scheduler")
+        self.admin_tabs.addTab(lint_tab, "Lint Evolution")
 
         self.disabled_page = QWidget()
         disabled_layout = QVBoxLayout(self.disabled_page)
@@ -602,6 +701,19 @@ class AdminPanel(QWidget):
             t("desktop.admin.col.timeout_sec", lang),
             "",
         ])
+        # Lint Evolution tab
+        tab_count = self.admin_tabs.count()
+        lint_tab_index = tab_count - 1
+        self.admin_tabs.setTabText(lint_tab_index, t("desktop.admin.tab.lint_evolution", lang))
+        self.lint_status_grp.setTitle(t("desktop.admin.lint.status_group", lang))
+        self.lint_status_refresh_btn.setText(t("desktop.admin.btn.refresh", lang))
+        self.lint_autopause_grp.setTitle(t("desktop.admin.lint.autopause_group", lang))
+        self.lint_autopause_pause_btn.setText(t("desktop.admin.lint.btn.pause", lang))
+        self.lint_autopause_resume_btn.setText(t("desktop.admin.lint.btn.resume", lang))
+        self.lint_schema_grp.setTitle(t("desktop.admin.lint.schema_group", lang))
+        self.lint_schema_refresh_btn.setText(t("desktop.admin.btn.refresh", lang))
+        self.lint_gate_grp.setTitle(t("desktop.admin.lint.gate_group", lang))
+        self.lint_gate_run_btn.setText(t("desktop.admin.lint.btn.run", lang))
 
     @property
     def active_session_uid(self) -> Optional[str]:
@@ -1520,6 +1632,162 @@ class AdminPanel(QWidget):
             if isinstance(result, dict):
                 error = str(result.get("error") or "unknown")
             self.ssh_actions_status_label.setText(t("desktop.admin.msg.error_fmt", lang, error=error))
+
+    # ------------------------------------------------------------------
+    # Lint Evolution handlers (Фича C)
+    # ------------------------------------------------------------------
+
+    def _refresh_lint_status(self) -> None:
+        session_uid = self._active_session_uid
+        lang = self.facade.ui_language
+        self.lint_status_view.clear()
+        loader = getattr(self.facade, "get_lint_evolution_status", None)
+        if not callable(loader):
+            self.lint_status_view.setPlainText(t("desktop.admin.lint.msg.api_unavailable", lang))
+            return
+        if not session_uid:
+            self.lint_status_view.setPlainText(t("desktop.admin.msg.no_session", lang))
+            return
+        try:
+            result = loader(session_uid)
+        except Exception:
+            self.logger.exception(
+                "admin panel _refresh_lint_status failed session_uid=%s", session_uid
+            )
+            self.lint_status_view.setPlainText(t("desktop.admin.lint.msg.load_error", lang))
+            return
+        if not isinstance(result, dict) or not result.get("ok"):
+            error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
+            self.lint_status_view.setPlainText(
+                t("desktop.admin.msg.error_fmt", lang, error=error)
+            )
+            return
+        self.lint_status_view.setPlainText("\n".join(result.get("lines") or []))
+
+    def _trigger_lint_autopause_pause(self) -> None:
+        session_uid = self._active_session_uid
+        lang = self.facade.ui_language
+        level = self.lint_autopause_level_combo.currentData()
+        caller = getattr(self.facade, "pause_lint_autopause", None)
+        if not callable(caller):
+            self.lint_autopause_status_label.setText(t("desktop.admin.lint.msg.api_unavailable", lang))
+            return
+        if not session_uid:
+            self.lint_autopause_status_label.setText(t("desktop.admin.msg.no_session", lang))
+            return
+        try:
+            result = caller(session_uid, int(level))
+        except Exception:
+            self.logger.exception(
+                "admin panel _trigger_lint_autopause_pause failed session_uid=%s level=%s",
+                session_uid, level,
+            )
+            self.lint_autopause_status_label.setText(t("desktop.admin.lint.msg.load_error", lang))
+            return
+        if isinstance(result, dict) and result.get("ok"):
+            self.lint_autopause_status_label.setText(
+                t("desktop.admin.lint.msg.paused", lang, level=level)
+            )
+        else:
+            error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
+            self.lint_autopause_status_label.setText(
+                t("desktop.admin.msg.error_fmt", lang, error=error)
+            )
+
+    def _trigger_lint_autopause_resume(self) -> None:
+        session_uid = self._active_session_uid
+        lang = self.facade.ui_language
+        level = self.lint_autopause_level_combo.currentData()
+        caller = getattr(self.facade, "resume_lint_autopause", None)
+        if not callable(caller):
+            self.lint_autopause_status_label.setText(t("desktop.admin.lint.msg.api_unavailable", lang))
+            return
+        if not session_uid:
+            self.lint_autopause_status_label.setText(t("desktop.admin.msg.no_session", lang))
+            return
+        try:
+            result = caller(session_uid, int(level))
+        except Exception:
+            self.logger.exception(
+                "admin panel _trigger_lint_autopause_resume failed session_uid=%s level=%s",
+                session_uid, level,
+            )
+            self.lint_autopause_status_label.setText(t("desktop.admin.lint.msg.load_error", lang))
+            return
+        if isinstance(result, dict) and result.get("ok"):
+            resumed = bool(result.get("resumed"))
+            if resumed:
+                self.lint_autopause_status_label.setText(
+                    t("desktop.admin.lint.msg.resumed", lang, level=level)
+                )
+            else:
+                self.lint_autopause_status_label.setText(
+                    t("desktop.admin.lint.msg.not_paused", lang, level=level)
+                )
+        else:
+            error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
+            self.lint_autopause_status_label.setText(
+                t("desktop.admin.msg.error_fmt", lang, error=error)
+            )
+
+    def _refresh_lint_schema(self) -> None:
+        session_uid = self._active_session_uid
+        lang = self.facade.ui_language
+        self.lint_schema_view.clear()
+        loader = getattr(self.facade, "get_lint_schema_history", None)
+        if not callable(loader):
+            self.lint_schema_view.setPlainText(t("desktop.admin.lint.msg.api_unavailable", lang))
+            return
+        if not session_uid:
+            self.lint_schema_view.setPlainText(t("desktop.admin.msg.no_session", lang))
+            return
+        try:
+            result = loader(session_uid)
+        except Exception:
+            self.logger.exception(
+                "admin panel _refresh_lint_schema failed session_uid=%s", session_uid
+            )
+            self.lint_schema_view.setPlainText(t("desktop.admin.lint.msg.load_error", lang))
+            return
+        if not isinstance(result, dict) or not result.get("ok"):
+            error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
+            self.lint_schema_view.setPlainText(
+                t("desktop.admin.msg.error_fmt", lang, error=error)
+            )
+            return
+        self.lint_schema_view.setPlainText("\n".join(result.get("lines") or []))
+
+    def _trigger_lint_gate_dry_run(self) -> None:
+        session_uid = self._active_session_uid
+        lang = self.facade.ui_language
+        self.lint_gate_view.clear()
+        self.lint_gate_run_btn.setEnabled(False)
+        caller = getattr(self.facade, "run_lint_gate_dry_run", None)
+        if not callable(caller):
+            self.lint_gate_view.setPlainText(t("desktop.admin.lint.msg.api_unavailable", lang))
+            self.lint_gate_run_btn.setEnabled(True)
+            return
+        if not session_uid:
+            self.lint_gate_view.setPlainText(t("desktop.admin.msg.no_session", lang))
+            self.lint_gate_run_btn.setEnabled(True)
+            return
+        try:
+            result = caller(session_uid)
+        except Exception:
+            self.logger.exception(
+                "admin panel _trigger_lint_gate_dry_run failed session_uid=%s", session_uid
+            )
+            self.lint_gate_view.setPlainText(t("desktop.admin.lint.msg.load_error", lang))
+            self.lint_gate_run_btn.setEnabled(True)
+            return
+        if not isinstance(result, dict) or not result.get("ok"):
+            error = str(result.get("error") or "unknown") if isinstance(result, dict) else "unknown"
+            self.lint_gate_view.setPlainText(
+                t("desktop.admin.msg.error_fmt", lang, error=error)
+            )
+        else:
+            self.lint_gate_view.setPlainText("\n".join(result.get("lines") or []))
+        self.lint_gate_run_btn.setEnabled(True)
 
     def closeEvent(self, event: Any) -> None:
         unsubscribe = getattr(self, "_unsubscribe", None)

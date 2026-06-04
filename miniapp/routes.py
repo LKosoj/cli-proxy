@@ -67,6 +67,8 @@ from .routes_json import JsonRouteServices, register_json_routes
 from .routes_logs import LogsRouteServices, register_logs_routes
 from .routes_scheduler import SchedulerRouteServices, register_scheduler_routes
 from .routes_ssh import SshRouteServices, register_ssh_routes
+from .routes_reports import ReportsRouteServices, register_reports_routes
+from .routes_tasks import TasksRouteServices, register_tasks_routes
 
 logger = logging.getLogger("miniapp")
 
@@ -131,6 +133,14 @@ class MiniAppRoutes:
             require_access=self._require_access,
             require_admin=self._require_admin,
             read_json_object=self._read_json_object,
+            json_error=self._json_error,
+        )
+        self.tasks_route_services = TasksRouteServices(
+            require_access=self._require_access,
+            json_error=self._json_error,
+        )
+        self.reports_route_services = ReportsRouteServices(
+            require_access=self._require_access,
             json_error=self._json_error,
         )
 
@@ -4662,6 +4672,8 @@ class MiniAppRoutes:
         app.router.add_post("/api/session/{uid}/remote-control/recheck", self.remote_control_recheck)
 
         register_ssh_routes(app, self.route_context, self.ssh_route_services)
+        register_tasks_routes(app, self.route_context, self.tasks_route_services)
+        register_reports_routes(app, self.route_context, self.reports_route_services)
 
         # i18n routes — user-lang literal routes BEFORE {lang} pattern
         app.router.add_get("/api/i18n/user-lang", self.i18n_user_lang_get)
