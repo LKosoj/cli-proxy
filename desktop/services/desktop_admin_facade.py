@@ -228,6 +228,7 @@ class DesktopAdminFacade:
         try:
             return await service.execute_pending(
                 session=session, approval_id=str(approval_id or ""),
+                lang=getattr(facade, "ui_language", "ru"),
             )
         except Exception as exc:
             facade.logger.exception(

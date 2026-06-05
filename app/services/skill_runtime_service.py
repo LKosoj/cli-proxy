@@ -17,6 +17,7 @@ from typing import Any, Dict, Literal, Optional, Sequence
 
 import yaml
 
+from i18n import t
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.sdk.runtime.openai_client import chat_completion
 
@@ -606,8 +607,10 @@ class SkillRuntimeService:
         is_admin: Optional[bool] = None,
         context: Any | None = None,
         dest: Optional[Dict[str, Any]] = None,
+        lang: str = None,
     ) -> SkillPromotionBatchResult:
         _ = context, dest
+        _lang = lang or "ru"
         allowed, reason = self._authorize_global_promotion(
             actor_chat_id=actor_chat_id,
             access_policy=access_policy,
@@ -681,7 +684,7 @@ class SkillRuntimeService:
             self.clear_cache()
             message = "Skills promoted to global: " + ", ".join(promoted_skill_ids)
             if skipped_skill_ids:
-                message += f". Пропущены: {', '.join(skipped_skill_ids)}"
+                message += t("msg.skill.promote_skipped", _lang, ids=", ".join(skipped_skill_ids))
             return SkillPromotionBatchResult(
                 status="ok",
                 message=message,

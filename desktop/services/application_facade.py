@@ -84,7 +84,7 @@ from agent import (
 from desktop.services.theme_service import ThemeService
 from desktop.services.desktop_identity_provider import DesktopIdentityProvider
 from desktop.services.desktop_admin_facade import DesktopAdminFacade
-from i18n import SUPPORTED_LANGS, FALLBACK_LANG
+from i18n import SUPPORTED_LANGS, FALLBACK_LANG, t
 from session import (
     consume_session_cli_switch_notice_text,
     session_scoped_key,
@@ -444,7 +444,7 @@ class ApplicationFacade:
             except Exception:
                 self.logger.exception("desktop reset_session failed to persist session_uid=%s", session_uid)
             self.notify("ui:session_updated", session_uid=session_uid)
-            self.notify("ui:message", session_id=session_uid, role="agent", text="Сессия сброшена.")
+            self.notify("ui:message", session_id=session_uid, role="agent", text=t("msg.session.reset_done", self.ui_language))
             return True
         return False
 
@@ -1599,7 +1599,7 @@ class ApplicationFacade:
             "ui:message",
             session_id=str(session_uid or ""),
             role="agent",
-            text=AccessPolicyService.DIRECT_CLI_DENIED_TEXT,
+            text=t("msg.input.direct_cli_denied", self.ui_language),
             md2=True,
         )
 
@@ -1935,7 +1935,7 @@ class ApplicationFacade:
         if session is None:
             payload = {
                 "status": "not_found",
-                "message": "Сессия не найдена.",
+                "message": t("errors.session_not_found", self.ui_language),
                 "mode_id": str(mode_id or "").strip() or None,
                 "run_id": str(run_id or "").strip() or None,
                 "promoted_skill_ids": [],
@@ -1954,7 +1954,7 @@ class ApplicationFacade:
             payload = {
                 "operation": "promote_run_skills",
                 "status": "denied",
-                "message": f"Run-операция запрещена policy: {reason}.",
+                "message": t("desktop.msg.run_op_denied", self.ui_language, reason=reason),
                 "mode_id": str(mode_id or "").strip() or None,
                 "run_id": str(run_id or "").strip() or None,
                 "blocked_by": [reason],
@@ -2077,7 +2077,7 @@ class ApplicationFacade:
                 "status": "not_found",
                 "approval_id": approval_token,
                 "skill_id": "",
-                "message": "Сессия не найдена.",
+                "message": t("errors.session_not_found", self.ui_language),
                 "manifest_path": None,
             }
             self.notify(
@@ -2092,7 +2092,7 @@ class ApplicationFacade:
                 "status": "denied",
                 "approval_id": approval_token,
                 "skill_id": "",
-                "message": "Административные skill-действия доступны только при активном admin mode.",
+                "message": t("desktop.msg.admin_skill_only", self.ui_language),
                 "manifest_path": None,
             }
             self.notify(
@@ -2213,7 +2213,7 @@ class ApplicationFacade:
             "status": "denied",
             "mode_id": str(mode_id or "").strip(),
             "phase": "",
-            "message": f"Run-операция запрещена policy: {reason}.",
+            "message": t("desktop.msg.run_op_denied", self.ui_language, reason=reason),
             "run_id": str(run_id or "").strip() or None,
             "recommended_action": None,
             "blocked_by": [reason],
@@ -2237,7 +2237,7 @@ class ApplicationFacade:
                 "status": "not_found",
                 "mode_id": str(mode_id or "").strip(),
                 "phase": "",
-                "message": "Сессия не найдена.",
+                "message": t("errors.session_not_found", self.ui_language),
                 "run_id": str(run_id or "").strip() or None,
                 "recommended_action": None,
                 "blocked_by": [],
@@ -2274,7 +2274,7 @@ class ApplicationFacade:
                 "status": "disabled",
                 "mode_id": str(mode_id or "").strip(),
                 "phase": "",
-                "message": "Run-операция не поддерживается.",
+                "message": t("desktop.msg.run_op_unsupported", self.ui_language),
                 "run_id": str(run_id or "").strip() or None,
                 "recommended_action": None,
                 "blocked_by": [],
@@ -2361,11 +2361,11 @@ class ApplicationFacade:
         resolved_mode = str(mode_id or "").strip()
         operation_name = str(operation or "").strip()
         if not operation_name:
-            return {"status": "blocked", "message": "Recovery operation не определена."}
+            return {"status": "blocked", "message": t("msg.recovery.operation_not_defined", self.ui_language)}
         self._ensure_modes_ready()
         mode = self.mode_registry_service.get(resolved_mode) if self.mode_registry_service else None
         if mode is None:
-            return {"status": "blocked", "message": f"Mode `{resolved_mode}` недоступен."}
+            return {"status": "blocked", "message": t("msg.recovery.mode_unavailable", self.ui_language, mode_id=resolved_mode)}
         desktop_bot_app = self._desktop_bot_app()
         resolved_context, resolved_dest = self._desktop_recovery_execution_vector(
             session=session,
@@ -2386,7 +2386,7 @@ class ApplicationFacade:
             )
         if resolved_mode == "codebase_mapper":
             if not hasattr(mode, "run_pipeline"):
-                return {"status": "blocked", "message": "Codebase Mapper mode недоступен."}
+                return {"status": "blocked", "message": t("msg.recovery.codebase_mapper_unavailable", self.ui_language)}
             output = await mode.run_pipeline(
                 session=session,
                 user_text=operation_name,
@@ -2396,12 +2396,12 @@ class ApplicationFacade:
             )
             return {
                 "status": "ok",
-                "message": str(output or "").strip() or f"Операция `{operation_name}` выполнена.",
+                "message": str(output or "").strip() or t("msg.recovery.operation_done", self.ui_language, operation_name=operation_name),
                 "executed_operation": operation_name,
                 "executed_via": "mode_run_pipeline",
             }
         if not hasattr(mode, "run_pipeline"):
-            return {"status": "blocked", "message": f"Recovery недоступен для режима `{resolved_mode}`."}
+            return {"status": "blocked", "message": t("msg.recovery.mode_no_pipeline", self.ui_language, mode_id=resolved_mode)}
         prompt_text = build_recovery_prompt(
             session=session,
             mode_id=resolved_mode,
@@ -2411,7 +2411,7 @@ class ApplicationFacade:
         if not prompt_text:
             return {
                 "status": "blocked",
-                "message": "Не удалось восстановить входные данные для recovery action.",
+                "message": t("msg.recovery.input_unavailable", self.ui_language),
                 "executed_operation": operation_name,
             }
         artifact_store = self._desktop_run_operations().artifact_store
@@ -2426,7 +2426,7 @@ class ApplicationFacade:
         latest_after = artifact_store.latest_run(session=session, mode_id=resolved_mode)
         payload = {
             "status": "ok",
-            "message": str(output or "").strip() or f"Операция `{operation_name}` выполнена.",
+            "message": str(output or "").strip() or t("msg.recovery.operation_done", self.ui_language, operation_name=operation_name),
             "executed_operation": operation_name,
             "executed_via": f"mode_run_pipeline:{operation_name}",
         }
@@ -2641,7 +2641,7 @@ class ApplicationFacade:
             from modes.sdk.planning import load_plan
             plan = load_plan(session.workdir, scoped_key=session_scoped_key(session))
             if not plan:
-                return "План не найден, нечего экспортировать."
+                return t("desktop.msg.export_plan_not_found", self.ui_language)
 
             # Эмуляция вызова CLI-обработчика через facade.run_session_input
             # или прямое использование manager runtime если он доступен.
@@ -2653,7 +2653,7 @@ class ApplicationFacade:
             )
         except Exception as e:
             self.logger.exception("export_data failed")
-            return f"Ошибка при экспорте: {e}"
+            return t("desktop.msg.export_error", self.ui_language, error=e)
 
     def resolve_analyst_question(self, question_id: str, answer: str) -> bool:
         """Резолвит вопрос от аналитика/агента, отвечая на него."""
@@ -3389,7 +3389,13 @@ class ApplicationFacade:
                     out_path = os.path.join(out_dir, os.path.basename(str(name)))
                     with open(out_path, "wb") as f:
                         f.write(document.read())
-                    facade.notify("ui:message", session_id=str(chat_id), role="agent", text=f"Файл сохранен: {out_path}", md2=True)
+                    facade.notify(
+                        "ui:message",
+                        session_id=str(chat_id),
+                        role="agent",
+                        text=t("msg.files.saved", facade.ui_language, path=out_path),
+                        md2=True,
+                    )
                     return True
                 except Exception:
                     facade.logger.exception("desktop _send_document failed")
@@ -3504,7 +3510,10 @@ class ApplicationFacade:
         """
         session = self.session_service.get_session_by_uid(session_uid)
         if not session:
-            return "Сессия не выбрана.", [[{"text": "❌ Отмена", "data": "sess_close_menu"}]]
+            return (
+                t("miniapp.autonomy.no_session", self.ui_language),
+                [[{"text": t("btn.session.cancel", self.ui_language), "data": "sess_close_menu"}]],
+            )
         active_mode = str(get_active_mode(session, "") or "").strip()
         rows: list[list[dict[str, str]]] = []
         access_policy = getattr(self._desktop_bot_app(), "access_policy_service", None)
@@ -3539,10 +3548,10 @@ class ApplicationFacade:
                 rows.append(row)
         if visibility.allows("orchestrator"):
             orch_enabled = is_orchestrator_enabled(session, False)
-            orch_text = f"🧠 {'Выключить' if orch_enabled else 'Включить'} оркестратор"
+            orch_text = t("desktop.msg.orch_toggle_disable" if orch_enabled else "desktop.msg.orch_toggle_enable", self.ui_language)
             rows.append([{"text": orch_text, "data": f"sess_orch_toggle:{session_runtime_uid(session)}"}])
-        rows.append([{"text": "❌ Отмена", "data": "sess_close_menu"}])
-        text = f"Сессия {session_runtime_uid(session)}"
+        rows.append([{"text": t("btn.session.cancel", self.ui_language), "data": "sess_close_menu"}])
+        text = t("desktop.msg.session_title", self.ui_language, uid=session_runtime_uid(session))
         if getattr(session, "name", None):
             text += f" — {session.name}"
         return text, rows
@@ -3554,7 +3563,7 @@ class ApplicationFacade:
         session: Any,
         mode_id: str,
         back_callback: str,
-        back_text: str = "⬅️ Назад",
+        back_text: Optional[str] = None,
     ) -> tuple[str, Any]:
         menu_visibility = build_mode_menu_visibility(
             session=session,
@@ -3565,7 +3574,7 @@ class ApplicationFacade:
             plugin,
             session,
             back_callback=back_callback,
-            back_text=back_text,
+            back_text=back_text if back_text is not None else t("common.back", self.ui_language),
             menu_visibility=menu_visibility,
         )
 
@@ -3929,7 +3938,7 @@ class ApplicationFacade:
         try:
             await dispatch.send_pending_input_decision(
                 context=object(),
-                decision=dispatch.pending_input_decision_for_action(action, pending_input=pending),
+                decision=dispatch.pending_input_decision_for_action(action, pending_input=pending, lang=self.ui_language),
                 dest=getattr(pending, "dest", None),
                 chat_id=session_uid,
                 ui_key=session_uid,
@@ -4045,7 +4054,13 @@ class ApplicationFacade:
             if not pending:
                 session = self.session_service.get_session_by_uid(session_uid)
                 if session:
-                    self.notify("ui:message", session_id=session_uid, role="agent", text="Запрос уже обработан.", md2=True)
+                    self.notify(
+                        "ui:message",
+                        session_id=session_uid,
+                        role="agent",
+                        text=t("msg.cmd.already_handled", self.ui_language),
+                        md2=True,
+                    )
                 return True
             session = self.session_service.get_session_by_uid(str(pending.session_id))
             if waiter_active:
@@ -4055,15 +4070,21 @@ class ApplicationFacade:
                         "ui:message",
                         session_uid=target.id,
                         role="agent",
-                        text="Одобрено. Продолжаю выполнение шага...",
+                        text=t("msg.cmd.approved_continue", self.ui_language),
                         md2=True,
                     )
                 return True
             if session:
-                self.notify("ui:message", session_id=session_uid, role="agent", text="Одобрено. Выполняю команду...", md2=True)
+                self.notify(
+                    "ui:message",
+                    session_id=session_uid,
+                    role="agent",
+                    text=t("msg.cmd.approved_execute", self.ui_language),
+                    md2=True,
+                )
             result = await execute_shell_command(str(pending.command), str(pending.cwd))
             output = result.get("output") if bool(result.get("success")) else result.get("error")
-            text = str(output or "(пустой вывод)")
+            text = str(output or t("msg.cmd.empty_output", self.ui_language))
             target = session or self.session_service.get_session_by_uid(session_uid)
             if target:
                 self.notify("ui:message", session_uid=target.id, role="agent", text=text, md2=True)
@@ -4075,7 +4096,13 @@ class ApplicationFacade:
             if not pending:
                 session = self.session_service.get_session_by_uid(session_uid)
                 if session:
-                    self.notify("ui:message", session_id=session_uid, role="agent", text="Запрос уже обработан.", md2=True)
+                    self.notify(
+                        "ui:message",
+                        session_id=session_uid,
+                        role="agent",
+                        text=t("msg.cmd.already_handled", self.ui_language),
+                        md2=True,
+                    )
                 return True
             session = None
             if pending:
@@ -4083,7 +4110,7 @@ class ApplicationFacade:
             if session is None:
                 session = self.session_service.get_session_by_uid(session_uid)
             if session:
-                text = "Команда отклонена. Продолжаю без неё." if waiter_active else "Команда отклонена."
+                text = t("msg.cmd.denied_continue", self.ui_language) if waiter_active else t("msg.cmd.denied", self.ui_language)
                 self.notify("ui:message", session_id=session_uid, role="agent", text=text, md2=True)
             return True
         if sdata in {"cancel_current", "queue_input", "discard_input", "take_pending_input", "queue_append_pending"}:
@@ -4092,7 +4119,13 @@ class ApplicationFacade:
             if not pending:
                 session = self.session_service.get_session_by_uid(session_uid)
                 if session:
-                    self.notify("ui:message", session_id=session_uid, role="agent", text="Нет ожидающего ввода.", md2=True)
+                    self.notify(
+                        "ui:message",
+                        session_id=session_uid,
+                        role="agent",
+                        text=t("msg.input.no_pending", self.ui_language),
+                        md2=True,
+                    )
                 return True
             pending_session_uid = str(
                 getattr(pending, "session_uid", "") or getattr(pending, "session_id", "") or ""
@@ -4101,7 +4134,13 @@ class ApplicationFacade:
             if not session:
                 active = self.session_service.get_session_by_uid(session_uid)
                 if active:
-                    self.notify("ui:message", session_uid=active.id, role="agent", text="Сессия уже закрыта.", md2=True)
+                    self.notify(
+                        "ui:message",
+                        session_uid=active.id,
+                        role="agent",
+                        text=t("msg.error.session_closed_stale", self.ui_language),
+                        md2=True,
+                    )
                 dispatch = getattr(self._desktop_bot_app(), "input_dispatch_service", None)
                 if dispatch is not None and hasattr(dispatch, "clear_pending_prompt_record"):
                     dispatch.clear_pending_prompt_record(session_uid)
@@ -4113,7 +4152,7 @@ class ApplicationFacade:
                 if dispatch is not None and hasattr(dispatch, "clear_pending_prompt_record"):
                     dispatch.clear_pending_prompt_record(session_uid)
                 InputDispatchService.pop_pending(pending_map, session_uid)
-                message_text = "Текущая генерация прервана. Ввод отброшен."
+                message_text = t("msg.input.interrupted", self.ui_language)
                 try:
                     report = await self._desktop_session_interrupt_service().interrupt_session_runtime(
                         session,
@@ -4126,11 +4165,11 @@ class ApplicationFacade:
                     self.logger.exception("desktop cancel_current interrupt failed session_uid=%s", session.id)
                 else:
                     if str(report.status or "") == "completed":
-                        message_text = "Текущая генерация прервана. Сессия освобождена. Ввод отброшен."
+                        message_text = t("msg.input.interrupted_freed", self.ui_language)
                     elif str(report.status or "") == "partial_timeout":
-                        message_text = "Текущая генерация прервана, но часть runtime еще завершает остановку. Ввод отброшен."
+                        message_text = t("msg.input.interrupted_partial", self.ui_language)
                     else:
-                        message_text = "Не удалось полностью прервать сессию. Ввод отброшен."
+                        message_text = t("msg.input.interrupt_failed", self.ui_language)
                 self.notify("ui:message", session_id=session_uid, role="agent", text=message_text, md2=True)
                 await self._notify_next_pending_busy_input(session_uid=session_uid)
                 return True
@@ -4143,7 +4182,7 @@ class ApplicationFacade:
                         "ui:message",
                         session_id=session_uid,
                         role="agent",
-                        text="Сессия занята. Переношу ввод в очередь.",
+                        text=t("msg.input.busy_queued", self.ui_language),
                         md2=True,
                     )
                     if dispatch is not None and hasattr(dispatch, "_handle_busy_pending_input"):
@@ -4154,7 +4193,7 @@ class ApplicationFacade:
                             context=object(),
                         )
                     return True
-                self.notify("ui:message", session_id=session_uid, role="agent", text="Взято в работу.", md2=True)
+                self.notify("ui:message", session_id=session_uid, role="agent", text=t("msg.input.taken", self.ui_language), md2=True)
                 prepared = None
                 image_paths = list(getattr(pending, "image_paths", []) or [])
                 if image_paths:
@@ -4180,7 +4219,7 @@ class ApplicationFacade:
                         "ui:message",
                         session_id=session_uid,
                         role="agent",
-                        text="Не удалось обновить сообщение в очереди. Попробуйте еще раз.",
+                        text=t("msg.error.queue_append_failed", self.ui_language),
                         md2=True,
                     )
                     return True
@@ -4188,7 +4227,7 @@ class ApplicationFacade:
                     "ui:message",
                     session_id=session_uid,
                     role="agent",
-                    text="Ввод добавлен к текущему сообщению в очереди.",
+                    text=t("msg.input.appended", self.ui_language),
                     md2=True,
                 )
                 await self._notify_next_pending_busy_input(session_uid=session_uid)
@@ -4202,14 +4241,14 @@ class ApplicationFacade:
                     raise RuntimeError("queue append rejected")
                 InputDispatchService.pop_pending(pending_map, session_uid)
                 self._persist_sessions_best_effort(reason="queue_input")
-                self.notify("ui:message", session_id=session_uid, role="agent", text="Ввод поставлен в очередь.", md2=True)
+                self.notify("ui:message", session_id=session_uid, role="agent", text=t("msg.input.queued", self.ui_language), md2=True)
                 await self._notify_next_pending_busy_input(session_uid=session_uid)
                 self._schedule_queue_kick(session_uid=session_uid)
                 return True
             if dispatch is not None and hasattr(dispatch, "clear_pending_prompt_record"):
                 dispatch.clear_pending_prompt_record(session_uid)
             InputDispatchService.pop_pending(pending_map, session_uid)
-            self.notify("ui:message", session_id=session_uid, role="agent", text="Ввод отменен.", md2=True)
+            self.notify("ui:message", session_id=session_uid, role="agent", text=t("msg.input.discarded", self.ui_language), md2=True)
             await self._notify_next_pending_busy_input(session_uid=session_uid)
             return True
         # sess_active — вернуться к предыдущему уровню (обзор сессии)
@@ -4267,7 +4306,13 @@ class ApplicationFacade:
                     explicit_mode_id = candidate_mode_id
                     session = candidate_session
             if not session:
-                self.notify("ui:message", session_uid=session_uid, role="agent", text="Сессия не найдена.", md2=True)
+                self.notify(
+                    "ui:message",
+                    session_uid=session_uid,
+                    role="agent",
+                    text=t("errors.session_not_found", self.ui_language),
+                    md2=True,
+                )
                 return True
             mode_id = explicit_mode_id or str(get_active_mode(session, "") or "").strip()
             if session and mode_id and self.mode_registry_service:
@@ -4346,7 +4391,7 @@ class ApplicationFacade:
                         "ui:message",
                         session_id=session_uid,
                         role="agent",
-                        text="Процесс остановлен пользователем. Продвинутый оркестратор выключен.",
+                        text=t("msg.orch.disabled", self.ui_language),
                         md2=True,
                     )
                     return True
@@ -4464,7 +4509,7 @@ class ApplicationFacade:
         session = self.session_service.get_session_by_uid(session_uid)
         if session is None or not bot_app._mode_allows_plugin_ui(session):
             try:
-                await bot_app._send_message(None, chat_id=session_uid, text="Режим плагинов не активен.", md2=True)
+                await bot_app._send_message(None, chat_id=session_uid, text=t("desktop.msg.plugins_inactive", self.ui_language), md2=True)
             except Exception:
                 self.logger.exception(
                     "desktop plugin ui callback failed to send inactive-mode message session_uid=%s",
@@ -4652,11 +4697,11 @@ class ApplicationFacade:
         self.notify(
             "ui:mode_menu",
             session_id=session_uid,
-            text=f"Нужное подтверждение: {str(reason or 'Dangerous')}\nКоманда:\n{str(cmd or '')}",
+            text=t("desktop.msg.cmd_confirm_prompt", self.ui_language, reason=str(reason or "Dangerous"), cmd=str(cmd or "")),
             rows=[
                 [
-                    {"text": "✅ Одобрить", "data": f"approve_cmd:{cmd_id}"},
-                    {"text": "❌ Запретить", "data": f"deny_cmd:{cmd_id}"},
+                    {"text": t("desktop.btn.cmd_approve", self.ui_language), "data": f"approve_cmd:{cmd_id}"},
+                    {"text": t("desktop.btn.cmd_deny", self.ui_language), "data": f"deny_cmd:{cmd_id}"},
                 ]
             ],
         )
@@ -4874,15 +4919,13 @@ class ApplicationFacade:
             session=session,
             mode_registry=self.mode_registry_service,
         )
-        text = "Результат текущего режима готов.\n" + self.advanced_orchestrator_service.build_confirm_text(
+        text = t("run.orch_transition_ready", self.ui_language) + self.advanced_orchestrator_service.build_confirm_text(
             current_mode_label=current_label,
             proposal=proposal,
+            lang=self.ui_language,
         )
         if is_return_to_previous:
-            text += (
-                "\n\n⚠️ Предложен возврат в предыдущий режим цепочки. "
-                "Проверьте уверенность и подтвердите вручную."
-            )
+            text += t("run.orch_transition_return_warning", self.ui_language)
         self.notify(
             "ui:mode_menu",
             session_id=session_uid,
@@ -4890,11 +4933,11 @@ class ApplicationFacade:
             rows=[
                 [
                     {
-                        "text": "✅ Передать дальше",
+                        "text": t("btn.orch_transition.apply", self.ui_language),
                         "data": f"orch_transition:apply:{session_uid}:{proposal.target_mode_id}",
                     },
                     {
-                        "text": "⛔ Остановить процесс",
+                        "text": t("btn.orch_transition.cancel", self.ui_language),
                         "data": f"orch_transition:cancel:{session_uid}",
                     },
                 ]
@@ -5021,11 +5064,11 @@ class ApplicationFacade:
                 rows = [
                     [
                         {
-                            "text": "✅ Перейти",
+                            "text": t("btn.input.orch_apply", self.ui_language),
                             "data": f"orch_transition:apply:{session_uid}:{proposal.target_mode_id}",
                         },
                         {
-                            "text": "⛔ Отменить",
+                            "text": t("btn.input.orch_cancel", self.ui_language),
                             "data": f"orch_transition:cancel:{session_uid}",
                         },
                     ]
@@ -5036,6 +5079,7 @@ class ApplicationFacade:
                     text=self.advanced_orchestrator_service.build_confirm_text(
                         current_mode_label=current_label,
                         proposal=proposal,
+                        lang=self.ui_language,
                     ),
                     rows=rows,
                 )

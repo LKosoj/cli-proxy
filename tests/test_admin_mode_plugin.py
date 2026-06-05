@@ -1395,8 +1395,8 @@ def test_admin_run_check_and_dry_run_flags_passed_to_executor(tmp_path) -> None:
             assert ctx_run_live.check_only is False
             assert ctx_run_live.dry_run is False
 
-            assert any("Dry-run: on" in str(item[1] or "") for item in sent)
-            assert any("Dry-run: off" in str(item[1] or "") for item in sent)
+            assert any("Сухой прогон: on" in str(item[1] or "") for item in sent)
+            assert any("Сухой прогон: off" in str(item[1] or "") for item in sent)
         finally:
             app.shutdown_html_process_pool()
 
@@ -1811,7 +1811,7 @@ def test_admin_mute_and_unmute_update_session_state(tmp_path) -> None:
             assert unmuted_state.get("muted_until_ts") is None
 
             assert "Alerts muted until_ts=" in str(sent[-2][1] or "")
-            assert "Alerts unmuted." in str(sent[-1][1] or "")
+            assert "Оповещения включены." in str(sent[-1][1] or "")
             assert sent[-2][3].get("md2") is True
             assert sent[-1][3].get("md2") is True
         finally:

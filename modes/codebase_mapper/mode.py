@@ -10,6 +10,8 @@ import yaml
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from session import Session
 
+from i18n import t
+from utils.lang import resolve_user_lang
 from app.mode_dependencies import ModeDependencies
 from app.services.tool_availability import is_tool_available
 from modes.codebase_mapper.ui import build_codebase_mapper_menu
@@ -74,13 +76,10 @@ class CodebaseMapperMode(BaseMode):
         ms = self._messaging(bot_app=bot_app, context=context)
         if await self._enqueue_if_busy(session=session, bot_app=bot_app, ms=ms, chat_id=chat_id, text=message.text, dest=dest):
             return ToolResult.ok()
+        lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
         await ms.send_text(
             chat_id,
-            (
-                "🗺 Mapper активен.\n"
-                "Текстовый ввод в этом режиме не обрабатывается.\n"
-                "Используйте кнопки в `/sessions` → `Mapper`."
-            ),
+            t("codebase_mapper.msg_active_no_input", lang),
             md2=True,
         )
         return ToolResult.ok()
@@ -342,15 +341,16 @@ class CodebaseMapperMode(BaseMode):
 
         ms = self._messaging(bot_app=bot_app, context=context)
         action = str(callback.action or "").strip()
+        lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
 
         if action in ("enable", "on"):
             await self._activate_mode(session=session, bot_app=bot_app, cli_work_type=None, executor_profile="default")
-            await self._rerender_menu(bot_app, session, chat_id, context, query, note="Маппер включен.")
+            await self._rerender_menu(bot_app, session, chat_id, context, query, note=t("codebase_mapper.msg_mapper_on", lang), lang=lang)
             return ToolResult.ok()
 
         if action in ("disable", "off"):
             await self._deactivate_mode(session=session, bot_app=bot_app, cancel_tasks=True, timeout_s=0.2)
-            await self._rerender_menu(bot_app, session, chat_id, context, query, note="Маппер выключен.")
+            await self._rerender_menu(bot_app, session, chat_id, context, query, note=t("codebase_mapper.msg_mapper_off", lang), lang=lang)
             return ToolResult.ok()
 
         if action in ("run", "refresh"):
@@ -359,7 +359,7 @@ class CodebaseMapperMode(BaseMode):
                 await ms.send_or_edit(
                     query=query,
                     chat_id=chat_id,
-                    text="🗺 Обновление карты уже выполняется.",
+                    text=t("codebase_mapper.msg_map_update_busy", lang),
                     md2=True,
                     reply_markup=None,
                 )
@@ -375,7 +375,7 @@ class CodebaseMapperMode(BaseMode):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="🗺 Обновление карты запущено.\nСтатус сессии: занята.",
+                text=t("codebase_mapper.msg_map_update_started", lang),
                 md2=True,
                 reply_markup=None,
             )
@@ -386,7 +386,7 @@ class CodebaseMapperMode(BaseMode):
                 await ms.send_or_edit(
                     query=query,
                     chat_id=chat_id,
-                    text="🗺 Операция маппера уже выполняется.",
+                    text=t("codebase_mapper.msg_mapper_busy", lang),
                     md2=True,
                     reply_markup=None,
                 )
@@ -401,7 +401,7 @@ class CodebaseMapperMode(BaseMode):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="🛠 Validate + Repair запущен.",
+                text=t("codebase_mapper.msg_validate_repair_started", lang),
                 md2=True,
                 reply_markup=None,
             )
@@ -417,7 +417,7 @@ class CodebaseMapperMode(BaseMode):
                     [
                         [
                             InlineKeyboardButton(
-                                "♻️ Переинициализировать полностью",
+                                t("codebase_mapper.btn_reinit_full", lang),
                                 callback_data=build_mode_action_callback_data(
                                     self.mode_id,
                                     "init_choice",
@@ -428,7 +428,7 @@ class CodebaseMapperMode(BaseMode):
                         ],
                         [
                             InlineKeyboardButton(
-                                "🩺 Детальная проверка и исправления",
+                                t("codebase_mapper.btn_detail_check", lang),
                                 callback_data=build_mode_action_callback_data(
                                     self.mode_id,
                                     "init_choice",
@@ -439,7 +439,7 @@ class CodebaseMapperMode(BaseMode):
                         ],
                         [
                             InlineKeyboardButton(
-                                "❌ Отмена",
+                                t("codebase_mapper.btn_cancel_init", lang),
                                 callback_data=build_mode_action_callback_data(
                                     self.mode_id,
                                     "init_choice",
@@ -453,13 +453,7 @@ class CodebaseMapperMode(BaseMode):
                 await ms.send_or_edit(
                     query=query,
                     chat_id=chat_id,
-                    text=(
-                        "Граф уже инициализирован.\n\n"
-                        "Выберите действие:\n"
-                        "1. Полная переинициализация\n"
-                        "2. Детальная проверка + repair\n"
-                        "3. Отмена"
-                    ),
+                    text=t("codebase_mapper.msg_already_initialized", lang),
                     md2=True,
                     reply_markup=keyboard,
                 )
@@ -468,7 +462,7 @@ class CodebaseMapperMode(BaseMode):
                 await ms.send_or_edit(
                     query=query,
                     chat_id=chat_id,
-                    text="🗺 Операция маппера уже выполняется.",
+                    text=t("codebase_mapper.msg_mapper_busy", lang),
                     md2=True,
                     reply_markup=None,
                 )
@@ -483,7 +477,7 @@ class CodebaseMapperMode(BaseMode):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="🧭 Инициализация md-графа запущена.",
+                text=t("codebase_mapper.msg_init_started", lang),
                 md2=True,
                 reply_markup=None,
             )
@@ -492,21 +486,24 @@ class CodebaseMapperMode(BaseMode):
         if action == "init_choice":
             choice = str((callback.payload or {}).get("value") or "").strip().lower()
             if choice == "cancel":
-                await self._rerender_menu(bot_app, session, chat_id, context, query, note="Инициализация отменена.")
+                await self._rerender_menu(
+                    bot_app, session, chat_id, context, query,
+                    note=t("codebase_mapper.msg_init_cancelled", lang), lang=lang,
+                )
                 return ToolResult.ok()
             if choice == "full":
                 prompt = "init_full"
-                notice = "♻️ Полная переинициализация запущена."
+                notice = t("codebase_mapper.msg_reinit_started", lang)
             elif choice == "verify":
                 prompt = "verify"
-                notice = "🩺 Детальная проверка графа запущена."
+                notice = t("codebase_mapper.msg_detail_check_started", lang)
             else:
                 return ToolResult.fail("unknown_init_choice")
             if self._is_mapper_operation_busy(bot_app=bot_app, session=session):
                 await ms.send_or_edit(
                     query=query,
                     chat_id=chat_id,
-                    text="🗺 Операция маппера уже выполняется.",
+                    text=t("codebase_mapper.msg_mapper_busy", lang),
                     md2=True,
                     reply_markup=None,
                 )
@@ -525,7 +522,12 @@ class CodebaseMapperMode(BaseMode):
             runtime_getter = self._runtime_getter()
             mapper = runtime_getter("codebase_mapper_status")
             if mapper is None:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Mapper runtime недоступен.", md2=True)
+                await ms.send_or_edit(
+                    query=query,
+                    chat_id=chat_id,
+                    text=t("codebase_mapper.msg_mapper_runtime_unavailable", lang),
+                    md2=True,
+                )
                 return ToolResult.ok()
             data = mapper.get_status(workdir=session.workdir)
             status = str(data.get("status") or "").strip()
@@ -543,7 +545,7 @@ class CodebaseMapperMode(BaseMode):
             repair_queue = list(data.get("repair_queue") or [])
             degraded_nodes = list(data.get("degraded_nodes") or [])
             nodes_status_counts = dict(data.get("nodes_status_counts") or {})
-            lines = ["🗺 Статус карты кодовой базы", f"Status: {status}", f"Docs: {len(docs)}"]
+            lines = [t("codebase_mapper.status_title", lang), f"Status: {status}", f"Docs: {len(docs)}"]
             if generated_at:
                 lines.append(f"Generated: {generated_at}")
             lines.append(f"Graph: {graph_state or 'empty'}")
@@ -587,6 +589,7 @@ class CodebaseMapperMode(BaseMode):
                 context=context,
                 query=query,
                 page=0,
+                lang=lang,
             )
             return ToolResult.ok()
 
@@ -599,6 +602,7 @@ class CodebaseMapperMode(BaseMode):
                 context=context,
                 query=query,
                 page=page,
+                lang=lang,
             )
             return ToolResult.ok()
 
@@ -607,17 +611,22 @@ class CodebaseMapperMode(BaseMode):
             runtime_getter = self._runtime_getter()
             mapper = runtime_getter("codebase_mapper_status")
             if mapper is None:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Mapper runtime недоступен.", md2=True)
+                await ms.send_or_edit(
+                    query=query,
+                    chat_id=chat_id,
+                    text=t("codebase_mapper.msg_mapper_runtime_unavailable", lang),
+                    md2=True,
+                )
                 return ToolResult.ok()
             review_data = mapper.list_review_items(workdir=session.workdir)
             items = list(review_data.get("items") or [])
             if idx < 0 or idx >= len(items):
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Элемент ревью не найден.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("codebase_mapper.msg_review_item_not_found", lang), md2=True)
                 return ToolResult.ok()
             item = str(items[idx] or "")
             result = mapper.confirm_review_item(workdir=session.workdir, item=item)
             if not bool(result.get("ok")):
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Не удалось подтвердить элемент ревью.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("codebase_mapper.msg_review_confirm_failed", lang), md2=True)
                 return ToolResult.ok()
             page = idx // self._review_page_size
             await self._render_review_page(
@@ -627,7 +636,8 @@ class CodebaseMapperMode(BaseMode):
                 context=context,
                 query=query,
                 page=page,
-                note=f"Подтверждено: `{item}`",
+                note=t("codebase_mapper.msg_review_confirmed", lang, item=item),
+                lang=lang,
             )
             return ToolResult.ok()
 
@@ -657,6 +667,8 @@ class CodebaseMapperMode(BaseMode):
         chat_id: int,
         prompt: str,
     ) -> None:
+        _lang = resolve_user_lang(bot_app.config, chat_id=chat_id)
+
         async def _run() -> None:
             pipeline = self._pipeline()
             ms = self._messaging(bot_app=bot_app, context=context)
@@ -671,9 +683,9 @@ class CodebaseMapperMode(BaseMode):
                 )
                 output = str(get_orchestrator_last_mode_output(session, "") or "").strip()
                 if not output:
-                    output = "🗺 Операция Codebase Mapper завершена."
+                    output = t("codebase_mapper.msg_operation_done", _lang)
                 else:
-                    output = f"✅ Операция Codebase Mapper завершена.\n\n{output}"
+                    output = t("codebase_mapper.msg_operation_done_with_output", _lang, output=output)
                 await self._deactivate_mode(session=session, bot_app=bot_app, cancel_tasks=False)
                 deactivated = True
                 await ms.send_text(chat_id, output, md2=True)
@@ -697,12 +709,13 @@ class CodebaseMapperMode(BaseMode):
         query: Any,
         page: int,
         note: str = "",
+        lang: str = "ru",
     ) -> None:
         runtime_getter = self._runtime_getter()
         mapper = runtime_getter("codebase_mapper_status")
         ms = self._messaging(bot_app=bot_app, context=context)
         if mapper is None:
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Mapper runtime недоступен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("codebase_mapper.msg_mapper_runtime_unavailable", lang), md2=True)
             return
         review_data = mapper.list_review_items(workdir=session.workdir)
         items = list(review_data.get("items") or [])
@@ -762,15 +775,18 @@ class CodebaseMapperMode(BaseMode):
             )
         if nav:
             rows.append(nav)
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=build_session_mode_pick_callback_data(session, self.mode_id))])
+        rows.append([InlineKeyboardButton(
+            t("common.back", lang),
+            callback_data=build_session_mode_pick_callback_data(session, self.mode_id),
+        )])
 
         text_lines = [
-            "🧾 Ревью графа",
-            f"Элементов: {total}",
+            t("codebase_mapper.review_title", lang),
+            t("codebase_mapper.review_items_count", lang, n=total),
             f"Needs review: {len(needs_review)}",
-            f"Страница: {cur_page + 1}/{max_page + 1 if total else 1}",
+            t("codebase_mapper.review_page", lang, a=cur_page + 1, b=max_page + 1 if total else 1),
             "",
-            "Нажмите на элемент, чтобы подтвердить.",
+            t("codebase_mapper.msg_review_press_to_confirm", lang),
         ]
         if note:
             text_lines.insert(0, note)
@@ -797,7 +813,10 @@ class CodebaseMapperMode(BaseMode):
             return s
         return s[: n - 1] + "…"
 
-    async def _rerender_menu(self, bot_app: Any, session: Any, chat_id: int, context: Any, query: Any, *, note: str = "") -> None:
+    async def _rerender_menu(
+        self, bot_app: Any, session: Any, chat_id: int, context: Any, query: Any,
+        *, note: str = "", lang: str = "ru",
+    ) -> None:
         await self._rerender_menu_common(
             bot_app=bot_app,
             session=session,
@@ -806,7 +825,7 @@ class CodebaseMapperMode(BaseMode):
             query=query,
             note=note,
             back_callback="sess_active",
-            back_text="⬅️ Назад",
+            back_text=t("common.back", lang),
         )
 
     def build_menu(
@@ -815,14 +834,18 @@ class CodebaseMapperMode(BaseMode):
         back_callback: str = "sess_active",
         back_text: str = "⬅️ Назад",
     ) -> tuple[str, Any]:
-        init_label = "🧭 Инициализировать граф"
+        _lang = resolve_user_lang(
+            getattr(session, "config", None),
+            chat_id=getattr(session, "chat_id", None),
+        )
+        init_label = t("codebase_mapper.btn_init_graph", _lang)
         try:
             runtime_getter = self._runtime_getter()
             mapper = runtime_getter("codebase_mapper_status")
             if mapper is not None:
                 status = mapper.get_status(workdir=getattr(session, "workdir", ""))
                 if bool(status.get("graph_initialized")):
-                    init_label = "🧭 Обновить граф"
+                    init_label = t("codebase_mapper.btn_update_graph", _lang)
         except Exception:
             self._log.exception("codebase_mapper build_menu: status lookup failed")
         return build_codebase_mapper_menu(

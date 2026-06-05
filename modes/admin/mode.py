@@ -9,6 +9,9 @@ from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from i18n import t
+from utils.lang import resolve_user_lang
+
 from app.mode_dependencies import ModeDependencies
 from app.services.admin_config_service import AdminConfigService
 from app.services.path_normalization import normalize_optional_state_path
@@ -79,25 +82,26 @@ def _format_autopilot_exec_summary(
     *,
     intent: Dict[str, Any],
     exec_result: Dict[str, Any],
+    lang: str = 'ru',
 ) -> str:
     itype = str(intent.get("type") or "")
     if itype == "propose_plan":
         total = exec_result.get("total_steps") or 0
         completed = exec_result.get("completed_steps") or 0
-        header = f"✅ Autopilot выполнил plan ({completed}/{total} шагов)"
+        header = t('admin.chat.autopilot_plan_ok', lang, completed=completed, total=total)
         if exec_result.get("stopped_early"):
-            header = f"⚠ Autopilot остановил plan на шаге {completed}/{total}"
+            header = t('admin.chat.autopilot_plan_stopped', lang, completed=completed, total=total)
         chunks = [header]
         if exec_result.get("runbook_saved"):
             rb_id = str(exec_result.get("runbook_id") or "")
-            chunks.append(f"Runbook сохранён: {rb_id}")
+            chunks.append(t('admin.chat.runbook_saved', lang, runbook_id=rb_id))
         return "\n".join(chunks)
     target_kind = str(exec_result.get("target_kind") or "?")
     action_id = str(intent.get("action_id") or "")
     argv_raw = intent.get("argv") if isinstance(intent.get("argv"), list) else None
     argv_text = " ".join(str(a) for a in (argv_raw or []))
     label = action_id or argv_text or itype
-    header = f"✅ Autopilot выполнил `{label}` ({target_kind})"
+    header = t('admin.chat.autopilot_exec_ok', lang, label=label, target_kind=target_kind)
     chunks = [header]
     exit_code = exec_result.get("exit_code")
     if exit_code is not None:
@@ -113,18 +117,18 @@ def _format_autopilot_exec_summary(
     return "\n\n".join(chunks)
 
 
-def _format_chat_result_for_telegram(result: Dict[str, Any]) -> str:
+def _format_chat_result_for_telegram(result: Dict[str, Any], lang: str = 'ru') -> str:
     chunks: list[str] = []
     target_kind = str(result.get("target_kind") or "")
     if target_kind == "plan":
         total = result.get("total_steps") or 0
         completed = result.get("completed_steps") or 0
         if result.get("ok"):
-            chunks.append(f"Plan выполнен ({completed}/{total} шагов)")
+            chunks.append(t('admin.chat.plan_ok', lang, completed=completed, total=total))
         elif result.get("stopped_early"):
-            chunks.append(f"Plan остановлен на шаге {completed}/{total}")
+            chunks.append(t('admin.chat.plan_stopped', lang, completed=completed, total=total))
         else:
-            chunks.append(f"Plan завершён с ошибками ({completed}/{total} шагов)")
+            chunks.append(t('admin.chat.plan_errors', lang, completed=completed, total=total))
         steps = result.get("steps")
         if isinstance(steps, list):
             for step in steps[:5]:
@@ -147,7 +151,7 @@ def _format_chat_result_for_telegram(result: Dict[str, Any]) -> str:
                     snippet = stderr if len(stderr) <= 500 else stderr[:500] + "..."
                     chunks.append(f"STDERR:\n{snippet}")
         if result.get("runbook_saved"):
-            chunks.append(f"Runbook сохранён: {result.get('runbook_id') or ''}")
+            chunks.append(t('admin.chat.runbook_saved', lang, runbook_id=result.get('runbook_id') or ''))
         return "\n\n".join(chunks)
     action_id = str(result.get("action_id") or "")
     if action_id:
@@ -417,12 +421,20 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return ToolResult.fail("missing_context")
 
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=message.chat_id)
         parsed = self._parse_input_action(
             str(getattr(message, "text", "") or ""),
             session=session,
         )
         action = str(parsed.get("action") or "").strip().lower()
-        message_text = str(parsed.get("message") or "").strip()
+        if parsed.get("i18n_key"):
+            message_text = t(
+                str(parsed["i18n_key"]),
+                lang,
+                **dict(parsed.get("i18n_kwargs") or {}),
+            )
+        else:
+            message_text = str(parsed.get("message") or "").strip()
         payload = parsed.get("payload") if isinstance(parsed, dict) else None
 
         handlers = {
@@ -445,6 +457,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 user_id=getattr(message, "user_id", None),
                 ms=ms,
                 context=context,
+                lang=lang,
             ),
             "disable_mode": lambda: self._input_disable_mode(
                 bot_app=bot_app,
@@ -452,6 +465,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 chat_id=str(message.chat_id),
                 user_id=getattr(message, "user_id", None),
                 ms=ms,
+                lang=lang,
             ),
             "error": lambda: self._input_show_error(
                 chat_id=str(message.chat_id),
@@ -487,6 +501,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=str(message.chat_id),
             ms=ms,
             payload=payload if isinstance(payload, dict) else {},
+            lang=lang,
         )
         handlers["list_actions"] = lambda: self._input_list_actions(
             bot_app=bot_app,
@@ -494,6 +509,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=str(message.chat_id),
             ms=ms,
             payload=payload if isinstance(payload, dict) else {},
+            lang=lang,
         )
         handlers["ack_alert"] = lambda: self._input_ack_alert(
             bot_app=bot_app,
@@ -502,6 +518,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             user_id=getattr(message, "user_id", None),
             ms=ms,
             incident_id=message_text,
+            lang=lang,
         )
         handlers["set_dry_run"] = lambda: self._input_set_dry_run(
             bot_app=bot_app,
@@ -510,6 +527,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             user_id=getattr(message, "user_id", None),
             ms=ms,
             payload=payload if isinstance(payload, dict) else {},
+            lang=lang,
         )
         handlers["mute_alerts"] = lambda: self._input_mute_alerts(
             bot_app=bot_app,
@@ -517,18 +535,21 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=str(message.chat_id),
             ms=ms,
             payload=payload if isinstance(payload, dict) else {},
+            lang=lang,
         )
         handlers["unmute_alerts"] = lambda: self._input_unmute_alerts(
             bot_app=bot_app,
             session=session,
             chat_id=str(message.chat_id),
             ms=ms,
+            lang=lang,
         )
         handlers["list_approvals"] = lambda: self._input_list_approvals(
             bot_app=bot_app,
             session=session,
             chat_id=str(message.chat_id),
             ms=ms,
+            lang=lang,
         )
         handlers["rescan_environment"] = lambda: self._input_rescan_environment(
             bot_app=bot_app,
@@ -537,6 +558,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             user_id=getattr(message, "user_id", None),
             ms=ms,
             context=context,
+            lang=lang,
         )
         handlers["revoke_approval"] = lambda: self._input_revoke_approval(
             bot_app=bot_app,
@@ -544,18 +566,21 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=str(message.chat_id),
             ms=ms,
             override_id=message_text,
+            lang=lang,
         )
         handlers["clear_approvals"] = lambda: self._input_clear_approvals(
             bot_app=bot_app,
             session=session,
             chat_id=str(message.chat_id),
             ms=ms,
+            lang=lang,
         )
         handlers["list_skill_installs"] = lambda: self._input_list_skill_installs(
             bot_app=bot_app,
             session=session,
             chat_id=str(message.chat_id),
             ms=ms,
+            lang=lang,
         )
         handlers["approve_skill_install"] = lambda: self._input_approve_skill_install(
             bot_app=bot_app,
@@ -563,6 +588,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=str(message.chat_id),
             ms=ms,
             approval_id=message_text,
+            lang=lang,
         )
         handlers["reject_skill_install"] = lambda: self._input_reject_skill_install(
             bot_app=bot_app,
@@ -570,6 +596,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=str(message.chat_id),
             ms=ms,
             approval_id=message_text,
+            lang=lang,
         )
         handlers["chat"] = lambda: self._input_handle_chat(
             bot_app=bot_app,
@@ -611,15 +638,15 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         subcommand = str(parts[1] or "").strip().lower()
         if subcommand in {"help", "status"}:
             if len(parts) != 2:
-                return {"action": "error", "message": f"Формат: /admin {subcommand}."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_subcommand", "i18n_kwargs": {"subcommand": subcommand}}
             return {"action": subcommand}
         if subcommand in {"enable", "on"}:
             if len(parts) != 2:
-                return {"action": "error", "message": "Формат: /admin enable."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_enable"}
             return {"action": "enable_mode"}
         if subcommand in {"disable", "off"}:
             if len(parts) != 2:
-                return {"action": "error", "message": "Формат: /admin disable."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_disable"}
             return {"action": "disable_mode"}
         if subcommand in self._EXEC_CONTROL_COMMANDS:
             return self._parse_executor_action(parts=parts, session=session, command=subcommand)
@@ -627,10 +654,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return self._parse_state_control_action(parts=parts, command=subcommand)
         return {
             "action": "error",
-            "message": (
-                "Неизвестная подкоманда `/admin ...`. "
-                "Используйте `/admin help`."
-            ),
+            "i18n_key": "admin.cmd.err_unknown_subcmd",
         }
 
     @staticmethod
@@ -668,112 +692,113 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         cmd = str(command or "").strip().lower()
         if cmd == "incidents":
             if len(parts) > 3:
-                return {"action": "error", "message": "Формат: /admin incidents [N]."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_incidents"}
             limit = 20
             if len(parts) == 3:
                 try:
                     limit = int(str(parts[2] or "").strip())
                 except Exception:
-                    return {"action": "error", "message": "N должен быть целым числом > 0."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_n_must_be_int"}
             if limit <= 0:
-                return {"action": "error", "message": "N должен быть > 0."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_n_must_be_positive"}
             return {"action": "list_incidents", "payload": {"limit": min(limit, 200)}}
         if cmd == "actions":
             if len(parts) > 3:
-                return {"action": "error", "message": "Формат: /admin actions [N]."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_actions"}
             limit = 20
             if len(parts) == 3:
                 try:
                     limit = int(str(parts[2] or "").strip())
                 except Exception:
-                    return {"action": "error", "message": "N должен быть целым числом > 0."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_n_must_be_int"}
             if limit <= 0:
-                return {"action": "error", "message": "N должен быть > 0."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_n_must_be_positive"}
             return {"action": "list_actions", "payload": {"limit": min(limit, 200)}}
         if cmd == "dry-run":
             if len(parts) != 3:
-                return {"action": "error", "message": "Формат: /admin dry-run <on|off>."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_dry_run"}
             mode = str(parts[2] or "").strip().lower()
             if mode not in {"on", "off"}:
-                return {"action": "error", "message": "Поддерживаются значения: on | off."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_dry_run_values"}
             return {"action": "set_dry_run", "payload": {"dry_run": mode == "on"}}
         if cmd == "ack":
             if len(parts) != 3:
-                return {"action": "error", "message": "Формат: /admin ack <incident_id>."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_ack"}
             incident_id = str(parts[2] or "").strip()
             if not is_valid_action_id(incident_id):
                 return {
                     "action": "error",
-                    "message": "Некорректный incident_id. Допустимы буквы, цифры, символы `._:-`.",
+                    "i18n_key": "admin.cmd.err_invalid_incident_id",
                 }
             return {"action": "ack_alert", "message": incident_id}
         if cmd == "mute":
             if len(parts) > 3:
-                return {"action": "error", "message": "Формат: /admin mute [minutes]."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_mute"}
             minutes = 60.0
             if len(parts) == 3:
                 try:
                     minutes = float(str(parts[2] or "").strip())
                 except Exception:
-                    return {"action": "error", "message": "Параметр minutes должен быть числом > 0."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_minutes_must_be_number"}
             if minutes <= 0:
-                return {"action": "error", "message": "Параметр minutes должен быть > 0."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_minutes_must_be_positive"}
             return {"action": "mute_alerts", "payload": {"minutes": minutes}}
         if cmd == "unmute":
             if len(parts) != 2:
-                return {"action": "error", "message": "Формат: /admin unmute."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_unmute"}
             return {"action": "unmute_alerts"}
         if cmd == "approvals":
             if len(parts) < 3:
                 return {
                     "action": "error",
-                    "message": "Формат: /admin approvals <list|revoke|clear> [override_id].",
+                    "i18n_key": "admin.cmd.err_format_approvals",
                 }
             op = str(parts[2] or "").strip().lower()
             if op == "list":
                 if len(parts) != 3:
-                    return {"action": "error", "message": "Формат: /admin approvals list."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_format_approvals_list"}
                 return {"action": "list_approvals"}
             if op == "revoke":
                 if len(parts) != 4:
-                    return {"action": "error", "message": "Формат: /admin approvals revoke <override_id>."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_format_approvals_revoke"}
                 override_id = str(parts[3] or "").strip()
                 if not is_valid_action_id(override_id):
                     return {
                         "action": "error",
-                        "message": "Некорректный override_id. Допустимы буквы, цифры, символы `._:-`.",
+                        "i18n_key": "admin.cmd.err_invalid_override_id",
                     }
                 return {"action": "revoke_approval", "message": override_id}
             if op == "clear":
                 if len(parts) != 3:
-                    return {"action": "error", "message": "Формат: /admin approvals clear."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_format_approvals_clear"}
                 return {"action": "clear_approvals"}
             return {
                 "action": "error",
-                "message": "Поддерживаются: /admin approvals list|revoke|clear.",
+                "i18n_key": "admin.cmd.err_approvals_supported_ops",
             }
         if cmd == "skills":
             if len(parts) < 3:
                 return {
                     "action": "error",
-                    "message": "Формат: /admin skills <list|approve|reject> [approval_id].",
+                    "i18n_key": "admin.cmd.err_format_skills",
                 }
             op = str(parts[2] or "").strip().lower()
             if op == "list":
                 if len(parts) != 3:
-                    return {"action": "error", "message": "Формат: /admin skills list."}
+                    return {"action": "error", "i18n_key": "admin.cmd.err_format_skills_list"}
                 return {"action": "list_skill_installs"}
             if op in {"approve", "reject"}:
                 if len(parts) != 4:
                     return {
                         "action": "error",
-                        "message": f"Формат: /admin skills {op} <approval_id>.",
+                        "i18n_key": "admin.cmd.err_format_skills_op",
+                        "i18n_kwargs": {"op": op},
                     }
                 approval_id = str(parts[3] or "").strip()
                 if not is_valid_action_id(approval_id):
                     return {
                         "action": "error",
-                        "message": "Некорректный approval_id. Допустимы буквы, цифры, символы `._:-`.",
+                        "i18n_key": "admin.cmd.err_invalid_approval_id",
                     }
                 return {
                     "action": "approve_skill_install" if op == "approve" else "reject_skill_install",
@@ -781,11 +806,11 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 }
             return {
                 "action": "error",
-                "message": "Поддерживаются: /admin skills list|approve|reject.",
+                "i18n_key": "admin.cmd.err_skills_supported_ops",
             }
         if cmd == "rescan":
             if len(parts) != 2:
-                return {"action": "error", "message": "Формат: /admin rescan."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_rescan"}
             return {"action": "rescan_environment"}
         return {"action": "status"}
 
@@ -793,10 +818,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         _ = session
         if command == "check":
             if len(parts) != 3:
-                return {"action": "error", "message": "Формат: /admin check <server_id>."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_format_check"}
             server_id = str(parts[2] or "").strip()
             if not is_valid_action_id(server_id):
-                return {"action": "error", "message": "Некорректный server_id."}
+                return {"action": "error", "i18n_key": "admin.cmd.err_invalid_server_id"}
             return {
                 "action": "exec_action",
                 "payload": {
@@ -807,13 +832,13 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             }
 
         if len(parts) != 4:
-            return {"action": "error", "message": "Формат: /admin run <action_id> <server_id>."}
+            return {"action": "error", "i18n_key": "admin.cmd.err_format_run"}
         action_id = str(parts[2] or "").strip()
         server_id = str(parts[3] or "").strip()
         if not is_valid_action_id(action_id):
-            return {"action": "error", "message": "Некорректный action_id."}
+            return {"action": "error", "i18n_key": "admin.cmd.err_invalid_action_id"}
         if not is_valid_action_id(server_id):
-            return {"action": "error", "message": "Некорректный server_id."}
+            return {"action": "error", "i18n_key": "admin.cmd.err_invalid_server_id"}
         return {
             "action": "exec_action",
             "payload": {
@@ -2206,9 +2231,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         return "idle"
 
     @staticmethod
-    def _format_entities_list(*, title: str, rows: list[Dict[str, Any]], id_key: str) -> str:
+    def _format_entities_list(*, title: str, rows: list[Dict[str, Any]], id_key: str, lang: str = 'ru') -> str:
         if not rows:
-            return f"{title}: нет данных"
+            return f"{title}: {t('admin.no_data', lang)}"
         lines = [title]
         for index, row in enumerate(rows, start=1):
             entity_id = str(row.get(id_key) or "-")
@@ -2271,15 +2296,16 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         config_payload: Dict[str, Any],
         action_id: str,
         server_id: str,
+        lang: str = 'ru',
     ) -> tuple[str, Any]:
         server_cfg = self._resolve_server_config(config_payload=config_payload, server_id=server_id)
         if not isinstance(server_cfg, dict):
-            raise ValueError(f"Server `{server_id}` не найден в admin.servers.")
+            raise ValueError(t('admin.error.server_not_in_config', lang, server_id=server_id))
         target = str(server_cfg.get("target") or "").strip().lower()
         if target not in self._EXEC_TARGETS:
-            raise ValueError(f"Server `{server_id}` имеет неподдерживаемый target `{target}`.")
+            raise ValueError(t('admin.error.server_unsupported_target', lang, server_id=server_id, target=target))
         if not is_action_allowlisted(config_payload, target=target, action_id=action_id):
-            raise ValueError(f"Action `{action_id}` не входит в allowlist для server `{server_id}`.")
+            raise ValueError(t('admin.error.action_not_allowlisted', lang, action_id=action_id, server_id=server_id))
 
         action_payload = self._resolve_exec_action_payload(
             config_payload=config_payload,
@@ -2287,10 +2313,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             action_id=action_id,
         )
         if action_payload is None:
-            raise ValueError(f"Action `{action_id}` не имеет конфигурации команды.")
+            raise ValueError(t('admin.error.action_no_command_config', lang, action_id=action_id))
         if target == "ssh":
             if not isinstance(action_payload, dict):
-                raise ValueError(f"Action `{action_id}` для ssh должен быть mapping.")
+                raise ValueError(t('admin.error.action_ssh_not_mapping', lang, action_id=action_id))
             merged = dict(action_payload)
             for key in ("host", "port", "user", "key_path", "password_env", "options"):
                 if key in server_cfg and server_cfg.get(key) not in (None, ""):
@@ -2345,6 +2371,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         action_id: str,
+        lang: str = 'ru',
     ) -> ToolResult:
         cfg_payload = self._load_admin_config(bot_app=bot_app, session=session)
         action_payload = self._resolve_exec_action_payload(
@@ -2356,7 +2383,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Для action `{action_id}` не найден конфиг команды local.",
+                text=t('admin.error.action_no_local_config', lang, action_id=action_id),
             )
 
         try:
@@ -2371,14 +2398,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Local action `{action_id}` завершился с ошибкой: {exc}",
+                text=t('admin.error.local_action_failed', lang, action_id=action_id, exc=exc),
             )
         except Exception as exc:
             self._log.exception("admin local execution unexpected failure action_id=%s", action_id)
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Local action `{action_id}` завершился с неожиданной ошибкой: {exc}",
+                text=t('admin.error.local_action_unexpected', lang, action_id=action_id, exc=exc),
             )
 
         chunks = [
@@ -2406,6 +2433,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         action_id: str,
+        lang: str = 'ru',
     ) -> ToolResult:
         cfg_payload = self._load_admin_config(bot_app=bot_app, session=session)
         action_payload = self._resolve_exec_action_payload(
@@ -2417,7 +2445,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Для action `{action_id}` не найден конфиг команды ssh.",
+                text=t('admin.error.action_no_ssh_config', lang, action_id=action_id),
             )
 
         try:
@@ -2432,14 +2460,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"SSH action `{action_id}` завершился с ошибкой: {exc}",
+                text=t('admin.error.ssh_action_failed', lang, action_id=action_id, exc=exc),
             )
         except Exception as exc:
             self._log.exception("admin ssh execution unexpected failure action_id=%s", action_id)
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"SSH action `{action_id}` завершился с неожиданной ошибкой: {exc}",
+                text=t('admin.error.ssh_action_unexpected', lang, action_id=action_id, exc=exc),
             )
 
         target = f"{result.user + '@' if result.user else ''}{result.host}:{result.port}"
@@ -2470,6 +2498,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         user_id: Any,
         ms: Any,
         payload: Dict[str, Any],
+        lang: str = 'ru',
     ) -> ToolResult:
         command = str(payload.get("command") or "").strip().lower()
         server_id = str(payload.get("server_id") or "").strip()
@@ -2478,19 +2507,19 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Некорректный payload команды выполнения.",
+                text=t('admin.error.invalid_exec_payload', lang),
             )
         if not server_id or not is_valid_action_id(server_id):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Некорректный server_id.",
+                text=t('admin.error.invalid_server_id', lang),
             )
         if command == "run" and (not action_id or not is_valid_action_id(action_id)):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Некорректный action_id.",
+                text=t('admin.error.invalid_action_id', lang),
             )
         if not self._is_session_selected_for_chat(bot_app=bot_app, session=session):
             self._log.warning(
@@ -2501,13 +2530,13 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Действие разрешено только в текущей выбранной сессии.",
+                text=t('admin.error.action_only_in_selected_session', lang),
             )
         if not self._is_admin_enabled(bot_app=bot_app, session=session, chat_id=str(chat_id)):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Admin выключен для текущей сессии. Сначала выполните `/admin enable`.",
+                text=t('admin.error.admin_disabled', lang),
             )
 
         cfg_payload = self._load_admin_config(bot_app=bot_app, session=session)
@@ -2522,13 +2551,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 return await self._input_show_error(
                     chat_id=chat_id,
                     ms=ms,
-                    text=f"Для server `{server_id}` не задан check_action_id.",
+                    text=t('admin.error.check_action_not_configured', lang, server_id=server_id),
                 )
         try:
             target, action_payload = self._resolve_action_payload_for_server(
                 config_payload=cfg_payload,
                 action_id=action_id,
                 server_id=server_id,
+                lang=lang,
             )
         except Exception as exc:
             self._log.warning(
@@ -2762,7 +2792,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Команда `{command}` для action `{action_id}` завершилась с ошибкой: {exc}",
+                text=t('admin.error.cmd_failed', lang, command=command, action_id=action_id, exc=exc),
             )
         except Exception as exc:
             self._save_run_state(
@@ -2801,7 +2831,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Команда `{command}` для action `{action_id}` завершилась с неожиданной ошибкой: {exc}",
+                text=t('admin.error.cmd_unexpected', lang, command=command, action_id=action_id, exc=exc),
             )
         finally:
             self._clear_active_run_handle(session)
@@ -2819,6 +2849,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         payload: Dict[str, Any],
+        lang: str = 'ru',
     ) -> ToolResult:
         limit = int(payload.get("limit") or 20)
         try:
@@ -2833,9 +2864,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось получить список incidents из БД.",
+                text=t('admin.error.incidents_db_failed', lang),
             )
-        text = self._format_entities_list(title="Incidents", rows=rows, id_key="incident_id")
+        text = self._format_entities_list(title=t("admin.title_incidents", lang), rows=rows, id_key="incident_id", lang=lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -2847,6 +2878,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         payload: Dict[str, Any],
+        lang: str = 'ru',
     ) -> ToolResult:
         limit = int(payload.get("limit") or 20)
         try:
@@ -2861,9 +2893,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось получить список actions из БД.",
+                text=t('admin.error.actions_db_failed', lang),
             )
-        text = self._format_entities_list(title="Actions", rows=rows, id_key="action_id")
+        text = self._format_entities_list(title=t("admin.title_actions", lang), rows=rows, id_key="action_id", lang=lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -2876,6 +2908,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         user_id: Any,
         ms: Any,
         incident_id: str,
+        lang: str = 'ru',
     ) -> ToolResult:
         sid = str(getattr(session, "id", "") or "").strip()
         iid = str(incident_id or "").strip()
@@ -2883,7 +2916,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось выполнить ack: отсутствует session_id или incident_id.",
+                text=t('admin.error.ack_session_or_incident_missing', lang),
             )
 
         now_ts = float(time.time())
@@ -2899,7 +2932,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 return await self._input_show_error(
                     chat_id=chat_id,
                     ms=ms,
-                    text=f"Incident `{iid}` не найден в текущей сессии.",
+                    text=t('admin.error.incident_not_in_session', lang, iid=iid),
                 )
             incident_payload = dict(incident.get("payload") or {})
             alert_id = str(incident_payload.get("alert_id") or "").strip()
@@ -2907,7 +2940,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 return await self._input_show_error(
                     chat_id=chat_id,
                     ms=ms,
-                    text=f"Для incident `{iid}` отсутствует связанный alert_id.",
+                    text=t('admin.error.incident_no_alert_id', lang, iid=iid),
                 )
 
             ack_id = f"{sid}:{iid}"
@@ -2954,10 +2987,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Не удалось подтвердить incident `{iid}`.",
+                text=t('admin.error.incident_ack_failed', lang, iid=iid),
             )
 
-        text = f"ACK выполнен: incident_id={iid}"
+        text = t('admin.cmd.ack_done', lang, iid=iid)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -2970,6 +3003,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         user_id: Any,
         ms: Any,
         payload: Dict[str, Any],
+        lang: str = 'ru',
     ) -> ToolResult:
         dry_run = bool(payload.get("dry_run"))
         try:
@@ -2989,10 +3023,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось обновить dry-run состояние.",
+                text=t('admin.error.dry_run_update_failed', lang),
             )
         self._set_session_admin_enabled(session=session, enabled=self._is_admin_enabled(bot_app=bot_app, session=session, chat_id=chat_id))
-        text = "Dry-run: on" if dry_run else "Dry-run: off"
+        text = t("admin.dry_run_state", lang, state="on" if dry_run else "off")
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3004,6 +3038,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         payload: Dict[str, Any],
+        lang: str = 'ru',
     ) -> ToolResult:
         sid = str(getattr(session, "id", "") or "").strip()
         minutes = float(payload.get("minutes") or 60.0)
@@ -3016,7 +3051,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось установить mute для alerts.",
+                text=t('admin.error.mute_failed', lang),
             )
         text = f"Alerts muted until_ts={muted_until_ts:.3f}"
         await ms.send_text(chat_id, text, md2=True)
@@ -3029,6 +3064,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         session: Any,
         chat_id: int,
         ms: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         sid = str(getattr(session, "id", "") or "").strip()
         try:
@@ -3039,9 +3075,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось снять mute для alerts.",
+                text=t('admin.error.unmute_failed', lang),
             )
-        text = "Alerts unmuted."
+        text = t("admin.alerts_unmuted", lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3052,6 +3088,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         session: Any,
         chat_id: int,
         ms: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         try:
             store = self._get_state_store(bot_app=bot_app)
@@ -3065,9 +3102,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось получить список approvals из БД.",
+                text=t('admin.error.approvals_db_failed', lang),
             )
-        text = self._format_entities_list(title="Approvals", rows=rows, id_key="override_id")
+        text = self._format_entities_list(title=t("admin.title_approvals", lang), rows=rows, id_key="override_id", lang=lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3079,6 +3116,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         override_id: str,
+        lang: str = 'ru',
     ) -> ToolResult:
         sid = str(getattr(session, "id", "") or "").strip()
         oid = str(override_id or "").strip()
@@ -3094,14 +3132,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 return await self._input_show_error(
                     chat_id=chat_id,
                     ms=ms,
-                    text=f"Approval `{oid}` не найден в текущей сессии.",
+                    text=t('admin.error.approval_not_in_session', lang, oid=oid),
                 )
             deleted = bool(store.delete_approved_override(oid))
             if not deleted:
                 return await self._input_show_error(
                     chat_id=chat_id,
                     ms=ms,
-                    text=f"Не удалось удалить approval `{oid}`.",
+                    text=t('admin.error.approval_delete_failed', lang, oid=oid),
                 )
         except Exception:
             self._log.exception(
@@ -3112,7 +3150,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Не удалось отозвать approval `{oid}`.",
+                text=t('admin.error.approval_revoke_failed', lang, oid=oid),
             )
 
         text = f"Approval revoked: override_id={oid}"
@@ -3126,6 +3164,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         session: Any,
         chat_id: int,
         ms: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         sid = str(getattr(session, "id", "") or "").strip()
         try:
@@ -3136,7 +3175,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось очистить approvals в текущей сессии.",
+                text=t('admin.error.approvals_clear_failed', lang),
             )
 
         text = f"Approvals cleared: {removed}"
@@ -3150,13 +3189,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         session: Any,
         chat_id: int,
         ms: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         skill_runtime = self._resolve_skill_runtime(bot_app=bot_app)
         if skill_runtime is None:
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Skill runtime недоступен для списка pending installs.",
+                text=t('admin.error.skill_runtime_unavailable_list', lang),
             )
         try:
             rows = [
@@ -3168,12 +3208,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось получить список pending skill installs.",
+                text=t('admin.error.skill_installs_list_failed', lang),
             )
         if not rows:
-            text = "Skill approvals: нет данных"
+            text = f"{t('admin.title_skill_approvals', lang)}: {t('admin.no_data', lang)}"
         else:
-            lines = ["Skill approvals"]
+            lines = [t("admin.title_skill_approvals", lang)]
             for index, row in enumerate(rows, start=1):
                 approval_id = str(row.get("approval_id") or "-")
                 skill_id = str(row.get("skill_id") or "-")
@@ -3204,13 +3244,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         approval_id: str,
+        lang: str = 'ru',
     ) -> ToolResult:
         skill_runtime = self._resolve_skill_runtime(bot_app=bot_app)
         if skill_runtime is None:
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Skill runtime недоступен для approve skill install.",
+                text=t('admin.error.skill_runtime_unavailable_approve', lang),
             )
         try:
             result = skill_runtime.approve_pending_install(
@@ -3228,9 +3269,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Не удалось подтвердить skill install `{approval_id}`.",
+                text=t('admin.error.skill_approve_failed', lang, approval_id=approval_id),
             )
-        text = str(result.message or "").strip() or "Skill install approve completed."
+        text = str(result.message or "").strip() or t("admin.skill_install_approved", lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3242,13 +3283,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         ms: Any,
         approval_id: str,
+        lang: str = 'ru',
     ) -> ToolResult:
         skill_runtime = self._resolve_skill_runtime(bot_app=bot_app)
         if skill_runtime is None:
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Skill runtime недоступен для reject skill install.",
+                text=t('admin.error.skill_runtime_unavailable_reject', lang),
             )
         try:
             result = skill_runtime.reject_pending_install(
@@ -3266,9 +3308,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=f"Не удалось отклонить skill install `{approval_id}`.",
+                text=t('admin.error.skill_reject_failed', lang, approval_id=approval_id),
             )
-        text = str(result.message or "").strip() or "Skill install rejected."
+        text = str(result.message or "").strip() or t("admin.skill_install_rejected", lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3284,10 +3326,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             session=session,
             enabled=self._is_admin_enabled(bot_app=bot_app, session=session, chat_id=str(chat_id)),
         )
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         text, keyboard = self.build_menu(
             session,
             back_callback="sess_active",
-            back_text="⬅️ Назад",
+            back_text=t('common.back', lang),
+            lang=lang,
         )
         await ms.send_text(chat_id, text, md2=True, reply_markup=keyboard)
         return ToolResult.ok()
@@ -3301,6 +3345,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         user_id: Any,
         ms: Any,
         context: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         try:
             await self._activate_admin_runtime(
@@ -3316,9 +3361,9 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось включить Admin режим.",
+                text=t('admin.error.enable_failed', lang),
             )
-        text = "Admin включен."
+        text = t('admin.enabled', lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3330,6 +3375,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         user_id: Any,
         ms: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         try:
             await self._deactivate_admin_runtime(
@@ -3343,10 +3389,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось выключить Admin режим.",
+                text=t('admin.error.disable_failed', lang),
             )
 
-        text = "Admin выключен."
+        text = t('admin.disabled', lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3359,6 +3405,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         user_id: Any,
         ms: Any,
         context: Any,
+        lang: str = 'ru',
     ) -> ToolResult:
         _ = user_id
         try:
@@ -3376,10 +3423,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Не удалось запустить пересканирование окружения.",
+                text=t('admin.error.rescan_failed', lang),
             )
 
-        text = "Rescan already running." if not started else "Environment rescan started."
+        text = t('admin.note.rescan_already_running', lang) if not started else t('admin.note.rescan_started', lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok(text)
 
@@ -3394,27 +3441,25 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         user_text: str,
     ) -> ToolResult:
         _ = user_id
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         if not self._is_admin_enabled(bot_app=bot_app, session=session, chat_id=str(chat_id)):
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text=(
-                    "Admin выключен для текущей сессии. "
-                    "Сначала выполните `/admin enable`."
-                ),
+                text=t('admin.error.admin_disabled', lang),
             )
         text = str(user_text or "").strip()
         if not text:
             return await self._input_show_error(
                 chat_id=chat_id,
                 ms=ms,
-                text="Пустое сообщение.",
+                text=t('admin.chat.empty_input', lang),
             )
 
         result = await self._chat_service.send(
-            session=session, bot_app=bot_app, text=text,
+            session=session, bot_app=bot_app, text=text, lang=lang,
         )
-        reply_text = str(result.get("reply_text") or "") or "(пустой ответ)"
+        reply_text = str(result.get("reply_text") or "") or t('admin.chat.empty_response', lang)
         intent_dict = result.get("intent") if isinstance(result.get("intent"), dict) else None
         intent_type = str((intent_dict or {}).get("type") or "").strip().lower()
         error = result.get("error")
@@ -3422,7 +3467,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         if error and not intent_dict:
             return await self._input_show_error(
                 chat_id=chat_id, ms=ms,
-                text=f"Не удалось обработать сообщение: {error}",
+                text=t('admin.error.process_message_failed', lang, error=error),
             )
 
         if not intent_dict or intent_type in ("answer", "ask_clarification", "update_memory"):
@@ -3435,10 +3480,10 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             action_id = str((intent_dict or {}).get("action_id") or "")
             if target == "local":
                 return await self._input_run_local(
-                    bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, action_id=action_id,
+                    bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, action_id=action_id, lang=lang,
                 )
             return await self._input_run_ssh(
-                bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, action_id=action_id,
+                bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, action_id=action_id, lang=lang,
             )
 
         if intent_type in ("propose_action", "propose_new_action", "propose_plan"):
@@ -3446,6 +3491,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 summary = _format_autopilot_exec_summary(
                     intent=intent_dict or {},
                     exec_result=result.get("exec_result") or {},
+                    lang=lang,
                 )
                 await ms.send_plain_text(chat_id, summary)
                 return ToolResult.ok(summary)
@@ -3465,6 +3511,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 approval_id=approval_id,
                 intent_type=intent_type,
                 can_save=can_save,
+                lang=lang,
             )
             await ms.send_plain_text(chat_id, message, reply_markup=markup)
             return ToolResult.ok(message)
@@ -3491,6 +3538,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         approval_id: str,
         intent_type: str,
         can_save: bool,
+        lang: str = 'ru',
     ) -> InlineKeyboardMarkup:
         approve_data = build_mode_action_callback_data(
             mode_id=self.mode_id,
@@ -3504,8 +3552,8 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         )
         rows = [
             [
-                InlineKeyboardButton("✅ Выполнить", callback_data=approve_data),
-                InlineKeyboardButton("❌ Отклонить", callback_data=reject_data),
+                InlineKeyboardButton(t('admin.btn.execute', lang), callback_data=approve_data),
+                InlineKeyboardButton(t('admin.btn.reject_action', lang), callback_data=reject_data),
             ],
         ]
         if can_save and intent_type in ("propose_new_action", "propose_plan"):
@@ -3514,8 +3562,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 action="chat_save_exec",
                 payload={"id": approval_id},
             )
-            label = "💾 Сохранить и выполнить"
-            rows.append([InlineKeyboardButton(label, callback_data=save_data)])
+            rows.append([InlineKeyboardButton(t('admin.btn.save_and_execute', lang), callback_data=save_data)])
         return InlineKeyboardMarkup(rows)
 
     async def _input_show_status(
@@ -3530,7 +3577,8 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             session=session,
             enabled=self._is_admin_enabled(bot_app=bot_app, session=session, chat_id=str(chat_id)),
         )
-        text = self._build_status_text(bot_app=bot_app, session=session)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
+        text = self._build_status_text(bot_app=bot_app, session=session, lang=lang)
         await ms.send_text(chat_id, text, md2=True)
         return ToolResult.ok()
 
@@ -3795,6 +3843,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         try:
             await self._activate_admin_runtime(
                 bot_app=bot_app,
@@ -3811,11 +3860,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Не удалось включить Admin режим."),
+                text=build_admin_error_text(t('admin.error.enable_failed', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_cb_enable_failed")
-        await self._rerender_menu(bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query, note="Admin включен.")
+        await self._rerender_menu(
+            bot_app=bot_app, session=session, chat_id=chat_id,
+            context=context, query=query, note=t('admin.note.enabled', lang),
+        )
         return ToolResult.ok()
 
     async def _cb_disable(
@@ -3828,6 +3880,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         try:
             await self._deactivate_admin_runtime(
                 bot_app=bot_app,
@@ -3843,11 +3896,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Не удалось выключить Admin режим."),
+                text=build_admin_error_text(t('admin.error.disable_failed', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_cb_disable_failed")
-        await self._rerender_menu(bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query, note="Admin выключен.")
+        await self._rerender_menu(
+            bot_app=bot_app, session=session, chat_id=chat_id,
+            context=context, query=query, note=t('admin.note.disabled', lang),
+        )
         return ToolResult.ok()
 
     async def _cb_status(
@@ -3859,7 +3915,8 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
         ms: Any,
     ) -> ToolResult:
-        text = self._build_status_text(bot_app=bot_app, session=session)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
+        text = self._build_status_text(bot_app=bot_app, session=session, lang=lang)
         await ms.send_or_edit(query=query, chat_id=chat_id, text=text, md2=True)
         return ToolResult.ok()
 
@@ -3875,11 +3932,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
     ) -> ToolResult:
         _ = user_id
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         if is_session_busy(session, getattr(session, "run_lock", None)):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Сессия занята. Пересканирование окружения доступно только когда сессия свободна.",
+                text=t('admin.error.rescan_session_busy', lang),
                 md2=True,
             )
             return ToolResult.fail("admin_rescan_busy")
@@ -3898,12 +3956,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Не удалось запустить пересканирование окружения."),
+                text=build_admin_error_text(t('admin.error.rescan_failed', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_rescan_failed")
 
-        note = "Rescan уже выполняется." if not started else "Rescan окружения запущен."
+        note = t('admin.note.rescan_already_running', lang) if not started else t('admin.note.rescan_started', lang)
         await self._rerender_menu(bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query, note=note)
         return ToolResult.ok()
 
@@ -3945,6 +4003,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         try:
             store = self._get_state_store(bot_app=bot_app)
             rows = store.list_incidents(
@@ -3959,7 +4018,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Не удалось получить список incidents."),
+                text=build_admin_error_text(t('admin.error.incidents_db_failed', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_incidents_failed")
@@ -3987,7 +4046,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         rows_kb.append(
             [
                 InlineKeyboardButton(
-                    "⬅️ Назад",
+                    t('common.back', lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
                 )
             ]
@@ -4011,6 +4070,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         try:
             store = self._get_state_store(bot_app=bot_app)
             rows = store.list_actions(
@@ -4025,7 +4085,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Не удалось получить список actions."),
+                text=build_admin_error_text(t('admin.error.actions_db_failed', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_actions_failed")
@@ -4035,7 +4095,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             [
                 [
                     InlineKeyboardButton(
-                        "⬅️ Назад",
+                        t('common.back', lang),
                         callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
                     )
                 ]
@@ -4054,6 +4114,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         try:
             store = self._get_state_store(bot_app=bot_app)
             rows = store.list_approved_overrides(
@@ -4068,7 +4129,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Не удалось получить список approvals."),
+                text=build_admin_error_text(t('admin.error.approvals_db_failed', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_approvals_failed")
@@ -4097,7 +4158,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             rows_kb.append(
                 [
                     InlineKeyboardButton(
-                        "🧹 Очистить все",
+                        t('admin.btn.clear_all', lang),
                         callback_data=build_mode_action_callback_data(self.mode_id, "approvals_clear", session=session),
                     )
                 ]
@@ -4105,7 +4166,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         rows_kb.append(
             [
                 InlineKeyboardButton(
-                    "⬅️ Назад",
+                    t('common.back', lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
                 )
             ]
@@ -4129,6 +4190,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         skill_runtime = self._resolve_skill_runtime(bot_app=bot_app)
         skills: list[Dict[str, Any]] = []
         if skill_runtime is not None:
@@ -4168,7 +4230,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         rows_kb.append(
             [
                 InlineKeyboardButton(
-                    "⬅️ Назад",
+                    t('common.back', lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
                 )
             ]
@@ -4192,13 +4254,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         runs = self._list_mode_runs(session=session, limit=10)
         text = build_admin_runs_screen(runs=runs)
         kb = InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        "⬅️ Назад",
+                        t('common.back', lang),
                         callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
                     )
                 ]
@@ -4219,12 +4282,13 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         incident_id: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         real_id = self._resolve_entity_by_token(session, "_admin_incident_tokens", token=incident_id)
         if not real_id or not is_valid_action_id(real_id):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Некорректный incident_id."),
+                text=build_admin_error_text(t('admin.error.incident_ack_invalid_id', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_ack_invalid_id")
@@ -4235,6 +4299,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             user_id=user_id,
             ms=ms,
             incident_id=real_id,
+            lang=lang,
         )
         return await self._cb_incidents(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query
@@ -4251,12 +4316,13 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         override_id: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         real_id = self._resolve_entity_by_token(session, "_admin_approval_tokens", token=override_id)
         if not real_id or not is_valid_action_id(real_id):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Некорректный override_id."),
+                text=build_admin_error_text(t('admin.error.approval_invalid_id', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_revoke_invalid_id")
@@ -4266,6 +4332,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             chat_id=chat_id,
             ms=ms,
             override_id=real_id,
+            lang=lang,
         )
         return await self._cb_approvals_list(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query
@@ -4302,25 +4369,18 @@ class AdminMode(BaseMode, RunArtifactsMixin):
     ) -> ToolResult:
         _ = user_id
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         approval = str(approval_id or "").strip()
         if save_action:
-            note = (
-                "Сохранение ad-hoc actions как runbook появится в PR-3. "
-                "Команда выполнена разово."
-            )
-            await ms.send_plain_text(chat_id, note)
+            await ms.send_plain_text(chat_id, t('admin.chat.pr3_save_action_note', lang))
         result = await self._chat_service.execute_pending(
-            session=session, approval_id=approval,
+            session=session, approval_id=approval, lang=lang,
         )
         err = str(result.get("error") or "").strip()
         executed = "exit_code" in result or str(result.get("target_kind") or "") == "plan"
         if not executed:
             if err == "propose_plan_execution_not_implemented":
-                await ms.send_plain_text(
-                    chat_id,
-                    "Plan execution приедет в PR-3. "
-                    "Пока план отображён только как предложение.",
-                )
+                await ms.send_plain_text(chat_id, t('admin.chat.pr3_plan_pending_note', lang))
                 return ToolResult.ok("chat_plan_pending_pr3")
             await ms.send_or_edit(
                 query=query, chat_id=chat_id,
@@ -4328,7 +4388,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 md2=True,
             )
             return ToolResult.fail(f"admin_chat_{err or 'unknown'}")
-        text = _format_chat_result_for_telegram(result)
+        text = _format_chat_result_for_telegram(result, lang=lang)
         await ms.send_plain_text(chat_id, text)
         if result.get("ok"):
             return ToolResult.ok(text)
@@ -4345,6 +4405,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         approval_id: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         workdir = str(getattr(session, "workdir", "") or "").strip()
         result = self._chat_service.reject_pending(
             workdir, approval_id=approval_id,
@@ -4358,7 +4419,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                 md2=True,
             )
             return ToolResult.fail(f"admin_chat_{result.get('error') or 'reject_failed'}")
-        await ms.send_plain_text(chat_id, "Отклонено.")
+        await ms.send_plain_text(chat_id, t('admin.chat.rejected', lang))
         return ToolResult.ok("admin_chat_rejected")
 
     async def _cb_approve_skill(
@@ -4372,17 +4433,18 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         approval_id: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         real_id = self._resolve_entity_by_token(session, "_admin_skill_tokens", token=approval_id)
         if not real_id or not is_valid_action_id(real_id):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Некорректный approval_id."),
+                text=build_admin_error_text(t('admin.error.skill_invalid_id', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_skill_approve_invalid_id")
         await self._input_approve_skill_install(
-            bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, approval_id=real_id
+            bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, approval_id=real_id, lang=lang,
         )
         return await self._cb_skills_list(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query
@@ -4399,17 +4461,18 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         approval_id: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         real_id = self._resolve_entity_by_token(session, "_admin_skill_tokens", token=approval_id)
         if not real_id or not is_valid_action_id(real_id):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=build_admin_error_text("Некорректный approval_id."),
+                text=build_admin_error_text(t('admin.error.skill_invalid_id', lang)),
                 md2=True,
             )
             return ToolResult.fail("admin_skill_reject_invalid_id")
         await self._input_reject_skill_install(
-            bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, approval_id=real_id
+            bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, approval_id=real_id, lang=lang,
         )
         return await self._cb_skills_list(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query
@@ -4426,16 +4489,18 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         minutes: float = 60.0,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         await self._input_mute_alerts(
             bot_app=bot_app,
             session=session,
             chat_id=chat_id,
             ms=ms,
             payload={"minutes": float(minutes)},
+            lang=lang,
         )
         await self._rerender_menu(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query,
-            note=f"Alerts muted на {int(minutes)} мин.",
+            note=t('admin.note.alerts_muted', lang, minutes=int(minutes)),
         )
         return ToolResult.ok()
 
@@ -4448,13 +4513,14 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         ms = self._messaging(bot_app=bot_app, context=context)
         await self._input_unmute_alerts(
-            bot_app=bot_app, session=session, chat_id=chat_id, ms=ms
+            bot_app=bot_app, session=session, chat_id=chat_id, ms=ms, lang=lang
         )
         await self._rerender_menu(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query,
-            note="Alerts unmuted.",
+            note=t("admin.alerts_unmuted", lang),
         )
         return ToolResult.ok()
 
@@ -4468,6 +4534,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         ms = self._messaging(bot_app=bot_app, context=context)
         state = self._get_admin_session_state(bot_app=bot_app, session=session, chat_id=chat_id)
         current_dry_run = bool(state.get("dry_run", True))
@@ -4479,10 +4546,11 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             user_id=user_id,
             ms=ms,
             payload={"dry_run": new_dry_run},
+            lang=lang,
         )
         await self._rerender_menu(
             bot_app=bot_app, session=session, chat_id=chat_id, context=context, query=query,
-            note=f"Dry-run: {'on' if new_dry_run else 'off'}",
+            note=t("admin.dry_run_state", lang, state="on" if new_dry_run else "off"),
         )
         return ToolResult.ok()
 
@@ -4680,13 +4748,13 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             "requester_actor_chat_id": str(requester.get("actor_chat_id") or "").strip() or None,
         }
 
-    def _build_status_text(self, *, bot_app: Any, session: Any) -> str:
+    def _build_status_text(self, *, bot_app: Any, session: Any, lang: str = 'ru') -> str:
         try:
             payload = self._status_payload(bot_app=bot_app, session=session)
             return build_admin_status_text(payload)
         except Exception:
             self._log.exception("admin status payload build failed")
-            return build_admin_error_text("Не удалось собрать статус режима")
+            return build_admin_error_text(t('admin.error.status_build_failed', lang))
 
     # ------------------------------------------------------------------
     # Autonomy (inventory/baseline/drift/memory/runbooks) callbacks
@@ -4705,18 +4773,18 @@ class AdminMode(BaseMode, RunArtifactsMixin):
     def _resolve_server_id_from_token(self, session: Any, *, token: str) -> str:
         return self._resolve_entity_by_token(session, "_admin_server_tokens", token=token)
 
-    def _back_to_servers_button(self, session: Any, *, page: int = 0) -> InlineKeyboardButton:
+    def _back_to_servers_button(self, session: Any, *, page: int = 0, lang: str = 'ru') -> InlineKeyboardButton:
         payload = {"p": str(page)} if page > 0 else None
         return InlineKeyboardButton(
-            "⬅️ К серверам",
+            t('admin.btn.back_to_servers', lang),
             callback_data=build_mode_action_callback_data(
                 self.mode_id, "servers", session=session, payload=payload,
             ),
         )
 
-    def _back_to_server_detail_button(self, session: Any, *, server_token: str) -> InlineKeyboardButton:
+    def _back_to_server_detail_button(self, session: Any, *, server_token: str, lang: str = 'ru') -> InlineKeyboardButton:
         return InlineKeyboardButton(
-            "⬅️ К серверу",
+            t('admin.btn.back_to_server', lang),
             callback_data=build_mode_action_callback_data(
                 self.mode_id, "srv", session=session, payload={"id": server_token},
             ),
@@ -4749,11 +4817,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         page: Any = 0,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         if svc is None:
             return await self._send_autonomy_error(
                 ms=ms, query=query, chat_id=chat_id,
-                message="Workdir сессии не задан — autonomy недоступна.",
+                message=t('admin.error.workdir_not_set', lang),
             )
         try:
             summaries = svc.list_servers()
@@ -4762,7 +4831,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             self._log.exception("admin autonomy: list_servers failed")
             return await self._send_autonomy_error(
                 ms=ms, query=query, chat_id=chat_id,
-                message="Не удалось получить список серверов.",
+                message=t('admin.error.servers_list_failed', lang),
             )
         try:
             page_index = int(page)
@@ -4826,7 +4895,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             rows_kb.append(nav_row)
         rows_kb.append([
             InlineKeyboardButton(
-                "⬅️ Назад",
+                t('common.back', lang),
                 callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
             )
         ])
@@ -4848,22 +4917,23 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         page: Any = 0,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             summary = svc.get_server_summary(sid)
         except Exception:
             self._log.exception("admin autonomy: get_server_summary failed sid=%s", sid)
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Не удалось получить данные по серверу.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_data_failed', lang),
             )
         if summary is None:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message=f"Сервер {sid} не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found_sid', lang, sid=sid),
             )
         try:
             page_index = max(0, int(page))
@@ -4909,7 +4979,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                         self.mode_id, "srv_rescan", session=session, payload=payload,
                     ),
                 ),
-                self._back_to_servers_button(session, page=page_index),
+                self._back_to_servers_button(session, page=page_index, lang=lang),
             ],
         ]
         await ms.send_or_edit(
@@ -4929,18 +4999,19 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             info = svc.get_baseline(sid)
         except Exception:
             self._log.exception("admin autonomy: get_baseline failed sid=%s", sid)
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Не удалось прочитать baseline.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.baseline_read_failed', lang),
             )
         text = build_admin_baseline_screen(server_id=sid, info=info)
         payload = {"id": server_token}
@@ -4960,7 +5031,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                     ),
                 ),
             ])
-        kb_rows.append([self._back_to_server_detail_button(session, server_token=server_token)])
+        kb_rows.append([self._back_to_server_detail_button(session, server_token=server_token, lang=lang)])
         await ms.send_or_edit(
             query=query, chat_id=chat_id, text=text, md2=True,
             reply_markup=InlineKeyboardMarkup(kb_rows),
@@ -4978,11 +5049,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             svc.accept_baseline(sid)
@@ -4990,7 +5062,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             self._log.exception("admin autonomy: accept_baseline failed sid=%s", sid)
             return await self._send_autonomy_error(
                 ms=ms, query=query, chat_id=chat_id,
-                message=f"Accept baseline не удался: {exc}",
+                message=t('admin.error.baseline_accept_failed', lang, exc=exc),
             )
         return await self._cb_baseline_view(
             bot_app=bot_app, session=session, chat_id=chat_id,
@@ -5008,11 +5080,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             svc.discard_baseline_proposal(sid)
@@ -5020,7 +5093,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             self._log.exception("admin autonomy: discard_baseline failed sid=%s", sid)
             return await self._send_autonomy_error(
                 ms=ms, query=query, chat_id=chat_id,
-                message=f"Discard не удался: {exc}",
+                message=t('admin.error.baseline_discard_failed', lang, exc=exc),
             )
         return await self._cb_baseline_view(
             bot_app=bot_app, session=session, chat_id=chat_id,
@@ -5037,27 +5110,28 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         query: Any,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         if svc is None:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Autonomy service недоступен.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.autonomy_unavailable', lang),
             )
         try:
             status = svc.autonomy_status()
         except Exception:
             self._log.exception("admin autonomy: status failed")
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Не удалось получить статус автономии.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.autonomy_status_failed', lang),
             )
         text = build_admin_autonomy_status_screen(status)
         rows = [
             [
                 InlineKeyboardButton(
-                    "🖥 Серверы",
+                    t('admin.btn.servers', lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "servers", session=session),
                 ),
                 InlineKeyboardButton(
-                    "⬅️ В меню",
+                    t('admin.btn.to_menu', lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "menu", session=session),
                 ),
             ],
@@ -5079,11 +5153,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             drifts = svc.list_drifts(sid, limit=15, open_only=True)
@@ -5091,7 +5166,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             self._log.exception("admin autonomy: list_drifts failed sid=%s", sid)
             return await self._send_autonomy_error(
                 ms=ms, query=query, chat_id=chat_id,
-                message="Не удалось получить список drift-ов.",
+                message=t('admin.error.drifts_list_failed', lang),
             )
         text = build_admin_autonomy_drifts_screen(server_id=sid, drifts=drifts)
         kb_rows: list[list[InlineKeyboardButton]] = []
@@ -5108,7 +5183,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                     ),
                 )
             ])
-        kb_rows.append([self._back_to_server_detail_button(session, server_token=server_token)])
+        kb_rows.append([self._back_to_server_detail_button(session, server_token=server_token, lang=lang)])
         await ms.send_or_edit(
             query=query, chat_id=chat_id, text=text, md2=True,
             reply_markup=InlineKeyboardMarkup(kb_rows),
@@ -5128,22 +5203,23 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         drift_id: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid or not drift_id:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Drift не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.drift_not_found', lang),
             )
         try:
             svc.ack_drift(sid, int(drift_id), by=str(user_id or "tg"))
         except (ValueError, TypeError):
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Некорректный drift_id.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.drift_invalid_id', lang),
             )
         except Exception:
             self._log.exception("admin autonomy: ack_drift failed sid=%s drift=%s", sid, drift_id)
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Не удалось подтвердить drift.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.drift_ack_failed', lang),
             )
         return await self._cb_autonomy_drifts(
             bot_app=bot_app, session=session, chat_id=chat_id,
@@ -5161,18 +5237,19 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             memory = svc.get_memory(sid)
         except Exception:
             self._log.exception("admin autonomy: get_memory failed sid=%s", sid)
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Не удалось получить memory.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.memory_failed', lang),
             )
         text = build_admin_memory_screen(server_id=sid, memory=memory)
         payload = {"id": server_token}
@@ -5184,7 +5261,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                         self.mode_id, "mem_compact", session=session, payload=payload,
                     ),
                 ),
-                self._back_to_server_detail_button(session, server_token=server_token),
+                self._back_to_server_detail_button(session, server_token=server_token, lang=lang),
             ]
         ]
         await ms.send_or_edit(
@@ -5204,18 +5281,19 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             svc.compact_memory(sid, force=True)
         except Exception:
             self._log.exception("admin autonomy: compact_memory failed sid=%s", sid)
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Compact не удался.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.memory_compact_failed', lang),
             )
         return await self._cb_memory_view(
             bot_app=bot_app, session=session, chat_id=chat_id,
@@ -5233,11 +5311,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         server_token: str,
     ) -> ToolResult:
         ms = self._messaging(bot_app=bot_app, context=context)
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         svc = self._autonomy_service(session=session)
         sid = self._resolve_server_id_from_token(session, token=server_token)
         if svc is None or not sid:
             return await self._send_autonomy_error(
-                ms=ms, query=query, chat_id=chat_id, message="Сервер не найден.",
+                ms=ms, query=query, chat_id=chat_id, message=t('admin.error.server_not_found', lang),
             )
         try:
             report = await svc.rescan_server(sid)
@@ -5245,7 +5324,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             self._log.exception("admin autonomy: rescan_server failed sid=%s", sid)
             return await self._send_autonomy_error(
                 ms=ms, query=query, chat_id=chat_id,
-                message=f"Rescan не удался: {exc}",
+                message=t('admin.error.server_rescan_failed', lang, exc=exc),
             )
         report_payload = {
             "ok": report.ok,
@@ -5257,7 +5336,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         }
         text = build_admin_rescan_report_screen(server_id=sid, report=report_payload)
         kb_rows = [[
-            self._back_to_server_detail_button(session, server_token=server_token),
+            self._back_to_server_detail_button(session, server_token=server_token, lang=lang),
         ]]
         await ms.send_or_edit(
             query=query, chat_id=chat_id, text=text, md2=True,
@@ -5345,10 +5424,12 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             session=session,
             enabled=self._is_admin_enabled(bot_app=bot_app, session=session, chat_id=str(chat_id)),
         )
+        lang = resolve_user_lang(getattr(bot_app, 'config', None), chat_id=chat_id)
         text, keyboard = self.build_menu(
             session,
             back_callback="sess_active",
-            back_text="⬅️ Назад",
+            back_text=t('common.back', lang),
+            lang=lang,
         )
         if note:
             text = merge_menu_with_note(menu_text=text, note=note)
@@ -5359,7 +5440,8 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         self,
         session: Any,
         back_callback: str = "sess_active",
-        back_text: str = "⬅️ Назад",
+        back_text: str = "",
+        lang: str = 'ru',
     ) -> tuple[str, Any]:
         active = bool(getattr(session, "admin_enabled", False))
         muted = self._is_session_muted(session)
@@ -5372,7 +5454,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             rows.append(
                 [
                     InlineKeyboardButton(
-                        "🔴 Выключить Admin",
+                        t('admin.btn.disable_admin', lang),
                         callback_data=build_mode_action_callback_data(self.mode_id, "disable", session=session),
                     )
                 ]
@@ -5381,7 +5463,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
             rows.append(
                 [
                     InlineKeyboardButton(
-                        "🟢 Включить Admin",
+                        t('admin.btn.enable_admin', lang),
                         callback_data=build_mode_action_callback_data(self.mode_id, "enable", session=session),
                     )
                 ]
@@ -5389,7 +5471,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
         rows.append(
             [
                 InlineKeyboardButton(
-                    "📊 Статус",
+                    t('admin.btn.status', lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "status", session=session),
                 ),
                 InlineKeyboardButton(
@@ -5446,7 +5528,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                         callback_data=build_mode_action_callback_data(self.mode_id, "dryrun_toggle", session=session),
                     ),
                     InlineKeyboardButton(
-                        "🖥 Серверы",
+                        t('admin.btn.servers', lang),
                         callback_data=build_mode_action_callback_data(self.mode_id, "servers", session=session),
                     ),
                 ]
@@ -5459,7 +5541,7 @@ class AdminMode(BaseMode, RunArtifactsMixin):
                     ),
                 ]
             )
-        rows.append([InlineKeyboardButton(str(back_text or "⬅️ Назад"), callback_data=str(back_callback or "sess_active"))])
+        rows.append([InlineKeyboardButton(str(back_text or t('common.back', 'ru')), callback_data=str(back_callback or "sess_active"))])
         return text, InlineKeyboardMarkup(rows)
 
     @staticmethod

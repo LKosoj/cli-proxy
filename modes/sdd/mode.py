@@ -11,6 +11,9 @@ import yaml
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from tg.markdown import escape_markdown_v2_all
 
+from i18n import t
+from utils.lang import resolve_user_lang
+
 from agent.cli_routing import run_prompt_routed_meta
 from app.mode_dependencies import ModeDependencies
 from modes.sdk import BaseMode, CallbackModel, MessageModel, MessagingService, ToolResult
@@ -126,12 +129,16 @@ class SddMode(BaseMode):
 
     @staticmethod
     def _enable_requirements_error(bot_app: Any, session: Any) -> str:
+        lang = resolve_user_lang(
+            getattr(bot_app, "config", None),
+            chat_id=getattr(session, "chat_id", None),
+        )
         defaults = getattr(getattr(bot_app, "config", None), "defaults", None)
         if not getattr(defaults, "openai_api_key", None) or not getattr(defaults, "openai_model", None):
-            return "Для SDD нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml."
+            return t("sdd.error_openai_required", lang)
         workdir = str(getattr(session, "workdir", "") or "")
         if not workdir or not os.path.isdir(workdir):
-            return "Для SDD нужна рабочая директория. Создайте сессию через /sessions."
+            return t("sdd.error_workdir_required", lang)
         return ""
 
     # ------------------------------------------------------------------
@@ -330,6 +337,7 @@ class SddMode(BaseMode):
     ) -> None:
         ms = self._messaging(bot_app=bot_app, context=context)
         chat_id = int(dest.get("chat_id") or 0)
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
 
         def _restore_failure_gate() -> None:
@@ -342,7 +350,7 @@ class SddMode(BaseMode):
         workdir = str(getattr(session, "workdir", "") or "")
         if not workdir:
             _restore_failure_gate()
-            await ms.send_text(chat_id, "❌ Рабочая директория не задана. Создайте сессию через /sessions.", md2=False)
+            await ms.send_text(chat_id, t("sdd.error_no_workdir_run", lang), md2=False)
             return
         raw_spec_dir = str(sdd.spec_dir or "")
         spec_dir = ""
@@ -352,7 +360,7 @@ class SddMode(BaseMode):
                 _restore_failure_gate()
                 await ms.send_text(
                     chat_id,
-                    "❌ Каталог спецификации небезопасен или находится вне `specs/`\\.",
+                    t("sdd.error_spec_dir_unsafe", lang),
                     md2=True,
                 )
                 return
@@ -364,7 +372,7 @@ class SddMode(BaseMode):
             _restore_failure_gate()
             await ms.send_text(
                 chat_id,
-                "❌ Каталог спецификации не задан — сначала запустите фазу `specify`\\.",
+                t("sdd.error_spec_dir_missing", lang),
                 md2=True,
             )
             return
@@ -374,7 +382,7 @@ class SddMode(BaseMode):
         try:
             if phase == "specify":
                 intent = str(sdd.source_intent or "")
-                await ms.send_text(chat_id, "⏳ Генерирую спецификацию...", md2=False)
+                await ms.send_text(chat_id, t("sdd.specify_progress", lang), md2=False)
                 spec_md, payload = await generate_spec(
                     self._model_call(bot_app),
                     intent=intent, constitution=constitution, prompts=prompts, revision=revision,
@@ -409,7 +417,7 @@ class SddMode(BaseMode):
                     q_text = "\n".join(f"{i}. {q}" for i, q in enumerate(questions, 1))
                     await ms.send_text(
                         chat_id,
-                        f"⚠️ Спецификация содержит вопросы для уточнения:\n\n{q_text}\n\nОтветьте через кнопку «Правки».",
+                        t("sdd.spec_clarification_note", lang, q_text=q_text),
                         md2=False,
                     )
                 set_sdd_phase(session, "specify")
@@ -425,7 +433,7 @@ class SddMode(BaseMode):
                 if os.path.isfile(spec_path):
                     with open(spec_path, encoding="utf-8") as fh:
                         spec_md = fh.read()
-                await ms.send_text(chat_id, "⏳ Генерирую архитектурный план...", md2=False)
+                await ms.send_text(chat_id, t("sdd.plan_progress", lang), md2=False)
                 await self._ensure_map_freshness(session, bot_app, workdir)
                 project_profile = _read_project_profile(workdir)
                 decisions = load_decisions(workdir)
@@ -464,7 +472,7 @@ class SddMode(BaseMode):
                 if os.path.isfile(plan_path):
                     with open(plan_path, encoding="utf-8") as fh:
                         plan_md = fh.read()
-                await ms.send_text(chat_id, "⏳ Генерирую список задач...", md2=False)
+                await ms.send_text(chat_id, t("sdd.tasks_progress", lang), md2=False)
                 project_profile = _read_project_profile(workdir)
                 decisions = load_decisions(workdir)
                 out_of_scope = "\n".join(f"- {x}" for x in parse_out_of_scope(spec_md))
@@ -505,7 +513,7 @@ class SddMode(BaseMode):
                 if os.path.isfile(tasks_path):
                     with open(tasks_path, encoding="utf-8") as fh:
                         tasks_md_text = fh.read()
-                await ms.send_text(chat_id, "⏳ Анализирую покрытие требований...", md2=False)
+                await ms.send_text(chat_id, t("sdd.analyze_progress", lang), md2=False)
                 requirements = parse_spec_requirements(spec_md)
                 project_plan = parse_tasks_md(tasks_md_text)
                 report = analyze_coverage(requirements, project_plan)
@@ -523,7 +531,7 @@ class SddMode(BaseMode):
             self._log.exception("sdd _run_phase failed phase=%s", phase)
             _restore_failure_gate()
             try:
-                await ms.send_text(chat_id, f"❌ Ошибка при генерации фазы `{phase}`\\. Проверьте логи\\.", md2=True)
+                await ms.send_text(chat_id, t("sdd.phase_generation_error", lang, phase=phase), md2=True)
             except Exception:
                 self._log.exception("sdd error notify failed")
 
@@ -539,13 +547,14 @@ class SddMode(BaseMode):
         if not bot_app or not session:
             return ToolResult.fail("missing_context")
 
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         dest = self._normalize_dest(ctx_dest=ctx.get("dest"), chat_id=chat_id)
         ms = self._messaging(bot_app=bot_app, context=context)
         sdd = get_sdd_state(session)
 
         # Guard: Аналитик ещё работает — не принимаем новые намерения
         if sdd.last_action == "fork_analyst_running":
-            await ms.send_text(chat_id, "⏳ Аналитик работает, дождитесь результата\\.", md2=True)
+            await ms.send_text(chat_id, t("sdd.analyst_running_wait", lang), md2=True)
             return ToolResult.ok()
 
         # If there is a pending gate — check last_action for revise flow
@@ -569,7 +578,7 @@ class SddMode(BaseMode):
         if sdd.pending_gate:
             await ms.send_text(
                 chat_id,
-                "Используйте кнопки ниже для управления текущей фазой SDD\\.",
+                t("sdd.use_gate_buttons", lang),
                 md2=True,
             )
             return ToolResult.ok()
@@ -577,7 +586,7 @@ class SddMode(BaseMode):
         # New feature intent
         intent = str(message.text or "").strip()
         if not intent:
-            await ms.send_text(chat_id, "Введите описание фичи для запуска SDD\\.", md2=True)
+            await ms.send_text(chat_id, t("sdd.enter_feature_intent", lang), md2=True)
             return ToolResult.ok()
 
         # Сохраняем намерение, сбрасываем фазу; spec_dir не аллоцируем — отложено до выбора пути
@@ -587,7 +596,7 @@ class SddMode(BaseMode):
         sdd.last_action = ""
         self._persist_sessions(bot_app)
 
-        await self._show_fork_menu(session, bot_app, context, chat_id, dest, ms)
+        await self._show_fork_menu(session, bot_app, context, chat_id, dest, ms, lang=lang)
         return ToolResult.ok()
 
     # ------------------------------------------------------------------
@@ -669,32 +678,36 @@ class SddMode(BaseMode):
     async def _cb_status(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         enabled = str(get_active_mode(session, "") or "").strip() == self.mode_id
-        text = (
-            f"📐 *Статус SDD*\n\n"
-            f"Режим: {'включен' if enabled else 'выключен'}\n"
-            f"Фаза: `{sdd.phase}`\n"
-            f"Фича: `{sdd.feature_slug or 'нет'}`\n"
-            f"Гейт: `{sdd.pending_gate or 'нет'}`\n"
-            f"Инициализация проекта: `{sdd.project_init_status}`\n"
-            f"Шаг: `{sdd.project_init_step or 'нет'}`\n"
-            f"Тип: `{sdd.project_init_kind or 'нет'}`\n"
-            f"Профиль: `{sdd.project_profile_path or 'нет'}`"
+        none_label = t("sdd.none", lang)
+        enabled_label = t("sdd.enabled_label", lang) if enabled else t("sdd.disabled_label", lang)
+        text = t(
+            "sdd.status_detail", lang,
+            enabled_label=enabled_label,
+            phase=sdd.phase,
+            feature_slug=sdd.feature_slug or none_label,
+            pending_gate=sdd.pending_gate or none_label,
+            project_init_status=sdd.project_init_status,
+            project_init_step=sdd.project_init_step or none_label,
+            project_init_kind=sdd.project_init_kind or none_label,
+            project_profile_path=sdd.project_profile_path or none_label,
         )
         if sdd.project_init_error:
-            text += f"\nОшибка: `{sdd.project_init_error}`"
+            text += t("sdd.status_error_suffix", lang, error=sdd.project_init_error)
         await ms.send_or_edit(query=query, chat_id=chat_id, text=text, md2=True)
         return ToolResult.ok()
 
     async def _cb_reset(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         if self._is_project_init_running(session) or self._running_sdd_task_names(session):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="⏳ SDD выполняет задачу\\. Дождитесь завершения или выключите режим для отмены\\.",
+                text=t("sdd.reset_busy", lang),
                 md2=True,
             )
             return ToolResult.ok()
@@ -706,61 +719,66 @@ class SddMode(BaseMode):
         sdd.source_intent = None
         sdd.last_action = ""
         self._persist_sessions(bot_app)
-        await ms.send_or_edit(query=query, chat_id=chat_id, text="🔄 SDD сброшен\\.", md2=True)
+        await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.reset_done", lang), md2=True)
         return ToolResult.ok()
 
     async def _cb_init_project(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         if sdd.pending_gate:
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Сначала завершите текущий SDD-гейт: принять, запросить правки или остановить фазу\\.",
+                text=t("sdd.complete_current_gate_first", lang),
                 md2=True,
             )
             return ToolResult.ok()
         if sdd.last_action == "fork_analyst_running":
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="⏳ Аналитик уже запущен\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.analyst_already_running_short", lang), md2=True)
             return ToolResult.ok()
         if self._is_session_busy_for_sdd_action(session) or self._running_sdd_task_names(session):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="⏳ Сессия занята\\. Дождитесь завершения текущей операции\\.",
+                text=t("sdd.session_busy_init", lang),
                 md2=True,
             )
             return ToolResult.ok()
         if self._is_project_init_running(session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="🧭 Инициализация проекта уже выполняется\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.project_init_running", lang), md2=True)
             return ToolResult.ok()
         workdir = str(getattr(session, "workdir", "") or "")
         if not workdir or not os.path.isdir(workdir):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="❌ Рабочая директория не задана\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.error_no_workdir_md2", lang), md2=True)
             return ToolResult.ok()
         try:
             classification = classify_project(workdir)
         except Exception:
             self._log.exception("sdd project init classify failed")
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="❌ Не удалось классифицировать проект\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.error_classify_short", lang), md2=True)
             return ToolResult.ok()
         sdd.project_init_status = "confirming"
         sdd.project_init_step = "confirming"
         sdd.project_init_kind = classification.kind
         sdd.project_init_error = ""
         self._persist_sessions(bot_app)
-        kind_text = "кодовая база найдена" if classification.is_existing_codebase else "кодовая база не найдена"
-        details = (
-            "Сначала будет актуализирован code map, затем будут созданы SDD-артефакты\\."
+        kind_text = (
+            t("sdd.kind_codebase_found", lang)
             if classification.is_existing_codebase
-            else "Будут созданы шаблоны SDD-артефактов без запуска code map\\."
+            else t("sdd.kind_codebase_not_found", lang)
+        )
+        details = (
+            t("sdd.init_details_existing", lang)
+            if classification.is_existing_codebase
+            else t("sdd.init_details_empty", lang)
         )
         keyboard = InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        "✅ Запустить",
+                        t("sdd.btn_run_init", lang),
                         callback_data=build_mode_action_callback_data(
                             self.mode_id, "init_project_confirm", session=session
                         ),
@@ -768,7 +786,7 @@ class SddMode(BaseMode):
                 ],
                 [
                     InlineKeyboardButton(
-                        "❌ Отмена",
+                        t("sdd.btn_cancel_init", lang),
                         callback_data=build_mode_action_callback_data(
                             self.mode_id, "init_project_cancel", session=session
                         ),
@@ -779,7 +797,7 @@ class SddMode(BaseMode):
         await ms.send_or_edit(
             query=query,
             chat_id=chat_id,
-            text=f"🧭 Инициализация проекта\n\nТип: {kind_text}\\.\n{details}",
+            text=t("sdd.init_project_confirm_text", lang, kind_text=kind_text, details=details),
             md2=True,
             reply_markup=keyboard,
         )
@@ -788,6 +806,7 @@ class SddMode(BaseMode):
     async def _cb_init_project_confirm(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         if str(sdd.project_init_status or "").strip() != "confirming":
             await self._rerender_menu_common(
@@ -796,19 +815,19 @@ class SddMode(BaseMode):
                 chat_id=chat_id,
                 context=context,
                 query=query,
-                note="Запрос инициализации устарел. Запустите инициализацию проекта заново.",
+                note=t("sdd.init_request_stale_new", lang),
             )
             return ToolResult.ok()
         if self._is_session_busy_for_sdd_action(session) or self._running_sdd_task_names(session):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="⏳ Сессия занята\\. Дождитесь завершения текущей операции\\.",
+                text=t("sdd.session_busy_init", lang),
                 md2=True,
             )
             return ToolResult.ok()
         if self._is_project_init_running(session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="🧭 Инициализация проекта уже выполняется\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.project_init_running", lang), md2=True)
             return ToolResult.ok()
         sdd.project_init_status = "running"
         sdd.project_init_step = "queued"
@@ -823,7 +842,7 @@ class SddMode(BaseMode):
         await ms.send_or_edit(
             query=query,
             chat_id=chat_id,
-            text="🧭 Инициализация проекта запущена\\.",
+            text=t("sdd.project_init_started_md2", lang),
             md2=True,
             reply_markup=None,
         )
@@ -832,6 +851,7 @@ class SddMode(BaseMode):
     async def _cb_init_project_cancel(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         if sdd.project_init_status == "confirming":
             sdd.project_init_status = "idle"
@@ -845,11 +865,12 @@ class SddMode(BaseMode):
             chat_id=chat_id,
             context=context,
             query=query,
-            note="Инициализация проекта отменена.",
+            note=t("sdd.init_cancelled_note", lang),
         )
         return ToolResult.ok()
 
     async def _run_project_init_task(self, session: Any, bot_app: Any, context: Any, chat_id: int) -> None:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         ms = self._messaging(bot_app=bot_app, context=context)
         try:
             runtime_getter = self._optional_runtime_getter()
@@ -861,17 +882,12 @@ class SddMode(BaseMode):
             )
             files_text = "\n".join(f"- `{path}`" for path in result.created_files[:12])
             if len(result.created_files) > 12:
-                files_text += f"\n- … и ещё {len(result.created_files) - 12}"
+                files_text += t("sdd.files_and_more_n", lang, n=len(result.created_files) - 12)
             files_text = escape_markdown_v2_all(files_text)
-            profile_path = escape_markdown_v2_all(result.project_profile_path or "нет")
+            profile_path = escape_markdown_v2_all(result.project_profile_path or t("sdd.none", lang))
             await ms.send_text(
                 chat_id,
-                (
-                    "✅ Инициализация проекта завершена\\.\n\n"
-                    f"Тип: `{result.kind}`\n"
-                    f"Профиль: {profile_path}\n\n"
-                    f"Создано/обновлено:\n{files_text}"
-                ),
+                t("sdd.project_init_done_detail", lang, kind=result.kind, profile_path=profile_path, files_text=files_text),
                 md2=True,
             )
         except asyncio.CancelledError:
@@ -881,7 +897,7 @@ class SddMode(BaseMode):
             sdd.project_init_error = ""
             self._persist_sessions(bot_app)
             try:
-                await ms.send_text(chat_id, "⏹ Инициализация проекта отменена\\.", md2=True)
+                await ms.send_text(chat_id, t("sdd.project_init_cancelled", lang), md2=True)
             except Exception:
                 self._log.exception("sdd project init cancel notify failed")
             raise
@@ -890,7 +906,7 @@ class SddMode(BaseMode):
             try:
                 await ms.send_text(
                     chat_id,
-                    f"❌ Инициализация проекта не завершена: `{str(exc)}`",
+                    t("sdd.project_init_failed", lang, error=str(exc)),
                     md2=True,
                 )
             except Exception:
@@ -906,6 +922,7 @@ class SddMode(BaseMode):
         query: Any,
         dest: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         current_phase = str(sdd.phase or "")
         pending = str(sdd.pending_gate or "")
@@ -920,7 +937,7 @@ class SddMode(BaseMode):
         if pending != current_phase or not pending:
             await ms.send_or_edit(
                 query=query, chat_id=chat_id,
-                text="Нет активного гейта для подтверждения\\.", md2=True
+                text=t("sdd.no_active_gate_confirm", lang), md2=True
             )
             return ToolResult.ok()
 
@@ -945,7 +962,7 @@ class SddMode(BaseMode):
             )
             await ms.send_or_edit(
                 query=query, chat_id=chat_id,
-                text=f"✅ Фаза `{current_phase}` принята\\. Запускаю `{nxt}`\\.", md2=True
+                text=t("sdd.phase_accepted_next_launch", lang, current_phase=current_phase, nxt=nxt), md2=True
             )
         else:
             # analyze phase accepted (terminal phase) — persist decisions, then handoff to Manager
@@ -956,7 +973,7 @@ class SddMode(BaseMode):
                 restore_current_gate()
                 await ms.send_or_edit(
                     query=query, chat_id=chat_id,
-                    text="❌ Каталог спецификации не задан или небезопасен — нечего передавать Менеджеру\\.",
+                    text=t("sdd.error_handoff_no_spec_dir", lang),
                     md2=True,
                     reply_markup=gate_keyboard,
                 )
@@ -968,7 +985,7 @@ class SddMode(BaseMode):
             self._append_feature_decisions(session, workdir, spec_dir)
             await ms.send_or_edit(
                 query=query, chat_id=chat_id,
-                text="✅ Анализ принят\\. Передаю Менеджеру\\.\\.\\.",
+                text=t("sdd.analysis_accepted_handoff", lang),
                 md2=True,
             )
             tasks_md_path = os.path.join(spec_dir, "tasks.md")
@@ -1019,25 +1036,27 @@ class SddMode(BaseMode):
     async def _cb_gate_revise(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         sdd.last_action = "gate_revise"
         self._persist_sessions(bot_app)
         await ms.send_or_edit(
             query=query, chat_id=chat_id,
-            text="✍️ Введите правки — они будут применены при перегенерации текущей фазы\\.", md2=True
+            text=t("sdd.enter_revisions_detail", lang), md2=True
         )
         return ToolResult.ok()
 
     async def _cb_gate_stop(
         self, bot_app: Any, session: Any, ms: MessagingService, chat_id: int, context: Any, query: Any
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         sdd.last_action = ""
         clear_sdd_gate(session)
         self._persist_sessions(bot_app)
         await ms.send_or_edit(
             query=query, chat_id=chat_id,
-            text="⏹ SDD остановлен\\. Состояние сохранено\\.", md2=True
+            text=t("sdd.stopped", lang), md2=True
         )
         return ToolResult.ok()
 
@@ -1045,20 +1064,20 @@ class SddMode(BaseMode):
     # Fork menu (метаоркестратор Аналитик/SDD)
     # ------------------------------------------------------------------
 
-    def _fork_keyboard(self, session: Any) -> InlineKeyboardMarkup:
+    def _fork_keyboard(self, session: Any, lang: str = "ru") -> InlineKeyboardMarkup:
         rows = [
             [
                 InlineKeyboardButton(
-                    "🔍 Через Аналитика",
+                    t("sdd.btn_fork_analyst_new", lang),
                     callback_data=build_mode_action_callback_data("sdd", "fork_analyst", session=session),
                 ),
                 InlineKeyboardButton(
-                    "📐 Сразу SDD",
+                    t("sdd.btn_fork_direct", lang),
                     callback_data=build_mode_action_callback_data("sdd", "fork_direct", session=session),
                 ),
             ],
             [
-                InlineKeyboardButton("⬅️ Назад", callback_data="sess_active"),
+                InlineKeyboardButton(t("common.back", lang), callback_data="sess_active"),
             ],
         ]
         return InlineKeyboardMarkup(rows)
@@ -1071,12 +1090,13 @@ class SddMode(BaseMode):
         chat_id: int,
         dest: Dict[str, Any],
         ms: MessagingService,
+        lang: str = "ru",
     ) -> None:
         await ms.send_text(
             chat_id,
-            "Выберите путь для фичи: сначала Аналитик соберёт ТЗ или сразу перейти к спецификации\\.",
+            t("sdd.fork_menu_path_text", lang),
             md2=True,
-            reply_markup=self._fork_keyboard(session),
+            reply_markup=self._fork_keyboard(session, lang=lang),
         )
 
     async def _init_and_run_specify(
@@ -1119,12 +1139,13 @@ class SddMode(BaseMode):
         query: Any,
         dest: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         intent = str(sdd.source_intent or "").strip()
         if not intent:
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="❌ Намерение не задано\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.error_no_intent_md2", lang), md2=True)
             return ToolResult.ok()
-        await ms.send_or_edit(query=query, chat_id=chat_id, text="📐 Запускаю SDD\\.\\.\\.", md2=True)
+        await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.starting_sdd", lang), md2=True)
         await self._init_and_run_specify(session, bot_app, context, dest, intent)
         return ToolResult.ok()
 
@@ -1138,17 +1159,18 @@ class SddMode(BaseMode):
         query: Any,
         dest: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         sdd = get_sdd_state(session)
         intent = str(sdd.source_intent or "").strip()
         if not intent:
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="❌ Намерение не задано\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.error_no_intent_md2", lang), md2=True)
             return ToolResult.ok()
         if sdd.last_action == "fork_analyst_running":
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="⏳ Аналитик уже запущен\\.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.analyst_already_running_short", lang), md2=True)
             return ToolResult.ok()
         sdd.last_action = "fork_analyst_running"
         self._persist_sessions(bot_app)
-        await ms.send_or_edit(query=query, chat_id=chat_id, text="🔍 Запускаю Аналитика\\.\\.\\.", md2=True)
+        await ms.send_or_edit(query=query, chat_id=chat_id, text=t("sdd.starting_analyst_new", lang), md2=True)
         self._start_mode_task(
             bot_app=bot_app,
             session=session,
@@ -1189,7 +1211,8 @@ class SddMode(BaseMode):
             self._persist_sessions(bot_app)
             try:
                 ms = self._messaging(bot_app=bot_app, context=context)
-                await ms.send_text(int(dest.get("chat_id") or 0), "❌ Ошибка при запуске Аналитика. Проверьте логи.", md2=False)
+                _notify_lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=int(dest.get("chat_id") or 0))
+                await ms.send_text(int(dest.get("chat_id") or 0), t("sdd.analyst_start_failed", _notify_lang), md2=False)
             except Exception:
                 self._log.exception("sdd fork_analyst notify failed")
         finally:
@@ -1212,47 +1235,49 @@ class SddMode(BaseMode):
         back_callback: str = "sess_active",
         back_text: str = "⬅️ Назад",
         menu_visibility: Any = None,
+        lang: str = "ru",
     ) -> Tuple[str, Any]:
         enabled = str(get_active_mode(session, "") or "").strip() == self.mode_id
         sdd = get_sdd_state(session)
+        none_label = t("sdd.none", lang)
         rows = []
         if enabled:
             rows.append([
                 InlineKeyboardButton(
-                    "🔴 Выключить SDD",
+                    t("sdd.btn_disable", lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "disable", session=session),
                 )
             ])
             rows.append([
                 InlineKeyboardButton(
-                    "🧭 Инициализировать проект",
+                    t("sdd.btn_init_project", lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "init_project", session=session),
                 )
             ])
             rows.append([
                 InlineKeyboardButton(
-                    "📊 Статус",
+                    t("sdd.btn_status", lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "status", session=session),
                 ),
                 InlineKeyboardButton(
-                    "🔄 Сбросить",
+                    t("sdd.btn_reset_label", lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "reset", session=session),
                 ),
             ])
-            text = (
-                f"📐 SDD\n\nРежим: включен\n"
-                f"Фаза: {sdd.phase}\n"
-                f"Фича: {sdd.feature_slug or 'нет'}\n"
-                f"Инициализация проекта: {sdd.project_init_status}"
+            text = t(
+                "sdd.menu_text_enabled", lang,
+                phase=sdd.phase,
+                feature_slug=sdd.feature_slug or none_label,
+                project_init_status=sdd.project_init_status,
             )
         else:
             rows.append([
                 InlineKeyboardButton(
-                    "🟢 Включить SDD",
+                    t("sdd.btn_enable", lang),
                     callback_data=build_mode_action_callback_data(self.mode_id, "enable", session=session),
                 )
             ])
-            text = "📐 SDD\n\nРежим: выключен\n\nSpec-Driven Development: specify → plan → tasks → analyze."
+            text = t("sdd.menu_text_disabled", lang)
         rows.append([InlineKeyboardButton(back_text, callback_data=back_callback)])
         return text, InlineKeyboardMarkup(rows)
 

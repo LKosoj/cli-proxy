@@ -463,7 +463,8 @@ class MiniAppRoutes:
                 return "ERR_SESSION_WORKDIR_MISSING"
             return ""
         try:
-            return str(checker(self.bot_app, session) or "").strip()
+            raw = str(checker(self.bot_app, session) or "").strip()
+            return t(raw, "ru") if raw else ""
         except Exception:
             logger.exception("miniapp settings mode enable preflight failed")
             return "active_mode enable failed"
@@ -1934,6 +1935,11 @@ class MiniAppRoutes:
     ) -> Dict[str, Any]:
         user_id = int(user["user_id"])
         is_admin = bool(user.get("is_admin", False))
+        try:
+            from utils.lang import resolve_user_lang as _rsl
+            _build_status_lang = _rsl(self.bot_app.config, chat_id=user_id)
+        except Exception:
+            _build_status_lang = "ru"
 
         if permissions_cache is not None and "visible_sessions" in permissions_cache:
             visible_sessions = permissions_cache["visible_sessions"]
@@ -2008,9 +2014,9 @@ class MiniAppRoutes:
                 selected_payload.get("status_text")
                 if isinstance(selected_payload, dict)
                 else (
-                    "Сессия не найдена или недоступна"
+                    t("miniapp.status.session_unavailable", _build_status_lang)
                     if selected_session_uid
-                    else "Сессия не выбрана"
+                    else t("miniapp.status.no_session", _build_status_lang)
                 )
             ),
         }
@@ -2526,9 +2532,11 @@ class MiniAppRoutes:
             session = await self._resolve_session_for_chat(user, session_uid)
         except web.HTTPException as exc:
             return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
+        from utils.lang import resolve_user_lang
+        approve_lang = resolve_user_lang(self.bot_app.config, chat_id=self._session_owner_chat_id(session))
         try:
             result = await service.execute_pending(
-                session=session, approval_id=approval_id,
+                session=session, approval_id=approval_id, lang=approve_lang,
             )
         except Exception:
             logger.exception(
@@ -4099,6 +4107,11 @@ class MiniAppRoutes:
         session_uid = self._validate_session_uid_input(body.get("session_uid") or "")
         mode_id = str(body.get("mode_id", "") or "").strip() or None
         try:
+            from utils.lang import resolve_user_lang as _rsl_run
+            _run_lang = _rsl_run(self.bot_app.config, chat_id=int(user["user_id"]))
+        except Exception:
+            _run_lang = "ru"
+        try:
             canonical_uid, session, handle = self._resolve_run_handle(
                 user=user,
                 session_uid=session_uid,
@@ -4115,7 +4128,7 @@ class MiniAppRoutes:
             if not decision.allowed:
                 return await self._json_error(
                     403,
-                    f"Run-операция запрещена policy: {decision.reason}.",
+                    t("msg.run.policy_denied", _run_lang, reason=decision.reason),
                 )
             execution_context, execution_dest = self._miniapp_run_execution_vector(user=user, session=session)
             store = self._run_artifact_store()

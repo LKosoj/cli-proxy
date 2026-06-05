@@ -75,6 +75,8 @@ from modes.sdk import ModeToolingService
 from modes.sdk.runtime.openai_client import chat_completion
 from tg.wiring import register_handlers
 from app.bootstrap import build_application
+from i18n import t
+from utils.lang import resolve_user_lang
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -793,24 +795,19 @@ class BotApp:
         thread_mode = getattr(self.config, "thread_mode", None)
         thread_mode_mode = str(getattr(thread_mode, "mode", "") or "").strip()
         topics_chat_id = getattr(thread_mode, "topics_chat_id", None)
+        lang = resolve_user_lang(self.config, chat_id=int(route.reply_chat_id))
         if (
             bool(getattr(thread_mode, "enabled", False))
             and thread_mode_mode == "group"
             and topics_chat_id is not None
             and int(route.reply_chat_id) != int(topics_chat_id)
         ):
-            return (
-                "Групповой Thread Mode принимает сообщения только в настроенном forum-чате "
-                f"`{int(topics_chat_id)}` и только внутри topic."
-            )
+            return t("bot.unknown_thread_group", lang, topics_chat_id=int(topics_chat_id))
         if route.message_thread_id is None:
             if self._route_has_any_sessions(route):
-                return "Используйте топики существующих сессий."
-            return "Сначала создайте сессию."
-        return (
-            "Этот topic не связан ни с одной сессией CLI Proxy. "
-            "Создайте новую сессию или выполните reconcile."
-        )
+                return t("bot.unknown_thread_use_topics", lang)
+            return t("bot.no_session_create", lang)
+        return t("bot.unknown_thread_no_session", lang)
 
     def _can_allow_outside_topic(self, route: TelegramInboundRoute) -> bool:
         thread_mode = getattr(self.config, "thread_mode", None)
@@ -884,9 +881,10 @@ class BotApp:
                 details=rate_decision.__dict__,
             )
             if emit_denied_message:
+                _rl_lang = resolve_user_lang(self.config, chat_id=int(route.owner_chat_id))
                 await self._send_message(
                     context,
-                    text="Слишком много запросов. Попробуйте позже.",
+                    text=t("bot.rate_limit", _rl_lang),
                     **route.reply_kwargs(),
                 )
             return None
@@ -922,9 +920,10 @@ class BotApp:
             return None
 
         if self.access_policy_service.is_whitelisted(int(route.owner_chat_id)):
+            _ac_lang = resolve_user_lang(self.config, chat_id=int(route.owner_chat_id))
             await self._send_message(
                 context,
-                text="Доступ не настроен. Обратитесь к администратору.",
+                text=t("bot.access_not_configured", _ac_lang),
                 **route.reply_kwargs(),
             )
         return None
@@ -1233,11 +1232,11 @@ class BotApp:
     def _setup_logging(self) -> None:
         setup_logging(self.config)
 
-    def _format_ts(self, ts: float) -> str:
+    def _format_ts(self, ts: float, lang: str = "ru") -> str:
         import datetime as _dt
 
         if not ts:
-            return "нет"
+            return t("session_status.no", lang)
         return _dt.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
     def _short_label(self, text: str, max_len: int = 40) -> str:
@@ -1280,8 +1279,9 @@ class BotApp:
         system_options: bool = True,
         message_thread_id: Optional[int] = None,
     ) -> None:
+        _ask_q_lang = resolve_user_lang(self.config, chat_id=chat_id)
         options = self._normalize_ask_options(options, allow_custom=allow_custom)
-        options = self._ensure_min_ask_options(options, system_options=system_options)
+        options = self._ensure_min_ask_options(options, system_options=system_options, lang=_ask_q_lang)
         ui_key = self.telegram_ui_key(
             chat_id,
             message_thread_id if message_thread_id is not None else getattr(context, "message_thread_id", None),
@@ -1298,7 +1298,7 @@ class BotApp:
         }
         rows = [[InlineKeyboardButton(opt, callback_data=f"ask:{question_id}:{idx}")] for idx, opt in enumerate(options)]
         if allow_custom:
-            rows.append([InlineKeyboardButton("✍️ Свой вариант", callback_data=f"ask:{question_id}:custom")])
+            rows.append([InlineKeyboardButton(t("bot.ask_custom_btn", _ask_q_lang), callback_data=f"ask:{question_id}:custom")])
         keyboard = InlineKeyboardMarkup(rows)
         await self._send_message(context, text=question, reply_markup=keyboard, **ui_key.reply_kwargs())
 
@@ -1322,15 +1322,15 @@ class BotApp:
         return normalized
 
     @staticmethod
-    def _ensure_min_ask_options(options: list[str], system_options: bool = True) -> list[str]:
+    def _ensure_min_ask_options(options: list[str], system_options: bool = True, lang: str = "ru") -> list[str]:
         normalized = [str(x).strip() for x in (options or []) if str(x).strip()]
         if len(normalized) >= 2:
             return normalized[:4]
         if not system_options:
             return normalized
         if len(normalized) == 1:
-            return [normalized[0], "Остановиться и уточнить"]
-        return ["Продолжить с допущениями", "Остановиться и уточнить"]
+            return [normalized[0], t("bot.ask_stop_clarify", lang)]
+        return [t("bot.ask_continue_assumptions", lang), t("bot.ask_stop_clarify", lang)]
 
     def _clear_pending_question(self, question_id: str) -> bool:
         qid = str(question_id or "").strip()
@@ -1606,17 +1606,18 @@ class BotApp:
             return
 
         async def _send() -> None:
+            _cmd_lang = resolve_user_lang(getattr(self, "config", None), chat_id=int(chat_id))
             keyboard = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("✅ Одобрить", callback_data=f"approve_cmd:{cmd_id}"),
-                        InlineKeyboardButton("❌ Запретить", callback_data=f"deny_cmd:{cmd_id}"),
+                        InlineKeyboardButton(t("desktop.btn.cmd_approve", _cmd_lang), callback_data=f"approve_cmd:{cmd_id}"),
+                        InlineKeyboardButton(t("desktop.btn.cmd_deny", _cmd_lang), callback_data=f"deny_cmd:{cmd_id}"),
                     ]
                 ]
             )
             send_kwargs = {
                 "chat_id": int(reply_chat_id),
-                "text": f"Нужное подтверждение: {reason}\nКоманда:\n{cmd}",
+                "text": t("bot.cmd_confirm", _cmd_lang, reason=reason, cmd=cmd),
                 "reply_markup": keyboard,
             }
             if message_thread_id is not None:
@@ -1636,17 +1637,18 @@ class BotApp:
         page_size = 10
         start = page * page_size
         end = start + page_size
+        _sk_lang = resolve_user_lang(self.config, chat_id=int(ui_key.chat_id))
         rows = []
         for i, k in enumerate(keys[start:end], start=start):
             rows.append([InlineKeyboardButton(self._short_label(k), callback_data=f"state_pick:{i}")])
         nav = []
         if start > 0:
-            nav.append(InlineKeyboardButton("◀️ Назад", callback_data=f"state_page:{page-1}"))
+            nav.append(InlineKeyboardButton(t("msg.dirs.btn_prev", _sk_lang), callback_data=f"state_page:{page-1}"))
         if end < len(keys):
-            nav.append(InlineKeyboardButton("▶️ Далее", callback_data=f"state_page:{page+1}"))
+            nav.append(InlineKeyboardButton(t("msg.dirs.btn_next", _sk_lang), callback_data=f"state_page:{page+1}"))
         if nav:
             rows.append(nav)
-        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="agent_cancel")])
+        rows.append([InlineKeyboardButton(t("btn.session.cancel", _sk_lang), callback_data="agent_cancel")])
         return InlineKeyboardMarkup(rows)
 
     async def send_output(
@@ -1699,10 +1701,11 @@ class BotApp:
             return resolved_context, resolved_dest, degradation_message
         if resolved_context is None:
             session_uid = str(getattr(getattr(session, "conversation_scope", None), "session_uid", "") or session.id or "-")
-            degradation_message = (
-                "Живой Telegram transport context недоступен: "
-                "промежуточные сообщения recovery не будут доставляться, итог придет после завершения."
-            )
+            try:
+                _deg_lang = resolve_user_lang(self.config, chat_id=getattr(session, "chat_id", None))
+            except Exception:
+                _deg_lang = "ru"
+            degradation_message = t("msg.recovery.degraded_delivery", _deg_lang)
             logging.getLogger(__name__).warning(
                 "telegram recovery degraded to final-only delivery mode=%s session_uid=%s run_chat_id=%s",
                 str(getattr(session, "active_mode", "") or ""),
@@ -1754,11 +1757,15 @@ class BotApp:
     ) -> Dict[str, Any]:
         resolved_mode = str(mode_id or "").strip()
         operation_name = str(operation or "").strip()
+        try:
+            _rec_lang = resolve_user_lang(self.config, chat_id=getattr(session, "chat_id", None))
+        except Exception:
+            _rec_lang = "ru"
         if not operation_name:
-            return {"status": "blocked", "message": "Recovery operation не определена."}
+            return {"status": "blocked", "message": t("msg.recovery.operation_not_defined", _rec_lang)}
         mode = self.mode_registry_service.get(resolved_mode) if self.mode_registry_service else None
         if mode is None:
-            return {"status": "blocked", "message": f"Mode `{resolved_mode}` недоступен."}
+            return {"status": "blocked", "message": t("msg.recovery.mode_unavailable", _rec_lang, mode_id=resolved_mode)}
         resolved_context, resolved_dest, degradation_message = self._resolve_recovery_execution_vector(
             session=session,
             state=state,
@@ -1780,7 +1787,7 @@ class BotApp:
             return self._with_recovery_degradation(dict(payload or {}), degradation_message)
         if resolved_mode == "codebase_mapper":
             if not hasattr(mode, "run_pipeline"):
-                return {"status": "blocked", "message": "Codebase Mapper mode недоступен."}
+                return {"status": "blocked", "message": t("msg.recovery.codebase_mapper_unavailable", _rec_lang)}
             output = await mode.run_pipeline(
                 session=session,
                 user_text=operation_name,
@@ -1791,14 +1798,14 @@ class BotApp:
             return self._with_recovery_degradation(
                 {
                     "status": "ok",
-                    "message": str(output or "").strip() or f"Операция `{operation_name}` выполнена.",
+                    "message": str(output or "").strip() or t("bot.op_executed", _rec_lang, op=operation_name),
                     "executed_operation": operation_name,
                     "executed_via": "mode_run_pipeline",
                 },
                 degradation_message,
             )
         if not hasattr(mode, "run_pipeline"):
-            return {"status": "blocked", "message": f"Recovery недоступен для режима `{resolved_mode}`."}
+            return {"status": "blocked", "message": t("msg.recovery.mode_no_pipeline", _rec_lang, mode_id=resolved_mode)}
         prompt_text = build_recovery_prompt(
             session=session,
             mode_id=resolved_mode,
@@ -1809,7 +1816,7 @@ class BotApp:
             return self._with_recovery_degradation(
                 {
                     "status": "blocked",
-                    "message": "Не удалось восстановить входные данные для recovery action.",
+                    "message": t("bot.recovery_no_inputs", _rec_lang),
                     "executed_operation": operation_name,
                 },
                 degradation_message,
@@ -1826,7 +1833,7 @@ class BotApp:
         latest_after = artifact_store.latest_run(session=session, mode_id=resolved_mode)
         payload = {
             "status": "ok",
-            "message": str(output or "").strip() or f"Операция `{operation_name}` выполнена.",
+            "message": str(output or "").strip() or t("bot.op_executed", _rec_lang, op=operation_name),
             "executed_operation": operation_name,
             "executed_via": f"mode_run_pipeline:{operation_name}",
         }
@@ -1922,7 +1929,8 @@ class BotApp:
         if route is None:
             return
         self.metrics.inc("commands")
-        await self._send_message(context, text="Команда не найдена. Откройте меню бота.", **route.reply_kwargs())
+        _uc_lang = resolve_user_lang(self.config, chat_id=int(route.owner_chat_id))
+        await self._send_message(context, text=t("bot.cmd_not_found", _uc_lang), **route.reply_kwargs())
 
     async def on_pre_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_chat:
@@ -1968,11 +1976,12 @@ class BotApp:
         chat_id = int(chat.id)
         user_id = getattr(user, "id", None)
 
+        _start_lang = resolve_user_lang(self.config, chat_id=chat_id)
         parts = []
         if user_id is not None:
-            parts.append(f"Ваш Telegram ID: {int(user_id)}")
+            parts.append(t("bot.your_telegram_id", _start_lang, user_id=int(user_id)))
         parts.append(f"Chat ID: {chat_id}")
-        parts.append("Обратитесь к вашему администратору.")
+        parts.append(t("bot.contact_admin", _start_lang))
 
         await self._send_message(context, chat_id=chat_id, text="\n".join(parts), md2=True)
 
@@ -2535,28 +2544,26 @@ class BotApp:
         if route is None:
             return
         chat_id = int(route.reply_chat_id)
+        _ma_lang = resolve_user_lang(self.config, chat_id=chat_id)
         if not bool(getattr(self.config.miniapp, "enabled", False)):
-            await self._send_message(context, chat_id=chat_id, text="MiniApp отключен в конфигурации.")
+            await self._send_message(context, chat_id=chat_id, text=t("bot.miniapp_disabled", _ma_lang))
             return
         url = self._build_miniapp_webapp_url()
         if not url:
             await self._send_message(
                 context,
                 chat_id=chat_id,
-                text=(
-                    "MiniApp ссылка не настроена. Укажите `miniapp.public_url` в config.yaml "
-                    "(например, `https://example.com/cli-proxy`)."
-                ),
+                text=t("bot.miniapp_url_not_set", _ma_lang),
                 md2=True,
             )
             return
         kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Открыть MiniApp", web_app=WebAppInfo(url=url))]]
+            [[InlineKeyboardButton(t("bot.miniapp_open_btn", _ma_lang), web_app=WebAppInfo(url=url))]]
         )
         await self._send_message(
             context,
             chat_id=chat_id,
-            text="Откройте MiniApp для администрирования:",
+            text=t("bot.miniapp_open_text", _ma_lang),
             reply_markup=kb,
             md2=True,
         )

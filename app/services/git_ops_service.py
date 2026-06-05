@@ -8,8 +8,10 @@ from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+from i18n import t
 from session import Session, SessionManager
 from utils.html_renderer import make_html_file
+from utils.lang import resolve_user_lang
 
 
 class GitOps:
@@ -108,7 +110,7 @@ class GitOps:
                 env["GIT_USERNAME"] = "x-access-token"
         return env
 
-    def build_git_keyboard(self) -> InlineKeyboardMarkup:
+    def build_git_keyboard(self, lang: str = "ru") -> InlineKeyboardMarkup:
         rows = [
             [
                 InlineKeyboardButton("📋 Status", callback_data="git_status"),
@@ -137,7 +139,7 @@ class GitOps:
                 InlineKeyboardButton("❓ Help", callback_data="git_help"),
             ],
             [
-                InlineKeyboardButton("❌ Закрыть", callback_data="git_cancel"),
+                InlineKeyboardButton(t("msg.git.btn_close", lang), callback_data="git_cancel"),
             ],
         ]
         return InlineKeyboardMarkup(rows)
@@ -148,6 +150,7 @@ class GitOps:
         action: str,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> InlineKeyboardMarkup:
         branches = self.git_branch_menu.get(self._state_key(chat_id, message_thread_id), [])
         rows = []
@@ -155,42 +158,42 @@ class GitOps:
             rows.append(
                 [InlineKeyboardButton(self._short_label(ref), callback_data=f"git_{action}_pick:{i}")]
             )
-        rows.append([InlineKeyboardButton("❌ Отмена", callback_data="git_cancel")])
+        rows.append([InlineKeyboardButton(t("msg.git.btn_cancel", lang), callback_data="git_cancel")])
         return InlineKeyboardMarkup(rows)
 
-    def _build_git_pull_keyboard(self, ref: str) -> InlineKeyboardMarkup:
+    def _build_git_pull_keyboard(self, ref: str, lang: str = "ru") -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(f"🔀 Merge {ref}", callback_data="git_pull_merge"),
                     InlineKeyboardButton(f"🔀 Rebase {ref}", callback_data="git_pull_rebase"),
                 ],
-                [InlineKeyboardButton("❌ Отмена", callback_data="git_pull_cancel")],
+                [InlineKeyboardButton(t("msg.git.btn_cancel", lang), callback_data="git_pull_cancel")],
             ]
         )
 
-    def _build_git_confirm_keyboard(self, action: str, ref: str) -> InlineKeyboardMarkup:
-        label = "✅ Выполнить merge" if action == "merge" else "✅ Выполнить rebase"
+    def _build_git_confirm_keyboard(self, action: str, ref: str, lang: str = "ru") -> InlineKeyboardMarkup:
+        label = t("msg.git.btn_execute_merge", lang) if action == "merge" else t("msg.git.btn_execute_rebase", lang)
         return InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton(f"{label} {ref}", callback_data=f"git_confirm_{action}")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="git_cancel")],
+                [InlineKeyboardButton(t("msg.git.btn_cancel", lang), callback_data="git_cancel")],
             ]
         )
 
-    def _build_git_conflict_keyboard(self) -> InlineKeyboardMarkup:
+    def _build_git_conflict_keyboard(self, lang: str = "ru") -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton("📝 Diff", callback_data="git_conflict_diff"),
-                    InlineKeyboardButton("⛔ Abort", callback_data="git_conflict_abort"),
+                    InlineKeyboardButton(t("msg.git.btn_abort", lang), callback_data="git_conflict_abort"),
                 ],
                 [
-                    InlineKeyboardButton("▶️ Continue", callback_data="git_conflict_continue"),
-                    InlineKeyboardButton("🤖 Позвать агента", callback_data="git_conflict_agent"),
+                    InlineKeyboardButton(t("msg.git.btn_continue", lang), callback_data="git_conflict_continue"),
+                    InlineKeyboardButton(t("msg.git.btn_call_agent", lang), callback_data="git_conflict_agent"),
                 ],
                 [
-                    InlineKeyboardButton("❌ Закрыть", callback_data="git_cancel"),
+                    InlineKeyboardButton(t("msg.git.btn_close", lang), callback_data="git_cancel"),
                 ],
             ]
         )
@@ -218,6 +221,7 @@ class GitOps:
         context: ContextTypes.DEFAULT_TYPE,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> bool:
         """Атомарный check-and-set для session.git.busy.
 
@@ -230,8 +234,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                "CLI-сессия занята. Дождитесь завершения и попробуйте снова.",
+                t("msg.git.busy_cli", lang),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return False
         git_lock = getattr(session.git, "lock", None)
@@ -242,8 +247,9 @@ class GitOps:
                     context,
                     chat_id,
                     session,
-                    "Git уже выполняется. Дождитесь завершения.",
+                    t("msg.git.busy_git", lang),
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return False
             session.git.busy = True
@@ -254,8 +260,9 @@ class GitOps:
                     context,
                     chat_id,
                     session,
-                    "Git уже выполняется. Дождитесь завершения.",
+                    t("msg.git.busy_git", lang),
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return False
             session.git.busy = True
@@ -283,21 +290,22 @@ class GitOps:
         context: ContextTypes.DEFAULT_TYPE,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> Optional[Session]:
         session = self._resolve_scope_session(int(chat_id), message_thread_id=message_thread_id)
         if not session:
             await self._send_message(
                 context,
-                text="Сессия для текущего контекста не найдена. Откройте /sessions и выберите нужную сессию явно.",
+                text=t("msg.git.no_session", lang),
                 **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
             )
             return None
         self._ensure_git_state(session)
         return session
 
-    def _session_label(self, session: Session) -> str:
+    def _session_label(self, session: Session, lang: str = "ru") -> str:
         label = session.name or f"{session.tool.name} @ {session.workdir}"
-        return f"сессия: {session.id} | {label}"
+        return t("msg.git.session_label_prefix", lang, session_id=session.id, label=label)
 
     async def _send_git_message(
         self,
@@ -307,8 +315,9 @@ class GitOps:
         text: str,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> None:
-        prefix = self._session_label(session)
+        prefix = self._session_label(session, lang)
         await self._send_message(
             context,
             text=f"{prefix}\n{text}",
@@ -322,6 +331,7 @@ class GitOps:
         context: ContextTypes.DEFAULT_TYPE,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> bool:
         code, output = await self._run_git(session, ["rev-parse", "--is-inside-work-tree"])
         if code != 0 or output.strip() != "true":
@@ -329,8 +339,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                "Каталог не является git-репозиторием.",
+                t("msg.git.not_git_repo", lang),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return False
         return True
@@ -342,6 +353,7 @@ class GitOps:
         context: ContextTypes.DEFAULT_TYPE,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> bool:
         self._ensure_git_state(session)
         if session.busy or session.is_active_by_tick():
@@ -349,8 +361,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                "CLI-сессия занята. Дождитесь завершения и попробуйте снова.",
+                t("msg.git.busy_cli", lang),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return False
         if session.git.busy:
@@ -358,8 +371,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                "Git уже выполняется. Дождитесь завершения.",
+                t("msg.git.busy_git", lang),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return False
         return True
@@ -469,8 +483,8 @@ class GitOps:
         """Показывает diff и мета-информацию коммита."""
         return await self._run_git(session, ["--no-pager", "show", "--stat", ref])
 
-    async def _git_status_text(self, session: Session) -> str:
-        branch = await self._git_current_branch(session) or "неизвестно"
+    async def _git_status_text(self, session: Session, lang: str = "ru") -> str:
+        branch = await self._git_current_branch(session) or t("msg.git.status_branch_unknown", lang)
         code, output = await self._run_git(session, ["status", "--porcelain"])
         dirty = bool(output.strip()) if code == 0 else False
         upstream = await self._git_upstream(session)
@@ -483,20 +497,20 @@ class GitOps:
         ahead_behind = await self._git_ahead_behind(session, upstream) if upstream else None
         conflicts = await self._git_conflict_files(session)
         lines = [
-            f"Ветка: {branch}",
-            f"Состояние: {'dirty' if dirty else 'clean'}",
+            t("msg.git.status_branch", lang, branch=branch),
+            t("msg.git.status_state", lang, state="dirty" if dirty else "clean"),
         ]
         if upstream and ahead_behind:
             ahead, behind = ahead_behind
-            lines.append(f"Upstream: {upstream} | ahead {ahead} / behind {behind}")
+            lines.append(t("msg.git.status_upstream_ahead_behind", lang, upstream=upstream, ahead=ahead, behind=behind))
         elif upstream:
-            lines.append(f"Upstream: {upstream} | ahead/behind: недоступно")
+            lines.append(t("msg.git.status_upstream_unavailable", lang, upstream=upstream))
         else:
-            lines.append("Upstream: нет")
+            lines.append(t("msg.git.status_no_upstream", lang))
         if conflicts:
-            lines.append(f"Конфликт: да ({len(conflicts)} файлов)")
+            lines.append(t("msg.git.status_conflict_yes", lang, count=len(conflicts)))
         else:
-            lines.append("Конфликт: нет")
+            lines.append(t("msg.git.status_conflict_no", lang))
         return "\n".join(lines)
 
     async def _send_git_help(
@@ -506,6 +520,7 @@ class GitOps:
         context: ContextTypes.DEFAULT_TYPE,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> None:
         path = self._resolve_git_help_path()
         try:
@@ -517,8 +532,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                f"Не удалось открыть git.md: {e}",
+                t("msg.git.help_read_error", lang, e=str(e)),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return
         if not content:
@@ -526,8 +542,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                "git.md пустой.",
+                t("msg.git.help_empty", lang),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return
         html_text = f"<pre>{html.escape(content)}</pre>"
@@ -537,8 +554,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                "Git help:",
+                t("msg.git.help_header", lang),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             with open(out_path, "rb") as f:
                 await self._send_document(
@@ -584,7 +602,7 @@ class GitOps:
             cleaned = cleaned[:max_len].rstrip()
         return cleaned
 
-    async def _build_commit_body(self, session: Session) -> Optional[str]:
+    async def _build_commit_body(self, session: Session, lang: str = "ru") -> Optional[str]:
         code, stat_out = await self._run_git(session, ["diff", "--stat"])
         if code != 0:
             stat_out = ""
@@ -593,9 +611,9 @@ class GitOps:
             status_out = ""
         parts = []
         if stat_out.strip():
-            parts.append("Изменения:\n" + stat_out.strip())
+            parts.append(t("msg.git.commit_body_changes", lang) + "\n" + stat_out.strip())
         if status_out.strip():
-            parts.append("Статус:\n" + status_out.strip())
+            parts.append(t("msg.git.commit_body_status", lang) + "\n" + status_out.strip())
         if not parts:
             return None
         return "\n\n".join(parts)
@@ -609,6 +627,7 @@ class GitOps:
         output: str,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> None:
         text = output.strip()
         if not text:
@@ -616,8 +635,9 @@ class GitOps:
                 context,
                 chat_id,
                 session,
-                f"{title}: готово.",
+                t("msg.git.output_done", lang, title=title),
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return
         if len(text) > 4000:
@@ -628,6 +648,7 @@ class GitOps:
             session,
             f"{title}:\n{text}",
             message_thread_id=message_thread_id,
+            lang=lang,
         )
 
     async def _execute_git_commit(
@@ -639,8 +660,9 @@ class GitOps:
         body: Optional[str] = None,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> None:
-        if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+        if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
             return
         try:
             code, add_out = await self._run_git(session, ["add", "-A"])
@@ -652,6 +674,7 @@ class GitOps:
                     "Git add",
                     add_out,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return
             args = ["commit", "-m", message]
@@ -665,15 +688,17 @@ class GitOps:
                 "Git commit",
                 commit_out,
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             if code == 0:
-                status = await self._git_status_text(session)
+                status = await self._git_status_text(session, lang)
                 await self._send_git_message(
                     context,
                     chat_id,
                     session,
                     status,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
         finally:
             session.git.busy = False
@@ -685,15 +710,16 @@ class GitOps:
         context: ContextTypes.DEFAULT_TYPE,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> None:
         files = session.git.conflict_files or await self._git_conflict_files(session)
-        files_text = ", ".join(files[:10]) if files else "нет файлов"
-        text = f"Обнаружены git-конфликты: {files_text}"
-        prefix = self._session_label(session)
+        files_text = ", ".join(files[:10]) if files else t("msg.git.no_files_label", lang)
+        text = t("msg.git.conflict_detected", lang, files=files_text)
+        prefix = self._session_label(session, lang)
         await self._send_message(
             context,
             text=f"{prefix}\n{text}",
-            reply_markup=self._build_git_conflict_keyboard(),
+            reply_markup=self._build_git_conflict_keyboard(lang),
             **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
         )
 
@@ -706,8 +732,9 @@ class GitOps:
         ref: str,
         *,
         message_thread_id: Optional[int] = None,
+        lang: str = "ru",
     ) -> None:
-        if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+        if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
             return
         try:
             code, output = await self._run_git(session, [action, ref])
@@ -718,6 +745,7 @@ class GitOps:
                 f"{action.title()} {ref}",
                 output,
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             conflicts = await self._git_conflict_files(session)
             if conflicts:
@@ -726,6 +754,7 @@ class GitOps:
                     chat_id,
                     context,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
             else:
                 self._git_clear_conflict(session)
@@ -740,6 +769,7 @@ class GitOps:
         *,
         message_thread_id: Optional[int] = None,
     ) -> bool:
+        lang = resolve_user_lang(self.config, chat_id=chat_id)
         state_key = self._state_key(chat_id, message_thread_id)
         if state_key not in self.pending_git_commit:
             return False
@@ -752,13 +782,14 @@ class GitOps:
                     context,
                     chat_id,
                     session,
-                    "Коммит отменен.",
+                    t("msg.git.commit_cancelled", lang),
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
             else:
                 await self._send_message(
                     context,
-                    text="Коммит отменен.",
+                    text=t("msg.git.commit_cancelled", lang),
                     **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
                 )
             return True
@@ -769,13 +800,14 @@ class GitOps:
                     context,
                     chat_id,
                     session,
-                    "Сообщение коммита пустое.",
+                    t("msg.git.commit_msg_empty", lang),
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
             else:
                 await self._send_message(
                     context,
-                    text="Сообщение коммита пустое.",
+                    text=t("msg.git.commit_msg_empty", lang),
                     **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
                 )
             return True
@@ -783,13 +815,13 @@ class GitOps:
         if not session:
             await self._send_message(
                 context,
-                text="Сессия не найдена.",
+                text=t("msg.git.session_not_found", lang),
                 **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
             )
             return True
-        if not await self.ensure_git_repo(session, chat_id, context, message_thread_id=message_thread_id):
+        if not await self.ensure_git_repo(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
             return True
-        if not await self.ensure_git_not_busy(session, chat_id, context, message_thread_id=message_thread_id):
+        if not await self.ensure_git_not_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
             return True
         conflicts = await self._git_conflict_files(session)
         if conflicts:
@@ -798,10 +830,11 @@ class GitOps:
                 chat_id,
                 context,
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             return True
         message = self._sanitize_commit_message(message)
-        body = await self._build_commit_body(session)
+        body = await self._build_commit_body(session, lang=lang)
         if body:
             body = self._sanitize_commit_body(body)
         await self._execute_git_commit(
@@ -811,6 +844,7 @@ class GitOps:
             message,
             body,
             message_thread_id=message_thread_id,
+            lang=lang,
         )
         return True
 
@@ -818,23 +852,25 @@ class GitOps:
         data = query.data or ""
         message_thread_id = self._query_thread_id(query)
         state_key = self._state_key(chat_id, message_thread_id)
+        lang = resolve_user_lang(self.config, chat_id=chat_id)
         try:
             if data == "git_cancel":
-                await self._edit_msg(context, query, "Операция отменена.")
+                await self._edit_msg(context, query, t("msg.git.op_cancelled", lang))
                 self.git_pending_ref.pop(state_key, None)
                 self.git_branch_menu.pop(state_key, None)
                 self.pending_git_commit.pop(state_key, None)
                 return True
             if data == "git_pull_cancel":
-                await self._edit_msg(context, query, "Pull отменен.")
+                await self._edit_msg(context, query, t("msg.git.pull_cancelled", lang))
                 self.git_pull_target.pop(state_key, None)
                 return True
             if data == "git_help":
-                await self._edit_msg(context, query, "Готовлю git help…")
+                await self._edit_msg(context, query, t("msg.git.preparing_help", lang))
                 session = await self.ensure_git_session(
                     chat_id,
                     context,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 if not session:
                     return True
@@ -843,6 +879,7 @@ class GitOps:
                     chat_id,
                     context,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return True
             if not (data.startswith("git_") or data.startswith("gitpull_") or data.startswith("git_conflict")):
@@ -852,33 +889,36 @@ class GitOps:
                 chat_id,
                 context,
                 message_thread_id=message_thread_id,
+                lang=lang,
             )
             if not session:
                 return True
-            if not await self.ensure_git_repo(session, chat_id, context, message_thread_id=message_thread_id):
+            if not await self.ensure_git_repo(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
                 return True
             if data not in ("git_conflict_agent",) and not await self.ensure_git_not_busy(
                 session,
                 chat_id,
                 context,
                 message_thread_id=message_thread_id,
+                lang=lang,
             ):
                 return True
 
             if data == "git_status":
-                await self._edit_msg(context, query, "Получаю git status…")
-                text = await self._git_status_text(session)
+                await self._edit_msg(context, query, t("msg.git.getting_status", lang))
+                text = await self._git_status_text(session, lang)
                 await self._send_git_message(
                     context,
                     chat_id,
                     session,
                     text,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return True
             if data == "git_fetch":
-                await self._edit_msg(context, query, "Выполняю git fetch…")
-                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                await self._edit_msg(context, query, t("msg.git.doing_fetch", lang))
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
                     return True
                 try:
                     code, output = await self._run_git(session, ["fetch", "--prune"])
@@ -889,22 +929,24 @@ class GitOps:
                         "Fetch",
                         output,
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                     if code == 0:
-                        status = await self._git_status_text(session)
+                        status = await self._git_status_text(session, lang)
                         await self._send_git_message(
                             context,
                             chat_id,
                             session,
                             status,
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                 finally:
                     session.git.busy = False
                 return True
             if data == "git_pull":
-                await self._edit_msg(context, query, "Проверяю возможность fast-forward…")
-                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                await self._edit_msg(context, query, t("msg.git.checking_ff", lang))
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
                     return True
                 try:
                     await self._run_git(session, ["fetch", "--prune"])
@@ -921,8 +963,9 @@ class GitOps:
                             context,
                             chat_id,
                             session,
-                            "Upstream не найден. Настройте upstream или выберите ветку через Merge/Rebase.",
+                            t("msg.git.no_upstream", lang),
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                         return True
                     ahead_behind = await self._git_ahead_behind(session, upstream)
@@ -931,8 +974,9 @@ class GitOps:
                             context,
                             chat_id,
                             session,
-                            "Не удалось определить ahead/behind. Проверьте состояние репозитория.",
+                            t("msg.git.ahead_behind_error", lang),
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                         return True
                     ahead, behind = ahead_behind
@@ -941,8 +985,9 @@ class GitOps:
                             context,
                             chat_id,
                             session,
-                            "Ветка уже актуальна.",
+                            t("msg.git.branch_up_to_date", lang),
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                         return True
                     if behind > 0 and ahead == 0:
@@ -954,23 +999,25 @@ class GitOps:
                             "Pull --ff-only",
                             output,
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                         if code == 0:
-                            status = await self._git_status_text(session)
+                            status = await self._git_status_text(session, lang)
                             await self._send_git_message(
                                 context,
                                 chat_id,
                                 session,
                                 status,
                                 message_thread_id=message_thread_id,
+                                lang=lang,
                             )
                         return True
                     self.git_pull_target[state_key] = upstream
-                    prefix = self._session_label(session)
+                    prefix = self._session_label(session, lang)
                     await self._send_message(
                         context,
-                        text=f"{prefix}\nFast-forward невозможен. Ahead {ahead} / Behind {behind} относительно {upstream}.",
-                        reply_markup=self._build_git_pull_keyboard(upstream),
+                        text=f"{prefix}\n{t('msg.git.ff_impossible', lang, ahead=ahead, behind=behind, upstream=upstream)}",
+                        reply_markup=self._build_git_pull_keyboard(upstream, lang),
                         **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
                     )
                 finally:
@@ -979,9 +1026,9 @@ class GitOps:
             if data == "git_pull_merge":
                 ref = self.git_pull_target.get(state_key)
                 if not ref:
-                    await self._edit_msg(context, query, "Цель pull не определена.")
+                    await self._edit_msg(context, query, t("msg.git.pull_target_undefined", lang))
                     return True
-                await self._edit_msg(context, query, "Выполняю merge…")
+                await self._edit_msg(context, query, t("msg.git.doing_merge", lang))
                 await self._git_merge_or_rebase(
                     session,
                     chat_id,
@@ -989,15 +1036,16 @@ class GitOps:
                     "merge",
                     ref,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 self.git_pull_target.pop(state_key, None)
                 return True
             if data == "git_pull_rebase":
                 ref = self.git_pull_target.get(state_key)
                 if not ref:
-                    await self._edit_msg(context, query, "Цель pull не определена.")
+                    await self._edit_msg(context, query, t("msg.git.pull_target_undefined", lang))
                     return True
-                await self._edit_msg(context, query, "Выполняю rebase…")
+                await self._edit_msg(context, query, t("msg.git.doing_rebase", lang))
                 await self._git_merge_or_rebase(
                     session,
                     chat_id,
@@ -1005,46 +1053,49 @@ class GitOps:
                     "rebase",
                     ref,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 self.git_pull_target.pop(state_key, None)
                 return True
             if data == "git_merge_menu":
-                await self._edit_msg(context, query, "Загружаю список веток…")
+                await self._edit_msg(context, query, t("msg.git.loading_branches", lang))
                 code, output = await self._run_git(session, ["branch", "-r"])
                 branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
                 if not branches:
-                    await self._edit_msg(context, query, "Нет удаленных веток.")
+                    await self._edit_msg(context, query, t("msg.git.no_remote_branches", lang))
                     return True
                 self.git_branch_menu[state_key] = branches
-                prefix = self._session_label(session)
+                prefix = self._session_label(session, lang)
                 await self._edit_msg(
                     context,
                     query,
-                    f"{prefix}\nВыберите ветку для merge:",
+                    f"{prefix}\n{t('msg.git.select_branch_merge', lang)}",
                     reply_markup=self._build_git_branches_keyboard(
                         chat_id,
                         "merge",
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     ),
                 )
                 return True
             if data == "git_rebase_menu":
-                await self._edit_msg(context, query, "Загружаю список веток…")
+                await self._edit_msg(context, query, t("msg.git.loading_branches", lang))
                 code, output = await self._run_git(session, ["branch", "-r"])
                 branches = [b.strip() for b in output.splitlines() if b.strip()] if code == 0 else []
                 if not branches:
-                    await self._edit_msg(context, query, "Нет удаленных веток.")
+                    await self._edit_msg(context, query, t("msg.git.no_remote_branches", lang))
                     return True
                 self.git_branch_menu[state_key] = branches
-                prefix = self._session_label(session)
+                prefix = self._session_label(session, lang)
                 await self._edit_msg(
                     context,
                     query,
-                    f"{prefix}\nВыберите ветку для rebase:",
+                    f"{prefix}\n{t('msg.git.select_branch_rebase', lang)}",
                     reply_markup=self._build_git_branches_keyboard(
                         chat_id,
                         "rebase",
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     ),
                 )
                 return True
@@ -1053,31 +1104,35 @@ class GitOps:
                 idx = int(data.split(":", 1)[1])
                 branches = self.git_branch_menu.get(state_key, [])
                 if idx < 0 or idx >= len(branches):
-                    await self._edit_msg(context, query, "Выбор недоступен.")
+                    await self._edit_msg(context, query, t("msg.git.pick_unavailable", lang))
                     return True
                 ref = branches[idx]
                 ahead_behind = await self._git_ahead_behind(session, ref)
                 if not ahead_behind:
-                    info = f"Не удалось определить ahead/behind относительно {ref}."
+                    info = t("msg.git.ahead_behind_unknown", lang, ref=ref)
                 else:
                     ahead, behind = ahead_behind
-                    info = f"Ahead {ahead} / Behind {behind} относительно {ref}."
+                    info = t("msg.git.ahead_behind_info", lang, ahead=ahead, behind=behind, ref=ref)
                 self.git_pending_ref[state_key] = ref
-                prefix = self._session_label(session)
+                prefix = self._session_label(session, lang)
                 await self._edit_msg(
                     context,
                     query,
                     f"{prefix}\n{info}",
-                    reply_markup=self._build_git_confirm_keyboard(action, ref),
+                    reply_markup=self._build_git_confirm_keyboard(action, ref, lang),
                 )
                 return True
             if data == "git_confirm_merge" or data == "git_confirm_rebase":
                 action = "merge" if data == "git_confirm_merge" else "rebase"
                 ref = self.git_pending_ref.get(state_key)
                 if not ref:
-                    await self._edit_msg(context, query, "Ссылка не выбрана.")
+                    await self._edit_msg(context, query, t("msg.git.ref_not_selected", lang))
                     return True
-                await self._edit_msg(context, query, f"Выполняю {action}…")
+                await self._edit_msg(
+                    context,
+                    query,
+                    t("msg.git.doing_merge", lang) if action == "merge" else t("msg.git.doing_rebase", lang),
+                )
                 await self._git_merge_or_rebase(
                     session,
                     chat_id,
@@ -1085,11 +1140,12 @@ class GitOps:
                     action,
                     ref,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 self.git_pending_ref.pop(state_key, None)
                 return True
             if data == "git_diff":
-                await self._edit_msg(context, query, "Получаю diff…")
+                await self._edit_msg(context, query, t("msg.git.getting_diff", lang))
                 code, output = await self._run_git(session, ["diff"])
                 await self._send_git_output(
                     context,
@@ -1098,10 +1154,11 @@ class GitOps:
                     "Diff",
                     output,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return True
             if data == "git_log":
-                await self._edit_msg(context, query, "Получаю log…")
+                await self._edit_msg(context, query, t("msg.git.getting_log", lang))
                 code, output = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "20"])
                 await self._send_git_output(
                     context,
@@ -1110,36 +1167,38 @@ class GitOps:
                     "Log",
                     output,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return True
             if data == "git_summary":
-                await self._edit_msg(context, query, "Собираю git summary…")
-                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                await self._edit_msg(context, query, t("msg.git.collecting_summary", lang))
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
                     return True
                 try:
                     code_status, status = await self._run_git(session, ["status", "--short", "--branch"])
                     code_stat, stat = await self._run_git(session, ["diff", "--stat"])
                     code_log, log = await self._run_git(session, ["--no-pager", "log", "--oneline", "--decorate", "-n", "10"])
-                    text_parts = ["Git summary:"]
+                    text_parts = [t("msg.git.summary_header", lang)]
                     if code_status == 0 and status.strip():
-                        text_parts.append("\nStatus:\n" + status.strip())
+                        text_parts.append("\n" + t("msg.git.summary_status", lang) + "\n" + status.strip())
                     if code_stat == 0 and stat.strip():
-                        text_parts.append("\nDiff --stat:\n" + stat.strip())
+                        text_parts.append("\n" + t("msg.git.summary_diff_stat", lang) + "\n" + stat.strip())
                     if code_log == 0 and log.strip():
-                        text_parts.append("\nLog (last 10):\n" + log.strip())
+                        text_parts.append("\n" + t("msg.git.summary_log", lang) + "\n" + log.strip())
                     await self._send_git_message(
                         context,
                         chat_id,
                         session,
                         "\n".join(text_parts)[:4000],
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                 finally:
                     session.git.busy = False
                 return True
             if data == "git_stash":
-                await self._edit_msg(context, query, "Выполняю stash…")
-                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                await self._edit_msg(context, query, t("msg.git.doing_stash", lang))
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
                     return True
                 try:
                     code, output = await self._run_git(session, ["stash", "push", "-u"])
@@ -1150,27 +1209,29 @@ class GitOps:
                         "Stash",
                         output,
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                     if code == 0:
-                        status = await self._git_status_text(session)
+                        status = await self._git_status_text(session, lang)
                         await self._send_git_message(
                             context,
                             chat_id,
                             session,
                             status,
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                 finally:
                     session.git.busy = False
                 return True
             if data == "git_commit":
                 try:
-                    await self._edit_msg(context, query, "Готовлю commit…")
+                    await self._edit_msg(context, query, t("msg.git.preparing_commit", lang))
                 except Exception:
                     pass
                 conflicts = await self._git_conflict_files(session)
                 if conflicts:
-                    await self._handle_git_conflict(session, chat_id, context)
+                    await self._handle_git_conflict(session, chat_id, context, lang=lang)
                     return True
                 commit_context = await self._git_commit_context(session)
                 if not commit_context:
@@ -1178,15 +1239,15 @@ class GitOps:
                         context,
                         chat_id,
                         session,
-                        "Не удалось получить diff для коммита.",
+                        t("msg.git.diff_error", lang),
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                     return True
                 commit_message = None
                 commit_body = None
                 if os.getenv("OPENAI_API_KEY") or self.config.defaults.openai_api_key:
                     from summary import suggest_commit_message_detailed_async
-                    from utils.lang import resolve_user_lang
                     _lang = resolve_user_lang(self.config, chat_id=chat_id)
                     detailed = await suggest_commit_message_detailed_async(commit_context, self.config, language=_lang)
                     if detailed:
@@ -1196,7 +1257,7 @@ class GitOps:
                     if commit_body:
                         commit_body = self._sanitize_commit_body(commit_body)
                     else:
-                        auto_body = await self._build_commit_body(session)
+                        auto_body = await self._build_commit_body(session, lang=lang)
                         if auto_body:
                             commit_body = self._sanitize_commit_body(auto_body)
                     await self._execute_git_commit(
@@ -1206,6 +1267,7 @@ class GitOps:
                         commit_message,
                         commit_body,
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                 else:
                     self.pending_git_commit[state_key] = session.id
@@ -1213,13 +1275,14 @@ class GitOps:
                         context,
                         chat_id,
                         session,
-                        "Введите сообщение коммита (или '-' для отмены):",
+                        t("msg.git.enter_commit_msg", lang),
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                 return True
             if data == "git_push":
-                await self._edit_msg(context, query, "Выполняю push…")
-                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id):
+                await self._edit_msg(context, query, t("msg.git.doing_push", lang))
+                if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
                     return True
                 try:
                     branch = await self._git_current_branch(session)
@@ -1235,21 +1298,23 @@ class GitOps:
                         "Push",
                         output,
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                     if code == 0:
-                        status = await self._git_status_text(session)
+                        status = await self._git_status_text(session, lang)
                         await self._send_git_message(
                             context,
                             chat_id,
                             session,
                             status,
                             message_thread_id=message_thread_id,
+                            lang=lang,
                         )
                 finally:
                     session.git.busy = False
                 return True
             if data == "git_conflict_diff":
-                await self._edit_msg(context, query, "Получаю diff…")
+                await self._edit_msg(context, query, t("msg.git.getting_diff", lang))
                 code, output = await self._run_git(session, ["diff"])
                 await self._send_git_output(
                     context,
@@ -1258,23 +1323,25 @@ class GitOps:
                     "Diff",
                     output,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 return True
             if data == "git_conflict_abort":
                 mode = await self._git_in_progress(session)
                 if not mode:
-                    await self._edit_msg(context, query, "Нет активного merge/rebase.")
+                    await self._edit_msg(context, query, t("msg.git.no_active_merge_rebase", lang))
                     return True
-                await self._edit_msg(context, query, "Выполняю abort…")
+                await self._edit_msg(context, query, t("msg.git.doing_abort", lang))
                 cmd = ["merge", "--abort"] if mode == "merge" else ["rebase", "--abort"]
                 code, output = await self._run_git(session, cmd)
                 await self._send_git_output(
                     context,
                     chat_id,
                     session,
-                    "Abort",
+                    t("msg.git.abort_title", lang),
                     output,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 await self._git_conflict_files(session)
                 if not session.git.conflict:
@@ -1283,18 +1350,19 @@ class GitOps:
             if data == "git_conflict_continue":
                 mode = await self._git_in_progress(session)
                 if not mode:
-                    await self._edit_msg(context, query, "Нет активного merge/rebase.")
+                    await self._edit_msg(context, query, t("msg.git.no_active_merge_rebase", lang))
                     return True
-                await self._edit_msg(context, query, "Выполняю continue…")
+                await self._edit_msg(context, query, t("msg.git.doing_continue", lang))
                 cmd = ["merge", "--continue"] if mode == "merge" else ["rebase", "--continue"]
                 code, output = await self._run_git(session, cmd)
                 await self._send_git_output(
                     context,
                     chat_id,
                     session,
-                    "Continue",
+                    t("msg.git.continue_title", lang),
                     output,
                     message_thread_id=message_thread_id,
+                    lang=lang,
                 )
                 conflicts = await self._git_conflict_files(session)
                 if conflicts:
@@ -1303,28 +1371,25 @@ class GitOps:
                         chat_id,
                         context,
                         message_thread_id=message_thread_id,
+                        lang=lang,
                     )
                 return True
             if data == "git_conflict_agent":
                 files = session.git.conflict_files or await self._git_conflict_files(session)
-                files_text = ", ".join(files[:10]) if files else "нет файлов"
-                note = (
-                    "Нужна помощь с git-конфликтами. "
-                    f"Список файлов: {files_text}. "
-                    "Пожалуйста, предложи шаги для разрешения конфликтов и команды git."
-                )
+                files_text = ", ".join(files[:10]) if files else t("msg.git.no_files_label", lang)
+                note = t("msg.git.conflict_agent_note", lang, files=files_text)
                 await self._handle_cli_input(session, note, chat_id, context)
                 if session.busy or session.is_active_by_tick():
-                    await self._edit_msg(context, query, "Сессия занята. Выберите действие для очереди.")
+                    await self._edit_msg(context, query, t("msg.git.conflict_agent_queued", lang))
                 else:
-                    await self._edit_msg(context, query, "Инструкция отправлена агенту.")
+                    await self._edit_msg(context, query, t("msg.git.conflict_agent_sent", lang))
                 return True
             return True
         except Exception as e:
             logging.exception(f"Ошибка git callback: {e}")
             await self._send_message(
                 context,
-                text=f"Ошибка выполнения git: {e}",
+                text=t("msg.git.error_callback", lang, e=str(e)),
                 **self._send_kwargs(chat_id, message_thread_id=message_thread_id),
             )
             return True

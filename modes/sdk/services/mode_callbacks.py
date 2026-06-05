@@ -6,7 +6,9 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
+from i18n import t
 from modes.sdk.runtime.json_normalizer import loads_safe
+from utils.lang import resolve_user_lang
 
 from ..dirs_mode import decode_mode_dirs
 from ..models import CallbackModel
@@ -375,12 +377,13 @@ class ModeCallbackRouterService:
         if not target_mode:
             return False
         action_token = str(action or "").strip()
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         busy_for_mode_changes = self._is_session_busy_for_mode_changes(session)
         if action_token in ("enable", "on", "disable", "off") and busy_for_mode_changes:
             if self.send_message:
                 await self.send_message(
                     transport_context,
-                    text="Сессия занята. Переключение/выключение режима доступно только когда сессия свободна.",
+                    text=t("msg.mode.session_busy_switch", lang),
                     md2=True,
                     **self._telegram_reply_kwargs(reply_dest),
                 )
@@ -389,7 +392,7 @@ class ModeCallbackRouterService:
             if self.send_message:
                 await self.send_message(
                     transport_context,
-                    text="Сессия занята. Деструктивные действия (reset/clean/disconnect) доступны только когда сессия свободна.",
+                    text=t("msg.mode.session_busy_destructive", lang),
                     md2=True,
                     **self._telegram_reply_kwargs(reply_dest),
                 )
@@ -419,9 +422,9 @@ class ModeCallbackRouterService:
                     from app.security.errors import DenyReasonCode
 
                     text = (
-                        "Режим недоступен для вашего пользователя."
+                        t("msg.mode.not_allowed_for_user", lang)
                         if str(decision.reason or "") == DenyReasonCode.MODE_NOT_ALLOWED
-                        else "Запуск режима отклонён политикой безопасности."
+                        else t("msg.mode.launch_denied_policy", lang)
                     )
                     await self.send_message(
                         transport_context,
@@ -434,7 +437,7 @@ class ModeCallbackRouterService:
             if self.send_message:
                 await self.send_message(
                     transport_context,
-                    text="Режим недоступен для вашего пользователя.",
+                    text=t("msg.mode.not_allowed_for_user", lang),
                     md2=True,
                     **self._telegram_reply_kwargs(reply_dest),
                 )
@@ -454,7 +457,7 @@ class ModeCallbackRouterService:
                 if self.send_message:
                     await self.send_message(
                         transport_context,
-                        text="Сессия не определена для run-операции.",
+                        text=t("msg.run.session_undefined", lang),
                         md2=True,
                         **self._telegram_reply_kwargs(reply_dest),
                     )
@@ -479,7 +482,7 @@ class ModeCallbackRouterService:
                 if self.send_message:
                     await self.send_message(
                         transport_context,
-                        text=f"Run-операция запрещена policy: {decision.reason}.",
+                        text=t("msg.run.policy_denied", lang, reason=decision.reason),
                         md2=True,
                         **self._telegram_reply_kwargs(reply_dest),
                     )
@@ -498,7 +501,7 @@ class ModeCallbackRouterService:
                 if self.send_message:
                     await self.send_message(
                         transport_context,
-                        text="Run-операции сейчас недоступны.",
+                        text=t("msg.run.unavailable", lang),
                         md2=True,
                         **self._telegram_reply_kwargs(reply_dest),
                     )
@@ -508,7 +511,7 @@ class ModeCallbackRouterService:
                 if self.send_message:
                     await self.send_message(
                         transport_context,
-                        text="Запрошенная run-операция не поддерживается.",
+                        text=t("msg.run.not_supported", lang),
                         md2=True,
                         **self._telegram_reply_kwargs(reply_dest),
                     )
@@ -520,7 +523,7 @@ class ModeCallbackRouterService:
                 "dest": dict(reply_dest),
             }
             result = await method(**operation_kwargs)
-            text = str(getattr(result, "message", "") or "Run-операция завершена.")
+            text = str(getattr(result, "message", "") or t("msg.run.done", lang))
             if self.send_message:
                 await self.send_message(
                     transport_context,
@@ -538,7 +541,7 @@ class ModeCallbackRouterService:
                 if self.send_message:
                     await self.send_message(
                         transport_context,
-                        text="Сессия не определена для promote-to-global.",
+                        text=t("msg.skill.promote_cb_session_undefined", lang),
                         md2=True,
                         **self._telegram_reply_kwargs(reply_dest),
                     )
@@ -547,7 +550,7 @@ class ModeCallbackRouterService:
                 if self.send_message:
                     await self.send_message(
                         transport_context,
-                        text="Promote-to-global сейчас недоступен.",
+                        text=t("msg.skill.promote_cb_unavailable", lang),
                         md2=True,
                         **self._telegram_reply_kwargs(reply_dest),
                     )
@@ -561,7 +564,7 @@ class ModeCallbackRouterService:
                 context=transport_context,
                 dest=dict(reply_dest),
             )
-            text = str(getattr(result, "message", "") or "Promote-to-global завершён.")
+            text = str(getattr(result, "message", "") or t("msg.skill.promote_cb_done", lang))
             if self.send_message:
                 await self.send_message(
                     transport_context,

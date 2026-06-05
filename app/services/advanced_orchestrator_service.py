@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from i18n import t
 from modes.sdk.runtime.json_normalizer import loads_safe
 from sessions.session_state_access import (
     get_active_mode,
@@ -142,8 +143,8 @@ class AdvancedOrchestratorService:
     @staticmethod
     def _contains_any(haystack: str, needles: Iterable[str]) -> bool:
         for token in needles:
-            t = str(token or "").strip().lower()
-            if t and t in haystack:
+            tok = str(token or "").strip().lower()
+            if tok and tok in haystack:
                 return True
         return False
 
@@ -182,7 +183,7 @@ class AdvancedOrchestratorService:
             return False
         return True
 
-    def propose_transition(self, *, session: Any, text: str, mode_registry: Any) -> Optional[OrchestratorProposal]:
+    def propose_transition(self, *, session: Any, text: str, mode_registry: Any, lang: str = "ru") -> Optional[OrchestratorProposal]:
         content = self._normalize_text(text)
         if not content:
             return None
@@ -216,7 +217,7 @@ class AdvancedOrchestratorService:
             if (top_score - second_score) < 0.35:
                 return None
 
-        reason = f"Обнаружен более подходящий режим: {top_label}."
+        reason = t("orchestrator.reason_heuristic", lang, mode=top_label)
         confidence = max(0.0, min(1.0, top_score / 4.0))
         return OrchestratorProposal(
             target_mode_id=top_mode,
@@ -234,6 +235,7 @@ class AdvancedOrchestratorService:
         mode_registry: Any,
         app_config: Any = None,
         llm_router_fn=None,
+        lang: str = "ru",
     ) -> Optional[OrchestratorProposal]:
         """
         Hybrid routing:
@@ -241,7 +243,7 @@ class AdvancedOrchestratorService:
         2) Policy/guardrails validate.
         3) On low confidence/invalid/unavailable -> deterministic fallback.
         """
-        fallback = self.propose_transition(session=session, text=text, mode_registry=mode_registry)
+        fallback = self.propose_transition(session=session, text=text, mode_registry=mode_registry, lang=lang)
         llm = llm_router_fn
         if llm is None or app_config is None:
             return fallback
@@ -251,6 +253,7 @@ class AdvancedOrchestratorService:
             mode_registry=mode_registry,
             app_config=app_config,
             llm_router_fn=llm,
+            lang=lang,
         )
         if llm_candidate is None:
             return fallback
@@ -264,6 +267,7 @@ class AdvancedOrchestratorService:
         mode_registry: Any,
         app_config: Any,
         llm_router_fn,
+        lang: str = "ru",
     ) -> Optional[OrchestratorProposal]:
         available = self._available_modes(mode_registry)
         available_map = {mid: label for mid, label in available}
@@ -311,7 +315,7 @@ class AdvancedOrchestratorService:
             return None
         label = available_map.get(mode_id, mode_id)
         if not reason:
-            reason = f"LLM выбрал более подходящий режим: {label}."
+            reason = t("orchestrator.reason_llm", lang, mode=label)
         return OrchestratorProposal(
             target_mode_id=mode_id,
             target_label=label,
@@ -341,15 +345,15 @@ class AdvancedOrchestratorService:
             _LOG.exception("failed to store orchestrator previous mode marker")
         set_active_mode(session, None if mid == DIRECT_CLI_MODE_ID else mid)
 
-    def build_confirm_text(self, *, current_mode_label: str, proposal: OrchestratorProposal) -> str:
+    def build_confirm_text(self, *, current_mode_label: str, proposal: OrchestratorProposal, lang: str = "ru") -> str:
         confidence_pct = int(round(float(proposal.confidence) * 100))
-        return (
-            "Продвинутый оркестратор предлагает переход.\n"
-            f"Текущий режим: {current_mode_label}.\n"
-            f"Предлагаемый режим: {proposal.target_label}.\n"
-            f"Причина: {proposal.reason}\n"
-            f"Уверенность: {confidence_pct}%\n\n"
-            "Выполнить переход перед обработкой сообщения?"
+        return t(
+            "orchestrator.confirm_transition",
+            lang,
+            current_label=current_mode_label,
+            target_label=proposal.target_label,
+            reason=proposal.reason,
+            confidence=confidence_pct,
         )
 
     def current_mode_label(self, *, session: Any, mode_registry: Any) -> str:

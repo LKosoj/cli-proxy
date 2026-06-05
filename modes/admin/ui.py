@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from i18n import t
 from tg.markdown import escape_markdown_v2_all
 
 
@@ -16,30 +17,30 @@ def _truncate(value: Any, max_len: int = 120) -> str:
     return text[: max_len - 3] + "..."
 
 
-def build_admin_menu_text(*, session_id: str, active: bool) -> str:
-    stage = "включен" if bool(active) else "выключен"
+def build_admin_menu_text(*, session_id: str, active: bool, lang: str = 'ru') -> str:
+    stage = t('admin.state.enabled', lang) if bool(active) else t('admin.state.disabled', lang)
     sid = _esc(session_id or "-")
     return "\n".join(
         [
-            "*🛡 Admin Mode*",
+            t('admin.menu.title', lang),
             f"*Session:* {sid}",
-            f"*Состояние:* {_esc(stage)}",
+            f"{t('admin.menu.state_label', lang)} {_esc(stage)}",
             "",
-            "_Режим администрирования текущей сессии_",
-            "_Используйте кнопки ниже или текстовые команды `/admin ...`_",
+            t('admin.menu.subtitle', lang),
+            t('admin.menu.hint', lang),
         ]
     )
 
 
-def build_admin_status_text(payload: Dict[str, Any]) -> str:
-    stage = "включен" if bool(payload.get("active")) else "выключен"
+def build_admin_status_text(payload: Dict[str, Any], lang: str = 'ru') -> str:
+    stage = t('admin.state.enabled', lang) if bool(payload.get("active")) else t('admin.state.disabled', lang)
     busy_3sig = bool(payload.get("busy") or payload.get("run_lock_locked") or payload.get("tick_active"))
     mode_tasks = bool(payload.get("mode_tasks_running"))
     sid = _esc(payload.get("session_id") or "-")
     pending_skill_installs = payload.get("pending_skill_installs") if isinstance(payload.get("pending_skill_installs"), dict) else {}
     pending_skill_count = int(pending_skill_installs.get("count") or 0)
     mute_state = payload.get("mute_state") if isinstance(payload.get("mute_state"), dict) else {}
-    mute_text = "да" if bool(mute_state.get("muted")) else "нет"
+    mute_text = t('admin.bool.yes', lang) if bool(mute_state.get("muted")) else t('admin.bool.no', lang)
     pipeline_status = str(payload.get("pipeline_status") or "-")
     monitor_status = str(payload.get("monitor_status") or "-")
     analyzer_status = str(payload.get("analyzer_status") or "-")
@@ -49,13 +50,14 @@ def build_admin_status_text(payload: Dict[str, Any]) -> str:
     approvals = payload.get("approved_overrides") if isinstance(payload.get("approved_overrides"), list) else []
     return "\n".join(
         [
-            "*🛡 Admin статус*",
+            t('admin.status.title', lang),
             f"*Session:* {sid}",
-            f"*Режим:* {_esc(stage)}",
+            f"{t('admin.status.mode_label', lang)} {_esc(stage)}",
             f"*Pipeline:* {_esc(pipeline_status)}",
             f"*Monitor:* {_esc(monitor_status)} | *Analyzer:* {_esc(analyzer_status)}",
             f"*Executor:* {_esc(executor_status)} | *Notifier:* {_esc(notifier_status)}",
-            f"*Busy 3sig:* {_esc('да' if busy_3sig else 'нет')} | *Mode tasks:* {_esc('есть' if mode_tasks else 'нет')}",
+            "*Busy 3sig:* " + _esc(t('admin.bool.yes', lang) if busy_3sig else t('admin.bool.no', lang))
+            + " | *Mode tasks:* " + _esc(t('admin.bool.present', lang) if mode_tasks else t('admin.bool.no', lang)),
             f"*Mute:* {_esc(mute_text)}",
             f"*Incidents:* {_esc(len(incidents))} | *Approvals:* {_esc(len(approvals))} | *Skills:* {_esc(pending_skill_count)}",
         ]
@@ -69,26 +71,27 @@ def build_admin_approval_prompt(
     diagnosis: str,
     reason: str,
     triggers: list[str],
+    lang: str = 'ru',
 ) -> str:
     trigger_map = {
-        "low_confidence": "низкая уверенность Analyzer",
-        "risky_action": "рискованное действие",
-        "signal_conflict": "конфликт сигналов",
-        "policy_conflict": "конфликт с policy",
+        "low_confidence": t('admin.approval_prompt.trigger.low_confidence', lang),
+        "risky_action": t('admin.approval_prompt.trigger.risky_action', lang),
+        "signal_conflict": t('admin.approval_prompt.trigger.signal_conflict', lang),
+        "policy_conflict": t('admin.approval_prompt.trigger.policy_conflict', lang),
     }
     trigger_text = ", ".join(trigger_map.get(str(item or ""), str(item or "")) for item in triggers if str(item or "").strip())
     if not trigger_text:
-        trigger_text = "требуется ручная проверка"
+        trigger_text = t('admin.approval_prompt.trigger.manual_check', lang)
     return "\n".join(
         [
-            "🛡 Admin: требуется подтверждение действия.",
-            f"Причина: {trigger_text}",
+            t('admin.approval_prompt.header', lang),
+            f"{t('admin.approval_prompt.trigger_reason_label', lang)} {trigger_text}",
             f"Action: {str(action or '-').strip() or '-'}",
             f"Confidence: {str(confidence or '-').strip() or '-'}",
             f"Diagnosis: {str(diagnosis or '-').strip() or '-'}",
             f"Reason: {str(reason or '-').strip() or '-'}",
             "",
-            "Подтвердить выполнение?",
+            t('admin.approval_prompt.confirm_question', lang),
         ]
     )
 
@@ -104,10 +107,10 @@ def build_admin_error_text(message: str) -> str:
     return f"*🛡 Admin*\n{_esc(message)}"
 
 
-def build_admin_incidents_screen(*, incidents: Iterable[Mapping[str, Any]]) -> str:
+def build_admin_incidents_screen(*, incidents: Iterable[Mapping[str, Any]], lang: str = 'ru') -> str:
     rows = [dict(row or {}) for row in incidents if isinstance(row, Mapping)]
     if not rows:
-        return "*🚨 Incidents*\n\n_Нет зарегистрированных инцидентов_"
+        return f"*🚨 Incidents*\n\n{t('admin.incidents.empty', lang)}"
     lines = ["*🚨 Incidents*", ""]
     for index, row in enumerate(rows, start=1):
         incident_id = str(row.get("incident_id") or "-")
@@ -134,14 +137,14 @@ def build_admin_incidents_screen(*, incidents: Iterable[Mapping[str, Any]]) -> s
         evidence_ref = _truncate(first_evidence.get("ref") or first_evidence.get("metric") or "")
         if evidence_ref:
             lines.append(f"   evidence: `{_esc(evidence_ref)}`")
-    lines.extend(["", "_Нажмите на кнопку чтобы подтвердить инцидент\\._"])
+    lines.extend(["", t('admin.incidents.ack_hint', lang)])
     return "\n".join(lines)
 
 
-def build_admin_actions_screen(*, actions: Iterable[Mapping[str, Any]]) -> str:
+def build_admin_actions_screen(*, actions: Iterable[Mapping[str, Any]], lang: str = 'ru') -> str:
     rows = [dict(row or {}) for row in actions if isinstance(row, Mapping)]
     if not rows:
-        return "*⚙️ Admin Actions*\n\n_Нет записей о выполненных действиях_"
+        return f"*⚙️ Admin Actions*\n\n{t('admin.actions.empty', lang)}"
     lines = ["*⚙️ Admin Actions*", ""]
     for index, row in enumerate(rows, start=1):
         action_id = str(row.get("action_id") or "-")
@@ -154,10 +157,10 @@ def build_admin_actions_screen(*, actions: Iterable[Mapping[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_admin_approvals_screen(*, approvals: Iterable[Mapping[str, Any]]) -> str:
+def build_admin_approvals_screen(*, approvals: Iterable[Mapping[str, Any]], lang: str = 'ru') -> str:
     rows = [dict(row or {}) for row in approvals if isinstance(row, Mapping)]
     if not rows:
-        return "*✅ Approvals*\n\n_Нет сохранённых approvals_"
+        return f"*✅ Approvals*\n\n{t('admin.approvals.empty', lang)}"
     lines = ["*✅ Approvals*", ""]
     for index, row in enumerate(rows, start=1):
         override_id = str(row.get("override_id") or "-")
@@ -167,14 +170,14 @@ def build_admin_approvals_screen(*, approvals: Iterable[Mapping[str, Any]]) -> s
         lines.append(f"{index}\\. `{_esc(override_id)}` → action=*{_esc(action)}*")
         if reason and reason != "-":
             lines.append(f"   _{_esc(reason)}_")
-    lines.extend(["", "_Нажмите на кнопку чтобы отозвать approval\\._"])
+    lines.extend(["", t('admin.approvals.revoke_hint', lang)])
     return "\n".join(lines)
 
 
-def build_admin_skills_screen(*, skills: Iterable[Mapping[str, Any]]) -> str:
+def build_admin_skills_screen(*, skills: Iterable[Mapping[str, Any]], lang: str = 'ru') -> str:
     rows = [dict(row or {}) for row in skills if isinstance(row, Mapping)]
     if not rows:
-        return "*🧩 Skill approvals*\n\n_Нет ожидающих установки skills_"
+        return f"*🧩 Skill approvals*\n\n{t('admin.skills.empty', lang)}"
     lines = ["*🧩 Skill approvals*", ""]
     for index, row in enumerate(rows, start=1):
         approval_id = str(row.get("approval_id") or "-")
@@ -193,14 +196,14 @@ def build_admin_skills_screen(*, skills: Iterable[Mapping[str, Any]]) -> str:
             detail_parts.append(f"source={source}")
         if detail_parts:
             lines.append(f"   _{_esc(' | '.join(detail_parts))}_")
-    lines.extend(["", "_Нажмите approve или reject рядом с нужным skill\\._"])
+    lines.extend(["", t('admin.skills.approve_hint', lang)])
     return "\n".join(lines)
 
 
-def build_admin_runs_screen(*, runs: Iterable[Mapping[str, Any]]) -> str:
+def build_admin_runs_screen(*, runs: Iterable[Mapping[str, Any]], lang: str = 'ru') -> str:
     rows = [dict(row or {}) for row in runs if isinstance(row, Mapping)]
     if not rows:
-        return "*📜 Pipeline runs*\n\n_История запусков пуста_"
+        return f"*📜 Pipeline runs*\n\n{t('admin.runs.empty', lang)}"
     lines = ["*📜 Pipeline runs*", ""]
     for index, row in enumerate(rows, start=1):
         run_id = str(row.get("run_id") or "-")
@@ -221,31 +224,31 @@ def build_admin_runs_screen(*, runs: Iterable[Mapping[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_admin_mute_screen(*, mute_state: Optional[Mapping[str, Any]]) -> str:
+def build_admin_mute_screen(*, mute_state: Optional[Mapping[str, Any]], lang: str = 'ru') -> str:
     state = dict(mute_state or {})
     muted = bool(state.get("muted"))
     until = state.get("muted_until_ts")
     if muted:
         return (
             "*🔕 Mute alerts*\n\n"
-            f"Alerts сейчас *замьючены*\\. Истекает в: `{_esc(until)}`\\."
+            + t('admin.mute.active', lang, until=_esc(until))
         )
     return (
         "*🔕 Mute alerts*\n\n"
-        "Alerts *активны*\\. Выберите длительность заглушения\\."
+        + t('admin.mute.inactive', lang)
     )
 
 
-def build_admin_dryrun_screen(*, dry_run: bool) -> str:
-    mode = "включен" if bool(dry_run) else "выключен"
+def build_admin_dryrun_screen(*, dry_run: bool, lang: str = 'ru') -> str:
+    mode = t('admin.state.enabled', lang) if bool(dry_run) else t('admin.state.disabled', lang)
     hint = (
-        "команды выполняются в реальном режиме"
+        t('admin.dryrun.hint_off', lang)
         if not dry_run
-        else "все команды будут симулированы без реального выполнения"
+        else t('admin.dryrun.hint_on', lang)
     )
     return (
-        "*🧪 Dry\\-run режим*\n\n"
-        f"Текущее состояние: *{_esc(mode)}*\n_{_esc(hint)}_"
+        t('admin.dryrun.title', lang) + "\n\n"
+        + t('admin.dryrun.state_line', lang, mode=_esc(mode), hint=_esc(hint))
     )
 
 
@@ -279,14 +282,15 @@ def build_admin_servers_screen(
     *,
     servers: Iterable[Mapping[str, Any]],
     totals: Optional[Mapping[str, Any]] = None,
+    lang: str = 'ru',
 ) -> str:
     rows = [dict(row or {}) for row in servers if isinstance(row, Mapping)]
     if not rows:
-        return "*🖥 Серверы*\n\n_Нет серверов в `admin.monitor.servers`_"
-    lines = ["*🖥 Серверы*"]
+        return f"{t('admin.servers.title', lang)}\n\n{t('admin.servers.empty', lang)}"
+    lines = [t('admin.servers.title', lang)]
     if totals:
         summary_parts = [
-            f"всего={_esc(totals.get('server_count') or len(rows))}",
+            f"{t('admin.servers.total_prefix', lang)}{_esc(totals.get('server_count') or len(rows))}",
         ]
         stats = totals.get("statuses") if isinstance(totals.get("statuses"), Mapping) else {}
         for key in ("alarm", "warn", "proposed_baseline", "no_baseline", "ok"):
@@ -323,13 +327,13 @@ def build_admin_servers_screen(
             meta_parts.append(f"host={host}")
         lines.append(f"   _{_esc(' | '.join(meta_parts))}_")
     lines.append("")
-    lines.append("_Нажмите кнопку сервера для подробностей\\._")
+    lines.append(t('admin.servers.detail_hint', lang))
     return "\n".join(lines)
 
 
-def build_admin_server_detail_screen(*, summary: Mapping[str, Any]) -> str:
+def build_admin_server_detail_screen(*, summary: Mapping[str, Any], lang: str = 'ru') -> str:
     if not isinstance(summary, Mapping) or not summary:
-        return "*🖥 Сервер*\n\n_Нет данных_"
+        return f"*🖥 Сервер*\n\n{t('admin.server_detail.no_data', lang)}"
     sid = str(summary.get("server_id") or "-")
     label = str(summary.get("label") or sid)
     transport = str(summary.get("transport") or "-")
@@ -342,18 +346,18 @@ def build_admin_server_detail_screen(*, summary: Mapping[str, Any]) -> str:
     mem_entries = int(summary.get("memory_entries") or 0)
     status = str(summary.get("status") or "-")
     icon = _STATUS_ICON.get(status, "•")
-    baseline_line = "есть" if baseline_present else "нет"
+    baseline_line = t('admin.baseline.present', lang) if baseline_present else t('admin.baseline.absent', lang)
     if has_proposed:
-        baseline_line += " (есть proposed)"
+        baseline_line += t('admin.baseline.has_proposed', lang)
     lines = [
-        f"*🖥 Сервер {_esc(label)}*",
+        t('admin.server_detail.title', lang, label=_esc(label)),
         "",
         f"*id:* `{_esc(sid)}`",
         f"*status:* {icon} *{_esc(status)}*",
         f"*transport:* {_esc(transport)}" + (f" \\| host: `{_esc(host)}`" if host and host != "-" else ""),
     ]
     if tags:
-        tag_text = ", ".join(str(t) for t in tags if str(t or "").strip())
+        tag_text = ", ".join(str(tag) for tag in tags if str(tag or "").strip())
         if tag_text:
             lines.append(f"*tags:* {_esc(tag_text)}")
     lines.append(f"*baseline:* {_esc(baseline_line)}")
@@ -363,7 +367,7 @@ def build_admin_server_detail_screen(*, summary: Mapping[str, Any]) -> str:
         cnt = int(drifts.get(key) or 0)
         if cnt:
             drift_parts.append(f"{_SEVERITY_ICON.get(key, '•')}{cnt}")
-    drift_text = " ".join(drift_parts) if drift_parts else "нет открытых"
+    drift_text = " ".join(drift_parts) if drift_parts else t('admin.drifts.none_open', lang)
     lines.append(f"*drifts:* {_esc(drift_text)}")
     lines.append(f"*memory entries:* {_esc(mem_entries)}")
     return "\n".join(lines)
@@ -374,6 +378,7 @@ def build_admin_baseline_screen(
     server_id: str,
     info: Mapping[str, Any],
     max_preview_chars: int = 1200,
+    lang: str = 'ru',
 ) -> str:
     if not isinstance(info, Mapping):
         info = {}
@@ -385,37 +390,37 @@ def build_admin_baseline_screen(
     lines = [
         f"*📋 Baseline {_esc(server_id)}*",
         "",
-        f"*active:* {_esc('да' if baseline else 'нет')}",
-        f"*proposed:* {_esc('да' if has_proposed else 'нет')}",
-        f"*prev:* {_esc('есть' if has_prev else 'нет')}",
+        f"*active:* {_esc(t('admin.bool.yes', lang) if baseline else t('admin.bool.no', lang))}",
+        f"*proposed:* {_esc(t('admin.bool.yes', lang) if has_proposed else t('admin.bool.no', lang))}",
+        f"*prev:* {_esc(t('admin.bool.present', lang) if has_prev else t('admin.bool.no', lang))}",
         f"*scanned\\_at:* {_esc(baseline.get('scanned_at') or '-')}",
         f"*checks:* {_esc(len(checks))}",
     ]
     if checks:
         preview_keys = sorted(str(k) for k in checks.keys())[:12]
         lines.append("")
-        lines.append("*Проверки \\(список\\):*")
+        lines.append(t('admin.baseline.checks_list', lang))
         for key in preview_keys:
             lines.append(f"• `{_esc(key)}`")
         extra = len(checks) - len(preview_keys)
         if extra > 0:
-            lines.append(f"_… и ещё {_esc(extra)}_")
+            lines.append(t('admin.baseline.more_checks', lang, n=_esc(extra)))
     if has_proposed and isinstance(proposed, Mapping):
         prop_checks = proposed.get("checks") if isinstance(proposed.get("checks"), Mapping) else {}
         diff_keys = sorted(set(prop_checks.keys()) ^ set(checks.keys()))[:8]
         lines.append("")
-        lines.append("*📌 Есть предложение baseline*")
+        lines.append(t('admin.baseline.proposed_header', lang))
         lines.append(f"_proposed checks:_ {_esc(len(prop_checks))}")
         if diff_keys:
-            lines.append("_Изменённые ключи \\(первые 8\\):_")
+            lines.append(t('admin.baseline.changed_keys', lang))
             for key in diff_keys:
                 lines.append(f"• `{_esc(key)}`")
         lines.append("")
-        lines.append("_Accept зафиксирует proposed как baseline, Discard удалит предложение\\._")
+        lines.append(t('admin.baseline.accept_discard_hint', lang))
     return "\n".join(lines)
 
 
-def build_admin_autonomy_status_screen(status: Mapping[str, Any]) -> str:
+def build_admin_autonomy_status_screen(status: Mapping[str, Any], lang: str = 'ru') -> str:
     policy = status.get("policy") if isinstance(status.get("policy"), Mapping) else {}
     counters = status.get("counters") if isinstance(status.get("counters"), Mapping) else {}
     enabled = bool(policy.get("enabled"))
@@ -427,25 +432,29 @@ def build_admin_autonomy_status_screen(status: Mapping[str, Any]) -> str:
         actions_preview += f" …(+{len(actions) - 5})"
     last_tick_age = counters.get("last_tick_age_sec")
     if last_tick_age is None:
-        last_tick_text = "никогда"
+        last_tick_text = t('admin.autonomy.last_tick_never', lang)
     elif last_tick_age < 60:
-        last_tick_text = f"{int(last_tick_age)}с назад"
+        last_tick_text = t('admin.autonomy.last_tick_sec', lang, n=int(last_tick_age))
     elif last_tick_age < 3600:
-        last_tick_text = f"{int(last_tick_age // 60)}м назад"
+        last_tick_text = t('admin.autonomy.last_tick_min', lang, n=int(last_tick_age // 60))
     else:
-        last_tick_text = f"{int(last_tick_age // 3600)}ч назад"
+        last_tick_text = t('admin.autonomy.last_tick_hour', lang, n=int(last_tick_age // 3600))
     lines = [
         "*🤖 Admin Autonomy*",
         "",
-        f"*Состояние:* {state_icon} {_esc('включено' if enabled else 'выключено')}",
+        t('admin.autonomy.state_label', lang) + " " + state_icon + " " + _esc(
+            t('admin.autonomy.state.enabled', lang) if enabled
+            else t('admin.autonomy.state.disabled', lang)
+        ),
         f"*Auto\\-apply severities:* {_esc(severities)}",
         f"*Auto\\-exec allowlist:* {_esc(actions_preview)}",
-        f"*Rate limit:* {_esc(policy.get('max_actions_per_hour', '-'))}/ч \\| "
-        f"*Cooldown:* {_esc(policy.get('cooldown_sec', '-'))}с",
-        f"*Baseline auto\\-accept:* {_esc('да' if policy.get('baseline_auto_accept_enabled') else 'нет')} "
-        f"\\(после {_esc(policy.get('baseline_auto_accept_after_stable_scans', '-'))} стабильных сканов\\)",
+        f"*Rate limit:* {_esc(policy.get('max_actions_per_hour', '-'))}{t('admin.autonomy.per_hour_suffix', lang)} \\| "
+        f"*Cooldown:* {_esc(policy.get('cooldown_sec', '-'))}{t('admin.autonomy.cooldown_suffix', lang)}",
+        "*Baseline auto\\-accept:* "
+        + _esc(t('admin.bool.yes', lang) if policy.get('baseline_auto_accept_enabled') else t('admin.bool.no', lang))
+        + f" \\({_esc(t('admin.autonomy.after_stable_scans', lang, n=policy.get('baseline_auto_accept_after_stable_scans', '-')))}\\)",
         "",
-        "*📊 Счётчики*",
+        t('admin.autonomy.counters_header', lang),
         f"• ticks: {_esc(counters.get('tick_count', 0))}",
         f"• executed: {_esc(counters.get('actions_executed_total', 0))}",
         f"• escalated: {_esc(counters.get('escalations_total', 0))}",
@@ -461,12 +470,13 @@ def build_admin_autonomy_drifts_screen(
     *,
     server_id: str,
     drifts: Iterable[Mapping[str, Any]],
+    lang: str = 'ru',
 ) -> str:
     rows = [dict(row or {}) for row in drifts if isinstance(row, Mapping)]
     if not rows:
         return (
             f"*🚨 Drifts {_esc(server_id)}*\n\n"
-            "_Открытых drift\\-ов нет_"
+            + t('admin.drifts.empty', lang)
         )
     lines = [f"*🚨 Drifts {_esc(server_id)}*", ""]
     for index, row in enumerate(rows, start=1):
@@ -484,7 +494,7 @@ def build_admin_autonomy_drifts_screen(
             lines.append(f"   was: `{_esc(prev_val)}`")
         if new_val and new_val != "-":
             lines.append(f"   now: `{_esc(new_val)}`")
-    lines.extend(["", "_Нажмите Ack рядом с drift чтобы подтвердить\\._"])
+    lines.extend(["", t('admin.drifts.ack_hint', lang)])
     return "\n".join(lines)
 
 
@@ -494,6 +504,7 @@ def build_admin_memory_screen(
     memory: Mapping[str, Any],
     max_fact_lines: int = 15,
     max_note_chars: int = 1200,
+    lang: str = 'ru',
 ) -> str:
     facts = memory.get("facts") if isinstance(memory.get("facts"), Mapping) else {}
     notes_text = str(memory.get("notes_text") or "")
@@ -516,7 +527,7 @@ def build_admin_memory_screen(
             lines.append(f"• `{_esc(key)}` \\= `{_esc(value_text)}`")
         extra = len([k for k in facts.keys() if k != "_meta"]) - len(fact_keys)
         if extra > 0:
-            lines.append(f"_… и ещё {_esc(extra)} фактов_")
+            lines.append(t('admin.memory.more_facts', lang, n=_esc(extra)))
     if notes_text:
         lines.append("")
         lines.append("*Notes \\(хвост\\):*")
@@ -529,13 +540,14 @@ def build_admin_runbook_catalog_screen(
     *,
     server_id: Optional[str],
     runbooks: Iterable[Mapping[str, Any]],
+    lang: str = 'ru',
 ) -> str:
     rows = [dict(row or {}) for row in runbooks if isinstance(row, Mapping)]
     title = "*📚 Runbooks*"
     if server_id:
-        title = f"*📚 Runbooks для `{_esc(server_id)}`*"
+        title = t('admin.runbooks.title_for_server', lang, server_id=_esc(server_id))
     if not rows:
-        return f"{title}\n\n_Подходящих runbook\\-ов не найдено_"
+        return f"{title}\n\n{t('admin.runbooks.empty', lang)}"
     lines = [title, ""]
     for index, row in enumerate(rows, start=1):
         rb_id = str(row.get("id") or "-")
@@ -544,7 +556,7 @@ def build_admin_runbook_catalog_screen(
         owner = str(row.get("owner") or "-")
         lines.append(f"{index}\\. `{_esc(rb_id)}` — *{_esc(rb_title)}*")
         if tags:
-            tag_text = ", ".join(str(t) for t in tags if str(t or "").strip())
+            tag_text = ", ".join(str(tag) for tag in tags if str(tag or "").strip())
             if tag_text:
                 lines.append(f"   _tags: {_esc(tag_text)}_")
         if owner and owner != "-":
@@ -552,9 +564,9 @@ def build_admin_runbook_catalog_screen(
     return "\n".join(lines)
 
 
-def build_admin_runbook_detail_screen(*, runbook: Mapping[str, Any], max_body_chars: int = 1800) -> str:
+def build_admin_runbook_detail_screen(*, runbook: Mapping[str, Any], max_body_chars: int = 1800, lang: str = 'ru') -> str:
     if not isinstance(runbook, Mapping) or not runbook:
-        return "*📚 Runbook*\n\n_Не найден_"
+        return f"*📚 Runbook*\n\n{t('admin.runbook.not_found', lang)}"
     rb_id = str(runbook.get("id") or "-")
     title = str(runbook.get("title") or rb_id)
     tags = runbook.get("tags") if isinstance(runbook.get("tags"), (list, tuple)) else []
@@ -568,7 +580,7 @@ def build_admin_runbook_detail_screen(*, runbook: Mapping[str, Any], max_body_ch
         "",
     ]
     if tags:
-        tag_text = ", ".join(str(t) for t in tags if str(t or "").strip())
+        tag_text = ", ".join(str(tag) for tag in tags if str(tag or "").strip())
         if tag_text:
             lines.append(f"*tags:* {_esc(tag_text)}")
     if owner and owner != "-":
@@ -658,9 +670,9 @@ def build_admin_rescan_report_screen(*, server_id: str, report: Mapping[str, Any
     return "\n".join(parts)
 
 
-def build_admin_run_detail_text(*, run: Mapping[str, Any]) -> str:
+def build_admin_run_detail_text(*, run: Mapping[str, Any], lang: str = 'ru') -> str:
     if not isinstance(run, Mapping) or not run:
-        return "*📜 Pipeline run*\n\n_Нет данных_"
+        return f"*📜 Pipeline run*\n\n{t('admin.run_detail.no_data', lang)}"
     run_id = str(run.get("run_id") or "-")
     status = str(run.get("status") or "-")
     phase = str(run.get("phase") or "-")
@@ -678,7 +690,7 @@ def build_admin_run_detail_text(*, run: Mapping[str, Any]) -> str:
     ]
     if events:
         lines.append("")
-        lines.append("*Events \\(последние\\):*")
+        lines.append(t('admin.run_detail.events_header', lang))
         for item in list(events)[-5:]:
             if not isinstance(item, Mapping):
                 continue

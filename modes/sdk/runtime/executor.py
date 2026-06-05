@@ -10,8 +10,10 @@ import random
 import re
 
 from app.services.runtime_progress_service import emit_runtime_progress
+from i18n import t
 from sessions.scoped_key import session_scoped_key
 from sessions.session_state_access import get_active_mode
+from utils.lang import resolve_user_lang
 from .agent_core import AgentRunner
 from .tooling.registry import ToolRegistry
 from .contracts import ExecutorRequest, ExecutorResponse, validate_request, validate_response
@@ -283,6 +285,8 @@ class Executor:
         mode_id = str(get_active_mode(session, "") or "").strip()
         self._log.info("executor start corr_id=%s task_id=%s profile=%s goal=%r",
                        request.corr_id, request.task_id, profile.name, (request.goal or "")[:200])
+        chat_id = dest.get("chat_id")
+        _lang = resolve_user_lang(self._config, chat_id=chat_id)
         emit_runtime_progress(
             session,
             {
@@ -292,11 +296,10 @@ class Executor:
                 "status": "running",
                 "corr_id": str(request.corr_id or ""),
                 "task_id": str(request.task_id or ""),
-                "message": f"Старт executor, profile={profile.name}",
+                "message": t("executor.progress.start", _lang, profile=profile.name),
             },
         )
         # Явный needs_input через ask_user
-        chat_id = dest.get("chat_id")
         scoped_key = session_scoped_key(session) or str(getattr(session, "id", "") or "").strip()
         state_root = self._chat_workspace(chat_id)
         session_workspace = self._session_workspace(scoped_key or session.id)
@@ -315,7 +318,7 @@ class Executor:
         question = (request.inputs or {}).get("question")
         options = (request.inputs or {}).get("options")
         if options is not None and len(options) < 2:
-            options = ["Да", "Нет"]
+            options = [t("common.yes", _lang), t("common.no", _lang)]
         if question and options:
             self._log.info("executor ask_user: question=%r options=%s", question[:100], options)
             emit_runtime_progress(
@@ -327,7 +330,7 @@ class Executor:
                     "status": "needs_input",
                     "corr_id": str(request.corr_id or ""),
                     "task_id": str(request.task_id or ""),
-                    "message": "Запрос уточнения у пользователя",
+                    "message": t("executor.progress.ask_user", _lang),
                 },
             )
             ctx = {
@@ -382,7 +385,7 @@ class Executor:
                 resp = ExecutorResponse(
                     task_id=request.task_id,
                     status="needs_input",
-                    summary="Нужен ответ пользователя",
+                    summary=t("executor.progress.needs_input", _lang),
                     outputs=[],
                     tool_calls=[{"tool": "ask_user", "error": result.get("error"), "reactions": reaction_results}],
                     next_questions=[question],
@@ -392,11 +395,11 @@ class Executor:
             resp = ExecutorResponse(
                 task_id=request.task_id,
                 status="ok",
-                summary="Ответ пользователя получен",
+                summary=t("executor.progress.user_answered", _lang),
                 outputs=[{"type": "text", "content": result.get("output")}],
                 claims=self._build_claims(
                     status="ok",
-                    summary="Ответ пользователя получен",
+                    summary=t("executor.progress.user_answered", _lang),
                     outputs=[{"type": "text", "content": result.get("output")}],
                 ),
                 claims_source="native_tool",
@@ -419,7 +422,7 @@ class Executor:
                     "status": str(resp.status or "ok"),
                     "corr_id": str(request.corr_id or ""),
                     "task_id": str(request.task_id or ""),
-                    "message": "Ответ пользователя получен",
+                    "message": t("executor.progress.user_answered", _lang),
                 },
             )
             return resp
@@ -435,7 +438,7 @@ class Executor:
                 "status": "running",
                 "corr_id": str(request.corr_id or ""),
                 "task_id": str(request.task_id or ""),
-                "message": f"Запуск ReAct, retries={int(profile.max_retries)} timeout_ms={int(profile.timeout_ms)}",
+                "message": t("executor.progress.launch_react", _lang, retries=int(profile.max_retries), timeout_ms=int(profile.timeout_ms)),
             },
         )
         last_exc: Exception | None = None
@@ -542,7 +545,7 @@ class Executor:
                         "status": str(resp.status or "ok"),
                         "corr_id": str(request.corr_id or ""),
                         "task_id": str(request.task_id or ""),
-                        "message": f"Executor завершен: status={resp.status}",
+                        "message": t("executor.progress.done", _lang, status=resp.status),
                     },
                 )
                 return resp
@@ -636,7 +639,7 @@ class Executor:
         resp = ExecutorResponse(
             task_id=request.task_id,
             status="error",
-            summary=f"Ошибка выполнения: {last_exc}",
+            summary=t("executor.execution_error", _lang, error=last_exc),
             outputs=[],
             claims=[],
             tool_calls=[{"tool": "agent", "error": str(last_exc), "corr_id": request.corr_id}],
@@ -657,7 +660,7 @@ class Executor:
                 "status": "error",
                 "corr_id": str(request.corr_id or ""),
                 "task_id": str(request.task_id or ""),
-                "message": f"Executor завершен с ошибкой: {str(last_exc)[:180]}",
+                "message": t("executor.progress.error", _lang, error=str(last_exc)[:180]),
             },
         )
         return resp

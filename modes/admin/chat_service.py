@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tupl
 import yaml
 
 from app.services.ssh_config_loader import load_ssh_config
+from i18n import t
 
 from .action_specs import (
     build_local_command_spec,
@@ -159,6 +160,7 @@ class AdminChatService:
         session: Any,
         bot_app: Any,
         text: str,
+        lang: str = 'ru',
     ) -> Dict[str, Any]:
         user_text = str(text or "").strip()
         if not user_text:
@@ -171,7 +173,7 @@ class AdminChatService:
             self._log.exception("admin chat: gateway build failed")
             return {"ok": False, "error": f"gateway_init:{exc}"}
 
-        decision = await gateway.handle(user_text)
+        decision = await gateway.handle(user_text, lang=lang)
         intent = decision.intent
         approval_id = str(decision.pending_action_id or "").strip()
         intent_dict = intent.as_dict() if intent else None
@@ -193,6 +195,7 @@ class AdminChatService:
                 exec_result = await self._auto_execute_intent(
                     session=session,
                     intent_dict=intent_dict or {},
+                    lang=lang,
                 )
                 auto_exec = True
                 self._record_autopilot_memory(
@@ -281,21 +284,22 @@ class AdminChatService:
         *,
         session: Any,
         intent_dict: Mapping[str, Any],
+        lang: str = "ru",
     ) -> Dict[str, Any]:
         itype = str(intent_dict.get("type") or "").strip()
         if itype == "propose_action":
             return await self._execute_propose_action(
-                session=session, intent=dict(intent_dict),
+                session=session, intent=dict(intent_dict), lang=lang,
             )
         if itype == "propose_new_action":
             return await self._execute_adhoc(
-                session=session, intent=dict(intent_dict),
+                session=session, intent=dict(intent_dict), lang=lang,
             )
         if itype == "propose_plan":
             # Autopilot forces stop_on_error=True regardless of intent value.
             forced = dict(intent_dict)
             forced["stop_on_error"] = True
-            return await self._execute_plan(session=session, intent=forced)
+            return await self._execute_plan(session=session, intent=forced, lang=lang)
         return {"ok": False, "error": f"unsupported_intent:{itype}"}
 
     def _record_autopilot_memory(
@@ -330,6 +334,7 @@ class AdminChatService:
         *,
         session: Any,
         approval_id: str,
+        lang: str = "ru",
     ) -> Dict[str, Any]:
         workdir = str(getattr(session, "workdir", "") or "").strip()
         if not workdir:
@@ -347,12 +352,12 @@ class AdminChatService:
         intent_type = str(intent.get("type") or "").strip().lower()
         if intent_type == "propose_action":
             return await self._execute_propose_action(
-                session=session, intent=intent
+                session=session, intent=intent, lang=lang
             )
         if intent_type == "propose_new_action":
-            return await self._execute_adhoc(session=session, intent=intent)
+            return await self._execute_adhoc(session=session, intent=intent, lang=lang)
         if intent_type == "propose_plan":
-            return await self._execute_plan(session=session, intent=intent)
+            return await self._execute_plan(session=session, intent=intent, lang=lang)
         return {"ok": False, "error": f"unsupported_intent:{intent_type}"}
 
     # ---------- private execution ----------
@@ -362,6 +367,7 @@ class AdminChatService:
         *,
         session: Any,
         intent: Dict[str, Any],
+        lang: str = "ru",
     ) -> Dict[str, Any]:
         action_id = str(intent.get("action_id") or "").strip()
         target = str(intent.get("target") or "").strip()
@@ -413,7 +419,7 @@ class AdminChatService:
             return {"ok": False, "error": f"unexpected:{exc}"}
         _append_exec_memory(
             workdir=workdir,
-            text=_build_result_text(payload, argv=None),
+            text=_build_result_text(payload, argv=None, lang=lang),
             exit_code=payload.get("exit_code"),
             target=target,
             intent_type="chat_propose_action",
@@ -426,6 +432,7 @@ class AdminChatService:
         *,
         session: Any,
         intent: Dict[str, Any],
+        lang: str = "ru",
     ) -> Dict[str, Any]:
         target = str(intent.get("target") or "").strip()
         argv_raw = intent.get("argv")
@@ -500,7 +507,7 @@ class AdminChatService:
 
         _append_exec_memory(
             workdir=workdir,
-            text=_build_result_text(payload, argv=list(argv)),
+            text=_build_result_text(payload, argv=list(argv), lang=lang),
             exit_code=payload.get("exit_code"),
             target=target,
             intent_type="chat_adhoc",
@@ -514,6 +521,7 @@ class AdminChatService:
         *,
         session: Any,
         intent: Dict[str, Any],
+        lang: str = "ru",
     ) -> Dict[str, Any]:
         steps_raw = intent.get("steps")
         if not isinstance(steps_raw, list) or not steps_raw:
@@ -554,7 +562,7 @@ class AdminChatService:
             results.append(step_result)
             _append_exec_memory(
                 workdir=workdir,
-                text=_build_result_text(step_result, argv=step_result.get("argv")),
+                text=_build_result_text(step_result, argv=step_result.get("argv"), lang=lang),
                 exit_code=step_result.get("exit_code"),
                 target=str(step_raw.get("target") or ""),
                 intent_type="chat_plan_step",
@@ -802,10 +810,10 @@ def _format_ssh_result(result: Any) -> Dict[str, Any]:
     }
 
 
-def _build_result_text(payload: Dict[str, Any], *, argv: Optional[List[str]]) -> str:
+def _build_result_text(payload: Dict[str, Any], *, argv: Optional[List[str]], lang: str = "ru") -> str:
     chunks: List[str] = []
     if argv:
-        chunks.append(f"Ad-hoc команда: {' '.join(argv)}")
+        chunks.append(t("admin.chat.adhoc_command_line", lang, command=" ".join(argv)))
     target_kind = payload.get("target_kind") or ""
     if target_kind == "ssh":
         host = str(payload.get("host") or "")

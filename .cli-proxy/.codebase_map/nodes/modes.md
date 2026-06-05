@@ -108,4 +108,4 @@ Mode Layer проекта: пакет `modes/` реализует подключ
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03 (enrichment pass)
+- 2026-06-04 (full i18n localization: admin, sdd, codebase_mapper modes)

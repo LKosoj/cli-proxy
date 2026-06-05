@@ -71,6 +71,7 @@ from .runtime.events import EventSeverity, EventType, OrchestratorEvent
 from .runtime.reactions import ReactionAction, ReactionEngine, ReactionRule
 from utils.text import strip_ansi
 from utils.lang import resolve_user_lang
+from i18n import t
 from i18n.language_names import LANGUAGE_NAMES
 from .orchestrator_deps import OrchestratorDeps, load_default_deps
 
@@ -882,13 +883,9 @@ class OrchestratorRunner:
                 return clarification_question
             required_inputs = _normalize_required_input_gaps(intent_flags.get("required_inputs") or [])
             if required_inputs:
-                return (
-                    "Нужно уточнение пользователя, чтобы завершить работу.\n\n"
-                    "Не закрыты обязательные входы задачи:\n"
-                    + "\n".join(f"- {item}" for item in required_inputs)
-                    + "\n\nОтветьте следующим сообщением и закройте эти пункты."
-                )
-            return "Нужно уточнение пользователя, но вопрос не сформирован."
+                _items = "\n".join(f"- {item}" for item in required_inputs)
+                return t("orchestrator.needs_clarification", _lang, items=_items)
+            return t("orchestrator.needs_clarification_no_question", _lang)
 
         final_rework_passes = self._final_rework_passes
         target_size_hint = ""
@@ -1516,12 +1513,8 @@ class OrchestratorRunner:
 
         def _build_required_input_pause_message(required_input_gaps: List[str]) -> str:
             normalized_gaps = _normalize_required_input_gaps(required_input_gaps)
-            return (
-                "Нужно уточнение пользователя, чтобы завершить работу.\n\n"
-                "Не закрыты обязательные входы задачи:\n"
-                + "\n".join(f"- {item}" for item in normalized_gaps)
-                + "\n\nОтветьте следующим сообщением и закройте эти пункты."
-            )
+            _items = "\n".join(f"- {item}" for item in normalized_gaps)
+            return t("orchestrator.needs_clarification", _lang, items=_items)
 
         async def _build_required_input_ask_step(required_input_gaps: List[str], *, stage: str) -> Any:
             normalized_gaps = _normalize_required_input_gaps(required_input_gaps)
@@ -4006,18 +3999,18 @@ class OrchestratorRunner:
                     max_items = 20
                     lines: List[str] = []
                     lines.append("")
-                    lines.append("### Артефакты")
+                    lines.append(t("orchestrator.artifacts_section_header", _lang))
                     for a in unique[:max_items]:
                         p = str(a.get("path") or "").strip()
-                        t = str(a.get("type") or "").strip()
+                        a_type = str(a.get("type") or "").strip()
                         name = str(a.get("name") or "").strip()
-                        suffix = f" ({t})" if t else ""
+                        suffix = f" ({a_type})" if a_type else ""
                         if name:
                             lines.append(f"- {p}{suffix} — {name}")
                         else:
                             lines.append(f"- {p}{suffix}")
                     if len(unique) > max_items:
-                        lines.append(f"- ...и ещё {len(unique) - max_items}")
+                        lines.append(t("orchestrator.artifacts_more", _lang, count=len(unique) - max_items))
                     # Do not duplicate the section if the model already listed artifacts.
                     if "артефакт" not in (final_text or "").lower():
                         final_text = (final_text.rstrip() + "\n" + "\n".join(lines).lstrip()).strip()
@@ -4028,7 +4021,7 @@ class OrchestratorRunner:
 
                 # 1) Short ready message
                 try:
-                    await bot.send_message(context, chat_id=chat_id, text="Готово. Результат ниже.")
+                    await bot.send_message(context, chat_id=chat_id, text=t("orchestrator.ready_result_below", _lang))
                 except Exception as e:
                     self._log.exception("compose_final_answer: failed to send ready message: %s", e)
 
@@ -7389,7 +7382,14 @@ class OrchestratorRunner:
                 "corr_id": corr_id,
                 "task_id": str(getattr(step, "id", "") or ""),
                 "step_id": str(getattr(step, "id", "") or ""),
-                "message": str(getattr(resp, "summary", "") or f"Шаг {step.id} завершен")[:240],
+                "message": str(
+                    getattr(resp, "summary", "")
+                    or t(
+                        "orchestrator.step_done",
+                        resolve_user_lang(self._config, chat_id=dest.get("chat_id")),
+                        step_id=step.id,
+                    )
+                )[:240],
             },
         )
         _step_done_trace = build_trace_event(
@@ -7402,7 +7402,8 @@ class OrchestratorRunner:
             # Явный запрос пользователю: первая формулировка
             resp.summary = resp.next_questions[0]
         if resp.status == "needs_input" and not resp.next_questions:
-            resp.summary = "Нужно уточнение пользователя, но вопрос не сформирован."
+            _step_lang = resolve_user_lang(self._config, chat_id=dest.get("chat_id"))
+            resp.summary = t("orchestrator.needs_clarification_no_question", _step_lang)
         return resp
 
     async def _execute_use_cli_step(

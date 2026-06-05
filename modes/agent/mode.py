@@ -30,7 +30,7 @@ from utils.lang import resolve_user_lang
 from utils.paths import is_within_root
 
 _AGENT_RUN_RESUME_GUARD_SESSION_ATTR = "agent_run_resume_guard"
-_AGENT_PROJECT_SELECTION_STALE_TEXT = "Меню выбора проекта устарело. Откройте меню агента снова."
+_AGENT_PROJECT_SELECTION_STALE_KEY = "agent.msg.project_selection_stale"
 
 
 def _optional_int(value: Any) -> Optional[int]:
@@ -379,17 +379,18 @@ class AgentMode(BaseMode, RunArtifactsMixin):
     ) -> Dict[str, Any]:
         _ = report
         resolved_action = str(action or "").strip()
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=int((dest or {}).get("chat_id") or 0))
         if resolved_action not in {"rollback_to_checkpoint", "restart_from_phase"}:
             return {
                 "status": "blocked",
-                "message": f"Recovery action `{resolved_action}` не поддерживается Agent hook.",
+                "message": t("agent.msg.recovery_action_unsupported", lang, action=resolved_action),
                 "executed_operation": resolved_action,
             }
         prompt_text = self._recovery_prompt_from_state(action=resolved_action, state=state)
         if not prompt_text:
             return {
                 "status": "blocked",
-                "message": "Agent recovery не может быть выполнен: отсутствует исходный prompt.",
+                "message": t("agent.msg.recovery_no_prompt", lang),
                 "executed_operation": resolved_action,
             }
         latest_before = self._latest_mode_run(session)
@@ -403,7 +404,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         latest_after = self._latest_mode_run(session)
         payload: Dict[str, Any] = {
             "status": "ok",
-            "message": str(output or "").strip() or f"Операция `{resolved_action}` выполнена.",
+            "message": str(output or "").strip() or t("agent.msg.operation_done", lang, action=resolved_action),
             "executed_operation": resolved_action,
             "executed_via": f"agent_recovery_hook:{resolved_action}",
         }
@@ -657,6 +658,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         ms: Any,
         prompts: Dict[str, str],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         ok = await self._check_enable_requirements(
             bot_app=bot_app,
             session=session,
@@ -667,17 +669,17 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             require_workdir=True,
             openai_error_text=str(
                 prompts.get("openai_error_text")
-                or "Для работы Агента нужен OpenAI API. Настройте openai_api_key и openai_model в config.yaml."
+                or t("agent.msg.openai_required", lang)
             ),
             workdir_error_text=str(
                 prompts.get("workdir_error_text")
-                or "Сначала создайте сессию через /sessions."
+                or t("agent.msg.session_required", lang)
             ),
         )
         if not ok:
             return ToolResult.ok()
         await self._activate_mode(session=session, bot_app=bot_app, cli_work_type=None, executor_profile=None)
-        await self._rerender_menu(bot_app, session, chat_id, context, query, note="Агент включен.")
+        await self._rerender_menu(bot_app, session, chat_id, context, query, note=t("agent.msg.agent_enabled", lang))
         return ToolResult.ok()
 
     async def _cb_disable(
@@ -689,9 +691,10 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         self._clear_pending_project_session(chat_id, query=query, context=context, session=session, clear_all_for_session=True)
         await self._deactivate_mode(session=session, bot_app=bot_app, cancel_tasks=True, timeout_s=0.2)
-        await self._rerender_menu(bot_app, session, chat_id, context, query, note="Агент выключен.")
+        await self._rerender_menu(bot_app, session, chat_id, context, query, note=t("agent.msg.agent_disabled", lang))
         return ToolResult.ok()
 
     async def _cb_project_connect(
@@ -706,6 +709,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         prompts: Dict[str, str],
         payload: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         if not await self._validate_project_selection_callback(
             session=session,
             chat_id=chat_id,
@@ -713,13 +717,14 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             context=context,
             ms=ms,
             payload=payload,
+            lang=lang,
         ):
             return ToolResult.ok()
         if self._is_project_switch_blocked(session):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Сессия занята. Переключение проекта доступно только когда сессия свободна.",
+                text=t("agent.msg.session_busy_switch", lang),
                 md2=True,
             )
             return ToolResult.ok()
@@ -733,7 +738,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                     chat_id=chat_id,
                     text=str(
                         prompts.get("projects_not_configured")
-                        or "Проекты не настроены. Обратитесь к администратору."
+                        or t("agent.msg.projects_not_configured", lang)
                     ),
                     md2=True,
                 )
@@ -743,7 +748,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             if not session_key:
                 await ms.send_or_edit(
                     query=query, chat_id=chat_id,
-                    text="Сессия не инициализирована. Откройте меню агента заново.",
+                    text=t("agent.msg.session_not_initialized", lang),
                     md2=True,
                 )
                 return ToolResult.ok()
@@ -763,11 +768,11 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                         )
                     ]
                 )
-            rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=build_session_mode_pick_callback_data(session))])
+            rows.append([InlineKeyboardButton(t("common.back", lang), callback_data=build_session_mode_pick_callback_data(session))])
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=str(prompts.get("project_select_text") or "Выберите проект:"),
+                text=str(prompts.get("project_select_text") or t("agent.msg.select_project", lang)),
                 md2=True,
                 reply_markup=InlineKeyboardMarkup(rows),
             )
@@ -780,13 +785,13 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 await ms.edit_text(
                     query.message.chat_id,
                     query.message.message_id,
-                    str(prompts.get("project_dir_select_text") or "Выберите каталог проекта."),
+                    str(prompts.get("project_dir_select_text") or t("agent.msg.select_project_dir", lang)),
                     md2=True,
                 )
             else:
                 await ms.send_text(
                     chat_id,
-                    str(prompts.get("project_dir_select_text") or "Выберите каталог проекта."),
+                    str(prompts.get("project_dir_select_text") or t("agent.msg.select_project_dir", lang)),
                     md2=True,
                 )
         except Exception:
@@ -804,7 +809,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Не удалось открыть выбор проекта.",
+                text=t("agent.msg.project_open_failed", lang),
                 md2=True,
             )
         return ToolResult.ok()
@@ -820,6 +825,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         ms: Any,
         payload: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         if not await self._validate_project_selection_callback(
             session=session,
             chat_id=chat_id,
@@ -827,13 +833,14 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             context=context,
             ms=ms,
             payload=payload,
+            lang=lang,
         ):
             return ToolResult.ok()
         if self._is_project_switch_blocked(session):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Сессия занята. Переключение проекта доступно только когда сессия свободна.",
+                text=t("agent.msg.session_busy_switch", lang),
                 md2=True,
             )
             return ToolResult.ok()
@@ -844,16 +851,16 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         except Exception:
             idx = -1
         if idx < 0 or idx >= len(projects):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Выбор недоступен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.pick_unavailable", lang), md2=True)
             return ToolResult.ok()
-        ok, msg = self._set_project_root(bot_app, session, chat_id, context, projects[idx])
+        ok, msg = self._set_project_root(bot_app, session, chat_id, context, projects[idx], lang=lang)
         await self._rerender_menu(
             bot_app,
             session,
             chat_id,
             context,
             query,
-            note=msg if ok else "Не удалось подключить проект.",
+            note=msg if ok else t("agent.msg.project_connect_failed", lang),
         )
         return ToolResult.ok()
 
@@ -915,8 +922,12 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
-        ok, msg = self._set_project_root(bot_app, session, chat_id, context, None)
-        await self._rerender_menu(bot_app, session, chat_id, context, query, note=msg if ok else "Не удалось отключить проект.")
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
+        ok, msg = self._set_project_root(bot_app, session, chat_id, context, None, lang=lang)
+        await self._rerender_menu(
+            bot_app, session, chat_id, context, query,
+            note=msg if ok else t("agent.msg.project_disconnect_failed", lang),
+        )
         return ToolResult.ok()
 
     async def _cb_clean_all(
@@ -928,9 +939,10 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         ms = self._messaging(bot_app=bot_app, context=context)
         if not self._is_agent_active(session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Агент не активен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.agent_not_active", lang), md2=True)
             return ToolResult.ok()
         runtime = self._agent_runtime()
         scoped_key = session_scoped_key(session)
@@ -940,9 +952,9 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         except Exception:
             self._log.exception("agent clean_all pre-clean interrupt failed")
         removed, errors = runtime.clear_sandbox(chat_id=chat_id)
-        msg = f"Песочница текущего чата очищена. Удалено: {removed}."
+        msg = t("agent.msg.sandbox_cleared", lang, removed=removed)
         if errors:
-            msg += f" Ошибок: {errors}."
+            msg += t("agent.msg.sandbox_cleared_errors", lang, errors=errors)
         await self._rerender_menu(bot_app, session, chat_id, context, query, note=msg)
         return ToolResult.ok()
 
@@ -955,9 +967,10 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context: Any,
         query: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         ms = self._messaging(bot_app=bot_app, context=context)
         if not self._is_agent_active(session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Агент не активен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.agent_not_active", lang), md2=True)
             return ToolResult.ok()
         runtime = self._agent_runtime()
         scoped_key = session_scoped_key(session)
@@ -967,7 +980,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         except Exception:
             self._log.exception("agent clean_session pre-clean interrupt failed")
         ok = runtime.clear_session_files(scoped_key or session.id)
-        msg = "Файлы текущей сессии удалены." if ok else "Не удалось очистить файлы сессии."
+        msg = t("agent.msg.session_files_cleared", lang) if ok else t("agent.msg.session_files_clear_failed", lang)
         await self._rerender_menu(bot_app, session, chat_id, context, query, note=msg)
         return ToolResult.ok()
 
@@ -981,6 +994,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         ms: Any,
         payload: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         target_session, session_missing = self._resolve_plugin_callback_session(
             bot_app=bot_app,
             session=session,
@@ -991,12 +1005,12 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Сессия для этого меню недоступна. Откройте меню агента снова.",
+                text=t("agent.msg.session_menu_unavailable", lang),
                 md2=True,
             )
             return ToolResult.ok()
         if not self._is_agent_active(target_session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Агент не активен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.agent_not_active", lang), md2=True)
             return ToolResult.ok()
         try:
             from modes.sdk.runtime.profiles import build_default_profile
@@ -1006,12 +1020,12 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             runtime_getter = self._runtime_getter()
             runtime = runtime_getter("plugin_ui")
             if runtime is None:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Рантайм режима недоступен.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.runtime_unavailable", lang), md2=True)
                 return ToolResult.ok()
             ui = runtime.get_plugin_ui(profile)
             plugin_menu = ui.get("plugin_menu") or []
             if not plugin_menu:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Нет доступных плагинов.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.no_plugins", lang), md2=True)
                 return ToolResult.ok()
             rows = [
                 # Prefix payload so it never parses as JSON (e.g. "null"/"true"/numbers").
@@ -1030,11 +1044,17 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 ]
                 for entry in plugin_menu
             ]
-            rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=build_session_mode_pick_callback_data(target_session))])
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Плагины:", md2=True, reply_markup=InlineKeyboardMarkup(rows))
+            rows.append([InlineKeyboardButton(t("common.back", lang), callback_data=build_session_mode_pick_callback_data(target_session))])
+            await ms.send_or_edit(
+                query=query,
+                chat_id=chat_id,
+                text=t("agent.msg.plugins_header", lang),
+                md2=True,
+                reply_markup=InlineKeyboardMarkup(rows),
+            )
         except Exception as e:
             self._log.exception("agent plugins menu failed: %s", e)
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Не удалось получить список плагинов.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.plugins_list_failed", lang), md2=True)
         return ToolResult.ok()
 
     async def _cb_plugin(
@@ -1047,6 +1067,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         ms: Any,
         payload: Dict[str, Any],
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         target_session, session_missing = self._resolve_plugin_callback_session(
             bot_app=bot_app,
             session=session,
@@ -1057,16 +1078,16 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Сессия для этого меню недоступна. Откройте меню агента снова.",
+                text=t("agent.msg.session_menu_unavailable", lang),
                 md2=True,
             )
             return ToolResult.ok()
         if not self._is_agent_active(target_session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Агент не активен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.agent_not_active", lang), md2=True)
             return ToolResult.ok()
         pid = self._extract_plugin_id(payload or {})
         if not pid:
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Плагин недоступен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.plugin_unavailable", lang), md2=True)
             return ToolResult.ok()
         try:
             from modes.sdk.runtime.profiles import build_default_profile
@@ -1076,19 +1097,19 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             runtime_getter = self._runtime_getter()
             runtime = runtime_getter("plugin_ui")
             if runtime is None:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Рантайм режима недоступен.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.runtime_unavailable", lang), md2=True)
                 return ToolResult.ok()
             ui = runtime.get_plugin_ui(profile)
             plugin_menu = ui.get("plugin_menu") or []
             entry = next((e for e in plugin_menu if e.get("plugin_id") == pid), None)
             if not entry:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Плагин недоступен.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.plugin_unavailable", lang), md2=True)
                 return ToolResult.ok()
             plugin = entry.get("plugin")
             actions = entry.get("actions") or []
             rows = []
             for act in actions:
-                label = str(act.get("label", "") or "").strip() or "Действие"
+                label = str(act.get("label", "") or "").strip() or t("agent.msg.plugin_action_default", lang)
                 plugin_action = str(act.get("action", "") or "").strip()
                 if plugin and hasattr(plugin, "action_button"):
                     btn = plugin.action_button(label, plugin_action)
@@ -1099,7 +1120,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             rows.append(
                 [
                     InlineKeyboardButton(
-                        "⬅️ Назад к плагинам",
+                        t("agent.btn.back_to_plugins", lang),
                         callback_data=build_mode_action_callback_data(
                             self.mode_id,
                             "plugins",
@@ -1118,7 +1139,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             )
         except Exception as e:
             self._log.exception("agent plugin view failed: %s", e)
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Ошибка при загрузке плагина.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.plugin_load_failed", lang), md2=True)
         return ToolResult.ok()
 
     async def _cb_run_operation(
@@ -1131,26 +1152,27 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         ms: Any,
         operation: str,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         if not self._is_agent_active(session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Агент не активен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.agent_not_active", lang), md2=True)
             return ToolResult.ok()
         service = getattr(bot_app, "mode_run_operations", None)
         if service is None or not getattr(service, "is_enabled", lambda: False)():
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Операции с запусками недоступны.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.run_ops_unavailable", lang), md2=True)
             return ToolResult.ok()
         method = getattr(service, f"{operation}_run", None)
         if not callable(method):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text=f"Операция `{operation}` не поддерживается.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.run_op_unsupported", lang, operation=operation), md2=True)
             return ToolResult.ok()
         try:
             result = await method(session=session, mode_id=self.mode_id)
             status = str(getattr(result, "status", "") or "").strip()
             message = str(getattr(result, "message", "") or "").strip()
-            text = message or f"Операция `{operation}`: {status or 'выполнена'}."
+            text = message or t("agent.msg.run_op_done", lang, operation=operation, status=status or t("agent.msg.run_op_executed", lang))
             await ms.send_or_edit(query=query, chat_id=chat_id, text=text, md2=True)
         except Exception as e:
             self._log.exception("agent run operation %s failed: %s", operation, e)
-            await ms.send_or_edit(query=query, chat_id=chat_id, text=f"Ошибка при выполнении `{operation}`.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.run_op_failed", lang, operation=operation), md2=True)
         return ToolResult.ok()
 
     async def _cb_promote_skills(
@@ -1162,21 +1184,22 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         query: Any,
         ms: Any,
     ) -> ToolResult:
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         if not self._is_agent_active(session):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Агент не активен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.agent_not_active", lang), md2=True)
             return ToolResult.ok()
         if not getattr(bot_app, "is_admin", lambda _: False)(chat_id):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Promote Skills доступен только администраторам.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.promote_admin_only", lang), md2=True)
             return ToolResult.ok()
         skill_runtime = self._optional_skill_runtime()
         if skill_runtime is None or not hasattr(skill_runtime, "promote_run_skills"):
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Skill runtime недоступен.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.skill_runtime_unavailable", lang), md2=True)
             return ToolResult.ok()
         try:
             artifact_store = self._artifact_store()
             latest = self._latest_mode_run(session)
             if latest is None or artifact_store is None:
-                await ms.send_or_edit(query=query, chat_id=chat_id, text="Нет доступных запусков для promote.", md2=True)
+                await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.no_runs_for_promote", lang), md2=True)
                 return ToolResult.ok()
             result = skill_runtime.promote_run_skills(
                 session=session,
@@ -1190,11 +1213,11 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             if promoted:
                 text = f"Promoted: {', '.join(str(s) for s in promoted)}"
             else:
-                text = str(result_dict.get("message") or "Нет скиллов для promote.")
+                text = str(result_dict.get("message") or t("agent.msg.no_skills_for_promote", lang))
             await ms.send_or_edit(query=query, chat_id=chat_id, text=text, md2=True)
         except Exception as e:
             self._log.exception("agent promote_skills failed: %s", e)
-            await ms.send_or_edit(query=query, chat_id=chat_id, text="Ошибка при promote skills.", md2=True)
+            await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.promote_failed", lang), md2=True)
         return ToolResult.ok()
 
     async def handle_dirs_selection(self, *, flow: str, event: str, path: str, ctx: Dict[str, Any]) -> Optional[ToolResult]:
@@ -1206,25 +1229,26 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         session = ctx.get("session")
         if not bot_app:
             return ToolResult.fail("missing_context")
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         event_name = str(event or "").strip().lower()
         if event_name in {"cancelled", "canceled", "cancel"}:
             self._clear_pending_project_session(chat_id, context=context, session=session)
-            return ToolResult.ok("Выбор проекта отменен.")
+            return ToolResult.ok(t("agent.msg.project_pick_cancelled", lang))
         selected_path = str(path or "").strip()
         if not selected_path:
             self._clear_pending_project_session(chat_id, context=context, session=session)
-            return ToolResult.ok("Путь не выбран.")
+            return ToolResult.ok(t("agent.msg.path_not_selected", lang))
         if not session:
-            return ToolResult.ok("Активная сессия не найдена.")
+            return ToolResult.ok(t("agent.msg.session_not_found", lang))
         pending = self._pop_pending_project_session(chat_id, context=context, session=session)
         if pending is None:
-            return ToolResult.ok(_AGENT_PROJECT_SELECTION_STALE_TEXT)
+            return ToolResult.ok(t(_AGENT_PROJECT_SELECTION_STALE_KEY, lang))
         if not self._pending_entry_matches_session(pending, session):
-            return ToolResult.ok(_AGENT_PROJECT_SELECTION_STALE_TEXT)
+            return ToolResult.ok(t(_AGENT_PROJECT_SELECTION_STALE_KEY, lang))
         if not self._is_agent_active(session):
-            return ToolResult.ok("Агент для этой сессии больше не активен.")
-        ok, msg = self._set_project_root(bot_app, session, chat_id, context, selected_path)
-        return ToolResult.ok(msg if ok else "Не удалось подключить проект.")
+            return ToolResult.ok(t("agent.msg.agent_inactive_for_session", lang))
+        ok, msg = self._set_project_root(bot_app, session, chat_id, context, selected_path, lang=lang)
+        return ToolResult.ok(msg if ok else t("agent.msg.project_connect_failed", lang))
 
     def build_menu(
         self,
@@ -1251,18 +1275,19 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         chat_id: int,
         context: Any,
         project_root: Optional[str],
+        lang: str = "ru",
     ) -> tuple[bool, str]:
         if project_root:
             if not bot_app.is_admin(chat_id):
                 allowed = {os.path.realpath(p) for p in (bot_app.user_projects(chat_id) or [])}
                 resolved = os.path.realpath(str(project_root))
                 if resolved not in allowed:
-                    return False, "Проект недоступен для вашего пользователя."
+                    return False, t("agent.msg.project_not_allowed", lang)
             root = bot_app.config.defaults.workdir
             if not is_within_root(project_root, root):
-                return False, "Нельзя выйти за пределы корневого каталога."
+                return False, t("agent.msg.project_outside_root", lang)
             if not os.path.isdir(project_root):
-                return False, "Каталог не существует."
+                return False, t("agent.msg.project_dir_not_exists", lang)
             project_root = os.path.realpath(project_root)
         session.project_root = project_root
         runtime = self._agent_runtime()
@@ -1277,10 +1302,14 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             self._log.exception("agent set_project_root clear_session_cache failed")
         self._persist_sessions(bot_app)
         if project_root:
-            return True, f"Проект подключен: {project_root}"
-        return True, "Проект отключен."
+            return True, t("agent.msg.project_connected", lang, project_root=project_root)
+        return True, t("agent.msg.project_disconnected", lang)
 
     async def _rerender_menu(self, bot_app: Any, session: Any, chat_id: int, context: Any, query: Any, *, note: str = "") -> None:
+        try:
+            _lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
+        except Exception:
+            _lang = "ru"
         await self._rerender_menu_common(
             bot_app=bot_app,
             session=session,
@@ -1289,7 +1318,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             query=query,
             note=note,
             back_callback="sess_active",
-            back_text="⬅️ Назад",
+            back_text=t("common.back", _lang),
         )
 
     @staticmethod
@@ -1600,6 +1629,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context: Any,
         ms: Any,
         payload: Dict[str, Any],
+        lang: str = "ru",
     ) -> bool:
         payload_data = self._extract_project_callback_payload(payload)
         expected_session_key = str(payload_data.get("sk") or payload_data.get("session_scoped_key") or "").strip()
@@ -1608,7 +1638,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text=_AGENT_PROJECT_SELECTION_STALE_TEXT,
+                text=t(_AGENT_PROJECT_SELECTION_STALE_KEY, lang),
                 md2=True,
             )
             return False
@@ -1623,7 +1653,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             await ms.send_or_edit(
                 query=query,
                 chat_id=chat_id,
-                text="Агент для этой сессии больше не активен. Откройте меню заново.",
+                text=t("agent.msg.agent_inactive_reopen", lang),
                 md2=True,
             )
             return False

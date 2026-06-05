@@ -21,6 +21,7 @@ from modes.sdk.runtime.openai_client import (
 from modes.sdk.runtime.tooling.registry import ToolRegistry as PluginToolRegistry
 
 from config import AppConfig
+from i18n import t
 from i18n.language_names import LANGUAGE_NAMES
 from sessions.scoped_key import session_scoped_key
 from sessions.session_state_access import get_active_mode
@@ -664,6 +665,7 @@ class ReActAgent:
         if not state_root:
             state_root = sandbox_root(self.config.defaults.workdir)
         os.makedirs(state_root, exist_ok=True)
+        _lang = resolve_user_lang(self.config, chat_id=chat_id)
         _log.info("ReAct start session=%s task=%s corr_id=%s msg=%r",
                   runtime_session_key, task_id, corr_id, user_message[:200])
 
@@ -852,7 +854,7 @@ class ReActAgent:
                 except Exception:
                     _log.debug("llm trace tool exec failed", exc_info=True)
 
-        await _emit_progress("start", "running", "ReAct запущен")
+        await _emit_progress("start", "running", t("agent.progress.react_started", _lang))
         async with self._get_session_lock(runtime_session_key):
             if runtime_session_key not in self._sessions:
                 self._sessions[runtime_session_key] = self._load_session(state_root)
@@ -1007,7 +1009,7 @@ class ReActAgent:
             await _emit_progress(
                 "extend_iterations",
                 "running",
-                f"Продлеваю лимит итераций на {AGENT_MAX_ITERATION_EXTENSION}: обнаружен прогресс, завершаю работу",
+                t("agent.progress.extend_iterations", _lang, n=AGENT_MAX_ITERATION_EXTENSION),
                 iteration=iteration_no,
             )
             return True
@@ -1054,7 +1056,7 @@ class ReActAgent:
                         iteration + 1,
                         str((working[0] or {}).get("content") or "") if working else "",
                     )
-                    progress_message = "Рабочий контекст суммаризирован для экономии токенов"
+                    progress_message = t("agent.progress.summarize_working", _lang)
                     if working_summary_artifact:
                         progress_message += f" (artifact: {working_summary_artifact})"
                     await _emit_progress(
@@ -1086,7 +1088,7 @@ class ReActAgent:
                     )
                     # summarize_context only changes the current request payload; working compression above
                     # is what persists across iterations.
-                    progress_message = "Исторический контекст суммаризирован для экономии токенов"
+                    progress_message = t("agent.progress.summarize_history", _lang)
                     if history_summary_artifact:
                         progress_message += f" (artifact: {history_summary_artifact})"
                     await _emit_progress(
@@ -1108,15 +1110,15 @@ class ReActAgent:
             await _emit_progress(
                 "iteration",
                 "running",
-                f"Итерация {iterations_done}: запрос к модели ({_current_tokens} tokens)",
+                t("agent.progress.iteration_request", _lang, n=iterations_done, tokens=_current_tokens),
                 iteration=iterations_done,
             )
             # Cooperative cancellation check.
             if cancel_event is not None and cancel_event.is_set():
                 _log.info("ReAct iter=%d cancelled via event", iterations_done)
-                final_response = "Операция отменена пользователем."
+                final_response = t("agent.cancelled", _lang)
                 final_status = "cancelled"
-                await _emit_progress("cancelled", "cancelled", "Отменено пользователем", iteration=iterations_done)
+                await _emit_progress("cancelled", "cancelled", t("agent.progress.cancelled", _lang), iteration=iterations_done)
                 break
             _trace_llm_request(
                 model=_model_name,
@@ -1161,20 +1163,17 @@ class ReActAgent:
                         await _emit_progress(
                             "no_tool_guard_retry",
                             "running",
-                            f"Итерация {iterations_done}: ответ без tool_calls отправлен на уточнение",
+                            t("agent.progress.no_tool_retry", _lang, n=iterations_done),
                             iteration=iterations_done,
                         )
                         iteration += 1
                         continue
-                    final_response = (
-                        "Прогресс остановился: модель ответила обещанием действия без вызова инструментов. "
-                        "Останавливаюсь, чтобы не выдавать невыполненную работу за результат."
-                    )
+                    final_response = t("agent.no_tool_guard_stopped", _lang)
                     final_status = "partial"
                     await _emit_progress(
                         "stop_no_tool_guard",
                         "partial",
-                        "Остановка: ответ без tool_calls не содержит проверенного результата",
+                        t("agent.progress.stop_no_tool", _lang),
                         iteration=iterations_done,
                     )
                     break
@@ -1183,7 +1182,7 @@ class ReActAgent:
                 await _emit_progress(
                     "final_text",
                     "running",
-                    f"Итерация {iterations_done}: получен финальный ответ",
+                    t("agent.progress.final_text", _lang, n=iterations_done),
                     iteration=iterations_done,
                 )
                 break
@@ -1192,7 +1191,7 @@ class ReActAgent:
             await _emit_progress(
                 "tool_batch",
                 "running",
-                f"Итерация {iterations_done}: вызовы инструментов ({', '.join(tool_names[:6])})",
+                t("agent.progress.tool_batch", _lang, n=iterations_done, tools=", ".join(tool_names[:6])),
                 iteration=iterations_done,
             )
             if content:
@@ -1330,7 +1329,10 @@ class ReActAgent:
                     await _emit_progress(
                         "tool_error",
                         "error",
-                        f"Итерация {iterations_done}: ошибка инструмента {call.get('function', {}).get('name', '?')}: {err_text[:160]}",
+                        t("agent.progress.tool_error", _lang,
+                          n=iterations_done,
+                          name=call.get("function", {}).get("name", "?"),
+                          error=err_text[:160]),
                         iteration=iterations_done,
                     )
                     if failure_event_callback is not None:
@@ -1415,17 +1417,13 @@ class ReActAgent:
                             last_err = str(last.get("error") or "")
                     except Exception:
                         last_err = ""
-                    final_response = (
-                        "Прогресс остановился: агент повторяет один и тот же вызов инструментов без успеха. "
-                        "Останавливаюсь, чтобы не зацикливаться.\n\n"
-                        "Последняя ошибка инструмента: "
-                        + (_redact_runtime_digest_text(last_err)[:600] if last_err else "(нет деталей)")
-                    )
+                    _last_err_text = _redact_runtime_digest_text(last_err)[:600] if last_err else t("agent.no_details", _lang)
+                    final_response = t("agent.stuck_loop", _lang, last_error=_last_err_text)
                     final_status = "error"
                     await _emit_progress(
                         "stop_repeated_failures",
                         "error",
-                        "Остановка: повтор одинаковых неуспешных вызовов инструментов",
+                        t("agent.progress.stop_repeated_failures", _lang),
                         iteration=iterations_done,
                     )
                     _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
@@ -1440,7 +1438,7 @@ class ReActAgent:
                 await _emit_progress(
                     "stop_blocked",
                     "blocked",
-                    f"Итерация {iterations_done}: остановка из-за policy block",
+                    t("agent.progress.stop_policy_block", _lang, n=iterations_done),
                     iteration=iterations_done,
                 )
                 _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
@@ -1462,16 +1460,13 @@ class ReActAgent:
                             last_err = str(last.get("error") or "")
                     except Exception:
                         last_err = ""
-                    final_response = (
-                        "Инструменты возвращают ошибки и прогресс остановился. "
-                        "Последняя ошибка инструмента: "
-                        + (_redact_runtime_digest_text(last_err)[:600] if last_err else "(нет деталей)")
-                    )
+                    _last_err_text = _redact_runtime_digest_text(last_err)[:600] if last_err else t("agent.no_details", _lang)
+                    final_response = t("agent.tools_failing", _lang, last_error=_last_err_text)
                     final_status = "error"
                     await _emit_progress(
                         "stop_consecutive_failures",
                         "error",
-                        "Остановка: несколько итераций подряд безуспешны",
+                        t("agent.progress.stop_consecutive_failures", _lang),
                         iteration=iterations_done,
                     )
                     _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
@@ -1491,14 +1486,14 @@ class ReActAgent:
             # can decide whether to continue/replan.
             recent = tool_facts[-6:]
             lines: List[str] = []
-            lines.append(f"⚠️ Достигнут лимит итераций ({max_iterations}). Возвращаю промежуточный результат.")
+            lines.append(t("agent.max_iterations_prefix", _lang, n=max_iterations))
             if recent:
                 lines.append("")
-                lines.append("Последние вызовы инструментов:")
-                for t in recent:
-                    tool = t.get("tool") or "?"
-                    ok = bool(t.get("success"))
-                    args = t.get("args") or {}
+                lines.append(t("agent.max_iterations_recent_calls", _lang))
+                for tf in recent:
+                    tool = tf.get("tool") or "?"
+                    ok = bool(tf.get("success"))
+                    args = tf.get("args") or {}
                     try:
                         args_s = json.dumps(args, ensure_ascii=False)
                     except Exception:
@@ -1506,11 +1501,11 @@ class ReActAgent:
                     args_s = _redact_runtime_digest_text(args_s)
                     lines.append(f"- {tool}: success={ok} args={args_s}")
                     if ok:
-                        prev = _redact_runtime_digest_text(t.get("output_preview")).strip()
+                        prev = _redact_runtime_digest_text(tf.get("output_preview")).strip()
                         if prev:
                             lines.append(prev)
                     else:
-                        err = _redact_runtime_digest_text(t.get("error")).strip()
+                        err = _redact_runtime_digest_text(tf.get("error")).strip()
                         if err:
                             lines.append(f"error: {err[:400]}")
             final_response = "\n".join(lines).strip()
@@ -1518,7 +1513,7 @@ class ReActAgent:
             await _emit_progress(
                 "max_iterations",
                 "partial",
-                f"Достигнут лимит итераций ({max_iterations})",
+                t("agent.progress.max_iterations_status", _lang, n=max_iterations),
                 iteration=iterations_done,
             )
             _maybe_persist_runtime_checkpoint(iterations_done, status=final_status, force=True)
@@ -1556,7 +1551,8 @@ class ReActAgent:
         await _emit_progress(
             "final",
             final_status,
-            f"ReAct завершен: status={final_status}, iterations={iterations_done}, tool_calls={len(tool_facts)}",
+            t("agent.progress.react_finished", _lang,
+              status=final_status, iterations=iterations_done, tool_calls=len(tool_facts)),
             iteration=iterations_done,
         )
         await _drain_lifecycle_events()
@@ -1614,15 +1610,16 @@ class AgentRunner:
         observability: Optional[Any] = None,
         run_handle: Optional[Any] = None,
     ) -> "AgentRunResult":
+        chat_id = dest.get("chat_id")
         if not resolve_openai_config(self.config, model_key="openai_model", env_priority=True):
             _log.error("AgentRunner: OpenAI not configured")
+            _lang = resolve_user_lang(self.config, chat_id=chat_id)
             return AgentRunResult(
-                output="Агент не настроен: отсутствуют OPENAI_API_KEY/OPENAI_MODEL.",
+                output=t("agent.not_configured", _lang),
                 status="error",
                 tool_calls=[],
                 claims=[],
             )
-        chat_id = dest.get("chat_id")
         chat_type = dest.get("chat_type")
         return await self._react.run(
             session.id,

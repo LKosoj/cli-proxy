@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequ
 
 import yaml
 
+from i18n import t
 from modes.sdk.runtime.json_normalizer import loads_safe
 
 try:
@@ -192,11 +193,11 @@ class AdminChatGateway:
             user_text=str(user_text or "").strip(),
         )
 
-    async def handle(self, user_text: str) -> ChatDecision:
+    async def handle(self, user_text: str, lang: str = 'ru') -> ChatDecision:
         text = str(user_text or "").strip()
         if not text:
             return ChatDecision(
-                reply_text="Пустое сообщение проигнорировано.",
+                reply_text=t('admin.chat.empty_input', lang),
                 error="empty_input",
             )
 
@@ -207,7 +208,7 @@ class AdminChatGateway:
             user_prompt = self.build_user_prompt(text)
         except AdminChatGatewayError as exc:
             _LOG.exception("admin chat: prompt build failed")
-            reply = f"Ошибка конфигурации chat-режима: {exc}"
+            reply = t('admin.chat.config_error', lang, exc=exc)
             self._memory.append(role="system", text=reply, intent_type="error")
             return ChatDecision(reply_text=reply, error=str(exc))
 
@@ -215,13 +216,13 @@ class AdminChatGateway:
             raw = await self._llm_provider(system_prompt, user_prompt)
         except Exception as exc:  # noqa: BLE001
             _LOG.exception("admin chat: llm provider failed")
-            reply = f"LLM недоступен: {exc}"
+            reply = t('admin.chat.llm_unavailable', lang, exc=exc)
             self._memory.append(role="system", text=reply, intent_type="error")
             return ChatDecision(reply_text=reply, error="llm_unavailable", raw_llm_output="")
 
         raw_text = str(raw or "").strip()
         if not raw_text:
-            reply = "LLM вернул пустой ответ."
+            reply = t('admin.chat.llm_empty_response', lang)
             self._memory.append(role="system", text=reply, intent_type="error")
             return ChatDecision(reply_text=reply, error="llm_empty_response", raw_llm_output="")
 
@@ -229,7 +230,7 @@ class AdminChatGateway:
             payload = _parse_json(raw_text)
         except ValueError as exc:
             _LOG.warning("admin chat: llm returned non-json output: %s", exc)
-            reply = f"LLM вернул невалидный JSON: {exc}"
+            reply = t('admin.chat.llm_invalid_json', lang, exc=exc)
             self._memory.append(
                 role="system", text=reply, intent_type="error",
                 meta={"raw_llm_output": raw_text},
@@ -242,7 +243,7 @@ class AdminChatGateway:
             intent = parse_intent(payload)
         except IntentValidationError as exc:
             _LOG.warning("admin chat: intent schema invalid: %s", exc)
-            reply = f"LLM вернул некорректный intent: {exc}"
+            reply = t('admin.chat.llm_invalid_intent', lang, exc=exc)
             self._memory.append(
                 role="system", text=reply, intent_type="error",
                 meta={"raw_llm_output": raw_text},
@@ -259,10 +260,7 @@ class AdminChatGateway:
             intent = revalidate_intent(intent, ctx=ctx)
         except IntentValidationError as exc:
             _LOG.warning("admin chat: intent revalidation failed: %s", exc)
-            reply = (
-                f"Я не могу выполнить это действие: {exc}. "
-                "Проверь allowlist или задай запрос иначе."
-            )
+            reply = t('admin.chat.action_not_allowed', lang, exc=exc)
             self._memory.append(
                 role="system", text=reply, intent_type="error",
                 meta={"raw_llm_output": raw_text, "intent": intent.as_dict()},
@@ -292,7 +290,7 @@ class AdminChatGateway:
 
         if intent.type == "update_memory":
             appended = self._memory.append_memory_md(intent.memory_append, source="chat")
-            reply_text = intent.text or "Записал в MEMORY.md."
+            reply_text = intent.text or t('admin.chat.memory_saved', lang)
             decision.reply_text = reply_text
             self._memory.append(
                 role="assistant", text=reply_text, intent_type="update_memory",
@@ -302,7 +300,7 @@ class AdminChatGateway:
 
         if intent.type == "run_readonly":
             decision.reply_text = (
-                intent.text or f"Запускаю read-only действие `{intent.action_id}` на `{intent.target}`."
+                intent.text or t('admin.chat.pending_run_readonly', lang, action_id=intent.action_id, target=intent.target)
             )
             self._memory.append(
                 role="assistant", text=decision.reply_text,
@@ -315,7 +313,7 @@ class AdminChatGateway:
         # propose_action / propose_new_action / propose_plan — требуют approval.
         approval_id = _new_approval_id()
         decision.pending_action_id = approval_id
-        decision.reply_text = _render_pending_text(intent)
+        decision.reply_text = _render_pending_text(intent, lang=lang)
         self._memory.append(
             role="assistant", text=decision.reply_text,
             intent_type=f"pending:{intent.type}",
@@ -382,30 +380,39 @@ def _format_actions(raw: Any) -> str:
     return "\n".join(rows)
 
 
-def _render_pending_text(intent: Intent) -> str:
+def _render_pending_text(intent: Intent, lang: str = 'ru') -> str:
     if intent.type == "propose_action":
-        argv_text = " ".join(intent.argv or []) if intent.argv else "(argv не задан)"
-        base = intent.text or f"Предлагаю выполнить `{intent.action_id}` на `{intent.target}`."
+        argv_text = (
+            " ".join(intent.argv or []) if intent.argv
+            else t('admin.chat.pending_argv_empty', lang)
+        )
+        base = intent.text or t(
+            'admin.chat.pending_propose_action', lang,
+            action_id=intent.action_id, target=intent.target,
+        )
         return (
             f"{base}\n"
-            f"Команда: `{argv_text}`\n"
-            f"Риск: {intent.risk_level or '?'}. Требуется ваше подтверждение."
+            f"{t('admin.chat.pending_command_line', lang, command=argv_text)}\n"
+            f"{t('admin.chat.pending_confirm_suffix', lang, risk_level=intent.risk_level or '?')}"
         )
     if intent.type == "propose_new_action":
         argv_text = " ".join(intent.argv or [])
-        base = intent.text or "Предлагаю выполнить следующую команду:"
+        base = intent.text or t('admin.chat.pending_propose_new_action', lang)
         save_hint = ""
         if intent.suggest_save and intent.suggested_action_id:
-            save_hint = f"\nМогу сохранить как action `{intent.suggested_action_id}` для повторного использования."
+            save_hint = t(
+                'admin.chat.pending_save_as_action', lang,
+                suggested_action_id=intent.suggested_action_id,
+            )
         return (
             f"{base}\n"
-            f"Target: `{intent.target}`\n"
-            f"Команда: `{argv_text}`\n"
-            f"Риск: {intent.risk_level}. Требуется ваше подтверждение.{save_hint}"
+            f"{t('admin.chat.pending_target_line', lang, target=intent.target)}\n"
+            f"{t('admin.chat.pending_command_line', lang, command=argv_text)}\n"
+            f"{t('admin.chat.pending_confirm_suffix', lang, risk_level=intent.risk_level)}{save_hint}"
         )
     if intent.type == "propose_plan":
         steps = intent.steps or []
-        header = intent.text or f"План из {len(steps)} шагов:"
+        header = intent.text or t('admin.chat.pending_plan_header', lang, count=len(steps))
         lines: List[str] = [header]
         for idx, step in enumerate(steps, 1):
             argv_text = " ".join(step.argv or []) if step.argv else ""
@@ -417,10 +424,12 @@ def _render_pending_text(intent: Intent) -> str:
         if intent.stop_on_error:
             lines.append("stop_on_error=True")
         if intent.suggest_save_as_runbook and intent.suggested_runbook_id:
-            lines.append(f"Можно сохранить как runbook `{intent.suggested_runbook_id}`.")
-        lines.append("Требуется ваше подтверждение.")
+            lines.append(
+                t('admin.chat.pending_save_as_runbook', lang, runbook_id=intent.suggested_runbook_id)
+            )
+        lines.append(t('admin.chat.pending_confirm', lang))
         return "\n".join(lines)
-    return intent.text or "Требуется ваше подтверждение."
+    return intent.text or t('admin.chat.pending_confirm', lang)
 
 
 def _new_approval_id() -> str:

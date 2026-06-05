@@ -15,6 +15,8 @@ from app.services.input_dispatch_models import (
     PendingInput,
     PendingInputDecision,
 )
+from i18n import t
+from utils.lang import resolve_user_lang
 from session import session_runtime_uid
 from app.services.telegram_ui_scope import TelegramUiKey
 from sessions.queue_item import append_session_queue_item, normalize_queue_item_payload
@@ -285,27 +287,24 @@ class InputDispatchService:
         return True, pending_input
 
     @classmethod
-    def pending_limit_overflow_text(cls) -> str:
-        return (
-            "Очередь ожидающего ввода переполнена "
-            f"(лимит {int(cls.PENDING_INPUT_LIMIT)}). Дождитесь обработки текущих запросов."
-        )
+    def pending_limit_overflow_text(cls, lang: str = "ru") -> str:
+        return t("msg.input.pending_limit_overflow", lang, limit=int(cls.PENDING_INPUT_LIMIT))
 
     @classmethod
-    def take_in_work_prompt_text(cls) -> str:
-        return "Сообщение получено. Взять в работу?"
+    def take_in_work_prompt_text(cls, lang: str = "ru") -> str:
+        return t("msg.input.take_in_work_prompt", lang)
 
     @classmethod
-    def busy_prompt_text(cls) -> str:
-        return "В очереди уже есть сообщение. Что сделать с новым вводом?"
+    def busy_prompt_text(cls, lang: str = "ru") -> str:
+        return t("msg.input.busy_prompt", lang)
 
     @classmethod
-    def queue_confirm_prompt_text(cls) -> str:
-        return "Сессия занята. Поставить сообщение в очередь?"
+    def queue_confirm_prompt_text(cls, lang: str = "ru") -> str:
+        return t("msg.input.queue_confirm_prompt", lang)
 
     @staticmethod
-    def queued_immediately_text() -> str:
-        return "Ввод добавлен в очередь."
+    def queued_immediately_text(lang: str = "ru") -> str:
+        return t("msg.input.queued_immediately", lang)
 
     @classmethod
     def pending_input_decision_for_action(
@@ -313,15 +312,16 @@ class InputDispatchService:
         action: str,
         *,
         pending_input: Optional[PendingInput] = None,
+        lang: str = "ru",
     ) -> PendingInputDecision:
         normalized = str(action or cls.PENDING_ACTION_CONFIRM).strip() or cls.PENDING_ACTION_CONFIRM
         if normalized == cls.PENDING_ACTION_QUEUE_CHOICE:
-            text = cls.busy_prompt_text()
+            text = cls.busy_prompt_text(lang)
         elif normalized == cls.PENDING_ACTION_QUEUE_CONFIRM:
-            text = cls.queue_confirm_prompt_text()
+            text = cls.queue_confirm_prompt_text(lang)
         else:
             normalized = cls.PENDING_ACTION_CONFIRM
-            text = cls.take_in_work_prompt_text()
+            text = cls.take_in_work_prompt_text(lang)
         payload: dict[str, Any] = {"pending_action": normalized}
         if pending_input is not None:
             payload.update(
@@ -334,10 +334,10 @@ class InputDispatchService:
         return PendingInputDecision(action=normalized, text=text, payload=payload)
 
     @classmethod
-    def pending_overflow_decision(cls) -> PendingInputDecision:
+    def pending_overflow_decision(cls, lang: str = "ru") -> PendingInputDecision:
         return PendingInputDecision(
             action="pending_overflow",
-            text=cls.pending_limit_overflow_text(),
+            text=cls.pending_limit_overflow_text(lang),
             payload={},
         )
 
@@ -621,12 +621,12 @@ class InputDispatchService:
             self._remember_pending_prompt_message(ui_key, getattr(message, "message_id", None))
         return message
 
-    async def _show_pending_prompt(self, *, ui_key: Any, pending_input: PendingInput, chat_id: Any, context) -> None:
+    async def _show_pending_prompt(self, *, ui_key: Any, pending_input: PendingInput, chat_id: Any, context, lang: str = "ru") -> None:
         await self._retire_pending_prompt(ui_key=ui_key, context=context, dest=getattr(pending_input, "dest", None))
         action = str(getattr(pending_input, "action", "") or "")
         await self.send_pending_input_decision(
             context=context,
-            decision=self.pending_input_decision_for_action(action, pending_input=pending_input),
+            decision=self.pending_input_decision_for_action(action, pending_input=pending_input, lang=lang),
             dest=getattr(pending_input, "dest", None),
             chat_id=chat_id,
             ui_key=ui_key,
@@ -696,6 +696,7 @@ class InputDispatchService:
         pending_input: PendingInput,
         chat_id: Any,
         context,
+        lang: str = "ru",
     ) -> None:
         pending_map = self._pending_map()
         ui_key = self._pending_ui_key(getattr(pending_input, "dest", None), chat_id)
@@ -714,13 +715,13 @@ class InputDispatchService:
         if not accepted:
             await self.send_pending_input_decision(
                 context=context,
-                decision=self.pending_overflow_decision(),
+                decision=self.pending_overflow_decision(lang),
                 dest=getattr(pending_input, "dest", None),
                 chat_id=chat_id,
             )
             return
         self._record_queue_metric()
-        await self._show_pending_prompt(ui_key=ui_key, pending_input=merged, chat_id=chat_id, context=context)
+        await self._show_pending_prompt(ui_key=ui_key, pending_input=merged, chat_id=chat_id, context=context, lang=lang)
 
     async def stage_user_input(
         self,
@@ -743,6 +744,7 @@ class InputDispatchService:
             action=self.PENDING_ACTION_CONFIRM,
         )
 
+        lang = resolve_user_lang(getattr(self.bot_app, "config", None), chat_id=chat_id)
         pending_map = self._pending_map()
         ui_key = self._pending_ui_key(getattr(pending_input, "dest", None), chat_id)
         if self._pending_input_confirmation_enabled():
@@ -751,12 +753,12 @@ class InputDispatchService:
             if not accepted:
                 await self.send_pending_input_decision(
                     context=context,
-                    decision=self.pending_overflow_decision(),
+                    decision=self.pending_overflow_decision(lang),
                     dest=getattr(pending_input, "dest", None),
                     chat_id=chat_id,
                 )
                 return
-            await self._show_pending_prompt(ui_key=ui_key, pending_input=merged, chat_id=chat_id, context=context)
+            await self._show_pending_prompt(ui_key=ui_key, pending_input=merged, chat_id=chat_id, context=context, lang=lang)
             return
 
         if self._is_session_busy(session, self.bot_app):
@@ -765,6 +767,7 @@ class InputDispatchService:
                 pending_input=pending_input,
                 chat_id=chat_id,
                 context=context,
+                lang=lang,
             )
             return
 
@@ -800,6 +803,7 @@ class InputDispatchService:
         policy = getattr(self.bot_app, "access_policy_service", None)
         checker = getattr(policy, "is_direct_cli_allowed_for_chat", None) if policy is not None else None
         resolved_chat_id = self._resolve_policy_chat_id(chat_id, dest)
+        lang = resolve_user_lang(getattr(self.bot_app, "config", None), chat_id=resolved_chat_id or chat_id)
         if enforce_direct_cli_policy and resolved_chat_id is not None and callable(checker):
             try:
                 direct_cli_allowed = bool(checker(resolved_chat_id))
@@ -807,9 +811,8 @@ class InputDispatchService:
                 logger.exception("direct CLI policy check failed chat_id=%s", resolved_chat_id)
                 direct_cli_allowed = False
             if not direct_cli_allowed:
-                denied_text = str(
-                    getattr(policy, "DIRECT_CLI_DENIED_TEXT", "") or self.DIRECT_CLI_DENIED_TEXT
-                ).strip() or self.DIRECT_CLI_DENIED_TEXT
+                policy_override = str(getattr(policy, "DIRECT_CLI_DENIED_TEXT", "") or "").strip()
+                denied_text = policy_override if policy_override else t("msg.input.direct_cli_denied", lang)
                 await self._send_text(
                     context,
                     text=denied_text,
@@ -832,6 +835,7 @@ class InputDispatchService:
                 ),
                 chat_id=chat_id,
                 context=context,
+                lang=lang,
             )
             return
         session_management = getattr(self.bot_app, "session_management", None)
@@ -910,6 +914,7 @@ class InputDispatchService:
                     orch = getattr(self.bot_app, "advanced_orchestrator_service", None)
                     mode_registry = getattr(self.bot_app, "mode_registry_service", None)
                     if orch is not None:
+                        orch_lang = resolve_user_lang(getattr(self.bot_app, "config", None), chat_id=chat_id)
                         proposal = None
                         try:
                             proposal = await orch.propose_transition_hybrid(
@@ -918,6 +923,7 @@ class InputDispatchService:
                                 mode_registry=mode_registry,
                                 app_config=getattr(self.bot_app, "config", None),
                                 llm_router_fn=getattr(self.bot_app, "orchestrator_chat_completion", None),
+                                lang=orch_lang,
                             )
                         except Exception:
                             logging.getLogger(__name__).exception("hybrid orchestrator proposal failed")
@@ -939,7 +945,7 @@ class InputDispatchService:
                             await self.send_pending_input_decision(
                                 context=context,
                                 decision=self.orchestrator_transition_decision(
-                                    text=orch.build_confirm_text(current_mode_label=current_label, proposal=proposal),
+                                    text=orch.build_confirm_text(current_mode_label=current_label, proposal=proposal, lang=orch_lang),
                                     session_uid=str(
                                         getattr(getattr(session, "conversation_scope", None), "session_uid", "") or ""
                                     ),
@@ -1006,6 +1012,7 @@ class InputDispatchService:
         dest: dict,
     ) -> bool:
         """Detect and handle 'send me a file' intent. Returns True if handled."""
+        lang = resolve_user_lang(getattr(self.bot_app, "config", None), chat_id=chat_id)
         if self._artifact_intent_text_too_long(text):
             if self._artifact_trace_enabled(text):
                 self._log_artifact_intent(
@@ -1105,7 +1112,7 @@ class InputDispatchService:
                 self._log_artifact_intent(session, "send_failed", text=text, filename=filename)
                 await self._send_text(
                     context,
-                    text="Не удалось отправить файл.",
+                    text=t("msg.artifact.send_failed", lang),
                     dest=dest,
                     chat_id=chat_id,
                 )
@@ -1116,7 +1123,7 @@ class InputDispatchService:
             logger.exception("artifact intent: failed to send file %s", result.resolved_path)
             await self._send_text(
                 context,
-                text="Ошибка при отправке файла.",
+                text=t("msg.artifact.send_error", lang),
                 dest=dest,
                 chat_id=chat_id,
             )

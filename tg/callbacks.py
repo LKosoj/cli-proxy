@@ -21,6 +21,7 @@ from sessions.session_state_access import (
     set_orchestrator_pending_input,
 )
 from i18n import t, lang_from_query
+from utils.lang import resolve_user_lang
 from tg.callback_actions import CallbackActionsMixin
 
 
@@ -388,9 +389,10 @@ class CallbackHandler(CallbackActionsMixin):
         if dispatch is None or not hasattr(dispatch, "send_pending_input_decision"):
             return
         try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=int(chat_id))
             await dispatch.send_pending_input_decision(
                 context=context,
-                decision=dispatch.pending_input_decision_for_action(action, pending_input=pending),
+                decision=dispatch.pending_input_decision_for_action(action, pending_input=pending, lang=lang),
                 dest=getattr(pending, "dest", None),
                 chat_id=int(chat_id),
                 ui_key=ui_key,
@@ -735,6 +737,7 @@ class CallbackHandler(CallbackActionsMixin):
                         pending_input=pending,
                         chat_id=int(chat_id),
                         context=context,
+                        lang=lang,
                     )
                 return
             await self._respond_callback(
