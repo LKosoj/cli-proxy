@@ -6037,6 +6037,123 @@ def test_orchestrator_claim_ledger_downgrades_repo_grounded_claim_without_repo_a
     assert first_claim["status"] == "needs_check"
 
 
+def test_orchestrator_claim_ledger_downgrades_codebase_map_only_evidence(tmp_path, monkeypatch) -> None:
+    cfg = AppConfig(
+        telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+        tools={},
+        defaults=DefaultsConfig(
+            workdir=str(tmp_path),
+            state_path=str(tmp_path / "state.json"),
+            toolhelp_path=str(tmp_path / "toolhelp.json"),
+            log_path=str(tmp_path / "bot.log"),
+        ),
+        mcp=MCPConfig(enabled=False),
+        mcp_clients=[],
+        presets=[],
+        path=str(tmp_path / "config.yaml"),
+    )
+
+    def _template_provider(_session):
+        return {
+            "name": "Repo change spec",
+            "required_sections": ["S1"],
+            "qa_prompt": "QA-REPO",
+            "repo_grounded_required": True,
+        }
+
+    orch = OrchestratorRunner(
+        cfg,
+        final_rework_enabled=False,
+        final_rework_passes=0,
+        template_provider=_template_provider,
+    )
+    monkeypatch.setattr(orch, "_missing_required_repo_use_cli_step_ids", lambda *args, **kwargs: [])
+
+    async def _fake_plan_steps(_cfg, _user_text, _ctx_summary):
+        return [PlanStep(id="step1", title="Repo findings", instruction="collect", step_type="task")]
+
+    async def _fake_execute_step(step, session, bot, context, dest, orchestrator_context, *, current_user_text="", constraints=None):
+        del session, bot, context, dest, orchestrator_context, current_user_text, constraints
+        return orch._deps.ExecutorResponse(
+            task_id=step.id,
+            status="ok",
+            summary="Codebase Map содержит навигационную заметку.",
+            outputs=[
+                {
+                    "type": "text",
+                    "content": "Codebase Map navigation summary",
+                    "path": ".cli-proxy/.codebase_map/INDEX.md",
+                }
+            ],
+            claims=[
+                {
+                    "claim_id": "claim_step1_1",
+                    "status": "confirmed",
+                    "text": "Runtime registry уже подтвержден.",
+                    "evidence": [],
+                }
+            ],
+            tool_calls=[],
+            next_questions=[],
+        )
+
+    async def _fake_chat_completion(_cfg, _system: str, _user: str, response_format=None):
+        if response_format is not None:
+            return '{"needs_rework": false, "issues": [], "missing_sections": []}'
+        return "DRAFT"
+
+    async def _no_memory(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(orch._deps, "plan_steps", _fake_plan_steps)
+    monkeypatch.setattr(orch, "_execute_step", _fake_execute_step)
+    monkeypatch.setattr(orch._deps, "chat_completion", _fake_chat_completion)
+    monkeypatch.setattr(orch, "_maybe_update_memory", _no_memory)
+
+    class _FakeBot:
+        async def _send_message(self, _context, *, chat_id: int, text: str, **_kwargs):
+            return True
+
+        async def send_output(self, *_args, **_kwargs):
+            return None
+
+        async def _send_document(self, *_args, **_kwargs):
+            return None
+
+    out = asyncio.run(
+        orch.run(
+            type(
+                "S",
+                (),
+                {
+                    "id": "s1-codebase-map-only",
+                    "workdir": str(tmp_path),
+                    "project_root": str(tmp_path),
+                    "analyst_intent_flags": {
+                        "document_kind": "spec",
+                        "requires_codebase_grounding": True,
+                        "requires_repo_audit": False,
+                        "requires_final_repo_review": False,
+                        "clarification_is_blocking": False,
+                    },
+                },
+            )(),
+            "user request",
+            _FakeBot(),
+            context=object(),
+            dest={"chat_id": 1},
+        )
+    )
+
+    assert out
+    workspace_dir = Path(tmp_path) / "_sandbox" / "chats" / "chat_1"
+    ledger_payload = json.loads(
+        (workspace_dir / "_orchestrator" / "s1-codebase-map-only_claim_ledger.json").read_text(encoding="utf-8")
+    )
+    first_claim = next(item for item in ledger_payload if item.get("claim_id") == "claim_step1_1")
+    assert first_claim["status"] == "needs_check"
+
+
 def test_orchestrator_large_spec_missing_counts_triggers_rework_with_counts_prompt(tmp_path, monkeypatch) -> None:
     cfg = AppConfig(
         telegram=TelegramConfig(token="", whitelist_chat_ids=[]),

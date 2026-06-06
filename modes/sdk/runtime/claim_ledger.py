@@ -7,6 +7,14 @@ VALID_CLAIM_STATUSES = {"confirmed", "needs_check", "unconfirmed"}
 VALID_FINAL_USAGES = {"fact", "open_question", "blocked_item"}
 
 
+def _final_usage_for_status(status: str) -> str:
+    if status == "confirmed":
+        return "fact"
+    if status == "needs_check":
+        return "open_question"
+    return "blocked_item"
+
+
 def _normalize_evidence_list(value: Any) -> List[Dict[str, str]]:
     items: List[Dict[str, str]] = []
     for raw in value if isinstance(value, list) else []:
@@ -33,13 +41,9 @@ def normalize_claim_entry(entry: Dict[str, Any], *, fallback_id: str) -> Dict[st
     source_step_id = str(raw.get("source_step_id") or raw.get("task_id") or "").strip()
     component_scope = str(raw.get("component_scope") or "general").strip() or "general"
     allowed_final_usage = str(raw.get("allowed_final_usage") or "").strip().lower()
-    if allowed_final_usage not in VALID_FINAL_USAGES:
-        if status == "confirmed":
-            allowed_final_usage = "fact"
-        elif status == "needs_check":
-            allowed_final_usage = "open_question"
-        else:
-            allowed_final_usage = "blocked_item"
+    status_final_usage = _final_usage_for_status(status)
+    if allowed_final_usage not in VALID_FINAL_USAGES or allowed_final_usage != status_final_usage:
+        allowed_final_usage = status_final_usage
     return {
         "claim_id": claim_id,
         "status": status,

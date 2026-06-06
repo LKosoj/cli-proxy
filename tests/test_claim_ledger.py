@@ -32,6 +32,35 @@ def test_normalize_claim_ledger_deduplicates_claim_ids() -> None:
     assert ledger[1]["claim_id"] == "dup_2"
 
 
+def test_normalize_claim_ledger_syncs_final_usage_to_status() -> None:
+    ledger = normalize_claim_ledger(
+        [
+            {
+                "claim_id": "needs-check",
+                "status": "needs_check",
+                "text": "Need verification",
+                "allowed_final_usage": "fact",
+            },
+            {
+                "claim_id": "unconfirmed",
+                "status": "unconfirmed",
+                "text": "Blocked claim",
+                "allowed_final_usage": "fact",
+            },
+            {
+                "claim_id": "confirmed",
+                "status": "confirmed",
+                "text": "Confirmed claim",
+                "allowed_final_usage": "open_question",
+            },
+        ]
+    )
+
+    assert ledger[0]["allowed_final_usage"] == "open_question"
+    assert ledger[1]["allowed_final_usage"] == "blocked_item"
+    assert ledger[2]["allowed_final_usage"] == "fact"
+
+
 def test_validate_claim_ledger_reports_missing_source_and_invalid_usage() -> None:
     result = validate_claim_ledger(
         [

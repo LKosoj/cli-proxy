@@ -107,4 +107,4 @@ Instruction node for the project test suite under `tests/**`: pytest-based unit,
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03 (enriched: scope counts, conftest layers, run commands verified against `tests/`, `pytest.ini`, `conftest.py`)
+- 2026-06-06 (document lint and evidence gate targeted coverage)

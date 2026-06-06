@@ -709,12 +709,12 @@ def test_orchestrator_document_lint_repairs_unbalanced_fence_and_persists_report
         monkeypatch.setattr(orch, "_maybe_update_memory", _noop_memory)
 
         async def _fake_chat_completion(_cfg, _system, _user):
-            return "## Doc\n\n```python\nprint('x')\n"
+            return "## Doc\n\n[Missing](docs/missing.md)\n\n```python\nprint('x')\n"
 
         monkeypatch.setattr(orch._deps, "chat_completion", _fake_chat_completion)
 
         fakebot = _FakeBot()
-        session = type("S", (), {"id": "s1"})
+        session = type("S", (), {"id": "s1", "workdir": str(tmp_path)})
         dest = {"kind": "telegram", "chat_id": 123, "chat_type": "private"}
 
         out = await orch.run(session, "do things", bot=fakebot, context=None, dest=dest)
@@ -722,6 +722,7 @@ def test_orchestrator_document_lint_repairs_unbalanced_fence_and_persists_report
         lint_report_path = next(Path(tmp_path).rglob("s1_document_lint.md"))
         lint_report = lint_report_path.read_text(encoding="utf-8")
         assert "unbalanced_fenced_code_blocks" in lint_report
+        assert "broken_local_markdown_link: line 3: docs/missing.md" in lint_report
         assert "closed_unbalanced_fenced_code_blocks" in lint_report
 
     asyncio.run(_run())

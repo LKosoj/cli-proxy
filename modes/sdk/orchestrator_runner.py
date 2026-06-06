@@ -43,7 +43,7 @@ from .runtime.final_qc import (
     collect_placeholder_gaps,
 )
 from .runtime.evidence_pipeline import (
-    claim_has_repo_anchor,
+    claim_is_confirmable,
     collect_step_evidence,
     verify_claim_ledger,
 )
@@ -2780,9 +2780,11 @@ class OrchestratorRunner:
                             seen_keys.add(key)
                             deduped.append(dict(ev))
                         claim_status = str(claim.get("status") or _claim_status(item)).strip() or _claim_status(item)
-                        if repo_grounded_required and str(claim_status).strip().lower() == "confirmed":
-                            if not claim_has_repo_anchor({"evidence": deduped}):
-                                claim_status = "needs_check"
+                        if str(claim_status).strip().lower() == "confirmed" and not claim_is_confirmable(
+                            {"text": claim_text, "evidence": deduped},
+                            repo_grounded_required=repo_grounded_required,
+                        ):
+                            claim_status = "needs_check"
                         ledger.append(
                             {
                                 "claim_id": str(claim.get("claim_id") or f"claim_{task_id}_{idx}").strip(),
@@ -2801,15 +2803,22 @@ class OrchestratorRunner:
                 fallback_claim_text = _fallback_claim_text(item, step_evidence)
                 if not fallback_claim_text:
                     continue
+                fallback_status = _claim_status(item)
+                fallback_evidence = [dict(ev) for ev in step_evidence]
+                if fallback_status == "confirmed" and not claim_is_confirmable(
+                    {"text": fallback_claim_text, "evidence": fallback_evidence},
+                    repo_grounded_required=repo_grounded_required,
+                ):
+                    fallback_status = "needs_check"
                 ledger.append(
                     {
                         "claim_id": f"claim_{task_id}_fallback",
                         "task_id": task_id,
                         "source_step_id": task_id,
                         "title": title,
-                        "status": _claim_status(item),
+                        "status": fallback_status,
                         "text": fallback_claim_text,
-                        "evidence": [dict(ev) for ev in step_evidence],
+                        "evidence": fallback_evidence,
                         "component_scope": "general",
                         "allowed_final_usage": "",
                         "step_artifact": str(item.get("orchestrator_artifact") or "").strip(),
@@ -3962,10 +3971,24 @@ class OrchestratorRunner:
                     final_text=final_text,
                     user_query=user_query,
                 )
-                lint_issues = lint_markdown_document(final_text).get("issues") or []
+                document_lint_base_dir = (
+                    str(
+                        getattr(session, "project_root", None)
+                        or getattr(session, "workdir", None)
+                        or ""
+                    ).strip()
+                    or None
+                )
+                lint_issues = (
+                    lint_markdown_document(final_text, base_dir=document_lint_base_dir).get("issues")
+                    or []
+                )
                 lint_repairs: List[str] = []
                 if lint_issues:
-                    final_text, lint_repairs = repair_markdown_document(final_text)
+                    final_text, lint_repairs = repair_markdown_document(
+                        final_text,
+                        base_dir=document_lint_base_dir,
+                    )
                     try:
                         lint_report_path = _write_text_artifact(
                             f"{_slug(str(getattr(session, 'id', '') or 'session'), fallback='session')}_document_lint.md",

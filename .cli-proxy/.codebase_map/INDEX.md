@@ -39,7 +39,7 @@ These files are mandatory context and must be considered before major edits.
 
 ## Nodes
 - [tests](nodes/tests.md) - files: 547, source_glob: `tests/**`
-- [modes](nodes/modes.md) - files: 220, source_glob: `modes/**`
+- [modes](nodes/modes.md) - files: 221, source_glob: `modes/**`
 - [app](nodes/app.md) - files: 154, source_glob: `app/**`
 - [agent](nodes/agent.md) - files: 61, source_glob: `agent/**`
 - [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`

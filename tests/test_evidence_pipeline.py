@@ -1,5 +1,6 @@
 from modes.sdk.runtime.evidence_pipeline import (
     claim_has_repo_anchor,
+    claim_is_confirmable,
     claim_uses_only_codebase_map_evidence,
     collect_step_evidence,
     verify_claim_ledger,
@@ -28,6 +29,8 @@ def test_claim_has_repo_anchor_checks_evidence_paths() -> None:
     assert claim_has_repo_anchor({"evidence": [{"path": "/repo/file.py"}]}) is True
     assert claim_has_repo_anchor({"evidence": [{"preview": "read_file"}]}) is False
     assert claim_has_repo_anchor({"evidence": [{"path": "/repo/.cli-proxy/.codebase_map/STACK.md"}]}) is False
+    assert claim_has_repo_anchor({"evidence": [{"path": ".cli-proxy/.codebase_map/STACK.md"}]}) is False
+    assert claim_has_repo_anchor({"evidence": [{"path": ".cli-proxy\\.codebase_map\\STACK.md"}]}) is False
     assert claim_has_repo_anchor({"evidence": [{"path": "/repo/_orchestrator/step1.md"}]}) is False
     assert (
         claim_has_repo_anchor(
@@ -94,6 +97,36 @@ def test_claim_uses_only_codebase_map_evidence_detects_navigation_only_claim() -
     )
 
 
+def test_claim_is_confirmable_rejects_codebase_map_only_evidence() -> None:
+    claim = {
+        "evidence": [
+            {
+                "path": ".cli-proxy/.codebase_map/INTEGRATIONS.md",
+                "preview": "Codebase Map integrations",
+            }
+        ]
+    }
+
+    assert claim_is_confirmable(claim, repo_grounded_required=False) is False
+
+
+def test_claim_is_confirmable_accepts_mixed_real_repo_evidence() -> None:
+    claim = {
+        "evidence": [
+            {
+                "path": ".cli-proxy/.codebase_map/INTEGRATIONS.md",
+                "preview": "Codebase Map integrations",
+            },
+            {
+                "path": "/repo/app/services/session_transfer/service.py",
+                "preview": "reader registry",
+            },
+        ]
+    }
+
+    assert claim_is_confirmable(claim, repo_grounded_required=True) is True
+
+
 def test_verify_claim_ledger_reports_repo_grounded_anchor_gap() -> None:
     result = verify_claim_ledger(
         [
@@ -145,3 +178,20 @@ def test_verify_claim_ledger_reports_codebase_map_only_claim() -> None:
     )
     assert result["codebase_map_gaps"]
     assert "Codebase Map navigation evidence" in result["codebase_map_gaps"][0]
+
+
+def test_verify_claim_ledger_reports_fact_usage_without_evidence() -> None:
+    result = verify_claim_ledger(
+        [
+            {
+                "status": "needs_check",
+                "allowed_final_usage": "fact",
+                "text": "Claim",
+                "evidence": [],
+            }
+        ],
+        repo_grounded_required=False,
+    )
+
+    assert result["evidence_gaps"]
+    assert "Final claim without captured evidence" in result["evidence_gaps"][0]

@@ -9,7 +9,7 @@ _LOCAL_PATH_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_./-])(/[^)\]>\s`]+)")
 
 
 def _is_codebase_map_path(path: str) -> bool:
-    normalized = str(path or "").replace("\\", "/").lower()
+    normalized = "/" + str(path or "").strip().replace("\\", "/").lower().lstrip("/")
     return "/.cli-proxy/.codebase_map/" in normalized or normalized.endswith("/.cli-proxy/.codebase_map")
 
 
@@ -125,6 +125,32 @@ def claim_uses_only_codebase_map_evidence(claim: Dict[str, Any]) -> bool:
     return has_codebase_map
 
 
+def _claim_has_captured_evidence(claim: Dict[str, Any]) -> bool:
+    evidence = claim.get("evidence") or []
+    return isinstance(evidence, list) and any(
+        isinstance(ev, dict)
+        and (
+            str(ev.get("path") or "").strip()
+            or str(ev.get("preview") or "").strip()
+        )
+        for ev in evidence
+    )
+
+
+def claim_is_confirmable(
+    claim: Dict[str, Any],
+    *,
+    repo_grounded_required: bool,
+) -> bool:
+    if not _claim_has_captured_evidence(claim):
+        return False
+    if claim_uses_only_codebase_map_evidence(claim):
+        return False
+    if repo_grounded_required and not claim_has_repo_anchor(claim):
+        return False
+    return True
+
+
 def verify_claim_ledger(
     claim_ledger: List[Dict[str, Any]],
     *,
@@ -136,30 +162,23 @@ def verify_claim_ledger(
         if not isinstance(claim, dict):
             continue
         status = str(claim.get("status") or "").strip().lower()
-        if status != "confirmed":
+        final_usage = str(claim.get("allowed_final_usage") or "").strip().lower()
+        if status != "confirmed" and final_usage != "fact":
             continue
         text = str(claim.get("text") or "").strip()
-        evidence = claim.get("evidence") or []
-        has_any_evidence = isinstance(evidence, list) and any(
-            isinstance(ev, dict)
-            and (
-                str(ev.get("path") or "").strip()
-                or str(ev.get("preview") or "").strip()
-            )
-            for ev in evidence
-        )
-        if not has_any_evidence:
+        claim_label = "Confirmed" if status == "confirmed" else "Final"
+        if not _claim_has_captured_evidence(claim):
             evidence_gaps.append(
-                f"Confirmed claim without captured evidence: {text[:180]}"
+                f"{claim_label} claim without captured evidence: {text[:180]}"
             )
             continue
         if claim_uses_only_codebase_map_evidence(claim):
-            msg = f"Confirmed claim relies only on Codebase Map navigation evidence: {text[:180]}"
+            msg = f"{claim_label} claim relies only on Codebase Map navigation evidence: {text[:180]}"
             codebase_map_gaps.append(msg)
             evidence_gaps.append(msg)
             continue
         if repo_grounded_required and not claim_has_repo_anchor(claim):
             evidence_gaps.append(
-                f"Confirmed repo-grounded claim without repo/file anchor: {text[:180]}"
+                f"{claim_label} repo-grounded claim without repo/file anchor: {text[:180]}"
             )
     return {"evidence_gaps": evidence_gaps, "codebase_map_gaps": codebase_map_gaps}

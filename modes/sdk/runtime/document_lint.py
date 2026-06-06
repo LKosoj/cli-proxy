@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import html
 import re
+from pathlib import Path
 from typing import Dict, List
+from urllib.parse import unquote, urlsplit
 
 _UNSAFE_HTML_RE = re.compile(
     r"(?is)<\s*(script|iframe|object|embed|form|style)\b|on[a-z]+\s*=|javascript:"
 )
 _TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$")
+_INLINE_LINK_RE = re.compile(r"(?<!!)\[[^\]\n]+\]\(([^)\n]+)\)")
+_REFERENCE_LINK_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s*(\S.*)$")
+_LINE_SUFFIX_RE = re.compile(r"^(.+?)(?::\d+){1,2}$")
 
 
 def _collect_pipe_blocks(lines: List[str]) -> List[tuple[int, int]]:
@@ -46,7 +51,70 @@ def _table_column_count(line: str) -> int:
     return len([cell for cell in stripped.split("|")])
 
 
-def lint_markdown_document(text: str) -> Dict[str, List[str]]:
+def _extract_markdown_destination(raw: str) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    if value.startswith("<"):
+        end = value.find(">")
+        if end > 0:
+            return value[1:end].strip()
+        return value[1:].strip()
+    return value.split(None, 1)[0].strip()
+
+
+def _is_ignored_markdown_destination(destination: str) -> bool:
+    if not destination or destination.startswith("#") or destination.startswith("//"):
+        return True
+    parsed = urlsplit(destination)
+    return bool(parsed.scheme)
+
+
+def _strip_url_parts(destination: str) -> str:
+    return destination.split("#", 1)[0].split("?", 1)[0]
+
+
+def _strip_line_suffix(path_value: str) -> str:
+    if re.match(r"^[A-Za-z]:[\\/]", path_value):
+        return path_value
+    match = _LINE_SUFFIX_RE.match(path_value)
+    if match:
+        return match.group(1)
+    return path_value
+
+
+def _local_markdown_target_exists(destination: str, base_dir: Path) -> bool:
+    path_value = _strip_line_suffix(unquote(_strip_url_parts(destination)))
+    if not path_value:
+        return True
+    target = Path(path_value)
+    if not target.is_absolute():
+        target = base_dir / target
+    return target.exists()
+
+
+def _iter_markdown_link_targets(lines: List[str]) -> List[tuple[int, str]]:
+    targets: List[tuple[int, str]] = []
+    in_fence = False
+    for line_no, line in enumerate(lines, start=1):
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        for match in _INLINE_LINK_RE.finditer(line):
+            target = _extract_markdown_destination(match.group(1))
+            if target:
+                targets.append((line_no, target))
+        reference_match = _REFERENCE_LINK_RE.match(line)
+        if reference_match:
+            target = _extract_markdown_destination(reference_match.group(1))
+            if target:
+                targets.append((line_no, target))
+    return targets
+
+
+def lint_markdown_document(text: str, *, base_dir: str | Path | None = None) -> Dict[str, List[str]]:
     issues: List[str] = []
     raw = str(text or "")
     lines = raw.splitlines()
@@ -70,12 +138,19 @@ def lint_markdown_document(text: str) -> Dict[str, List[str]]:
             if _table_column_count(row) != header_cols:
                 issues.append("malformed_markdown_table")
                 break
+    if base_dir is not None:
+        resolved_base_dir = Path(base_dir)
+        for line_no, destination in _iter_markdown_link_targets(lines):
+            if _is_ignored_markdown_destination(destination):
+                continue
+            if not _local_markdown_target_exists(destination, resolved_base_dir):
+                issues.append(f"broken_local_markdown_link: line {line_no}: {destination}")
     return {"issues": issues}
 
 
-def repair_markdown_document(text: str) -> tuple[str, List[str]]:
+def repair_markdown_document(text: str, *, base_dir: str | Path | None = None) -> tuple[str, List[str]]:
     raw = str(text or "")
-    issues = lint_markdown_document(raw).get("issues") or []
+    issues = lint_markdown_document(raw, base_dir=base_dir).get("issues") or []
     repaired = raw
     applied: List[str] = []
     if "unbalanced_fenced_code_blocks" in issues:
