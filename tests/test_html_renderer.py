@@ -28,6 +28,28 @@ def test_make_html_file_creates_file_with_content() -> None:
             os.remove(path)
 
 
+def test_full_html_document_includes_responsive_mobile_layout() -> None:
+    result = ansi_to_html("# Title\n\n| Column | Value |\n| --- | --- |\n| key | value |\n\n```text\nx\n```")
+
+    assert "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">" in result
+    assert "html{box-sizing:border-box;-webkit-text-size-adjust:100%;}" in result
+    assert "main{max-width:100%;}" in result
+    assert "table{border-collapse:collapse;margin:12px 0;display:block;max-width:100%;" in result
+    assert "overflow:auto;max-width:100%;white-space:pre;-webkit-overflow-scrolling:touch;" in result
+    assert "img,svg{max-width:100%;height:auto;}" in result
+    assert "@media (max-width:600px)" in result
+    assert "<body><main>" in result
+    assert "</main></body></html>" in result
+
+
+def test_html_fragment_does_not_include_document_mobile_shell() -> None:
+    result = ansi_to_html("# Title\n\nText", fragment=True)
+
+    assert "<!doctype html>" not in result
+    assert "<meta name=\"viewport\"" not in result
+    assert "<body><main>" not in result
+
+
 def test_botapp_has_no_html_markdown_renderer_methods() -> None:
     from bot import BotApp
 

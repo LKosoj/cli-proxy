@@ -68,4 +68,4 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03 (enriched in place; based on `sessions/*.py` at commit 5193643)
+- 2026-06-09 (HTML output renderer behavior reviewed)

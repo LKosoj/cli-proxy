@@ -67,4 +67,4 @@ Downstream (основные потребители `utils`):
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03
+- 2026-06-09 (responsive HTML output shell)
