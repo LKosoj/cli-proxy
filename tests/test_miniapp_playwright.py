@@ -1212,7 +1212,7 @@ def test_miniapp_conflict_diff_dialog_functionality(tmp_path) -> None:
                 "      diffPreExists: !!diffPre,"
                 "      diffPreHasMonospaceFont: diffPre && window.getComputedStyle(diffPre).fontFamily.includes('monospace'),"
                 "      forceSaveBtnExists: !!forceSaveBtn,"
-                "      forceSaveBtnHasDangerStyle: forceSaveBtn && forceSaveBtn.style.backgroundColor,"
+                "      forceSaveBtnHasDangerStyle: forceSaveBtn && forceSaveBtn.classList.contains('btn-danger'),"
                 "      cancelBtnExists: !!cancelBtn,"
                 "      reloadBtnExists: !!reloadBtn,"
                 "      dialogHiddenByDefault: dialog && dialog.style.display === 'none'"

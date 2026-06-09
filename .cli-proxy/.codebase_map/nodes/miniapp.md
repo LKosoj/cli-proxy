@@ -38,7 +38,7 @@ Generated: 2026-06-03T02:24:29Z
 - `miniapp/services/config_service.py` — валидация/диф/редактирование секретов config-черновика.
 - `miniapp/services/files_service.py` — compat-реэкспорт `app/services/session_files_service.py`.
 - `miniapp/services/logs_service.py` — чтение и парсинг логов сессий.
-- `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css` — SPA на vanilla JS; вкладки: config, files, logs, status, scheduler, tasks, settings, admin. Внешние зависимости с CDN: Telegram WebApp JS SDK (`telegram.org/js/telegram-web-app.js`) и Ace editor `1.43.6` (jsdelivr).
+- `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css` — SPA на vanilla JS; вкладки: config, files, logs, status, scheduler, tasks, settings, admin. Внешние зависимости с CDN: Telegram WebApp JS SDK (`telegram.org/js/telegram-web-app.js`), Ace editor `1.43.6` и шрифты IBM Plex Sans/Mono (fontsource, jsdelivr). Дизайн-система (редизайн 2026-06-10): токены в `:root` `styles.css` (включая legacy-алиасы `--card-bg`/`--button-primary`/`--bg-secondary`/`--border-color`/`--fg-muted`/`--warn`), тёмная тема через `:root[data-color-scheme]` + `prefers-color-scheme` (синхронизация с `tg.colorScheme` в `syncColorScheme()`, app.js), «терминальные» панели raw-вывода (`--terminal-bg`). Диалоги — только через `uiConfirm`/`uiAlert` (app.js, обёртки над `tg.showConfirm`/`tg.showAlert` с фолбэком на `window.*`: нативные `confirm/alert` заблокированы в Telegram WebView на iOS/Android). При изменении статики бампать query-версии `?v=` в `index.html`. Тест-харнесс `tests/test_miniapp_config_tab_js.py` исполняет app.js в node VM с минимальным DOM — top-level код app.js обязан переживать отсутствие `document.documentElement`.
 - `miniapp/routes_tasks.py` — панель Task Progress: GET `/api/tasks` (список активных задач из `bot_app.mode_tasks`), POST `/api/tasks/{session_uid}/cancel` (`TasksRouteServices`).
 - `start_miniapp.py` — standalone dev-лаунчер.
 
@@ -88,4 +88,4 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-04T01:55:00Z
+- 2026-06-10T00:00:00Z

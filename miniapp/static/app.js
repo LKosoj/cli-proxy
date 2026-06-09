@@ -4,6 +4,24 @@
     tg.ready();
     tg.expand();
   }
+
+  function syncColorScheme() {
+    const scheme = tg && tg.colorScheme === "dark" ? "dark" : "light";
+    const rootEl = document.documentElement;
+    if (rootEl && rootEl.dataset && rootEl.style) {
+      rootEl.dataset.colorScheme = scheme;
+      rootEl.style.colorScheme = scheme;
+    }
+    if (window.__aceEditor) {
+      window.__aceEditor.setTheme(scheme === "dark" ? "ace/theme/tomorrow_night" : "ace/theme/textmate");
+    }
+  }
+  if (tg) {
+    syncColorScheme();
+    if (typeof tg.onEvent === "function") {
+      tg.onEvent("themeChanged", syncColorScheme);
+    }
+  }
   const state = {
     me: null,
     schema: null,
@@ -165,6 +183,8 @@
   editor.setTheme("ace/theme/textmate");
   editor.session.setMode("ace/mode/yaml");
   editor.setShowPrintMargin(false);
+  window.__aceEditor = editor;
+  syncColorScheme();
 
   function initData() {
     return (tg && tg.initData) || "";
@@ -270,6 +290,39 @@
     return body;
   }
 
+  // window.alert/confirm заблокированы в Telegram WebView на iOS/Android —
+  // используем нативные попапы Bot API (>= 6.2) с фолбэком на браузерные.
+  function uiAlert(message) {
+    const text = String(message ?? "");
+    return new Promise((resolve) => {
+      if (tg && typeof tg.showAlert === "function") {
+        try {
+          tg.showAlert(text.slice(0, 256), () => resolve());
+          return;
+        } catch {
+          // Bot API < 6.2 — фолбэк ниже
+        }
+      }
+      window.alert(text);
+      resolve();
+    });
+  }
+
+  function uiConfirm(message) {
+    const text = String(message ?? "");
+    return new Promise((resolve) => {
+      if (tg && typeof tg.showConfirm === "function") {
+        try {
+          tg.showConfirm(text.slice(0, 256), (ok) => resolve(Boolean(ok)));
+          return;
+        } catch {
+          // Bot API < 6.2 — фолбэк ниже
+        }
+      }
+      resolve(window.confirm(text));
+    });
+  }
+
   function blockUnauthorizedScreen() {
     document.body.innerHTML = "";
     const wrapper = document.createElement("div");
@@ -277,7 +330,7 @@
     wrapper.style.display = "flex";
     wrapper.style.alignItems = "center";
     wrapper.style.justifyContent = "center";
-    wrapper.style.fontFamily = '"IBM Plex Sans", "Segoe UI", sans-serif';
+    wrapper.style.fontFamily = '"IBM Plex Sans", "Segoe UI", system-ui, sans-serif';
     wrapper.style.background = "var(--tg-theme-bg-color, #f3f4f6)";
     wrapper.style.color = "var(--tg-theme-text-color, #111827)";
     wrapper.textContent = t("miniapp.error.access_denied", "Доступ запрещен");
@@ -3293,7 +3346,7 @@
       setSchedulerStatus(t("miniapp.scheduler.no_job_selected", "Job не выбрана"), false);
       return;
     }
-    if (!window.confirm(`${t("miniapp.scheduler.delete_job_confirm", "Удалить job")} ${jobId}?`)) {
+    if (!(await uiConfirm(`${t("miniapp.scheduler.delete_job_confirm", "Удалить job")} ${jobId}?`))) {
       return;
     }
     try {
@@ -4740,12 +4793,12 @@
     });
   }
 
-  function confirmSecretChangesBeforeSave() {
+  async function confirmSecretChangesBeforeSave() {
     const paths = changedSecretPaths();
     if (!paths.length) {
       return true;
     }
-    return window.confirm(t("miniapp.cfg.secret_changed_confirm", "Изменены или очищены secret-поля: {paths}. Продолжить сохранение?").replace("{paths}", paths.join(", ")));
+    return uiConfirm(t("miniapp.cfg.secret_changed_confirm", "Изменены или очищены secret-поля: {paths}. Продолжить сохранение?").replace("{paths}", paths.join(", ")));
   }
 
   function optionalMap(obj) {
@@ -4822,7 +4875,7 @@
     el.onchange = () => {
       const parsed = parseJsonObjectText(el.value);
       if (!parsed.ok) {
-        window.alert(`${label} ${t("miniapp.cfg.err_must_be_json_object", "должен быть JSON-объектом")}`);
+        uiAlert(`${label} ${t("miniapp.cfg.err_must_be_json_object", "должен быть JSON-объектом")}`);
         el.value = jsonObjectToText(getter());
         return;
       }
@@ -5520,7 +5573,7 @@
         const toolName = name.trim();
         if (!toolName) return;
         if (cfg.tools[toolName]) {
-          window.alert(t("miniapp.cfg.err_tool_exists", "Инструмент с таким именем уже есть"));
+          uiAlert(t("miniapp.cfg.err_tool_exists", "Инструмент с таким именем уже есть"));
           return;
         }
         cfg.tools[toolName] = {
@@ -5534,11 +5587,11 @@
       };
     });
     root.querySelectorAll("button[data-tool-remove]").forEach((btn) => {
-      btn.onclick = (e) => {
+      btn.onclick = async (e) => {
         e.preventDefault();
         const toolName = btn.dataset.toolRemove || "";
         if (!toolName || !cfg.tools[toolName]) return;
-        if (!window.confirm(t("miniapp.cfg.confirm_delete_tool", "Удалить tool '{name}'?").replace("{name}", toolName))) return;
+        if (!(await uiConfirm(t("miniapp.cfg.confirm_delete_tool", "Удалить tool '{name}'?").replace("{name}", toolName)))) return;
         delete cfg.tools[toolName];
         renderConfigForm();
       };
@@ -5681,8 +5734,8 @@
     const ok = await validateConfig();
     if (!ok) return;
     await previewDiff();
-    if (!confirmSecretChangesBeforeSave()) return;
-    if (!window.confirm(t("miniapp.cfg.save_confirm", "Сохранить config.yaml и применить hot-reload?"))) return;
+    if (!(await confirmSecretChangesBeforeSave())) return;
+    if (!(await uiConfirm(t("miniapp.cfg.save_confirm", "Сохранить config.yaml и применить hot-reload?")))) return;
     const result = await api("/config/save", {
       method: "POST",
       body: JSON.stringify({ draft: state.draft, expected_revision: state.revision }),
@@ -5819,14 +5872,14 @@
         document.getElementById("editorSave").style.display = "none";
         document.getElementById("editorForceSave").style.display = "inline-block";
       } else {
-        window.alert(`${t("miniapp.files.save_error_prefix", "Ошибка сохранения:")} ${err.message || "unknown"}`);
+        uiAlert(`${t("miniapp.files.save_error_prefix", "Ошибка сохранения:")} ${err.message || "unknown"}`);
       }
     }
   }
 
   async function resetOpenFileBuffer() {
     if (!state.openFile) return;
-    const ok = window.confirm(t("miniapp.files.reset_confirm", "Сбросить несохраненные изменения и перезагрузить файл с диска?"));
+    const ok = await uiConfirm(t("miniapp.files.reset_confirm", "Сбросить несохраненные изменения и перезагрузить файл с диска?"));
     if (!ok) return;
     await openFile(state.openFile);
   }
@@ -5852,7 +5905,7 @@
         openDownloadUrl(downloadUrl);
       })
       .catch((err) => {
-        window.alert(`${t("miniapp.files.download_error_prefix", "Ошибка скачивания:")} ${err.message || "unknown"}`);
+        uiAlert(`${t("miniapp.files.download_error_prefix", "Ошибка скачивания:")} ${err.message || "unknown"}`);
       });
   }
 
@@ -5874,7 +5927,7 @@
     if (!sessionUid) {
       throw new Error(t("miniapp.status.no_session", "Сессия не выбрана"));
     }
-    if (!window.confirm(t("miniapp.files.delete_confirm", "Удалить {path}?").replace("{path}", state.selectedPath))) return;
+    if (!(await uiConfirm(t("miniapp.files.delete_confirm", "Удалить {path}?").replace("{path}", state.selectedPath)))) return;
     await api("/files/delete", { method: "POST", body: JSON.stringify({ session_uid: sessionUid, path: state.selectedPath }) });
     if (state.openFile === state.selectedPath) {
       state.openFile = null;

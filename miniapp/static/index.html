@@ -3,15 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Панель управления CLI-агентами cli-proxy: конфигурация, файлы, логи, статус сессий и планировщик." />
   <title>cli-proxy MiniApp</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314181f'/%3E%3Cpath d='M8 11l6 5-6 5' stroke='%234a9ede' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M17 21h7' stroke='%23d2dae4' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/src-min-noconflict/ace.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/css/ace.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260323-01" />
+  <link href="https://cdn.jsdelivr.net/fontsource/css/ibm-plex-sans@latest/400.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/fontsource/css/ibm-plex-sans@latest/500.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/fontsource/css/ibm-plex-sans@latest/600.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/fontsource/css/ibm-plex-sans@latest/700.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/fontsource/css/ibm-plex-mono@latest/400.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/fontsource/css/ibm-plex-mono@latest/600.css" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260610-01" />
 </head>
 <body>
   <header>
-    <h1>cli-proxy MiniApp</h1>
+    <h1>cli-proxy<span class="brand-cursor">▌</span></h1>
+    <span class="brand-sub">miniapp</span>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Навигация MiniApp">
@@ -32,7 +41,7 @@
         <button id="cfgRefresh" data-i18n-key="miniapp.btn.refresh">Обновить</button>
         <button id="cfgValidate" data-i18n-key="miniapp.btn.validate">Проверить</button>
         <button id="cfgDiff" data-i18n-key="miniapp.cfg.preview_diff">Preview diff</button>
-        <button id="cfgSave" disabled data-i18n-key="miniapp.btn.save">Сохранить</button>
+        <button id="cfgSave" class="btn-primary" disabled data-i18n-key="miniapp.btn.save">Сохранить</button>
       </div>
       <div id="cfgRestartBanner" class="banner hidden" data-i18n-key="miniapp.cfg.restart_banner">Требуется перезапуск для части изменений</div>
       <div id="cfgDirty"></div>
@@ -43,8 +52,8 @@
     </section>
 
     <section id="tab-files" class="tab">
-      <div id="filesExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
-      <div id="filesRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.banner.remote_fs">Remote FS</div>
+      <div id="filesExecutionTargetBanner" class="app-banner" style="display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
+      <div id="filesRemoteFsBanner" class="app-banner app-banner-remote" style="display: none;" data-i18n-key="miniapp.banner.remote_fs">Remote FS</div>
       <div class="toolbar">
         <label for="filesSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="filesSession"></select>
@@ -61,26 +70,26 @@
     </section>
 
     <section id="tab-editor" class="tab">
-      <div id="editorExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
-      <div id="editorRemoteFsBanner" style="font-weight: bold; padding: 8px; background-color: #005A9E; color: white; border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.banner.remote_fs">Remote FS</div>
+      <div id="editorExecutionTargetBanner" class="app-banner" style="display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
+      <div id="editorRemoteFsBanner" class="app-banner app-banner-remote" style="display: none;" data-i18n-key="miniapp.banner.remote_fs">Remote FS</div>
       <div class="toolbar">
         <span id="editorPath" data-i18n-key="miniapp.editor.no_file">Файл не выбран</span>
         <button id="editorClose" data-i18n-key="miniapp.btn.close">Закрыть</button>
         <button id="editorReload" data-i18n-key="miniapp.btn.reload">Обновить</button>
         <button id="editorDownload" data-i18n-key="miniapp.btn.download">Скачать</button>
-        <button id="editorSave" data-i18n-key="miniapp.btn.save">Сохранить</button>
-        <button id="editorForceSave" style="display: none; background-color: var(--danger);" data-i18n-key="miniapp.editor.force_save_btn">Force Save</button>
+        <button id="editorSave" class="btn-primary" data-i18n-key="miniapp.btn.save">Сохранить</button>
+        <button id="editorForceSave" class="btn-danger" style="display: none;" data-i18n-key="miniapp.editor.force_save_btn">Force Save</button>
         <button id="editorUndo" data-i18n-key="miniapp.btn.undo">Отменить</button>
       </div>
       <div id="editorMeta"></div>
-      <div id="editorConflictDialog" style="display: none; margin-bottom: 16px; border: 1px solid var(--danger); padding: 16px; border-radius: 4px; background-color: var(--bg);">
-        <h3 style="color: var(--danger); margin-top: 0;" data-i18n-key="miniapp.editor.conflict_title">Обнаружен конфликт версий!</h3>
+      <div id="editorConflictDialog" class="editor-conflict" style="display: none;">
+        <h3 data-i18n-key="miniapp.editor.conflict_title">Обнаружен конфликт версий!</h3>
         <p data-i18n-key="miniapp.editor.conflict_desc">Файл был изменён на сервере с момента последнего открытия.</p>
-        <pre id="editorConflictDiff" style="background: var(--card-bg); padding: 12px; overflow-x: auto; font-family: monospace; font-size: 12px; border: 1px solid var(--border);"></pre>
-        <div style="margin-top: 12px; display: flex; gap: 8px;">
+        <pre id="editorConflictDiff" class="editor-conflict-diff"></pre>
+        <div class="editor-conflict-actions">
           <button id="editorConflictCancel" data-i18n-key="miniapp.btn.cancel_save">Отменить сохранение</button>
           <button id="editorConflictReload" data-i18n-key="miniapp.btn.reload_file">Перезагрузить файл (потерять мои изменения)</button>
-          <button id="editorConflictForceSave" style="background-color: var(--danger); color: white;" data-i18n-key="miniapp.btn.force_save">Force Save (перезаписать)</button>
+          <button id="editorConflictForceSave" class="btn-danger" data-i18n-key="miniapp.btn.force_save">Force Save (перезаписать)</button>
         </div>
       </div>
       <div id="ace"></div>
@@ -121,7 +130,7 @@
     </section>
 
     <section id="tab-status" class="tab">
-      <div id="statusExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center; display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
+      <div id="statusExecutionTargetBanner" class="app-banner" style="display: none;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
       <div class="toolbar status-toolbar">
         <label for="statusSession" data-i18n-key="miniapp.label.session">Сессия</label>
         <select id="statusSession"></select>
@@ -310,7 +319,7 @@
                 <textarea id="schedulerPayload" rows="5" placeholder='{"key": "value"}'></textarea>
               </div>
               <div class="toolbar">
-                <button id="schedulerSave" data-i18n-key="miniapp.btn.create">Создать</button>
+                <button id="schedulerSave" class="btn-primary" data-i18n-key="miniapp.btn.create">Создать</button>
                 <button id="schedulerDelete" data-i18n-key="miniapp.btn.delete">Удалить</button>
                 <button id="schedulerRunNow" data-i18n-key="miniapp.scheduler.run_now">Run now</button>
                 <button id="schedulerPause" data-i18n-key="miniapp.scheduler.pause" disabled>Pause</button>
@@ -379,7 +388,7 @@
           <div class="status-card">
             <div class="status-card-header" data-i18n-key="miniapp.settings.session_params">Параметры сессии</div>
             <div class="status-card-body">
-              <div id="settingsExecutionTargetBanner" style="font-weight: bold; padding: 8px; background-color: var(--card-bg); border-radius: 4px; border: 1px solid var(--border); margin-bottom: 16px; text-align: center;" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
+              <div id="settingsExecutionTargetBanner" class="app-banner" data-i18n-key="miniapp.settings.exec_target_local">Execution Target: Local</div>
               <div class="field">
                 <label for="settingsActiveMode" data-i18n-key="miniapp.label.active_mode">Active Mode</label>
                 <select id="settingsActiveMode"></select>
@@ -402,7 +411,7 @@
               </div>
               <div id="settingsRemoteControlError" style="color: var(--danger); margin-top: 8px; font-size: 0.9em; display: none;"></div>
               <div class="toolbar" style="margin-top: 16px;">
-                <button id="settingsSave" data-i18n-key="miniapp.btn.save_changes">Сохранить изменения</button>
+                <button id="settingsSave" class="btn-primary" data-i18n-key="miniapp.btn.save_changes">Сохранить изменения</button>
               </div>
             </div>
           </div>
@@ -415,14 +424,14 @@
             <div class="status-card-body">
               <div id="sshHostsEmpty" class="status-empty" data-i18n-key="miniapp.ssh.no_hosts">Хосты не настроены.</div>
               <div id="sshHostsList" class="hidden">
-                <table class="admin-table" style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                <table class="admin-table">
                   <thead>
-                    <tr style="text-align: left; border-bottom: 1px solid var(--border);">
-                      <th style="padding: 8px;">Alias</th>
-                      <th style="padding: 8px;">Host</th>
-                      <th style="padding: 8px;">User</th>
-                      <th style="padding: 8px;">Auth</th>
-                      <th style="padding: 8px;" data-i18n-key="miniapp.label.actions">Действия</th>
+                    <tr>
+                      <th>Alias</th>
+                      <th>Host</th>
+                      <th>User</th>
+                      <th>Auth</th>
+                      <th data-i18n-key="miniapp.label.actions">Действия</th>
                     </tr>
                   </thead>
                   <tbody id="sshHostsTableBody"></tbody>
@@ -508,7 +517,7 @@
                   <input type="number" id="sshHostTimeout" value="1200" />
                 </div>
                 <div class="toolbar" style="margin-top: 16px;">
-                  <button id="sshHostSave" data-i18n-key="miniapp.btn.save">Сохранить</button>
+                  <button id="sshHostSave" class="btn-primary" data-i18n-key="miniapp.btn.save">Сохранить</button>
                   <button id="sshHostCancel" data-i18n-key="miniapp.btn.cancel">Отмена</button>
                 </div>
               </div>
@@ -528,7 +537,7 @@
               </select>
             </div>
             <div class="toolbar" style="margin-top: 12px;">
-              <button id="langSave" data-i18n-key="miniapp.settings.lang_save">Сохранить язык</button>
+              <button id="langSave" class="btn-primary" data-i18n-key="miniapp.settings.lang_save">Сохранить язык</button>
             </div>
           </div>
         </div>
@@ -538,6 +547,6 @@
     <div id="tab-admin" class="tab"></div>
   </main>
 
-  <script src="./app.js?v=20260329-03"></script>
+  <script src="./app.js?v=20260610-01"></script>
 </body>
 </html>

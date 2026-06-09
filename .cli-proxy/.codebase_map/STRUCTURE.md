@@ -29,7 +29,7 @@
 | Путь | Файлов по `rg --files` | Роль |
 |---|---:|---|
 | `app/` | 154 | Shared application services, config runtime, security, events, bootstrap |
-| `modes/` | 221 | Mode plugins, SDK, runtime executor/dispatcher, validation/tooling |
+| `modes/` | 220 | Mode plugins, SDK, runtime executor/dispatcher, validation/tooling |
 | `agent/` | 61 | CLI routing, manager core, tool plugins, Telegram plugin wiring |
 | `tests/` | 547 | Unit/integration/smoke coverage |
 | `desktop/` | 32 | PySide6 Desktop UI, facade, widgets, desktop services |
