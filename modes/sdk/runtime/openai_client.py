@@ -13,6 +13,7 @@ from .json_normalizer import loads_safe
 
 OPENAI_SDK_MAX_RETRIES = 4
 CHAT_COMPLETION_ATTEMPTS = 3
+OPENAI_EXTRA_HEADERS = {"X-Title": "cli-proxy"}
 
 logger = logging.getLogger(__name__)
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL | re.IGNORECASE)
@@ -85,6 +86,7 @@ def create_async_openai_client(
     kwargs: dict[str, Any] = {
         "api_key": api_key,
         "max_retries": OPENAI_SDK_MAX_RETRIES,
+        "default_headers": dict(OPENAI_EXTRA_HEADERS),
     }
     if base_url:
         kwargs["base_url"] = base_url

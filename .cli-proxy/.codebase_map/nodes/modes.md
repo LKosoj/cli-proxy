@@ -108,4 +108,4 @@ Mode Layer проекта: пакет `modes/` реализует подключ
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-06 (document lint local links and evidence gate updates)
+- 2026-06-12 (OpenAI client default X-Title header)

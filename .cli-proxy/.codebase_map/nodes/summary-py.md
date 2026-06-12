@@ -56,4 +56,4 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03
+- 2026-06-12 (OpenAI client default X-Title header)

@@ -29,6 +29,7 @@ def test_create_async_openai_client_sets_max_retries(monkeypatch):
     assert captured["api_key"] == "k"
     assert captured["base_url"] == "https://api.openai.com"
     assert captured["max_retries"] == 4
+    assert captured["default_headers"] == {"X-Title": "cli-proxy"}
 
 
 def test_summary_client_factory_uses_shared_openai_builder(monkeypatch):

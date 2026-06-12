@@ -107,4 +107,4 @@ Instruction node for the project test suite under `tests/**`: pytest-based unit,
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-09 (targeted HTML renderer responsive coverage)
+- 2026-06-12 (OpenAI client default X-Title header coverage)
