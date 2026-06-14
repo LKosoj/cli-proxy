@@ -115,6 +115,36 @@ async def test_session_interrupt_service_clears_session_runtime_and_reports_comp
 
 
 @pytest.mark.asyncio
+async def test_session_interrupt_service_persists_even_with_empty_queue(tmp_path) -> None:
+    persisted: list[tuple[int, str]] = []
+
+    async def _cancel_session(_session_uid: str, _timeout_s: float) -> int:
+        return 0
+
+    def _persist(chat_id: int, session_id: str) -> None:
+        persisted.append((int(chat_id), str(session_id)))
+
+    session = _build_session(tmp_path)
+    session.queue = deque()  # очередь пуста — нечего очищать
+
+    service = SessionInterruptService(
+        cancel_session_tasks=_cancel_session,
+        persist_session=_persist,
+    )
+
+    report = await service.interrupt_session_runtime(
+        session,
+        owner_chat_id=77,
+        reason="test_empty_queue",
+    )
+
+    # Несмотря на пустую очередь, состояние должно быть персистнуто, чтобы
+    # свежезафиксированный resume_token пережил рестарт процесса.
+    assert report.cleared_queue is False
+    assert persisted == [(77, "s1")]
+
+
+@pytest.mark.asyncio
 async def test_session_interrupt_service_reports_partial_timeout_when_runtime_still_alive(tmp_path) -> None:
     async def _cancel_session(_session_uid: str, _timeout_s: float) -> int:
         return 1

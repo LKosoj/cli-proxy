@@ -18,6 +18,7 @@ Generated: 2026-06-03T02:24:29Z
 - Перед любым утверждением о runtime-поведении проверять конкретный метод в `session.py` и ссылаться на `session.py:<строка>`; публичная поверхность зеркалируется в `.cli-proxy/.codebase_map/api/session-py.md`.
 - Не менять порядок сворачивания легаси-полей в `__post_init__` (`session.py:415`) и прокси `_LEGACY_STATE_FIELDS` (`session.py:503-548`): persisted `state.json` и тесты опираются на то, что `active_cli`/`resume_tokens`/`agent_memory`/`git_busy` и т.п. читаются и как вложенные, и как плоские атрибуты.
 - `resume_token` — это представление пер-CLI словаря, ключуемое активным CLI (`session.py:559`). Никогда не хранить единый глобальный токен — писать через `self.resume_token` / `self.cli.resume_tokens`. `set_active_cli` (`session.py:574`) переключает только на CLI из `config.tools` и обновляет `tool` + активный токен.
+- Внутри `_run_headless` resume_token фиксируется СРАЗУ на событии стрима `session_started` (для Claude — `system/init`), а не откладывается до финального `completed`. Это сохраняет id resumable-сессии при `/interrupt` и при ошибке прогона. Гейт — наличие `session_started`: если CLI не создал сессию (нет init, как в `test_headless_claude_does_not_persist_failed_fresh_session`), токен остаётся `None`. Не возвращать отложенную запись токена на `completed`.
 - CLI-специфичные ветки в `_run_headless` (`session.py:699`) — codex/gemini/qwen/claude/grok — НЕ взаимозаменяемы (свои JSON-stream адаптеры, мониторы и восстановление resume-токена). Проверять каждую ветку отдельно, не выводя поведение по аналогии (см. policy в `INDEX.md`).
 - Claude в headless и интерактиве обязан исполняться через обёртку `su - claude-bot -c` со снятием nested-маркеров `CLAUDECODE`/`CLAUDE_CODE_*` (`session.py:782-811`, `session.py:1271-1274`); без этого вложенный `claude` падает с конфликтом «уже внутри Claude Code».
 - Инвентарь `SessionManager` — chat-scoped: мутации проходить через `_index_session`/`_unindex_session` (`session.py:2138-2151`) и завершать `_persist_sessions` (`session.py:2528`), иначе ломается uid-lookup и персист.
@@ -65,4 +66,4 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03
+- 2026-06-14

@@ -100,4 +100,5 @@ Service Layer (слой 2 архитектуры): транспорт-агнос
 - project-maintainers
 
 ## Last reviewed
+- 2026-06-14 (session_interrupt_service: безусловный persist при /interrupt)
 - 2026-06-03 (enriched: Purpose/Scope/Instructions/Source of truth)

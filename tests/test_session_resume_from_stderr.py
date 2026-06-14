@@ -88,6 +88,41 @@ class _NeverEndingProc:
         return self.returncode
 
 
+class _InitThenHangStream:
+    """Отдаёт начальные chunks (например, system/init), затем блокируется —
+    имитируя Claude, который уже сообщил session_id и продолжает работать."""
+
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    async def read(self, _n: int) -> bytes:
+        await asyncio.sleep(0)
+        if self._chunks:
+            return self._chunks.pop(0)
+        await asyncio.Future()
+        raise AssertionError("unreachable")
+
+
+class _InitThenHangProc:
+    def __init__(self, stdout_chunks):
+        self.pid = 717171
+        self.returncode = None
+        self.stdin = None
+        self.stdout = _InitThenHangStream(stdout_chunks)
+        self.stderr = _NeverEndingStream()
+
+    def terminate(self) -> None:
+        self.returncode = -15
+
+    def kill(self) -> None:
+        self.returncode = -9
+
+    async def wait(self) -> int:
+        while self.returncode is None:
+            await asyncio.sleep(0)
+        return int(self.returncode)
+
+
 def test_headless_uses_devnull_unless_prompt_is_sent_via_stdin(monkeypatch, tmp_path):
     async def _run() -> None:
         tool = ToolConfig(
@@ -1403,6 +1438,132 @@ def test_headless_claude_does_not_persist_failed_fresh_session(monkeypatch, tmp_
         out = await session._run_headless("hello")
         assert "No conversation found" in out
         assert session.resume_token is None
+
+    asyncio.run(_run())
+
+
+def test_headless_claude_resume_token_survives_interrupt(monkeypatch, tmp_path):
+    """Прерывание fresh-сессии Claude после system/init (через отмену задачи)
+    не должно терять resume_token — сессия уже создана и resumable."""
+
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="claude",
+            mode="headless",
+            cmd=["claude", "--continue", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["claude", "--continue", "-p", "{prompt}", "--resume", "{resume}"],
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"claude": tool},
+            defaults=DefaultsConfig(workdir=str(tmp_path)),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+
+        proc = _InitThenHangProc(
+            stdout_chunks=[
+                b'{"type":"system","subtype":"init","session_id":"77777777-7777-4777-8777-777777777777"}\n',
+            ],
+        )
+        killpg_calls = []
+
+        async def _fake_create_subprocess_exec(*_args, **_kwargs):
+            return proc
+
+        def _fake_killpg(pid: int, sig: int) -> None:
+            killpg_calls.append((pid, sig))
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+        monkeypatch.setattr(os, "killpg", _fake_killpg)
+        monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID("77777777-7777-4777-8777-777777777777"))
+
+        task = asyncio.create_task(session._run_headless("hello"))
+        # Ждём, пока system/init будет обработан и resume_token зафиксируется
+        # ещё ДО завершения прогона.
+        for _ in range(1000):
+            await asyncio.sleep(0)
+            if session.resume_token:
+                break
+        assert session.resume_token == "77777777-7777-4777-8777-777777777777"
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # Главное: после прерывания токен НЕ потерян.
+        assert session.resume_token == "77777777-7777-4777-8777-777777777777"
+        assert session.current_proc is None
+        assert len(killpg_calls) >= 1
+
+    asyncio.run(_run())
+
+
+def test_headless_claude_persists_session_after_error_following_init(monkeypatch, tmp_path):
+    """Если Claude эмитировал system/init, но прогон завершился ошибкой
+    (returncode!=0), resume_token всё равно сохраняется: сессия уже создана."""
+
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="claude",
+            mode="headless",
+            cmd=["claude", "--continue", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["claude", "--continue", "-p", "{prompt}", "--resume", "{resume}"],
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"claude": tool},
+            defaults=DefaultsConfig(workdir=str(tmp_path)),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+
+        class _FakeInitThenErrorProc(_FakeProc):
+            async def wait(self) -> int:
+                await asyncio.sleep(0)
+                self.returncode = 1
+                return 1
+
+            async def communicate(self):
+                out, err = await super().communicate()
+                self.returncode = 1
+                return out, err
+
+        async def _fake_create_subprocess_exec(*_args, **_kwargs):
+            return _FakeInitThenErrorProc(
+                stdout_chunks=[
+                    b'{"type":"system","subtype":"init","session_id":"88888888-8888-4888-8888-888888888888"}\n',
+                    (
+                        b'{"type":"result","subtype":"error_during_execution","is_error":true,'
+                        b'"result":"boom","session_id":"88888888-8888-4888-8888-888888888888"}\n'
+                    ),
+                ],
+                stderr_chunks=[],
+            )
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+        monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID("88888888-8888-4888-8888-888888888888"))
+
+        await session._run_headless("hello")
+        assert session.resume_token == "88888888-8888-4888-8888-888888888888"
 
     asyncio.run(_run())
 

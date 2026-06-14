@@ -867,11 +867,10 @@ class Session:
         semantic_completion = asyncio.Event() if stream_adapter else None
         semantic_output_text: Optional[str] = None
         semantic_structured_candidate: Optional[str] = None
-        semantic_session_id: Optional[str] = None
         streamed_assistant_tick_seen = False
 
         def _record_stream_event(event: Any) -> None:
-            nonlocal semantic_output_text, semantic_session_id, streamed_assistant_tick_seen
+            nonlocal semantic_output_text, streamed_assistant_tick_seen
             nonlocal semantic_structured_candidate
             try:
                 stream_recorder.record_event(event)
@@ -879,10 +878,14 @@ class Session:
                 _log.exception("CLI JSON stream event archive failed")
             if event.kind == "session_started":
                 session_id = str(event.session_id or "").strip() or None
-                if session_id and is_claude and not force_fresh and not resume:
-                    semantic_session_id = session_id
-                    return
                 if session_id and not force_fresh:
+                    # Фиксируем resume_token сразу, как только CLI сообщил о старте
+                    # сессии (для Claude это событие system/init). С этого момента
+                    # Claude уже пишет транскрипт на диск, поэтому сессия остаётся
+                    # resumable даже если прогон затем прервут через /interrupt или
+                    # он завершится ошибкой. Ранее fresh-сессия Claude откладывала
+                    # запись до финального события completed, из-за чего при любом
+                    # раннем выходе (уже resumable) session id терялся.
                     self.resume_token = session_id
                 return
             if event.kind == "assistant_text":
@@ -937,8 +940,6 @@ class Session:
                 if event.text:
                     self._update_activity(event.text, tick_kind=event.kind)
             if event.kind in {"completed", "failed"} and semantic_completion is not None:
-                if event.kind == "completed" and semantic_session_id and not force_fresh and not self.resume_token:
-                    self.resume_token = semantic_session_id
                 final_output = stream_adapter.final_output_text() if stream_adapter else ""
                 if final_output and not is_time_only_text(final_output):
                     semantic_output_text = final_output

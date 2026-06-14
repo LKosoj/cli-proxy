@@ -167,7 +167,10 @@ class SessionInterruptService:
         self._clear_runtime_markers(session)
 
         effective_chat_id = owner_chat_id if owner_chat_id is not None else getattr(session, "chat_id", None)
-        if cleared_queue and self._persist_session is not None and effective_chat_id is not None:
+        # Персистим состояние при любом прерывании (не только когда очистили
+        # очередь): прогон мог только что зафиксировать resume_token, и его нужно
+        # сбросить на диск, чтобы прерванная сессия пережила рестарт процесса.
+        if self._persist_session is not None and effective_chat_id is not None:
             try:
                 self._persist_session(int(effective_chat_id), str(getattr(session, "id", "") or ""))
             except Exception:
