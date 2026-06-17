@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import inspect
+import os
 import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -10,9 +11,12 @@ from pydantic import ValidationError
 import yaml
 
 from app.services.config_service import ConfigService, FileConfigProvider
+from app.services.report_history_service import ReportHistoryService
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.ui_state_models import ChatUiState
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig, app_config_to_dict
+from modes.sdk.planning import ProjectPlan, save_plan
+from sessions.scoped_key import session_scoped_key
 from tg.command_registry import build_command_registry
 from tg.callbacks import CallbackHandler
 from tg.handlers import BotHandlers
@@ -97,6 +101,7 @@ def _make_full_app() -> types.SimpleNamespace:
         cmd_newpath=object(),
         cmd_close=object(),
         cmd_status=object(),
+        cmd_reports=object(),
         cmd_limits=object(),
         cmd_queue=object(),
         cmd_clearqueue=object(),
@@ -134,6 +139,17 @@ def test_command_registry_registers_limits_command() -> None:
     assert limits_entry["menu"] is True
 
 
+def test_command_registry_registers_reports_command() -> None:
+    app = _make_full_app()
+
+    registry = build_command_registry(app)
+    names = {str(item.get("name") or "") for item in registry}
+
+    assert "reports" in names
+    reports_entry = next(item for item in registry if str(item.get("name") or "") == "reports")
+    assert reports_entry["menu"] is True
+
+
 def test_command_registry_registers_git_subcommands() -> None:
     app = _make_full_app()
 
@@ -146,6 +162,164 @@ def test_command_registry_registers_git_subcommands() -> None:
     for cmd in ("git_branch", "git_checkout", "git_stash_pop", "git_show"):
         entry = next(item for item in registry if str(item.get("name") or "") == cmd)
         assert entry["menu"] is False, f"Command '{cmd}' should not appear in menu"
+
+
+@pytest.mark.asyncio
+async def test_cmd_reports_lists_current_session_reports(tmp_path: Path) -> None:
+    service = ReportHistoryService()
+    session = types.SimpleNamespace(id="s1", workdir=str(tmp_path))
+    service.save_markdown_report(session, "# First", now=1000)
+    sent: list[str] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        sent.append(str(text))
+
+    route = types.SimpleNamespace(
+        owner_chat_id=101,
+        reply_kwargs=lambda: {"chat_id": 101},
+    )
+    bot_app = types.SimpleNamespace(
+        report_history_service=service,
+        ensure_telegram_inbound_session=AsyncMock(return_value=(route, session)),
+        _send_message=_send_message,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=[])
+
+    await handlers.cmd_reports(update, context)
+
+    assert len(sent) == 1
+    assert "report_19700101_001640.md" in sent[0]
+    assert "/reports latest" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_cmd_reports_latest_sends_document(tmp_path: Path) -> None:
+    service = ReportHistoryService()
+    session = types.SimpleNamespace(id="s1", workdir=str(tmp_path))
+    service.save_markdown_report(session, "# First", now=1000)
+    documents: list[tuple[str, bytes]] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        raise AssertionError(f"unexpected message: {text}")
+
+    async def _send_document(_ctx, *, document, filename: str, **_kw):
+        documents.append((filename, document.read()))
+        return True
+
+    route = types.SimpleNamespace(
+        owner_chat_id=101,
+        reply_kwargs=lambda: {"chat_id": 101},
+    )
+    bot_app = types.SimpleNamespace(
+        report_history_service=service,
+        ensure_telegram_inbound_session=AsyncMock(return_value=(route, session)),
+        _send_message=_send_message,
+        _send_document=_send_document,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["latest"])
+
+    await handlers.cmd_reports(update, context)
+
+    assert documents == [("report_19700101_001640.md", b"# First")]
+
+
+@pytest.mark.asyncio
+async def test_cmd_reports_latest_sends_pdf_document(tmp_path: Path) -> None:
+    service = ReportHistoryService()
+    session = types.SimpleNamespace(id="s1", workdir=str(tmp_path))
+    reports_dir = Path(service.ensure_reports_dir(session))
+    pdf_path = reports_dir / "latest.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    os.utime(pdf_path, (2000, 2000))
+    documents: list[tuple[str, bytes]] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        raise AssertionError(f"unexpected message: {text}")
+
+    async def _send_document(_ctx, *, document, filename: str, **_kw):
+        documents.append((filename, document.read()))
+        return True
+
+    route = types.SimpleNamespace(
+        owner_chat_id=101,
+        reply_kwargs=lambda: {"chat_id": 101},
+    )
+    bot_app = types.SimpleNamespace(
+        report_history_service=service,
+        ensure_telegram_inbound_session=AsyncMock(return_value=(route, session)),
+        _send_message=_send_message,
+        _send_document=_send_document,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["latest"])
+
+    await handlers.cmd_reports(update, context)
+
+    assert documents == [("latest.pdf", b"%PDF-1.4\n")]
+
+
+@pytest.mark.asyncio
+async def test_cmd_reports_generate_saves_plan_report_and_sends_document(tmp_path: Path) -> None:
+    service = ReportHistoryService()
+    session = types.SimpleNamespace(id="s1", workdir=str(tmp_path), chat_id=101)
+    save_plan(
+        session.workdir,
+        ProjectPlan(project_goal="Generate reports", tasks=[]),
+        scoped_key=session_scoped_key(session),
+    )
+    messages: list[str] = []
+    documents: list[tuple[str, bytes]] = []
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        messages.append(str(text))
+
+    async def _send_document(_ctx, *, document, filename: str, **_kw):
+        documents.append((filename, document.read()))
+        return True
+
+    route = types.SimpleNamespace(
+        owner_chat_id=101,
+        reply_kwargs=lambda: {"chat_id": 101},
+    )
+    bot_app = types.SimpleNamespace(
+        report_history_service=service,
+        ensure_telegram_inbound_session=AsyncMock(return_value=(route, session)),
+        _send_message=_send_message,
+        _send_document=_send_document,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["generate"])
+
+    await handlers.cmd_reports(update, context)
+
+    reports = service.list_reports(session)
+    assert len(messages) == 1
+    assert len(reports) == 1
+    assert reports[0].report_id.startswith("manager_plan_")
+    assert documents[0][0] == reports[0].report_id
+    assert b"# Project Report: Generate reports" in documents[0][1]
 
 
 @pytest.mark.asyncio

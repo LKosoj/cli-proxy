@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
-import time
-from typing import TYPE_CHECKING, Optional, List, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFrame,
     QListWidget, QListWidgetItem, QTextBrowser, QMessageBox,
-    QSplitter
+    QSplitter, QFileDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocument
@@ -20,7 +19,6 @@ except ImportError:
 from i18n import t
 from sessions.session_state_access import get_active_mode
 from utils.html_renderer import ansi_to_html
-from utils.paths import cli_proxy_artifact_path
 
 if TYPE_CHECKING:
     from desktop.services.application_facade import ApplicationFacade, AppNotification
@@ -38,7 +36,7 @@ class ReportViewerWidget(QWidget):
         self.facade = facade
         self.logger = logging.getLogger(__name__)
         self._active_session_uid: Optional[str] = None
-        self._reports_dir: Optional[str] = None
+        self._selected_report_content: Optional[str] = None
 
         self._theme_colors: Dict[str, str] = {}
         self._setup_ui()
@@ -128,11 +126,8 @@ class ReportViewerWidget(QWidget):
         """Обновление активной сессии."""
         self._active_session_uid = session_uid
         if session_uid:
-            # Определяем директорию отчетов (в workdir сессии)
             session = self._resolve_session(session_uid)
             if session:
-                self._reports_dir = cli_proxy_artifact_path(session.workdir, ".manager_reports")
-                os.makedirs(self._reports_dir, exist_ok=True)
                 self.refresh_history()
                 self.setEnabled(True)
             else:
@@ -141,25 +136,23 @@ class ReportViewerWidget(QWidget):
             self.setEnabled(False)
             self.history_list.clear()
             self.viewer.clear()
+            self._selected_report_content = None
 
     def refresh_history(self):
-        """Загрузка списка файлов из директории отчетов."""
-        if not self._reports_dir or not os.path.exists(self._reports_dir):
+        """Загрузка списка отчётов через facade."""
+        if not self._active_session_uid:
             return
 
         self.history_list.clear()
+        self._selected_report_content = None
         try:
-            files = []
-            for entry in os.scandir(self._reports_dir):
-                if entry.is_file() and entry.name.lower().endswith(('.md', '.pdf')):
-                    files.append(entry)
-
-            # Сортировка по времени изменения (новые сверху)
-            files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
-
-            for entry in files:
-                item = QListWidgetItem(entry.name)
-                item.setData(Qt.ItemDataRole.UserRole, entry.path)
+            for report in self.facade.list_session_reports(self._active_session_uid):
+                name = str(report.get("name") or report.get("filename") or report.get("id") or "")
+                report_id = str(report.get("report_id") or report.get("id") or name)
+                if not report_id:
+                    continue
+                item = QListWidgetItem(name or report_id)
+                item.setData(Qt.ItemDataRole.UserRole, report_id)
                 self.history_list.addItem(item)
         except Exception:
             self.logger.exception("failed to refresh report history")
@@ -170,26 +163,29 @@ class ReportViewerWidget(QWidget):
         if not items:
             return
 
-        path = items[0].data(Qt.ItemDataRole.UserRole)
-        if not os.path.exists(path):
+        report_id = str(items[0].data(Qt.ItemDataRole.UserRole) or "")
+        if not self._active_session_uid or not report_id:
             self.viewer.setPlainText(t("desktop.report.msg.file_not_found", self.facade.ui_language))
             return
 
-        if path.lower().endswith(".md"):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                # Мы можем использовать markdown-it-py если он есть,
-                # но для простоты воспользуемся тем, что QTextBrowser понимает базовый Markdown/HTML
-                # utils.ansi_to_html превращает markdown в HTML через markdown-it-py
-                self.viewer.setHtml(ansi_to_html(content, theme_colors=self._theme_colors or None))
-            except Exception as e:
-                self.viewer.setPlainText(
-                    t("desktop.report.msg.read_error", self.facade.ui_language, error=e)
-                )
-        elif path.lower().endswith(".pdf"):
-            self.viewer.setHtml(f"<b>PDF File:</b> {os.path.basename(path)}<br/><br/>"
+        report = self.facade.get_session_report(self._active_session_uid, report_id)
+        if not report:
+            self.viewer.setPlainText(t("desktop.report.msg.file_not_found", self.facade.ui_language))
+            return
+
+        content = report.get("content")
+        fmt = str(report.get("format") or "").lower()
+        name = str(report.get("name") or report_id)
+        if isinstance(content, str) and fmt in ("md", "html"):
+            self._selected_report_content = content
+            self.viewer.setHtml(ansi_to_html(content, theme_colors=self._theme_colors or None))
+        elif fmt == "pdf":
+            self._selected_report_content = None
+            self.viewer.setHtml(f"<b>PDF File:</b> {os.path.basename(name)}<br/><br/>"
                                 f"Please open this file in an external viewer.")
+        else:
+            self._selected_report_content = None
+            self.viewer.setPlainText(t("desktop.report.msg.file_not_found", self.facade.ui_language))
 
     def _generate_report(self, fmt: str):
         """Генерация отчета из текущего плана Manager Mode."""
@@ -197,29 +193,19 @@ class ReportViewerWidget(QWidget):
             return
 
         lang = self.facade.ui_language
-        plan = self.facade.get_manager_plan(self._active_session_uid)
-        if not plan:
-            QMessageBox.warning(self, t("common.error", lang), t("desktop.report.msg.no_plan", lang))
+        if fmt == "pdf":
+            self._export_selected_report_to_pdf()
             return
 
-        md_content = self._build_plan_markdown(plan)
-
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        filename = f"report_{timestamp}.md"
-        path = os.path.join(self._reports_dir, filename)
-
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(md_content)
-
-            if fmt == "pdf" and QPrinter:
-                pdf_path = path.replace(".md", ".pdf")
-                self._export_to_pdf(md_content, pdf_path)
-                msg = t("desktop.report.msg.saved_pdf", lang, filename=os.path.basename(pdf_path))
-            else:
-                msg = t("desktop.report.msg.saved_md", lang, filename=os.path.basename(path))
+            report = self.facade.save_manager_plan_report(self._active_session_uid)
+            if not report:
+                QMessageBox.warning(self, t("common.error", lang), t("desktop.report.msg.no_plan", lang))
+                return
 
             self.refresh_history()
+            filename = str(report.get("name") or report.get("filename") or report.get("id") or "")
+            msg = t("desktop.report.msg.saved_md", lang, filename=filename)
             QMessageBox.information(self, t("desktop.report.msg.success_title", lang), msg)
         except Exception as e:
             self.logger.exception("failed to generate report")
@@ -228,67 +214,37 @@ class ReportViewerWidget(QWidget):
                 t("desktop.report.msg.gen_error", lang, error=e)
             )
 
-    def _build_plan_markdown(self, plan: Any) -> str:
-        """Сборка Markdown-текста на основе ProjectPlan."""
-        lines = []
-        lines.append(f"# Project Report: {plan.project_goal}")
-        lines.append(f"**Created:** {plan.created_at}")
-        lines.append(f"**Updated:** {plan.updated_at}")
-        lines.append(f"**Status:** {plan.status.upper()}")
-        lines.append("")
-
-        if plan.analysis:
-            lines.append("## Analysis")
-            lines.append(f"**Current State:** {plan.analysis.current_state}")
-            lines.append("")
-            lines.append("### Remaining Work")
-            for item in plan.analysis.remaining_work:
-                lines.append(f"- {item}")
-            lines.append("")
-
-        lines.append("## Task Tree")
-
-        # Строим дерево как в ManagerPanel
-        tasks_dict = {task.id: task for task in plan.tasks}
-        dependents: Dict[str, List[str]] = {task.id: [] for task in plan.tasks}
-        roots = []
-        for task in plan.tasks:
-            if not task.depends_on:
-                roots.append(task.id)
-            else:
-                for dep_id in task.depends_on:
-                    if dep_id in dependents:
-                        dependents[dep_id].append(task.id)
-                    else:
-                        if task.id not in roots:
-                            roots.append(task.id)
-
-        added_ids = set()
-
-        def add_task_md(task_id: str, level: int):
-            if task_id in added_ids:
-                return
-            task = tasks_dict.get(task_id)
-            if not task:
-                return
-
-            indent = "  " * level
-            lines.append(f"{indent}- **[{task.status.upper()}]** {task.title} `({task.id})`")
-            if task.description:
-                lines.append(f"{indent}  _{task.description}_")
-
-            added_ids.add(task_id)
-            for child_id in dependents.get(task_id, []):
-                add_task_md(child_id, level + 1)
-
-        for rid in roots:
-            add_task_md(rid, 0)
-
-        lines.append("")
-        lines.append("---")
-        lines.append("Generated by Gemini CLI Desktop")
-
-        return "\n".join(lines)
+    def _export_selected_report_to_pdf(self) -> None:
+        """Экспорт текущего выбранного markdown-отчёта в локальный PDF."""
+        lang = self.facade.ui_language
+        if not QPrinter:
+            return
+        content = self._selected_report_content
+        if not content:
+            QMessageBox.warning(self, t("common.error", lang), t("desktop.report.msg.file_not_found", lang))
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            t("desktop.report.btn.gen_pdf", lang),
+            "report.pdf",
+            "PDF Files (*.pdf)",
+        )
+        if not path:
+            return
+        try:
+            self._export_to_pdf(content, path)
+            QMessageBox.information(
+                self,
+                t("desktop.report.msg.success_title", lang),
+                t("desktop.report.msg.saved_pdf", lang, filename=os.path.basename(path)),
+            )
+        except Exception as e:
+            self.logger.exception("failed to export report pdf")
+            QMessageBox.critical(
+                self,
+                t("common.error", lang),
+                t("desktop.report.msg.gen_error", lang, error=e),
+            )
 
     def _export_to_pdf(self, md_content: str, path: str):
         """Рендеринг Markdown в PDF через QTextDocument и QPrinter."""
@@ -308,7 +264,7 @@ class ReportViewerWidget(QWidget):
         """Обработка уведомлений от фасада."""
         # Можно автоматически обновлять историю при завершении задач экспорта,
         # если экспорт инициирован извне.
-        if note.event in ("task:completed", "ui:mode_changed"):
+        if note.event in ("task:completed", "ui:mode_changed", "report:created"):
             self.refresh_history()
 
     def _show_system_info(self):

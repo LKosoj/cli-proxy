@@ -72,6 +72,7 @@ from app.services.remote_control_service import (
 )
 from app.services.sandbox_service import AgentSandboxService
 from app.services.path_normalization import normalize_optional_state_path
+from app.services.report_history_service import ReportHistoryService
 from app.services.task_service import TaskService
 from agent import (
     approve_pending_command,
@@ -170,6 +171,7 @@ class ApplicationFacade:
         ui_state_service: Optional[Any] = None,  # Avoid circular import if any
         logger: Optional[logging.Logger] = None,
         advanced_orchestrator_service: Optional[AdvancedOrchestratorService] = None,
+        report_history_service: Optional[ReportHistoryService] = None,
     ):
         self.config_service = config_service
         self.session_service = session_service
@@ -189,6 +191,7 @@ class ApplicationFacade:
                 self.git_service._remote_control_service = self.remote_control_service
         self.logger = logger or logging.getLogger(__name__)
         self.advanced_orchestrator_service = advanced_orchestrator_service or AdvancedOrchestratorService()
+        self.report_history_service = report_history_service or ReportHistoryService()
         self.cli_limits_service = CliLimitsService()
         self.orchestrator_chat_completion = chat_completion
         self._subscribers: List[Callable[[AppNotification], Any]] = []
@@ -2626,6 +2629,52 @@ class ApplicationFacade:
             self.logger.exception("get_manager_plan failed session_uid=%s", session_uid)
             return None
 
+    def list_session_reports(self, session_uid: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Список сохранённых отчётов сессии для Desktop UI."""
+        session = self.session_service.get_session_by_uid(session_uid)
+        if not session:
+            return []
+        try:
+            return [
+                report.to_dict()
+                for report in self.report_history_service.list_reports(session, limit=limit)
+            ]
+        except Exception:
+            self.logger.exception("list_session_reports failed session_uid=%s", session_uid)
+            return []
+
+    def get_session_report(self, session_uid: str, report_id: str) -> Optional[dict[str, Any]]:
+        """Загрузить содержимое отчёта сессии через общий сервис истории."""
+        session = self.session_service.get_session_by_uid(session_uid)
+        if not session:
+            return None
+        try:
+            return self.report_history_service.get_report(session, report_id).to_dict()
+        except Exception:
+            self.logger.exception(
+                "get_session_report failed session_uid=%s report_id=%s",
+                session_uid,
+                report_id,
+            )
+            return None
+
+    def save_manager_plan_report(self, session_uid: str) -> Optional[dict[str, Any]]:
+        """Сохранить markdown-отчёт текущего Manager plan через общий сервис истории."""
+        session = self.session_service.get_session_by_uid(session_uid)
+        if not session:
+            return None
+        plan = self.get_manager_plan(session_uid)
+        if not plan:
+            return None
+        try:
+            summary = self.report_history_service.save_manager_plan_report(session, plan)
+            payload = summary.to_dict()
+            self.notify("report:created", session_uid=session_uid, report=payload)
+            return payload
+        except Exception:
+            self.logger.exception("save_manager_plan_report failed session_uid=%s", session_uid)
+            return None
+
     async def export_data(self, session_uid: str) -> str:
         """
         Инициирует экспорт данных через CLI-обработчик.
@@ -3177,6 +3226,7 @@ class ApplicationFacade:
                 self._config_ref = facade.config
                 self.ui_state = ChatUiState()
                 self.metrics = self._Metrics()
+                self.report_history_service = facade.report_history_service
                 from desktop.services.pending_input_ui import DesktopPendingInputUiAdapter
                 self.pending_input_ui = DesktopPendingInputUiAdapter(facade, self)
                 self.input_dispatch_service = InputDispatchService(self, pending_input_ui=self.pending_input_ui)

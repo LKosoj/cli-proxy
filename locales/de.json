@@ -952,6 +952,18 @@
     "artifact": {
       "send_failed": "Datei konnte nicht gesendet werden.",
       "send_error": "Fehler beim Senden der Datei."
+    },
+    "report": {
+      "empty": "Für die aktuelle Sitzung gibt es noch keine Berichte. Verwenden Sie /reports generate, um einen Bericht aus dem Manager-Plan zu erstellen.",
+      "menu_title": "Berichte für Sitzung {session_id}:",
+      "usage": "Befehle: /reports latest — neuesten Bericht senden; /reports generate — Bericht aus dem Plan erstellen; /reports <filename.md> — bestimmten Bericht senden.",
+      "generated": "Bericht erstellt: {name}",
+      "unavailable": "Berichtsdienst ist nicht verfügbar.",
+      "no_plan": "Für diese Sitzung wurde kein aktiver Manager-Plan gefunden.",
+      "generate_failed": "Bericht konnte nicht erstellt werden.",
+      "invalid_id": "Ungültige Berichts-ID.",
+      "not_found": "Bericht nicht gefunden.",
+      "send_failed": "Bericht konnte nicht gesendet werden."
     }
   },
   "cmd": {
@@ -1007,6 +1019,9 @@
     },
     "status": {
       "desc": "Status der aktuellen Kontextsitzung anzeigen."
+    },
+    "reports": {
+      "desc": "Berichte der aktuellen Sitzung anzeigen oder senden."
     },
     "limits": {
       "desc": "Limits/Nutzung für das aktuelle Chat-CLI anzeigen."

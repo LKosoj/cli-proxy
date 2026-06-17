@@ -31,6 +31,7 @@ from app.services.config_service import ConfigService, FileConfigProvider, Runti
 from app.services.mode_launch_adapter import ModeLaunchAdapterService, ModeLaunchPolicy
 from app.services.notification_queue_service import NotificationQueueService
 from app.services.project_registry import ProjectRegistry
+from app.services.report_history_service import ReportHistoryService
 from app.services.remote_control_service import RemoteControlService
 from app.services.run_operations_service import RunOperationsService
 from app.services.scheduled_job_repository import ScheduledJobRecord, ScheduledJobRepository
@@ -89,6 +90,7 @@ class ApplicationContainer:
     session_thread_manager: SessionThreadManager
     advanced_orchestrator_service: AdvancedOrchestratorService
     artifact_intent_service: ArtifactIntentService
+    report_history_service: ReportHistoryService
 
 
 ToolRegistryFactory = Callable[[AppConfig], ToolRegistry]
@@ -283,6 +285,14 @@ def _build_artifact_intent_service() -> ArtifactIntentService:
         raise
 
 
+def _build_report_history_service() -> ReportHistoryService:
+    try:
+        return ReportHistoryService()
+    except Exception:
+        logger.exception("report history service init failed during bootstrap")
+        raise
+
+
 def build_application(
     config: AppConfig,
     *,
@@ -319,6 +329,7 @@ def build_application(
     session_thread_repository = _build_session_thread_repository(config)
     advanced_orchestrator_service = _build_advanced_orchestrator_service()
     artifact_intent_service = _build_artifact_intent_service()
+    report_history_service = _build_report_history_service()
     scheduler_service = _build_scheduler_service(
         config,
         scheduled_job_repository=scheduled_job_repository,
@@ -427,4 +438,5 @@ def build_application(
         session_thread_manager=session_thread_manager,
         advanced_orchestrator_service=advanced_orchestrator_service,
         artifact_intent_service=artifact_intent_service,
+        report_history_service=report_history_service,
     )

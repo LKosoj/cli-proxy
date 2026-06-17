@@ -35,7 +35,8 @@ from app.services.input_dispatch_models import PendingInput as PendingInput  # n
 from app.services.session_files_service import FilesServiceError
 from app.services.path_normalization import normalize_optional_state_path
 from app.services.state_repository import get_state_repository
-from session import Session, session_runtime_uid
+from session import Session, session_runtime_uid, session_scoped_key
+from app.services.report_history_service import InvalidReportIdError, ReportNotFoundError
 from sessions.session_state_access import get_active_mode, is_orchestrator_enabled, is_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
 from tg.command_registry import build_command_registry
@@ -1057,6 +1058,188 @@ class BotHandlers:
             text=self._active_session_status_text(s, chat_id=chat_id),
             **self._reply_kwargs(update, s),
         )
+
+    async def cmd_reports(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        route, session = await self.bot_app.ensure_telegram_inbound_session(
+            update,
+            context,
+            auto_create=False,
+            scope="reports",
+            allow_outside_topic=True,
+        )
+        if route is None or session is None:
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
+        except Exception:
+            lang = "ru"
+
+        service = getattr(self.bot_app, "report_history_service", None)
+        if service is None:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.unavailable", lang),
+                **route.reply_kwargs(),
+            )
+            return
+
+        args = [str(arg or "").strip() for arg in getattr(context, "args", []) if str(arg or "").strip()]
+        action = str(args[0] if args else "").strip()
+        if action.lower() == "generate":
+            await self._generate_and_send_report(context, route, session, lang)
+            return
+        if action.lower() == "latest":
+            await self._send_report_document(context, route, session, None, lang)
+            return
+        if action:
+            await self._send_report_document(context, route, session, action, lang)
+            return
+
+        reports = service.list_reports(session, limit=10)
+        if not reports:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.empty", lang),
+                **route.reply_kwargs(),
+            )
+            return
+
+        lines = [
+            t(
+                "msg.report.menu_title",
+                lang,
+                session_id=str(getattr(session, "id", "") or "-"),
+            ),
+            "",
+        ]
+        for idx, report in enumerate(reports, start=1):
+            lines.append(
+                f"{idx}. `{report.report_id}` — {report.date}, {report.size} bytes"
+            )
+        lines.extend(
+            [
+                "",
+                t("msg.report.usage", lang),
+            ]
+        )
+        await self.bot_app._send_message(
+            context,
+            text="\n".join(lines),
+            **route.reply_kwargs(),
+        )
+
+    async def _generate_and_send_report(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        route,
+        session: Session,
+        lang: str,
+    ) -> None:
+        service = self.bot_app.report_history_service
+        try:
+            from modes.sdk.planning import load_plan
+
+            plan = load_plan(session.workdir, scoped_key=session_scoped_key(session))
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "report plan load failed session_uid=%s",
+                session_runtime_uid(session),
+            )
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.generate_failed", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        if not plan:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.no_plan", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        try:
+            summary = service.save_manager_plan_report(session, plan)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "report generate failed session_uid=%s",
+                session_runtime_uid(session),
+            )
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.generate_failed", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        await self.bot_app._send_message(
+            context,
+            text=t("msg.report.generated", lang, name=summary.report_id),
+            **route.reply_kwargs(),
+        )
+        await self._send_report_document(context, route, session, summary.report_id, lang)
+
+    async def _send_report_document(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        route,
+        session: Session,
+        report_id: Optional[str],
+        lang: str,
+    ) -> None:
+        service = self.bot_app.report_history_service
+        try:
+            target_id = str(report_id or "").strip()
+            if not target_id:
+                reports = service.list_reports(session, limit=20)
+                if not reports:
+                    await self.bot_app._send_message(
+                        context,
+                        text=t("msg.report.empty", lang),
+                        **route.reply_kwargs(),
+                    )
+                    return
+                target_id = reports[0].report_id
+            document = service.get_report(session, target_id)
+        except InvalidReportIdError:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.invalid_id", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        except ReportNotFoundError:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.not_found", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "report send failed session_uid=%s report_id=%s",
+                session_runtime_uid(session),
+                report_id,
+            )
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.send_failed", lang),
+                **route.reply_kwargs(),
+            )
+            return
+
+        with open(document.summary.path, "rb") as f:
+            ok = await self.bot_app._send_document(
+                context,
+                document=f,
+                filename=document.summary.name,
+                **route.reply_kwargs(),
+            )
+        if not ok:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.send_failed", lang),
+                **route.reply_kwargs(),
+            )
 
     async def cmd_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         route = await self.bot_app.ensure_telegram_inbound_authorized(

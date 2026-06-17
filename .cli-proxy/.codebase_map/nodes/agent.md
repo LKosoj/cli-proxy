@@ -92,4 +92,5 @@ Agent Layer (слой 4 архитектуры): инструменты аген
 - project-maintainers
 
 ## Last reviewed
+- 2026-06-17 (Manager final report saved to shared report history)
 - 2026-06-12 (OpenAI client default X-Title header)

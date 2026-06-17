@@ -128,6 +128,13 @@ def build_command_registry(bot_app) -> List[Dict[str, object]]:
             "menu": False,
         },
         {
+            "name": "reports",
+            "desc_key": "cmd.reports.desc",
+            "desc": "Показать или отправить отчёты текущей сессии.",
+            "handler": bot_app.cmd_reports,
+            "menu": True,
+        },
+        {
             "name": "limits",
             "desc_key": "cmd.limits.desc",
             "desc": "Показать лимиты/usage по CLI текущего чата.",

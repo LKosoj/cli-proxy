@@ -199,6 +199,7 @@ class BotApp:
         self.runtime_service = AppRuntimeService(self)
         self.advanced_orchestrator_service = self.container.advanced_orchestrator_service
         self.artifact_intent_service = self.container.artifact_intent_service
+        self.report_history_service = self.container.report_history_service
         self.config_service = self.container.config_service
         self.orchestrator_chat_completion = chat_completion
         self.mode_callback_router = ModeCallbackRouterService(
@@ -2456,6 +2457,9 @@ class BotApp:
 
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_status(update, context)
+
+    async def cmd_reports(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_reports(update, context)
 
     async def cmd_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_limits(update, context)

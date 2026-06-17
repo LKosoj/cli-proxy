@@ -20,7 +20,7 @@ from modes.sdk.runtime.tooling.change_filter import (
 )
 from config import AppConfig
 from i18n.language_names import LANGUAGE_NAMES
-from session import Session, session_scoped_key
+from session import Session, session_runtime_uid, session_scoped_key
 from utils.lang import resolve_user_lang
 from utils.paths import cli_proxy_artifact_path
 from utils.text import strip_ansi
@@ -1109,6 +1109,28 @@ class ManagerOrchestrator:
         Send final Manager report through the common output path so large texts
         are automatically delivered as an attachment.
         """
+        service = getattr(bot, "report_history_service", None)
+        saver = getattr(service, "save_markdown_report", None)
+        if callable(saver) and str(report or "").strip():
+            try:
+                summary = saver(
+                    session,
+                    str(report),
+                    prefix="manager_final",
+                    title="Manager final report",
+                )
+                notifier = getattr(bot, "notify", None)
+                if callable(notifier):
+                    notifier(
+                        "report:created",
+                        session_uid=session_runtime_uid(session),
+                        report=summary.to_dict(),
+                    )
+            except Exception:
+                _log.exception(
+                    "manager final report history save failed session_uid=%s",
+                    session_runtime_uid(session),
+                )
         # `send_output` is mandatory in bot interface.
         # TODO(M3): route large output via a transport-agnostic MessagingService.send_large_output when available.
         await bot.send_output(session, dest, report, context, send_header=False)

@@ -78,6 +78,7 @@ _DESKTOP_BOT_APP_PUBLIC_SURFACE = {
     "mode_run_operations",
     "notify",
     "pending_input_ui",
+    "report_history_service",
     "run_prompt",
     "security",
     "send_output",

@@ -82,4 +82,4 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-04T00:00:00Z
+- 2026-06-17 (ReportViewerWidget uses ApplicationFacade report history contract)

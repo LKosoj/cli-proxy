@@ -60,4 +60,5 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
+- 2026-06-17 (BotApp report_history_service wiring and /reports delegation)
 - 2026-06-03

@@ -18,7 +18,7 @@ Mode Layer проекта: пакет `modes/` реализует подключ
 
 ## Scope
 - Source glob: `modes/**`
-- Current files: 220 under `modes/**` as of last review.
+- Current files: 221 under `modes/**` as of last review.
 - Подпакеты режимов: `modes/admin/`, `modes/agent/`, `modes/analyst/`, `modes/codebase_mapper/`, `modes/manager/`, `modes/sdd/`, `modes/webmaster/`.
 - Инфраструктура: `modes/sdk/` (в т.ч. `modes/sdk/services/`, `modes/sdk/runtime/`, `modes/sdk/runtime/mcp/`, `modes/sdk/planning/`).
 - Корневые файлы: `modes/registry.py`, `modes/DEVELOPMENT.md`, `modes/codebase_mapper_constants.py`, `modes/__init__.py`.
@@ -108,4 +108,5 @@ Mode Layer проекта: пакет `modes/` реализует подключ
 - project-maintainers
 
 ## Last reviewed
+- 2026-06-17 (count sync after full codebase map count check)
 - 2026-06-12 (OpenAI client default X-Title header)

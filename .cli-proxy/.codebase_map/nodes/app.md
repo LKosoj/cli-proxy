@@ -14,7 +14,7 @@ Service Layer (слой 2 архитектуры): транспорт-агнос
 
 ## Scope
 - Source glob: `app/**`
-- Current files: 154 under `app/**` as of last review.
+- Current files: 155 under `app/**` as of last review.
 - Корневые модули: `app/bootstrap.py`, `app/mode_dependencies.py`.
 - Подпакеты: `app/services/` (+ `app/services/lint_evolution/`, `app/services/session_transfer/`), `app/config_runtime/`, `app/security/`, `app/events/`.
 
@@ -100,5 +100,6 @@ Service Layer (слой 2 архитектуры): транспорт-агнос
 - project-maintainers
 
 ## Last reviewed
+- 2026-06-17 (ReportHistoryService and bootstrap wiring)
 - 2026-06-14 (session_interrupt_service: безусловный persist при /interrupt)
 - 2026-06-03 (enriched: Purpose/Scope/Instructions/Source of truth)

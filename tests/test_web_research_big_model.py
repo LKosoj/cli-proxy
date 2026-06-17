@@ -8,6 +8,7 @@ def test_web_research_uses_openai_big_model_from_config(monkeypatch):
     monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
 
     cfg = load_config(os.path.join(os.path.dirname(__file__), "..", "config_example.yaml"))
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
     cfg.defaults.openai_big_model = "gpt-4.1"
 
     tool = WebResearchTool()

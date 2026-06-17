@@ -7,7 +7,7 @@ Instruction node for the project test suite under `tests/**`: pytest-based unit,
 
 ## Scope
 - Source glob: `tests/**`
-- Current files: 547 under `tests/**` as of last review.
+- Current files: 549 under `tests/**` as of last review.
 - Subdirectories: only `tests/smoke/` (entrypoint smoke tests); the rest is a flat `tests/test_*.py` namespace.
 - Test framework config lives outside this glob: `pytest.ini` (root), `requirements.txt`.
 - Two `conftest.py` layers: root `conftest.py` (Qt/offscreen env, RLIMIT_NOFILE bump, `qapp_args` session fixture) and `tests/conftest.py` (adds repo root to `sys.path`, tracks/shuts down `BotApp` async services, resets `ToolRegistry` singleton between tests).
@@ -107,4 +107,4 @@ Instruction node for the project test suite under `tests/**`: pytest-based unit,
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-12 (OpenAI client default X-Title header coverage)
+- 2026-06-17 (shared report history, Telegram /reports and Desktop facade/widget coverage)

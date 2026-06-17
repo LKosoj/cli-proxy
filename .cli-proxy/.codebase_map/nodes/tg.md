@@ -87,4 +87,5 @@ Generated: 2026-06-03T02:24:29Z
 - project-maintainers
 
 ## Last reviewed
+- 2026-06-17 (Telegram /reports command over shared report history)
 - 2026-06-03T02:39:47Z

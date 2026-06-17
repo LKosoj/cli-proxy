@@ -2,14 +2,16 @@ import asyncio
 import types
 
 import agent.manager as manager_mod
+from app.services.report_history_service import ReportHistoryService
 from modes.sdk.runtime.contracts import DevTask, ProjectPlan
 from agent.manager import ManagerOrchestrator
 
 
 class _FakeBot:
-    def __init__(self) -> None:
+    def __init__(self, report_history_service=None) -> None:
         self.messages = []
         self.outputs = []
+        self.report_history_service = report_history_service
 
     async def _send_message(self, _context, *, chat_id: int, text: str, **_kwargs) -> None:
         self.messages.append((chat_id, text, _kwargs))
@@ -66,7 +68,8 @@ def test_manager_final_report_uses_unified_send_output(monkeypatch, tmp_path) ->
         monkeypatch.setattr(manager_mod, "save_plan", lambda _w, _p, **_kwargs: None)
         monkeypatch.setattr(manager_mod, "archive_plan", lambda _w, _s, **_kwargs: None)
 
-        bot = _FakeBot()
+        report_history = ReportHistoryService()
+        bot = _FakeBot(report_history_service=report_history)
         session = types.SimpleNamespace(workdir=str(tmp_path))
         dest = {"chat_id": 123, "kind": "telegram"}
 
@@ -81,6 +84,10 @@ def test_manager_final_report_uses_unified_send_output(monkeypatch, tmp_path) ->
         assert kwargs.get("send_header") is False
         assert result == output
         assert result == plan.completion_report
+        reports = report_history.list_reports(session)
+        assert len(reports) == 1
+        assert reports[0].report_id.startswith("manager_final_")
+        assert report_history.get_report(session, reports[0].report_id).content == output
 
     asyncio.run(_run())
 

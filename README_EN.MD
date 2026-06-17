@@ -18,6 +18,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok) wit
 - Merge/rebase conflict handling with diff/abort/continue/call-agent buttons.
 - Admin command `/selfupdate`: runs `git pull --ff-only` in the bot directory and starts service restart on success.
 - Manage files in the working directory via `/files` (send, save, rename, delete).
+- Current-session reports are available in Telegram via `/reports`; Manager final reports are automatically saved into the shared report history.
 - Task templates (hidden `/preset` command).
 - **Agent mode** (via `/sessions` -> `Agent`) - AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.), plans and executes tasks step by step.
 - **Manager mode** (via `/sessions` -> `Manager`) - multi-agent orchestration: automatic task decomposition into subtasks, development via CLI, review via Agent, acceptance-criteria-based arbitration, and a final report.
@@ -194,6 +195,7 @@ Desktop architecture entry points:
 - `desktop/main_window.py` - main window shell and UI event routing. Visual rendering of V2 reaction events (retry, reroute, needs_input) and validation statuses (not_run).
 - `desktop/services/application_facade.py` - desktop orchestration and mode/runtime integration, subscribing to ReactionEngine events.
 - `desktop/widgets/*` - UI components without duplicating domain logic.
+- The `Reports` tab uses the same shared report history as Telegram `/reports`; Desktop does not create a second report copy and only displays or locally exports the selected Markdown to PDF.
 
 For layering and placement rules, see `ARCHITECTURE.md`.
 
@@ -217,6 +219,7 @@ For layering and placement rules, see `ARCHITECTURE.md`.
    - Short results up to 3900 characters arrive as regular Telegram messages.
    - Long results arrive as HTML files; `force_html=True` forces an HTML file even for short results.
    - Summary or preview for long HTML output arrives as a separate message when summary delivery is enabled.
+   - Use `/reports` for session reports; `/reports latest` sends the latest report, `/reports generate` creates one from the current Manager plan, and `/reports <filename.md>` sends a specific report file.
    - Use `/files` to work with files (download/save/rename/delete).
 
 5. **Sessions and continuation**
@@ -549,6 +552,7 @@ GitHub PAT for HTTPS git:
 - `/git` - Git actions for the current context session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/files` - file management in the working directory (send/save/rename/delete)
 - `/miniapp` - open the administration MiniApp
+- `/reports` - show, create, or send reports for the current session (`latest`, `generate`, `<filename.md>`)
 - `/tools` - list tools
 ### Available but hidden from menu
 - `/dirs` - browse directories (menu)
