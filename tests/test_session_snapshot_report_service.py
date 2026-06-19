@@ -62,7 +62,7 @@ def test_session_snapshot_report_collects_active_mode_runs_reports_and_chat(tmp_
         now_fn=lambda: 2000,
     )
 
-    summary = service.save_html_report(session, now=2000)
+    summary = service.save_html_report(session, now=2000, lang="ru")
     content = reports.get_report(session, summary.report_id).content or ""
 
     assert summary.report_id == "session_snapshot_19700101_003320.html"
@@ -90,7 +90,35 @@ def test_session_snapshot_report_handles_disabled_run_artifacts(tmp_path: Path) 
         now_fn=lambda: 2000,
     )
 
-    summary = service.save_html_report(_session(tmp_path), now=2000)
+    summary = service.save_html_report(_session(tmp_path), now=2000, lang="ru")
     content = reports.get_report(_session(tmp_path), summary.report_id).content or ""
 
     assert "Артефакты запусков отключены в runtime config." in content
+
+
+def test_session_snapshot_report_uses_requested_language(tmp_path: Path) -> None:
+    reports = ReportHistoryService()
+    service = SessionSnapshotReportService(
+        report_history_service=reports,
+        run_artifacts_service=types.SimpleNamespace(is_enabled=lambda: False),
+        extract_session_fn=lambda *_args: None,
+        now_fn=lambda: 2000,
+    )
+    session = _session(tmp_path)
+
+    samples = [
+        ("ru", '<html lang="ru">', "Отчёт по сессии", "Коротко"),
+        ("en", '<html lang="en">', "Session report", "At a glance"),
+        ("de", '<html lang="de">', "Sitzungsbericht", "Kurzüberblick"),
+        ("zh", '<html lang="zh">', "会话报告", "概览"),
+    ]
+    for lang, html_lang, title, section in samples:
+        content = service.build_html_report(session, now=2000, lang=lang).html
+
+        assert html_lang in content
+        assert title in content
+        assert section in content
+
+    en_content = service.build_html_report(session, now=2000, lang="unknown").html
+    assert '<html lang="en">' in en_content
+    assert "Session report" in en_content

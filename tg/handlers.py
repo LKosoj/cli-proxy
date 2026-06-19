@@ -1204,7 +1204,7 @@ class BotHandlers:
             )
             return
         try:
-            summary = await asyncio.to_thread(service.save_html_report, session)
+            summary = await asyncio.to_thread(service.save_html_report, session, lang=lang)
         except Exception:
             logging.getLogger(__name__).exception(
                 "session snapshot report failed session_uid=%s",

@@ -330,7 +330,8 @@ async def test_cmd_reports_snapshot_saves_html_and_sends_document(tmp_path: Path
     documents: list[tuple[str, bytes]] = []
 
     class _SnapshotService:
-        def save_html_report(self, target_session):
+        def save_html_report(self, target_session, *, lang="en"):
+            assert lang == "ru"
             return service.save_html_report(
                 target_session,
                 "<!doctype html><h1>Snapshot</h1>",
@@ -398,8 +399,9 @@ async def test_session_snapshot_callback_sends_html_document(tmp_path: Path) -> 
             return session if str(token) == session_uid else None
 
     class _SnapshotService:
-        def save_html_report(self, target_session):
+        def save_html_report(self, target_session, *, lang="en"):
             assert target_session is session
+            assert lang == "ru"
             return summary
 
     async def _send_document(_ctx, *, document, filename: str, **kwargs):

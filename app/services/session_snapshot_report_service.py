@@ -26,6 +26,433 @@ class SessionSnapshotReport:
     html: str
 
 
+@dataclass(frozen=True)
+class _ReportCopy:
+    lang: str
+    text: dict[str, str]
+    statuses: dict[str, str]
+    roles: dict[str, str]
+
+    def t(self, key: str, **kwargs: Any) -> str:
+        value = self.text.get(key, _REPORT_COPIES["en"].text.get(key, key))
+        return value.format(**kwargs)
+
+
+_REPORT_COPIES: dict[str, _ReportCopy] = {
+    "en": _ReportCopy(
+        lang="en",
+        text={
+            "title": "Session report: {session_uid}",
+            "lede": (
+                "A human-readable summary: what this session is, what it is doing, "
+                "which artifacts and messages matter now. Technical details remain "
+                "below for verification."
+            ),
+            "overview_title": "At a glance",
+            "runs_title": "Artifacts and progress",
+            "chat_title": "Recent messages",
+            "reports_title": "Saved reports",
+            "session_card_title": "Technical session card",
+            "run_card_title": "What matters",
+            "run_technical_title": "Technical run data",
+            "field": "Field",
+            "value": "Value",
+            "session_uid": "Session UID",
+            "session_id": "Session ID",
+            "name": "Name",
+            "workdir": "Workdir",
+            "active_cli": "Active CLI",
+            "active_mode": "Active mode",
+            "status": "Status",
+            "queue": "Queue",
+            "generated": "Generated",
+            "direct_cli": "direct CLI",
+            "no_cli": "no CLI selected",
+            "busy_running": "session is running a task",
+            "busy_idle": "session is idle",
+            "queue_empty": "Queue is empty",
+            "queue_one": "1 item in queue",
+            "queue_count": "{n} items in queue",
+            "overview_session": "Session: {name}",
+            "overview_now": "Now: {busy}. {queue}.",
+            "overview_context": "Context: {mode} via {cli}.",
+            "overview_workdir": "Workdir: {workdir}.",
+            "overview_footer": (
+                "Below are the latest artifacts for the active mode, saved reports, "
+                "and the available chat excerpt."
+            ),
+            "artifacts_service_missing": "Artifact service is unavailable.",
+            "artifacts_disabled": "Run artifacts are disabled in runtime config.",
+            "artifact_store_missing": "Artifact storage is unavailable.",
+            "artifacts_read_failed": "Failed to read run artifacts.",
+            "no_artifacts": "No run artifacts{scope} yet.",
+            "active_mode_scope": " for active mode {mode_id}",
+            "run_mode": "Mode",
+            "run_id": "Run ID",
+            "phase": "Phase",
+            "started": "Started",
+            "updated": "Updated",
+            "finished": "Finished",
+            "checkpoints": "Checkpoints",
+            "files": "Files",
+            "run_summary": "Run {run_id} in mode {mode_id}: {status}, phase {phase}.",
+            "plan_missing": "The run plan is not saved.",
+            "plan_text": "Plan: {text}",
+            "plan_steps": "The plan has {count} step(s): {names}{suffix}.",
+            "plan_more": " and {count} more",
+            "plan_family": "Plan task type: {family}.",
+            "plan_no_summary": "The plan is saved, but it has no short description.",
+            "last_checkpoint": "Last checkpoint",
+            "last_event": "Last event",
+            "latest_missing": "{label}: no data.",
+            "latest_value": "{label}: {text}.",
+            "artifact_files_missing": "No artifact files were saved.",
+            "artifact_files": "Artifact files: {files}{suffix}.",
+            "artifact_files_more": " and {count} more",
+            "reports_read_failed": "Failed to read saved reports.",
+            "reports_empty": "No saved reports yet.",
+            "report": "Report",
+            "date": "Date",
+            "format": "Format",
+            "size": "Size",
+            "chat_no_cli": "Active CLI is not set.",
+            "chat_no_token": "Active CLI resume token is unavailable.",
+            "chat_no_workdir": "Session workdir is not set.",
+            "chat_missing": "Native CLI transcript is unavailable.",
+            "chat_note": "Showing the latest messages out of {count}. Source: {source}. Roles: {roles}.",
+            "status_missing": "status is not specified",
+            "message": "Message",
+        },
+        statuses={
+            "completed": "completed",
+            "done": "completed",
+            "failed": "failed",
+            "error": "failed",
+            "cancelled": "cancelled",
+            "canceled": "cancelled",
+            "running": "running",
+            "in_progress": "running",
+            "active": "running",
+        },
+        roles={
+            "user": "User",
+            "assistant": "Assistant",
+            "system": "System",
+            "tool": "Tool",
+        },
+    ),
+    "ru": _ReportCopy(
+        lang="ru",
+        text={
+            "title": "Отчёт по сессии: {session_uid}",
+            "lede": (
+                "Короткая версия для чтения человеком: что за сессия, чем она "
+                "занята, какие артефакты и сообщения важны сейчас. Технические "
+                "детали оставлены ниже для проверки."
+            ),
+            "overview_title": "Коротко",
+            "runs_title": "Артефакты и прогресс",
+            "chat_title": "Последние сообщения",
+            "reports_title": "Сохранённые отчёты",
+            "session_card_title": "Техническая карточка сессии",
+            "run_card_title": "Что важно",
+            "run_technical_title": "Технические данные запуска",
+            "field": "Поле",
+            "value": "Значение",
+            "session_uid": "UID сессии",
+            "session_id": "ID сессии",
+            "name": "Название",
+            "workdir": "Рабочая папка",
+            "active_cli": "Активный CLI",
+            "active_mode": "Активный режим",
+            "status": "Состояние",
+            "queue": "Очередь",
+            "generated": "Сформирован",
+            "direct_cli": "прямой CLI",
+            "no_cli": "не выбранный CLI",
+            "busy_running": "сессия сейчас выполняет задачу",
+            "busy_idle": "сессия свободна",
+            "queue_empty": "Очередь пуста",
+            "queue_one": "В очереди 1 задача",
+            "queue_few": "В очереди {n} задачи",
+            "queue_count": "В очереди {n} задач",
+            "overview_session": "Сессия: {name}",
+            "overview_now": "Сейчас: {busy}. {queue}.",
+            "overview_context": "Контекст: {mode} через {cli}.",
+            "overview_workdir": "Рабочая папка: {workdir}.",
+            "overview_footer": (
+                "Ниже собраны последние артефакты активного режима, сохранённые "
+                "отчёты и доступный фрагмент чата."
+            ),
+            "artifacts_service_missing": "Сервис артефактов недоступен.",
+            "artifacts_disabled": "Артефакты запусков отключены в runtime config.",
+            "artifact_store_missing": "Хранилище артефактов недоступно.",
+            "artifacts_read_failed": "Не удалось прочитать артефакты запусков.",
+            "no_artifacts": "Артефактов запусков{scope} пока нет.",
+            "active_mode_scope": " для активного режима {mode_id}",
+            "run_mode": "Режим",
+            "run_id": "Run ID",
+            "phase": "Фаза",
+            "started": "Начат",
+            "updated": "Обновлён",
+            "finished": "Завершён",
+            "checkpoints": "Чекпоинты",
+            "files": "Файлы",
+            "run_summary": "Запуск {run_id} в режиме {mode_id}: {status}, фаза {phase}.",
+            "plan_missing": "План запуска не сохранён.",
+            "plan_text": "План: {text}",
+            "plan_steps": "План содержит {count} шаг(ов): {names}{suffix}.",
+            "plan_more": " и ещё {count}",
+            "plan_family": "Тип задачи в плане: {family}.",
+            "plan_no_summary": "План сохранён, но в нём нет короткого описания.",
+            "last_checkpoint": "Последний чекпоинт",
+            "last_event": "Последнее событие",
+            "latest_missing": "{label}: нет данных.",
+            "latest_value": "{label}: {text}.",
+            "artifact_files_missing": "Файлы артефактов не сохранены.",
+            "artifact_files": "Файлы артефактов: {files}{suffix}.",
+            "artifact_files_more": " и ещё {count}",
+            "reports_read_failed": "Не удалось прочитать сохранённые отчёты.",
+            "reports_empty": "Сохранённых отчётов пока нет.",
+            "report": "Отчёт",
+            "date": "Дата",
+            "format": "Формат",
+            "size": "Размер",
+            "chat_no_cli": "Активный CLI не выбран.",
+            "chat_no_token": "Resume token активного CLI недоступен.",
+            "chat_no_workdir": "Рабочая папка сессии не задана.",
+            "chat_missing": "Transcript нативного CLI недоступен.",
+            "chat_note": "Показаны последние сообщения из {count}. Источник: {source}. Роли: {roles}.",
+            "status_missing": "статус не указан",
+            "message": "Сообщение",
+        },
+        statuses={
+            "completed": "завершён",
+            "done": "завершён",
+            "failed": "завершился с ошибкой",
+            "error": "завершился с ошибкой",
+            "cancelled": "остановлен",
+            "canceled": "остановлен",
+            "running": "в работе",
+            "in_progress": "в работе",
+            "active": "в работе",
+        },
+        roles={
+            "user": "Пользователь",
+            "assistant": "Ассистент",
+            "system": "Система",
+            "tool": "Инструмент",
+        },
+    ),
+}
+
+
+_REPORT_COPIES["de"] = _ReportCopy(
+    lang="de",
+    text={
+        **_REPORT_COPIES["en"].text,
+        "title": "Sitzungsbericht: {session_uid}",
+        "lede": (
+            "Lesbare Kurzfassung: welche Sitzung das ist, woran sie arbeitet "
+            "und welche Artefakte und Nachrichten jetzt wichtig sind. "
+            "Technische Details stehen unten zur Prüfung."
+        ),
+        "overview_title": "Kurzüberblick",
+        "runs_title": "Artefakte und Fortschritt",
+        "chat_title": "Letzte Nachrichten",
+        "reports_title": "Gespeicherte Berichte",
+        "session_card_title": "Technische Sitzungskarte",
+        "run_card_title": "Wichtig",
+        "run_technical_title": "Technische Laufdaten",
+        "field": "Feld",
+        "value": "Wert",
+        "session_uid": "Sitzungs-UID",
+        "session_id": "Sitzungs-ID",
+        "name": "Name",
+        "workdir": "Arbeitsverzeichnis",
+        "active_cli": "Aktive CLI",
+        "active_mode": "Aktiver Modus",
+        "status": "Status",
+        "queue": "Warteschlange",
+        "generated": "Erstellt",
+        "direct_cli": "direkte CLI",
+        "no_cli": "keine CLI ausgewählt",
+        "busy_running": "die Sitzung führt gerade eine Aufgabe aus",
+        "busy_idle": "die Sitzung ist frei",
+        "queue_empty": "Warteschlange ist leer",
+        "queue_one": "1 Aufgabe in der Warteschlange",
+        "queue_count": "{n} Aufgaben in der Warteschlange",
+        "overview_session": "Sitzung: {name}",
+        "overview_now": "Jetzt: {busy}. {queue}.",
+        "overview_context": "Kontext: {mode} über {cli}.",
+        "overview_workdir": "Arbeitsverzeichnis: {workdir}.",
+        "overview_footer": (
+            "Unten stehen die neuesten Artefakte des aktiven Modus, gespeicherte "
+            "Berichte und der verfügbare Chat-Auszug."
+        ),
+        "artifacts_service_missing": "Artefakt-Service ist nicht verfügbar.",
+        "artifacts_disabled": "Run-Artefakte sind in der Runtime-Konfiguration deaktiviert.",
+        "artifact_store_missing": "Artefakt-Speicher ist nicht verfügbar.",
+        "artifacts_read_failed": "Run-Artefakte konnten nicht gelesen werden.",
+        "no_artifacts": "Noch keine Run-Artefakte{scope}.",
+        "active_mode_scope": " für den aktiven Modus {mode_id}",
+        "run_mode": "Modus",
+        "run_id": "Run ID",
+        "phase": "Phase",
+        "started": "Gestartet",
+        "updated": "Aktualisiert",
+        "finished": "Beendet",
+        "checkpoints": "Checkpoints",
+        "files": "Dateien",
+        "run_summary": "Run {run_id} im Modus {mode_id}: {status}, Phase {phase}.",
+        "plan_missing": "Der Run-Plan ist nicht gespeichert.",
+        "plan_text": "Plan: {text}",
+        "plan_steps": "Der Plan hat {count} Schritt(e): {names}{suffix}.",
+        "plan_more": " und {count} weitere",
+        "plan_family": "Aufgabentyp im Plan: {family}.",
+        "plan_no_summary": "Der Plan ist gespeichert, hat aber keine Kurzbeschreibung.",
+        "last_checkpoint": "Letzter Checkpoint",
+        "last_event": "Letztes Ereignis",
+        "latest_missing": "{label}: keine Daten.",
+        "latest_value": "{label}: {text}.",
+        "artifact_files_missing": "Keine Artefaktdateien gespeichert.",
+        "artifact_files": "Artefaktdateien: {files}{suffix}.",
+        "artifact_files_more": " und {count} weitere",
+        "reports_read_failed": "Gespeicherte Berichte konnten nicht gelesen werden.",
+        "reports_empty": "Noch keine gespeicherten Berichte.",
+        "report": "Bericht",
+        "date": "Datum",
+        "format": "Format",
+        "size": "Grösse",
+        "chat_no_cli": "Aktive CLI ist nicht gesetzt.",
+        "chat_no_token": "Resume-Token der aktiven CLI ist nicht verfügbar.",
+        "chat_no_workdir": "Arbeitsverzeichnis der Sitzung ist nicht gesetzt.",
+        "chat_missing": "Transcript der nativen CLI ist nicht verfügbar.",
+        "chat_note": "Gezeigt werden die neuesten Nachrichten aus {count}. Quelle: {source}. Rollen: {roles}.",
+        "status_missing": "Status ist nicht angegeben",
+        "message": "Nachricht",
+    },
+    statuses={
+        "completed": "abgeschlossen",
+        "done": "abgeschlossen",
+        "failed": "fehlgeschlagen",
+        "error": "fehlgeschlagen",
+        "cancelled": "abgebrochen",
+        "canceled": "abgebrochen",
+        "running": "läuft",
+        "in_progress": "läuft",
+        "active": "läuft",
+    },
+    roles={
+        "user": "Benutzer",
+        "assistant": "Assistent",
+        "system": "System",
+        "tool": "Werkzeug",
+    },
+)
+
+
+_REPORT_COPIES["zh"] = _ReportCopy(
+    lang="zh",
+    text={
+        **_REPORT_COPIES["en"].text,
+        "title": "会话报告：{session_uid}",
+        "lede": (
+            "面向用户的简短摘要：这个会话是什么、正在做什么、当前哪些"
+            "产物和消息重要。技术细节保留在下方供核查。"
+        ),
+        "overview_title": "概览",
+        "runs_title": "产物和进度",
+        "chat_title": "最近消息",
+        "reports_title": "已保存报告",
+        "session_card_title": "会话技术卡片",
+        "run_card_title": "重点",
+        "run_technical_title": "运行技术数据",
+        "field": "字段",
+        "value": "值",
+        "session_uid": "会话 UID",
+        "session_id": "会话 ID",
+        "name": "名称",
+        "workdir": "工作目录",
+        "active_cli": "当前 CLI",
+        "active_mode": "当前模式",
+        "status": "状态",
+        "queue": "队列",
+        "generated": "生成时间",
+        "direct_cli": "直接 CLI",
+        "no_cli": "未选择 CLI",
+        "busy_running": "会话正在执行任务",
+        "busy_idle": "会话空闲",
+        "queue_empty": "队列为空",
+        "queue_one": "队列中有 1 个任务",
+        "queue_count": "队列中有 {n} 个任务",
+        "overview_session": "会话：{name}",
+        "overview_now": "当前：{busy}。{queue}。",
+        "overview_context": "上下文：{mode}，通过 {cli}。",
+        "overview_workdir": "工作目录：{workdir}。",
+        "overview_footer": "下方汇总当前模式的最新产物、已保存报告和可用聊天摘录。",
+        "artifacts_service_missing": "产物服务不可用。",
+        "artifacts_disabled": "运行产物已在 runtime config 中关闭。",
+        "artifact_store_missing": "产物存储不可用。",
+        "artifacts_read_failed": "无法读取运行产物。",
+        "no_artifacts": "尚无运行产物{scope}。",
+        "active_mode_scope": "（当前模式 {mode_id}）",
+        "run_mode": "模式",
+        "run_id": "Run ID",
+        "phase": "阶段",
+        "started": "开始时间",
+        "updated": "更新时间",
+        "finished": "完成时间",
+        "checkpoints": "检查点",
+        "files": "文件",
+        "run_summary": "运行 {run_id}，模式 {mode_id}：{status}，阶段 {phase}。",
+        "plan_missing": "未保存运行计划。",
+        "plan_text": "计划：{text}",
+        "plan_steps": "计划包含 {count} 个步骤：{names}{suffix}。",
+        "plan_more": "，另有 {count} 个",
+        "plan_family": "计划任务类型：{family}。",
+        "plan_no_summary": "计划已保存，但没有简短说明。",
+        "last_checkpoint": "最后检查点",
+        "last_event": "最后事件",
+        "latest_missing": "{label}：无数据。",
+        "latest_value": "{label}：{text}。",
+        "artifact_files_missing": "未保存产物文件。",
+        "artifact_files": "产物文件：{files}{suffix}。",
+        "artifact_files_more": "，另有 {count} 个",
+        "reports_read_failed": "无法读取已保存报告。",
+        "reports_empty": "尚无已保存报告。",
+        "report": "报告",
+        "date": "日期",
+        "format": "格式",
+        "size": "大小",
+        "chat_no_cli": "未设置当前 CLI。",
+        "chat_no_token": "当前 CLI 的 resume token 不可用。",
+        "chat_no_workdir": "未设置会话工作目录。",
+        "chat_missing": "原生 CLI transcript 不可用。",
+        "chat_note": "显示 {count} 条消息中的最新消息。来源：{source}。角色：{roles}。",
+        "status_missing": "未指定状态",
+        "message": "消息",
+    },
+    statuses={
+        "completed": "已完成",
+        "done": "已完成",
+        "failed": "失败",
+        "error": "失败",
+        "cancelled": "已取消",
+        "canceled": "已取消",
+        "running": "运行中",
+        "in_progress": "运行中",
+        "active": "运行中",
+    },
+    roles={
+        "user": "用户",
+        "assistant": "助手",
+        "system": "系统",
+        "tool": "工具",
+    },
+)
+
+
 class SessionSnapshotReportService:
     """Builds a human-readable HTML report from the current session state."""
 
@@ -42,8 +469,8 @@ class SessionSnapshotReportService:
         self._extract_session = extract_session_fn
         self._now = now_fn
 
-    def save_html_report(self, session: Any, *, now: Optional[float] = None) -> ReportSummary:
-        snapshot = self.build_html_report(session, now=now)
+    def save_html_report(self, session: Any, *, now: Optional[float] = None, lang: str = "en") -> ReportSummary:
+        snapshot = self.build_html_report(session, now=now, lang=lang)
         return self.report_history_service.save_html_report(
             session,
             snapshot.html,
@@ -52,26 +479,33 @@ class SessionSnapshotReportService:
             now=now,
         )
 
-    def build_html_report(self, session: Any, *, now: Optional[float] = None) -> SessionSnapshotReport:
+    def build_html_report(
+        self,
+        session: Any,
+        *,
+        now: Optional[float] = None,
+        lang: str = "en",
+    ) -> SessionSnapshotReport:
+        copy = _copy_for(lang)
         generated_at = float(now if now is not None else self._now())
         session_uid = session_runtime_uid(session) or str(getattr(session, "id", "") or "session")
         active_mode = str(get_active_mode(session, "") or "").strip()
         active_cli = session_active_cli_name(session)
-        title = f"Отчёт по сессии: {session_uid}"
+        title = copy.t("title", session_uid=session_uid)
         summary_rows = [
-            ("UID сессии", session_uid),
-            ("ID сессии", str(getattr(session, "id", "") or "-")),
-            ("Название", str(getattr(session, "name", "") or "-")),
-            ("Рабочая папка", str(getattr(session, "workdir", "") or "-")),
-            ("Активный CLI", active_cli or "-"),
-            ("Активный режим", active_mode or "прямой CLI"),
-            ("Состояние", _busy_text(session)),
-            ("Очередь", _queue_text(session)),
-            ("Сформирован", _format_ts(generated_at)),
+            (copy.t("session_uid"), session_uid),
+            (copy.t("session_id"), str(getattr(session, "id", "") or "-")),
+            (copy.t("name"), str(getattr(session, "name", "") or "-")),
+            (copy.t("workdir"), str(getattr(session, "workdir", "") or "-")),
+            (copy.t("active_cli"), active_cli or "-"),
+            (copy.t("active_mode"), active_mode or copy.t("direct_cli")),
+            (copy.t("status"), _busy_text(session, copy)),
+            (copy.t("queue"), _queue_text(session, copy)),
+            (copy.t("generated"), _format_ts(generated_at)),
         ]
         body = [
             "<!doctype html>",
-            '<html lang="ru">',
+            f'<html lang="{_e(copy.lang)}">',
             "<head>",
             '<meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
@@ -82,64 +516,71 @@ class SessionSnapshotReportService:
             "<main>",
             '<section class="hero">',
             f"<h1>{_e(title)}</h1>",
-            (
-                '<p class="lede">Короткая версия для чтения человеком: '
-                "что за сессия, чем она занята, какие артефакты и сообщения "
-                "важны сейчас. Технические детали оставлены ниже для проверки.</p>"
-            ),
+            f'<p class="lede">{_e(copy.t("lede"))}</p>',
             "</section>",
-            _section("Коротко", self._render_overview(session, active_mode=active_mode, active_cli=active_cli)),
-            _section("Артефакты и прогресс", self._render_runs(session, mode_id=active_mode)),
-            _section("Последние сообщения", self._render_chat_excerpt(session, active_cli=active_cli)),
-            _section("Сохранённые отчёты", self._render_report_history(session)),
-            _details("Техническая карточка сессии", _table(summary_rows), open_=False),
+            _section(
+                copy.t("overview_title"),
+                self._render_overview(session, active_mode=active_mode, active_cli=active_cli, copy=copy),
+            ),
+            _section(copy.t("runs_title"), self._render_runs(session, mode_id=active_mode, copy=copy)),
+            _section(copy.t("chat_title"), self._render_chat_excerpt(session, active_cli=active_cli, copy=copy)),
+            _section(copy.t("reports_title"), self._render_report_history(session, copy=copy)),
+            _details(
+                copy.t("session_card_title"),
+                _table(summary_rows, headers=(copy.t("field"), copy.t("value"))),
+                open_=False,
+            ),
             "</main>",
             "</body>",
             "</html>",
         ]
         return SessionSnapshotReport(title=title, html="\n".join(body))
 
-    def _render_overview(self, session: Any, *, active_mode: str, active_cli: str) -> str:
+    def _render_overview(
+        self,
+        session: Any,
+        *,
+        active_mode: str,
+        active_cli: str,
+        copy: _ReportCopy,
+    ) -> str:
         name = str(getattr(session, "name", "") or "").strip()
         workdir = str(getattr(session, "workdir", "") or "").strip()
         bullets = [
-            f"Сессия: {name or session_runtime_uid(session) or getattr(session, 'id', '-')}",
-            f"Сейчас: {_busy_text(session)}, {_queue_text(session).lower()}.",
-            f"Контекст: {active_mode or 'прямой CLI'} через {active_cli or 'не выбранный CLI'}.",
+            copy.t("overview_session", name=name or session_runtime_uid(session) or getattr(session, "id", "-")),
+            copy.t("overview_now", busy=_busy_text(session, copy), queue=_queue_text(session, copy)),
+            copy.t("overview_context", mode=active_mode or copy.t("direct_cli"), cli=active_cli or copy.t("no_cli")),
         ]
         if workdir:
-            bullets.append(f"Рабочая папка: {workdir}.")
-        bullets.append(
-            "Ниже собраны последние артефакты активного режима, сохранённые отчёты "
-            "и доступный фрагмент чата."
-        )
+            bullets.append(copy.t("overview_workdir", workdir=workdir))
+        bullets.append(copy.t("overview_footer"))
         return _bullet_list(bullets, class_name="human-list")
 
-    def _render_runs(self, session: Any, *, mode_id: str) -> str:
+    def _render_runs(self, session: Any, *, mode_id: str, copy: _ReportCopy) -> str:
         service = self.run_artifacts_service
         if service is None:
-            return _empty("Сервис артефактов недоступен.")
+            return _empty(copy.t("artifacts_service_missing"))
         try:
             if hasattr(service, "is_enabled") and not bool(service.is_enabled()):
-                return _empty("Артефакты запусков отключены в runtime config.")
+                return _empty(copy.t("artifacts_disabled"))
             store = getattr(service, "artifact_store", service)
             list_runs = getattr(store, "list_runs", None)
             if not callable(list_runs):
-                return _empty("Хранилище артефактов недоступно.")
+                return _empty(copy.t("artifact_store_missing"))
             runs = list_runs(session=session, mode_id=(mode_id or None), limit=5)
         except Exception:
             logger.exception("session snapshot failed to list run artifacts")
-            return _empty("Не удалось прочитать артефакты запусков.")
+            return _empty(copy.t("artifacts_read_failed"))
         if not runs:
-            scope = f" для активного режима {mode_id}" if mode_id else ""
-            return _empty(f"Артефактов запусков{scope} пока нет.")
+            scope = copy.t("active_mode_scope", mode_id=mode_id) if mode_id else ""
+            return _empty(copy.t("no_artifacts", scope=scope))
 
         chunks: list[str] = []
         for run in runs:
-            chunks.append(self._render_run(store, run))
+            chunks.append(self._render_run(store, run, copy=copy))
         return "\n".join(chunks)
 
-    def _render_run(self, store: Any, run: Any) -> str:
+    def _render_run(self, store: Any, run: Any, *, copy: _ReportCopy) -> str:
         state = _safe_call_dict(store, "load_state", run)
         plan = _safe_call_dict(store, "load_plan", run)
         checkpoints = _safe_call_dict(store, "load_checkpoints", run)
@@ -149,29 +590,29 @@ class SessionSnapshotReportService:
         checkpoint_items = list(checkpoints.get("items") or []) if isinstance(checkpoints, dict) else []
         artifact_files = _list_files(getattr(run, "artifacts_dir", ""), limit=20)
         rows = [
-            ("Режим", getattr(run, "mode_id", "") or state.get("mode_id") or "-"),
-            ("Run ID", getattr(run, "run_id", "") or state.get("run_id") or "-"),
-            ("Статус", state.get("status") or "-"),
-            ("Фаза", state.get("phase") or "-"),
-            ("Начат", _format_ts(state.get("started_at"))),
-            ("Обновлён", _format_ts(state.get("updated_at"))),
-            ("Завершён", _format_ts(state.get("finished_at"))),
-            ("Чекпоинты", str(len(checkpoint_items))),
-            ("Файлы", str(len(artifact_files))),
+            (copy.t("run_mode"), getattr(run, "mode_id", "") or state.get("mode_id") or "-"),
+            (copy.t("run_id"), getattr(run, "run_id", "") or state.get("run_id") or "-"),
+            (copy.t("status"), state.get("status") or "-"),
+            (copy.t("phase"), state.get("phase") or "-"),
+            (copy.t("started"), _format_ts(state.get("started_at"))),
+            (copy.t("updated"), _format_ts(state.get("updated_at"))),
+            (copy.t("finished"), _format_ts(state.get("finished_at"))),
+            (copy.t("checkpoints"), str(len(checkpoint_items))),
+            (copy.t("files"), str(len(artifact_files))),
         ]
         technical = [
-            _table(rows),
+            _table(rows, headers=(copy.t("field"), copy.t("value"))),
             "<h3>PLAN</h3>",
             _json_block(_short_json(plan)),
             "<h3>METRICS</h3>",
             _json_block(_short_json(metrics)),
             "<h3>RECOVERY</h3>",
             _json_block(_short_json(recovery)),
-            "<h3>Последние checkpoints</h3>",
+            f"<h3>{_e(copy.t('last_checkpoint'))}</h3>",
             _json_block(_short_json(checkpoint_items[-5:])),
-            "<h3>Последние events</h3>",
+            f"<h3>{_e(copy.t('last_event'))}</h3>",
             _json_block(_short_json(events)),
-            "<h3>Файлы артефактов</h3>",
+            f"<h3>{_e(copy.t('files'))}</h3>",
             _list_block(artifact_files),
         ]
         content = [
@@ -182,20 +623,21 @@ class SessionSnapshotReportService:
                 checkpoints=checkpoint_items,
                 events=events,
                 artifact_files=artifact_files,
+                copy=copy,
             ),
-            _details("Технические данные запуска", "\n".join(technical), open_=False),
+            _details(copy.t("run_technical_title"), "\n".join(technical), open_=False),
         ]
         title = f"{getattr(run, 'mode_id', '-')}/{getattr(run, 'run_id', '-')}"
         return _details(str(title), "\n".join(content), open_=False)
 
-    def _render_report_history(self, session: Any) -> str:
+    def _render_report_history(self, session: Any, *, copy: _ReportCopy) -> str:
         try:
             reports = self.report_history_service.list_reports(session, limit=10)
         except Exception:
             logger.exception("session snapshot failed to list saved reports")
-            return _empty("Не удалось прочитать сохранённые отчёты.")
+            return _empty(copy.t("reports_read_failed"))
         if not reports:
-            return _empty("Сохранённых отчётов пока нет.")
+            return _empty(copy.t("reports_empty"))
         rows = [
             (
                 item.report_id,
@@ -205,17 +647,17 @@ class SessionSnapshotReportService:
             )
             for item in reports
         ]
-        return _table(rows, headers=("Отчёт", "Дата", "Формат", "Размер"))
+        return _table(rows, headers=(copy.t("report"), copy.t("date"), copy.t("format"), copy.t("size")))
 
-    def _render_chat_excerpt(self, session: Any, *, active_cli: str) -> str:
+    def _render_chat_excerpt(self, session: Any, *, active_cli: str, copy: _ReportCopy) -> str:
         resume_token = _resume_token(session, active_cli)
         workdir = str(getattr(session, "workdir", "") or "").strip()
         if not active_cli:
-            return _empty("Активный CLI не выбран.")
+            return _empty(copy.t("chat_no_cli"))
         if not resume_token:
-            return _empty("Resume token активного CLI недоступен.")
+            return _empty(copy.t("chat_no_token"))
         if not workdir:
-            return _empty("Рабочая папка сессии не задана.")
+            return _empty(copy.t("chat_no_workdir"))
         try:
             canonical = self._extract_session(active_cli, resume_token, workdir)
         except Exception:
@@ -223,45 +665,49 @@ class SessionSnapshotReportService:
             canonical = None
         messages = list(getattr(canonical, "messages", []) or []) if canonical is not None else []
         if not messages:
-            return _empty("Transcript нативного CLI недоступен.")
+            return _empty(copy.t("chat_missing"))
         role_counts: dict[str, int] = {}
         for msg in messages:
             role = str(getattr(msg, "role", "") or "unknown").strip() or "unknown"
             role_counts[role] = role_counts.get(role, 0) + 1
-        chunks = [
-            (
-                '<p class="note">'
-                f"Показаны последние сообщения из {len(messages)}. "
-                f"Источник: {_e(getattr(canonical, 'source_cli', '') or active_cli)}. "
-                f"Роли: {_e(', '.join(f'{key}: {value}' for key, value in sorted(role_counts.items())))}."
-                "</p>"
-            )
-        ]
+        roles_text = ", ".join(f"{_role_label(key, copy)}: {value}" for key, value in sorted(role_counts.items()))
+        note = copy.t(
+            "chat_note",
+            count=len(messages),
+            source=getattr(canonical, "source_cli", "") or active_cli,
+            roles=roles_text,
+        )
+        chunks = [f'<p class="note">{_e(note)}</p>']
         for idx, msg in enumerate(messages[-8:], start=max(1, len(messages) - 7)):
             role = str(getattr(msg, "role", "") or "message").strip() or "message"
             ts = _format_ts(getattr(msg, "timestamp", None))
             text = _truncate(str(getattr(msg, "content", "") or ""), 2500)
             chunks.append(
                 f'<article class="message role-{_css_token(role)}">'
-                f"<h3>{idx}. {_e(_role_label(role))} <span>{_e(ts)}</span></h3>"
+                f"<h3>{idx}. {_e(_role_label(role, copy))} <span>{_e(ts)}</span></h3>"
                 f"<p>{_e(text)}</p></article>"
             )
         return "\n".join(chunks)
 
 
-def _busy_text(session: Any) -> str:
-    return "сессия сейчас выполняет задачу" if bool(getattr(session, "busy", False)) else "сессия свободна"
+def _copy_for(lang: str) -> _ReportCopy:
+    code = str(lang or "").strip().lower().split("-", 1)[0]
+    return _REPORT_COPIES.get(code, _REPORT_COPIES["en"])
 
 
-def _queue_text(session: Any) -> str:
+def _busy_text(session: Any, copy: _ReportCopy) -> str:
+    return copy.t("busy_running") if bool(getattr(session, "busy", False)) else copy.t("busy_idle")
+
+
+def _queue_text(session: Any, copy: _ReportCopy) -> str:
     size = len(list(getattr(session, "queue", []) or []))
     if size == 0:
-        return "Очередь пуста"
+        return copy.t("queue_empty")
     if size == 1:
-        return "В очереди 1 задача"
-    if 2 <= size <= 4:
-        return f"В очереди {size} задачи"
-    return f"В очереди {size} задач"
+        return copy.t("queue_one")
+    if copy.lang == "ru" and 2 <= size <= 4:
+        return copy.t("queue_few", n=size)
+    return copy.t("queue_count", n=size)
 
 
 def _section(title: str, content: str) -> str:
@@ -284,44 +730,37 @@ def _run_human_summary(
     checkpoints: list[Any],
     events: list[Any],
     artifact_files: list[str],
+    copy: _ReportCopy,
 ) -> str:
     mode_id = str(getattr(run, "mode_id", "") or state.get("mode_id") or "-")
     run_id = str(getattr(run, "run_id", "") or state.get("run_id") or "-")
     status = str(state.get("status") or "-")
     phase = str(state.get("phase") or "-")
     bullets = [
-        f"Запуск {run_id} в режиме {mode_id}: {_status_text(status)}, фаза {phase}.",
-        _describe_plan(plan),
-        _describe_latest("Последний чекпоинт", checkpoints),
-        _describe_latest("Последнее событие", events),
-        _describe_artifact_files(artifact_files),
+        copy.t("run_summary", run_id=run_id, mode_id=mode_id, status=_status_text(status, copy), phase=phase),
+        _describe_plan(plan, copy),
+        _describe_latest(copy.t("last_checkpoint"), checkpoints, copy),
+        _describe_latest(copy.t("last_event"), events, copy),
+        _describe_artifact_files(artifact_files, copy),
     ]
-    return '<div class="run-card"><h3>Что важно</h3>%s</div>' % _bullet_list(bullets, class_name="human-list")
+    return '<div class="run-card"><h3>%s</h3>%s</div>' % (
+        _e(copy.t("run_card_title")),
+        _bullet_list(bullets, class_name="human-list"),
+    )
 
 
-def _status_text(status: str) -> str:
+def _status_text(status: str, copy: _ReportCopy) -> str:
     normalized = str(status or "").strip().lower()
-    labels = {
-        "completed": "завершён",
-        "done": "завершён",
-        "failed": "завершился с ошибкой",
-        "error": "завершился с ошибкой",
-        "cancelled": "остановлен",
-        "canceled": "остановлен",
-        "running": "в работе",
-        "in_progress": "в работе",
-        "active": "в работе",
-    }
-    return labels.get(normalized, status or "статус не указан")
+    return copy.statuses.get(normalized, status or copy.t("status_missing"))
 
 
-def _describe_plan(plan: dict[str, Any]) -> str:
+def _describe_plan(plan: dict[str, Any], copy: _ReportCopy) -> str:
     if not plan:
-        return "План запуска не сохранён."
+        return copy.t("plan_missing")
     for key in ("goal", "summary", "task", "title"):
         value = str(plan.get(key) or "").strip()
         if value:
-            return f"План: {_truncate(value, 220)}"
+            return copy.t("plan_text", text=_truncate(value, 220))
     units = plan.get("units") or plan.get("tasks") or []
     if isinstance(units, list) and units:
         names = []
@@ -330,32 +769,32 @@ def _describe_plan(plan: dict[str, Any]) -> str:
                 names.append(str(item.get("title") or item.get("name") or item.get("id") or "шаг").strip())
             else:
                 names.append(str(item).strip())
-        suffix = f" и ещё {len(units) - 3}" if len(units) > 3 else ""
-        return f"План содержит {len(units)} шаг(ов): {', '.join(names)}{suffix}."
+        suffix = copy.t("plan_more", count=len(units) - 3) if len(units) > 3 else ""
+        return copy.t("plan_steps", count=len(units), names=", ".join(names), suffix=suffix)
     family = str(plan.get("task_family") or "").strip()
     if family:
-        return f"Тип задачи в плане: {family}."
-    return "План сохранён, но в нём нет короткого описания."
+        return copy.t("plan_family", family=family)
+    return copy.t("plan_no_summary")
 
 
-def _describe_latest(label: str, values: list[Any]) -> str:
+def _describe_latest(label: str, values: list[Any], copy: _ReportCopy) -> str:
     if not values:
-        return f"{label}: нет данных."
+        return copy.t("latest_missing", label=label)
     value = values[-1]
     if isinstance(value, dict):
         for key in ("message", "summary", "title", "status", "phase", "event_type", "current_step_id"):
             text = str(value.get(key) or "").strip()
             if text:
-                return f"{label}: {_truncate(text, 220)}."
-    return f"{label}: {_truncate(str(value), 220)}."
+                return copy.t("latest_value", label=label, text=_truncate(text, 220))
+    return copy.t("latest_value", label=label, text=_truncate(str(value), 220))
 
 
-def _describe_artifact_files(files: list[str]) -> str:
+def _describe_artifact_files(files: list[str], copy: _ReportCopy) -> str:
     if not files:
-        return "Файлы артефактов не сохранены."
+        return copy.t("artifact_files_missing")
     visible = files[:3]
-    suffix = f" и ещё {len(files) - 3}" if len(files) > 3 else ""
-    return f"Файлы артефактов: {', '.join(visible)}{suffix}."
+    suffix = copy.t("artifact_files_more", count=len(files) - 3) if len(files) > 3 else ""
+    return copy.t("artifact_files", files=", ".join(visible), suffix=suffix)
 
 
 def _safe_call_dict(store: Any, name: str, run: Any) -> dict[str, Any]:
@@ -429,14 +868,8 @@ def _format_bytes(size: Any) -> str:
     return f"{value:.1f} {unit}"
 
 
-def _role_label(role: str) -> str:
-    labels = {
-        "user": "Пользователь",
-        "assistant": "Ассистент",
-        "system": "Система",
-        "tool": "Инструмент",
-    }
-    return labels.get(str(role or "").strip().lower(), role or "Сообщение")
+def _role_label(role: str, copy: _ReportCopy) -> str:
+    return copy.roles.get(str(role or "").strip().lower(), role or copy.t("message"))
 
 
 def _css_token(value: str) -> str:

@@ -18,7 +18,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok) wit
 - Merge/rebase conflict handling with diff/abort/continue/call-agent buttons.
 - Admin command `/selfupdate`: runs `git pull --ff-only` in the bot directory and starts service restart on success.
 - Manage files in the working directory via `/files` (send, save, rename, delete).
-- Current-session reports are available in Telegram via `/reports`; `/reports snapshot` and the "Session report" button in `/sessions` create a human-readable HTML session report from run artifacts, saved report history, and the available CLI transcript. Manager final reports are automatically saved into the shared report history.
+- Current-session reports are available in Telegram via `/reports`; `/reports snapshot` and the "Session report" button in `/sessions` create a human-readable HTML session report in the user's language from run artifacts, saved report history, and the available CLI transcript. Manager final reports are automatically saved into the shared report history.
 - Task templates (hidden `/preset` command).
 - **Agent mode** (via `/sessions` -> `Agent`) - AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.), plans and executes tasks step by step.
 - **Manager mode** (via `/sessions` -> `Manager`) - multi-agent orchestration: automatic task decomposition into subtasks, development via CLI, review via Agent, acceptance-criteria-based arbitration, and a final report.
@@ -219,7 +219,7 @@ For layering and placement rules, see `ARCHITECTURE.md`.
    - Short results up to 3900 characters arrive as regular Telegram messages.
    - Long results arrive as HTML files; `force_html=True` forces an HTML file even for short results.
    - Summary or preview for long HTML output arrives as a separate message when summary delivery is enabled.
-   - Use `/reports` for session reports; `/reports latest` sends the latest report, `/reports snapshot` creates a human-readable HTML session report, `/reports generate` creates one from the current Manager plan, and `/reports <filename.md>` sends a specific report file.
+   - Use `/reports` for session reports; `/reports latest` sends the latest report, `/reports snapshot` creates a human-readable HTML session report in the user's language, `/reports generate` creates one from the current Manager plan, and `/reports <filename.md>` sends a specific report file.
    - Use `/files` to work with files (download/save/rename/delete).
 
 5. **Sessions and continuation**
