@@ -1,0 +1,1852 @@
+{
+  "status": "selected",
+  "reason": "",
+  "selected": [
+    {
+      "pack_id": "core-baseline",
+      "title": "Core SDD Baseline",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "core-baseline",
+        "title": "Core SDD Baseline",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "core",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.0,
+          "evidence_groups_required": [],
+          "rules": []
+        },
+        "sdd": {
+          "spec_guidance": "Keep requirements explicit and mark assumptions as open questions.",
+          "plan_guidance": "Separate confirmed project facts from inferred implementation choices.",
+          "task_guidance": "Ensure each task has validation evidence.",
+          "artifact_templates": [
+            {
+              "id": "artifact-pack-manifest",
+              "output_path": "artifact-pack-manifest.md",
+              "title": "Artifact Pack Manifest"
+            },
+            {
+              "id": "validation",
+              "output_path": "validation.md",
+              "title": "Validation Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Do not treat missing evidence as confirmation."
+          ]
+        },
+        "merge": {
+          "priority": 0,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": []
+    },
+    {
+      "pack_id": "architecture",
+      "title": "Architecture Baseline",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "architecture",
+        "title": "Architecture Baseline",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "architecture",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "architecture"
+          ],
+          "rules": [
+            {
+              "id": "architecture_doc",
+              "kind": "any_file_matches",
+              "pattern": "**/ARCHITECTURE.md",
+              "group": "architecture",
+              "weight": 0.55,
+              "reason": "Architecture document found."
+            },
+            {
+              "id": "codebase_architecture_doc",
+              "kind": "codebase_map_contains",
+              "text": "architecture",
+              "group": "architecture",
+              "weight": 0.45,
+              "reason": "Codebase map contains architecture context."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture context, containers/components and architecturally significant requirements.",
+          "plan_guidance": "Use lightweight C4-style context/container/component views when useful.",
+          "task_guidance": "Include architecture validation tasks for boundary changes.",
+          "artifact_templates": [
+            {
+              "id": "c4-context",
+              "output_path": "c4-context.md",
+              "title": "C4 Context"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Architecture docs must stay traceable to code map evidence."
+          ]
+        },
+        "merge": {
+          "priority": 18,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "architecture",
+          "rule_id": "architecture_doc",
+          "group": "architecture",
+          "kind": "any_file_matches",
+          "path": ".cli-proxy/.codebase_map/ARCHITECTURE.md",
+          "reason": "Architecture document found.",
+          "weight": 0.55,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        },
+        {
+          "pack_id": "architecture",
+          "rule_id": "codebase_architecture_doc",
+          "group": "architecture",
+          "kind": "codebase_map_contains",
+          "path": ".cli-proxy/.codebase_map",
+          "reason": "Codebase map contains architecture context.",
+          "weight": 0.45,
+          "confidence": 1.0,
+          "value": "",
+          "source": "codebase_map"
+        }
+      ]
+    },
+    {
+      "pack_id": "asyncapi",
+      "title": "Event-Driven API / AsyncAPI",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "asyncapi",
+        "title": "Event-Driven API / AsyncAPI",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "messaging",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "contract"
+          ],
+          "rules": [
+            {
+              "id": "asyncapi_file",
+              "kind": "any_file_matches",
+              "pattern": "*asyncapi*.y*ml",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "AsyncAPI YAML contract found."
+            },
+            {
+              "id": "asyncapi_json",
+              "kind": "any_file_matches",
+              "pattern": "*asyncapi*.json",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "AsyncAPI JSON contract found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture channels, producers, consumers, message schemas and broker/protocol constraints.",
+          "plan_guidance": "Separate send/receive operations and infrastructure assumptions.",
+          "task_guidance": "Include message contract validation and integration tasks.",
+          "artifact_templates": [
+            {
+              "id": "messaging-contract-plan",
+              "output_path": "messaging-contract-plan.md",
+              "title": "Messaging Contract Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Do not infer sender and receiver symmetry without evidence."
+          ]
+        },
+        "merge": {
+          "priority": 20,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "asyncapi",
+          "rule_id": "asyncapi_file",
+          "group": "contract",
+          "kind": "any_file_matches",
+          "path": "modes/sdd/packs/builtin/asyncapi.yaml",
+          "reason": "AsyncAPI YAML contract found.",
+          "weight": 0.8,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "openapi",
+      "title": "HTTP API / OpenAPI",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "openapi",
+        "title": "HTTP API / OpenAPI",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "api",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "contract"
+          ],
+          "rules": [
+            {
+              "id": "openapi_file",
+              "kind": "any_file_matches",
+              "pattern": "*openapi*.y*ml",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "OpenAPI YAML contract found."
+            },
+            {
+              "id": "swagger_file",
+              "kind": "any_file_matches",
+              "pattern": "*swagger*.y*ml",
+              "group": "contract",
+              "weight": 0.7,
+              "reason": "Swagger/OpenAPI contract found."
+            },
+            {
+              "id": "openapi_json",
+              "kind": "any_file_matches",
+              "pattern": "*openapi*.json",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "OpenAPI JSON contract found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture API consumers, resources, auth, request/response and error contracts.",
+          "plan_guidance": "Keep API contract and implementation changes traceable.",
+          "task_guidance": "Include contract validation and compatibility tasks.",
+          "artifact_templates": [
+            {
+              "id": "api-contract-plan",
+              "output_path": "api-contract-plan.md",
+              "title": "API Contract Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "API docs can drift from implementation routes."
+          ]
+        },
+        "merge": {
+          "priority": 20,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "openapi",
+          "rule_id": "openapi_file",
+          "group": "contract",
+          "kind": "any_file_matches",
+          "path": "modes/sdd/packs/builtin/openapi.yaml",
+          "reason": "OpenAPI YAML contract found.",
+          "weight": 0.8,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "ops",
+      "title": "Operations / Deployment",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "ops",
+        "title": "Operations / Deployment",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "ops",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "ops"
+          ],
+          "rules": [
+            {
+              "id": "dockerfile",
+              "kind": "any_file_matches",
+              "pattern": "Dockerfile*",
+              "group": "ops",
+              "weight": 0.55,
+              "reason": "Dockerfile found."
+            },
+            {
+              "id": "compose",
+              "kind": "any_file_matches",
+              "pattern": "*compose*.y*ml",
+              "group": "ops",
+              "weight": 0.45,
+              "reason": "Compose file found."
+            },
+            {
+              "id": "github_actions",
+              "kind": "any_file_matches",
+              "pattern": ".github/workflows/*.yml",
+              "group": "ops",
+              "weight": 0.45,
+              "reason": "GitHub Actions workflow found."
+            },
+            {
+              "id": "systemd",
+              "kind": "any_file_matches",
+              "pattern": "*.service",
+              "group": "ops",
+              "weight": 0.35,
+              "reason": "systemd unit found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture deployment, runtime config, startup/restart and observability requirements.",
+          "plan_guidance": "Identify deployment artifacts, CI gates and runtime rollback paths.",
+          "task_guidance": "Include smoke checks and operational verification.",
+          "artifact_templates": [
+            {
+              "id": "runbook",
+              "output_path": "runbook.md",
+              "title": "Runbook"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Runtime config and deploy scripts can diverge from local development behavior."
+          ]
+        },
+        "merge": {
+          "priority": 15,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "ops",
+          "rule_id": "github_actions",
+          "group": "ops",
+          "kind": "any_file_matches",
+          "path": ".github/workflows/ci.yml",
+          "reason": "GitHub Actions workflow found.",
+          "weight": 0.45,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "python",
+      "title": "Python",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "python",
+        "title": "Python",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "python",
+          "languages": [
+            "python"
+          ],
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.58,
+          "evidence_groups_required": [
+            "source"
+          ],
+          "rules": [
+            {
+              "id": "pyproject",
+              "kind": "file_exists",
+              "path": "pyproject.toml",
+              "group": "manifest",
+              "weight": 0.65,
+              "reason": "Python pyproject.toml found."
+            },
+            {
+              "id": "requirements",
+              "kind": "file_exists",
+              "path": "requirements.txt",
+              "group": "manifest",
+              "weight": 0.45,
+              "reason": "Python requirements.txt found."
+            },
+            {
+              "id": "python_source",
+              "kind": "ext_count",
+              "ext": ".py",
+              "min": 1,
+              "group": "source",
+              "weight": 0.55,
+              "reason": "Python source files found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture package/app boundaries, runtime version, dependency and config expectations.",
+          "plan_guidance": "Identify pyproject/requirements, package layout, async boundaries, and test framework.",
+          "task_guidance": "Include targeted pytest and lint tasks based on project conventions.",
+          "artifact_templates": [
+            {
+              "id": "python-validation",
+              "output_path": "python-validation.md",
+              "title": "Python Validation"
+            }
+          ],
+          "validation_commands": [
+            "python -m pytest"
+          ],
+          "risk_prompts": [
+            "Python projects can be app-only, package-only, or mixed; do not infer publishability from source files alone."
+          ]
+        },
+        "merge": {
+          "priority": 30,
+          "override_policy": "additive",
+          "conflict_keys": [
+            "primary_ecosystem"
+          ]
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "python",
+          "rule_id": "requirements",
+          "group": "manifest",
+          "kind": "file_exists",
+          "path": "requirements.txt",
+          "reason": "Python requirements.txt found.",
+          "weight": 0.45,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        },
+        {
+          "pack_id": "python",
+          "rule_id": "python_source",
+          "group": "source",
+          "kind": "ext_count",
+          "path": "*.py",
+          "reason": "Python source files found.",
+          "weight": 0.55,
+          "confidence": 1.0,
+          "value": "1042",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "ui",
+      "title": "User Interface",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "ui",
+        "title": "User Interface",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "ui",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "surface"
+          ],
+          "rules": [
+            {
+              "id": "jsx_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.jsx",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "JSX frontend source found."
+            },
+            {
+              "id": "tsx_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.tsx",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "TSX frontend source found."
+            },
+            {
+              "id": "vue_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.vue",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Vue frontend source found."
+            },
+            {
+              "id": "svelte_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.svelte",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Svelte frontend source found."
+            },
+            {
+              "id": "static_app",
+              "kind": "any_file_matches",
+              "pattern": "static/*.js",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Static browser UI assets found."
+            },
+            {
+              "id": "desktop_ui",
+              "kind": "any_file_matches",
+              "pattern": "desktop/widgets/*.py",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Desktop UI widget files found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture user workflows, states, accessibility and responsive behavior.",
+          "plan_guidance": "Identify UI surfaces and required browser/desktop verification.",
+          "task_guidance": "Include UI regression checks and Playwright only for web/MiniApp changes.",
+          "artifact_templates": [
+            {
+              "id": "ui-surface-plan",
+              "output_path": "ui-surface-plan.md",
+              "title": "UI Surface Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "UI changes need surface-specific verification, not only unit tests."
+          ]
+        },
+        "merge": {
+          "priority": 15,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "ui",
+          "rule_id": "desktop_ui",
+          "group": "surface",
+          "kind": "any_file_matches",
+          "path": "desktop/widgets/admin_chat_section.py",
+          "reason": "Desktop UI widget files found.",
+          "weight": 0.35,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    }
+  ],
+  "proposed": [],
+  "all_scores": [
+    {
+      "pack_id": "architecture",
+      "title": "Architecture Baseline",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "architecture",
+        "title": "Architecture Baseline",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "architecture",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "architecture"
+          ],
+          "rules": [
+            {
+              "id": "architecture_doc",
+              "kind": "any_file_matches",
+              "pattern": "**/ARCHITECTURE.md",
+              "group": "architecture",
+              "weight": 0.55,
+              "reason": "Architecture document found."
+            },
+            {
+              "id": "codebase_architecture_doc",
+              "kind": "codebase_map_contains",
+              "text": "architecture",
+              "group": "architecture",
+              "weight": 0.45,
+              "reason": "Codebase map contains architecture context."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture context, containers/components and architecturally significant requirements.",
+          "plan_guidance": "Use lightweight C4-style context/container/component views when useful.",
+          "task_guidance": "Include architecture validation tasks for boundary changes.",
+          "artifact_templates": [
+            {
+              "id": "c4-context",
+              "output_path": "c4-context.md",
+              "title": "C4 Context"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Architecture docs must stay traceable to code map evidence."
+          ]
+        },
+        "merge": {
+          "priority": 18,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "architecture",
+          "rule_id": "architecture_doc",
+          "group": "architecture",
+          "kind": "any_file_matches",
+          "path": ".cli-proxy/.codebase_map/ARCHITECTURE.md",
+          "reason": "Architecture document found.",
+          "weight": 0.55,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        },
+        {
+          "pack_id": "architecture",
+          "rule_id": "codebase_architecture_doc",
+          "group": "architecture",
+          "kind": "codebase_map_contains",
+          "path": ".cli-proxy/.codebase_map",
+          "reason": "Codebase map contains architecture context.",
+          "weight": 0.45,
+          "confidence": 1.0,
+          "value": "",
+          "source": "codebase_map"
+        }
+      ]
+    },
+    {
+      "pack_id": "asyncapi",
+      "title": "Event-Driven API / AsyncAPI",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "asyncapi",
+        "title": "Event-Driven API / AsyncAPI",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "messaging",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "contract"
+          ],
+          "rules": [
+            {
+              "id": "asyncapi_file",
+              "kind": "any_file_matches",
+              "pattern": "*asyncapi*.y*ml",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "AsyncAPI YAML contract found."
+            },
+            {
+              "id": "asyncapi_json",
+              "kind": "any_file_matches",
+              "pattern": "*asyncapi*.json",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "AsyncAPI JSON contract found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture channels, producers, consumers, message schemas and broker/protocol constraints.",
+          "plan_guidance": "Separate send/receive operations and infrastructure assumptions.",
+          "task_guidance": "Include message contract validation and integration tasks.",
+          "artifact_templates": [
+            {
+              "id": "messaging-contract-plan",
+              "output_path": "messaging-contract-plan.md",
+              "title": "Messaging Contract Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Do not infer sender and receiver symmetry without evidence."
+          ]
+        },
+        "merge": {
+          "priority": 20,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "asyncapi",
+          "rule_id": "asyncapi_file",
+          "group": "contract",
+          "kind": "any_file_matches",
+          "path": "modes/sdd/packs/builtin/asyncapi.yaml",
+          "reason": "AsyncAPI YAML contract found.",
+          "weight": 0.8,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "openapi",
+      "title": "HTTP API / OpenAPI",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "openapi",
+        "title": "HTTP API / OpenAPI",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "api",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "contract"
+          ],
+          "rules": [
+            {
+              "id": "openapi_file",
+              "kind": "any_file_matches",
+              "pattern": "*openapi*.y*ml",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "OpenAPI YAML contract found."
+            },
+            {
+              "id": "swagger_file",
+              "kind": "any_file_matches",
+              "pattern": "*swagger*.y*ml",
+              "group": "contract",
+              "weight": 0.7,
+              "reason": "Swagger/OpenAPI contract found."
+            },
+            {
+              "id": "openapi_json",
+              "kind": "any_file_matches",
+              "pattern": "*openapi*.json",
+              "group": "contract",
+              "weight": 0.8,
+              "reason": "OpenAPI JSON contract found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture API consumers, resources, auth, request/response and error contracts.",
+          "plan_guidance": "Keep API contract and implementation changes traceable.",
+          "task_guidance": "Include contract validation and compatibility tasks.",
+          "artifact_templates": [
+            {
+              "id": "api-contract-plan",
+              "output_path": "api-contract-plan.md",
+              "title": "API Contract Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "API docs can drift from implementation routes."
+          ]
+        },
+        "merge": {
+          "priority": 20,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "openapi",
+          "rule_id": "openapi_file",
+          "group": "contract",
+          "kind": "any_file_matches",
+          "path": "modes/sdd/packs/builtin/openapi.yaml",
+          "reason": "OpenAPI YAML contract found.",
+          "weight": 0.8,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "ops",
+      "title": "Operations / Deployment",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "ops",
+        "title": "Operations / Deployment",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "ops",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "ops"
+          ],
+          "rules": [
+            {
+              "id": "dockerfile",
+              "kind": "any_file_matches",
+              "pattern": "Dockerfile*",
+              "group": "ops",
+              "weight": 0.55,
+              "reason": "Dockerfile found."
+            },
+            {
+              "id": "compose",
+              "kind": "any_file_matches",
+              "pattern": "*compose*.y*ml",
+              "group": "ops",
+              "weight": 0.45,
+              "reason": "Compose file found."
+            },
+            {
+              "id": "github_actions",
+              "kind": "any_file_matches",
+              "pattern": ".github/workflows/*.yml",
+              "group": "ops",
+              "weight": 0.45,
+              "reason": "GitHub Actions workflow found."
+            },
+            {
+              "id": "systemd",
+              "kind": "any_file_matches",
+              "pattern": "*.service",
+              "group": "ops",
+              "weight": 0.35,
+              "reason": "systemd unit found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture deployment, runtime config, startup/restart and observability requirements.",
+          "plan_guidance": "Identify deployment artifacts, CI gates and runtime rollback paths.",
+          "task_guidance": "Include smoke checks and operational verification.",
+          "artifact_templates": [
+            {
+              "id": "runbook",
+              "output_path": "runbook.md",
+              "title": "Runbook"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Runtime config and deploy scripts can diverge from local development behavior."
+          ]
+        },
+        "merge": {
+          "priority": 15,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "ops",
+          "rule_id": "github_actions",
+          "group": "ops",
+          "kind": "any_file_matches",
+          "path": ".github/workflows/ci.yml",
+          "reason": "GitHub Actions workflow found.",
+          "weight": 0.45,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "python",
+      "title": "Python",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "python",
+        "title": "Python",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "python",
+          "languages": [
+            "python"
+          ],
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.58,
+          "evidence_groups_required": [
+            "source"
+          ],
+          "rules": [
+            {
+              "id": "pyproject",
+              "kind": "file_exists",
+              "path": "pyproject.toml",
+              "group": "manifest",
+              "weight": 0.65,
+              "reason": "Python pyproject.toml found."
+            },
+            {
+              "id": "requirements",
+              "kind": "file_exists",
+              "path": "requirements.txt",
+              "group": "manifest",
+              "weight": 0.45,
+              "reason": "Python requirements.txt found."
+            },
+            {
+              "id": "python_source",
+              "kind": "ext_count",
+              "ext": ".py",
+              "min": 1,
+              "group": "source",
+              "weight": 0.55,
+              "reason": "Python source files found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture package/app boundaries, runtime version, dependency and config expectations.",
+          "plan_guidance": "Identify pyproject/requirements, package layout, async boundaries, and test framework.",
+          "task_guidance": "Include targeted pytest and lint tasks based on project conventions.",
+          "artifact_templates": [
+            {
+              "id": "python-validation",
+              "output_path": "python-validation.md",
+              "title": "Python Validation"
+            }
+          ],
+          "validation_commands": [
+            "python -m pytest"
+          ],
+          "risk_prompts": [
+            "Python projects can be app-only, package-only, or mixed; do not infer publishability from source files alone."
+          ]
+        },
+        "merge": {
+          "priority": 30,
+          "override_policy": "additive",
+          "conflict_keys": [
+            "primary_ecosystem"
+          ]
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "python",
+          "rule_id": "requirements",
+          "group": "manifest",
+          "kind": "file_exists",
+          "path": "requirements.txt",
+          "reason": "Python requirements.txt found.",
+          "weight": 0.45,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        },
+        {
+          "pack_id": "python",
+          "rule_id": "python_source",
+          "group": "source",
+          "kind": "ext_count",
+          "path": "*.py",
+          "reason": "Python source files found.",
+          "weight": 0.55,
+          "confidence": 1.0,
+          "value": "1042",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "ui",
+      "title": "User Interface",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "ui",
+        "title": "User Interface",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "ui",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "surface"
+          ],
+          "rules": [
+            {
+              "id": "jsx_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.jsx",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "JSX frontend source found."
+            },
+            {
+              "id": "tsx_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.tsx",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "TSX frontend source found."
+            },
+            {
+              "id": "vue_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.vue",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Vue frontend source found."
+            },
+            {
+              "id": "svelte_source",
+              "kind": "any_file_matches",
+              "pattern": "src/*.svelte",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Svelte frontend source found."
+            },
+            {
+              "id": "static_app",
+              "kind": "any_file_matches",
+              "pattern": "static/*.js",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Static browser UI assets found."
+            },
+            {
+              "id": "desktop_ui",
+              "kind": "any_file_matches",
+              "pattern": "desktop/widgets/*.py",
+              "group": "surface",
+              "weight": 0.35,
+              "reason": "Desktop UI widget files found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture user workflows, states, accessibility and responsive behavior.",
+          "plan_guidance": "Identify UI surfaces and required browser/desktop verification.",
+          "task_guidance": "Include UI regression checks and Playwright only for web/MiniApp changes.",
+          "artifact_templates": [
+            {
+              "id": "ui-surface-plan",
+              "output_path": "ui-surface-plan.md",
+              "title": "UI Surface Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "UI changes need surface-specific verification, not only unit tests."
+          ]
+        },
+        "merge": {
+          "priority": 15,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 1.0,
+      "missing_groups": [],
+      "evidence": [
+        {
+          "pack_id": "ui",
+          "rule_id": "desktop_ui",
+          "group": "surface",
+          "kind": "any_file_matches",
+          "path": "desktop/widgets/admin_chat_section.py",
+          "reason": "Desktop UI widget files found.",
+          "weight": 0.35,
+          "confidence": 1.0,
+          "value": "",
+          "source": "workdir"
+        }
+      ]
+    },
+    {
+      "pack_id": "adr",
+      "title": "Architecture Decision Records",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "adr",
+        "title": "Architecture Decision Records",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "decision-log",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "adr"
+          ],
+          "rules": [
+            {
+              "id": "adr_dir",
+              "kind": "any_file_matches",
+              "pattern": "**/adr/*.md",
+              "group": "adr",
+              "weight": 0.7,
+              "reason": "ADR markdown files found."
+            },
+            {
+              "id": "decisions_dir",
+              "kind": "any_file_matches",
+              "pattern": "**/decisions/*.md",
+              "group": "adr",
+              "weight": 0.6,
+              "reason": "Decision records found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture when a change requires an explicit decision record.",
+          "plan_guidance": "Propose ADRs for significant technology, boundary, data or deployment decisions.",
+          "task_guidance": "Include ADR update tasks when architecture changes.",
+          "artifact_templates": [
+            {
+              "id": "adr-template",
+              "output_path": "decisions/ADR-template.md",
+              "title": "ADR Template"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Do not invent historical decisions; record new decisions as proposed."
+          ]
+        },
+        "merge": {
+          "priority": 12,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "adr"
+      ],
+      "evidence": []
+    },
+    {
+      "pack_id": "data",
+      "title": "Data / Persistence",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "data",
+        "title": "Data / Persistence",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "data",
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "data"
+          ],
+          "rules": [
+            {
+              "id": "migrations",
+              "kind": "any_file_matches",
+              "pattern": "**/migrations/*",
+              "group": "data",
+              "weight": 0.7,
+              "reason": "Migration files found."
+            },
+            {
+              "id": "sql_files",
+              "kind": "ext_count",
+              "ext": ".sql",
+              "min": 1,
+              "group": "data",
+              "weight": 0.45,
+              "reason": "SQL files found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture entities, migration constraints, consistency and rollback requirements.",
+          "plan_guidance": "Identify schema changes, migration ordering and data compatibility risks.",
+          "task_guidance": "Include migration and rollback validation.",
+          "artifact_templates": [
+            {
+              "id": "data-model-plan",
+              "output_path": "data-model-plan.md",
+              "title": "Data Model Plan"
+            }
+          ],
+          "validation_commands": [],
+          "risk_prompts": [
+            "Data changes can be irreversible without explicit rollback planning."
+          ]
+        },
+        "merge": {
+          "priority": 15,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "data"
+      ],
+      "evidence": []
+    },
+    {
+      "pack_id": "dotnet",
+      "title": ".NET / MSBuild",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "dotnet",
+        "title": ".NET / MSBuild",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "dotnet",
+          "languages": [
+            "csharp",
+            "fsharp"
+          ],
+          "frameworks": [
+            "msbuild",
+            "dotnet"
+          ],
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.6,
+          "evidence_groups_required": [
+            "project"
+          ],
+          "rules": [
+            {
+              "id": "csproj",
+              "kind": "any_file_matches",
+              "pattern": "*.csproj",
+              "group": "project",
+              "weight": 0.8,
+              "reason": "C# project file found."
+            },
+            {
+              "id": "fsproj",
+              "kind": "any_file_matches",
+              "pattern": "*.fsproj",
+              "group": "project",
+              "weight": 0.8,
+              "reason": "F# project file found."
+            },
+            {
+              "id": "solution",
+              "kind": "any_file_matches",
+              "pattern": "*.sln",
+              "group": "solution",
+              "weight": 0.4,
+              "reason": ".NET solution file found."
+            },
+            {
+              "id": "dotnet_sdk_web",
+              "kind": "xml_hint",
+              "pattern": "*.csproj",
+              "sdk_contains": "Microsoft.NET.Sdk",
+              "group": "sdk",
+              "weight": 0.4,
+              "reason": "SDK-style .NET project found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture project SDK, target frameworks, app type, packages and hosting model.",
+          "plan_guidance": "Identify solution structure, SDK ids, project references, NuGet dependencies, and build/test commands.",
+          "task_guidance": "Include dotnet restore/build/test validation tasks.",
+          "artifact_templates": [
+            {
+              "id": "dotnet-plan",
+              "output_path": "dotnet-plan.md",
+              "title": ".NET Plan"
+            }
+          ],
+          "validation_commands": [
+            "dotnet build",
+            "dotnet test"
+          ],
+          "risk_prompts": [
+            "SDK-style projects may use implicit imports and Directory.Build.props."
+          ]
+        },
+        "merge": {
+          "priority": 30,
+          "override_policy": "additive",
+          "conflict_keys": [
+            "primary_ecosystem"
+          ]
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "project"
+      ],
+      "evidence": []
+    },
+    {
+      "pack_id": "esp32-embedded",
+      "title": "ESP32 / ESP-IDF Firmware",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "esp32-embedded",
+        "title": "ESP32 / ESP-IDF Firmware",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "embedded",
+          "languages": [
+            "c",
+            "cpp"
+          ],
+          "frameworks": [
+            "esp-idf"
+          ],
+          "targets": [
+            "esp32"
+          ],
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.62,
+          "evidence_groups_required": [
+            "build",
+            "embedded"
+          ],
+          "rules": [
+            {
+              "id": "esp_idf_cmakelists",
+              "kind": "content_regex",
+              "path": "CMakeLists.txt",
+              "regex": "project\\.cmake|idf_component_register|IDF_PATH",
+              "group": "build",
+              "weight": 0.65,
+              "reason": "ESP-IDF CMake markers found."
+            },
+            {
+              "id": "sdkconfig",
+              "kind": "file_exists",
+              "path": "sdkconfig",
+              "group": "embedded",
+              "weight": 0.55,
+              "reason": "ESP-IDF sdkconfig found."
+            },
+            {
+              "id": "sdkconfig_defaults",
+              "kind": "file_exists",
+              "path": "sdkconfig.defaults",
+              "group": "embedded",
+              "weight": 0.35,
+              "reason": "ESP-IDF sdkconfig defaults found."
+            },
+            {
+              "id": "idf_component",
+              "kind": "any_file_matches",
+              "pattern": "**/idf_component.yml",
+              "group": "components",
+              "weight": 0.4,
+              "reason": "ESP-IDF component manifest found."
+            },
+            {
+              "id": "partitions",
+              "kind": "any_file_matches",
+              "pattern": "*partitions*.csv",
+              "group": "flash",
+              "weight": 0.25,
+              "reason": "ESP32 partition table found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture board, target chip, peripherals, timing, power, and update constraints.",
+          "plan_guidance": "Model FreeRTOS tasks, components, partition layout, flashing, OTA and hardware assumptions.",
+          "task_guidance": "Include build/flash/monitor validation and hardware-in-loop checks.",
+          "artifact_templates": [
+            {
+              "id": "embedded-build-plan",
+              "output_path": "embedded-build-plan.md",
+              "title": "Embedded Build Plan"
+            },
+            {
+              "id": "hardware-assumptions",
+              "output_path": "hardware-assumptions.md",
+              "title": "Hardware Assumptions"
+            }
+          ],
+          "validation_commands": [
+            "idf.py build"
+          ],
+          "risk_prompts": [
+            "Firmware validation may require connected hardware and target-specific configuration."
+          ]
+        },
+        "merge": {
+          "priority": 35,
+          "override_policy": "additive",
+          "conflict_keys": [
+            "primary_ecosystem"
+          ]
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "build",
+        "embedded"
+      ],
+      "evidence": []
+    },
+    {
+      "pack_id": "node",
+      "title": "Node.js / package.json",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "node",
+        "title": "Node.js / package.json",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "node",
+          "languages": [
+            "javascript",
+            "typescript"
+          ],
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.58,
+          "evidence_groups_required": [
+            "manifest"
+          ],
+          "rules": [
+            {
+              "id": "package_json",
+              "kind": "file_exists",
+              "path": "package.json",
+              "group": "manifest",
+              "weight": 0.7,
+              "reason": "npm package.json found."
+            },
+            {
+              "id": "package_scripts",
+              "kind": "json_field",
+              "path": "package.json",
+              "field": "scripts",
+              "group": "scripts",
+              "weight": 0.35,
+              "reason": "package.json scripts found."
+            },
+            {
+              "id": "npm_lock",
+              "kind": "any_file_matches",
+              "pattern": "package-lock.json",
+              "group": "lockfile",
+              "weight": 0.2,
+              "reason": "npm lockfile found."
+            },
+            {
+              "id": "ts_source",
+              "kind": "ext_count",
+              "ext": ".ts",
+              "min": 1,
+              "group": "source",
+              "weight": 0.25,
+              "reason": "TypeScript source found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture package type, runtime/browser target, workspace and script expectations.",
+          "plan_guidance": "Identify package scripts, module type, workspaces and frontend/backend split.",
+          "task_guidance": "Include npm/pnpm/yarn test/build validation tasks when scripts exist.",
+          "artifact_templates": [
+            {
+              "id": "node-package-plan",
+              "output_path": "node-package-plan.md",
+              "title": "Node Package Plan"
+            }
+          ],
+          "validation_commands": [
+            "npm test"
+          ],
+          "risk_prompts": [
+            "package.json may be tooling-only; inspect scripts and source before assuming application type."
+          ]
+        },
+        "merge": {
+          "priority": 30,
+          "override_policy": "additive",
+          "conflict_keys": [
+            "primary_ecosystem"
+          ]
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "manifest"
+      ],
+      "evidence": []
+    },
+    {
+      "pack_id": "platformio",
+      "title": "PlatformIO",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "platformio",
+        "title": "PlatformIO",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "embedded",
+          "frameworks": [
+            "platformio"
+          ],
+          "can_combine_with": [
+            "core-baseline",
+            "esp32-embedded",
+            "architecture",
+            "adr",
+            "ops"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.55,
+          "evidence_groups_required": [
+            "manifest"
+          ],
+          "rules": [
+            {
+              "id": "platformio_ini",
+              "kind": "file_exists",
+              "path": "platformio.ini",
+              "group": "manifest",
+              "weight": 1.0,
+              "reason": "PlatformIO project configuration found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture PlatformIO environments, boards, frameworks and upload/debug requirements.",
+          "plan_guidance": "Build a board/environment matrix from platformio.ini.",
+          "task_guidance": "Include PlatformIO build/test/upload validation tasks.",
+          "artifact_templates": [
+            {
+              "id": "board-env-matrix",
+              "output_path": "board-env-matrix.md",
+              "title": "Board Environment Matrix"
+            }
+          ],
+          "validation_commands": [
+            "pio run"
+          ],
+          "risk_prompts": [
+            "Multiple PlatformIO environments can target different boards and frameworks."
+          ]
+        },
+        "merge": {
+          "priority": 34,
+          "override_policy": "additive",
+          "conflict_keys": []
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "manifest"
+      ],
+      "evidence": []
+    },
+    {
+      "pack_id": "rust-cargo",
+      "title": "Rust / Cargo",
+      "lifecycle": "builtin",
+      "pack": {
+        "schema_version": "1",
+        "pack_id": "rust-cargo",
+        "title": "Rust / Cargo",
+        "lifecycle": "builtin",
+        "version": "1.0",
+        "applies_to": {
+          "primary_ecosystem": "rust",
+          "languages": [
+            "rust"
+          ],
+          "frameworks": [
+            "cargo"
+          ],
+          "targets": [],
+          "can_combine_with": [
+            "any"
+          ]
+        },
+        "detectors": {
+          "min_confidence": 0.62,
+          "evidence_groups_required": [
+            "manifest",
+            "source"
+          ],
+          "rules": [
+            {
+              "id": "cargo_manifest",
+              "kind": "file_exists",
+              "path": "Cargo.toml",
+              "group": "manifest",
+              "weight": 0.7,
+              "reason": "Cargo manifest found."
+            },
+            {
+              "id": "cargo_lock",
+              "kind": "file_exists",
+              "path": "Cargo.lock",
+              "group": "lockfile",
+              "weight": 0.2,
+              "reason": "Cargo lockfile found."
+            },
+            {
+              "id": "rust_source",
+              "kind": "any_file_matches",
+              "pattern": "**/src/*.rs",
+              "group": "source",
+              "weight": 0.5,
+              "reason": "Rust source found under a Cargo src directory."
+            },
+            {
+              "id": "rust_workspace",
+              "kind": "toml_field",
+              "path": "Cargo.toml",
+              "field": "workspace",
+              "group": "workspace",
+              "weight": 0.2,
+              "reason": "Cargo workspace metadata found."
+            }
+          ]
+        },
+        "sdd": {
+          "spec_guidance": "Capture crate boundaries, library vs binary target, and safety-sensitive requirements.",
+          "plan_guidance": "Identify Cargo workspace layout, feature flags, async runtime, FFI/native links, and build script constraints.",
+          "task_guidance": "Include cargo check/test/clippy validation tasks where applicable.",
+          "artifact_templates": [
+            {
+              "id": "cargo-plan",
+              "output_path": "cargo-plan.md",
+              "title": "Cargo Plan"
+            }
+          ],
+          "validation_commands": [
+            "cargo check",
+            "cargo test"
+          ],
+          "risk_prompts": [
+            "Cargo features and target-specific cfg flags may change behavior."
+          ]
+        },
+        "merge": {
+          "priority": 30,
+          "override_policy": "additive",
+          "conflict_keys": [
+            "primary_ecosystem"
+          ]
+        },
+        "source": "builtin",
+        "provenance": {}
+      },
+      "score": 0.0,
+      "missing_groups": [
+        "manifest",
+        "source"
+      ],
+      "evidence": []
+    }
+  ]
+}

@@ -136,6 +136,7 @@ def test_sessions_overview_with_active_session_has_expected_buttons(tmp_path):
     assert f"sess_queue:{s.id}" not in callbacks
     assert f"sess_clearqueue:{s.id}" not in callbacks
     assert f"sess_state:{s.id}" in callbacks
+    assert f"sess_snapshot:{session_uid}" in callbacks
     assert f"sess_close:{s.id}" in callbacks
     assert f"sess_reset:{s.id}" in callbacks
     assert f"sess_cli:{session_uid}:dummy" in callbacks

@@ -1,9 +1,9 @@
 # API Spec: `agent/plugins/brainstorm.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
-### `class BrainstormTool(ToolPlugin)` (line 163)
+### `class BrainstormTool(ToolPlugin)` (line 167)
 *Плагин мозгового штурма с множественными методологиями и параллельным выполнением.*
-- `def get_spec()` (line 166)
-- `async def execute(args, ctx)` (line 407)
+- `def get_spec()` (line 170)
+- `async def execute(args, ctx)` (line 416)

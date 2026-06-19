@@ -1,6 +1,6 @@
 # Codebase Mapper Instruction Graph
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:19Z
 
 This index is the entrypoint for agent instructions.
 
@@ -39,16 +39,17 @@ These files are mandatory context and must be considered before major edits.
 
 ## Nodes
 - [tests](nodes/tests.md) - files: 549, source_glob: `tests/**`
-- [modes](nodes/modes.md) - files: 221, source_glob: `modes/**`
-- [app](nodes/app.md) - files: 155, source_glob: `app/**`
-- [agent](nodes/agent.md) - files: 61, source_glob: `agent/**`
-- [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`
+- [modes](nodes/modes.md) - files: 219, source_glob: `modes/**`
+- [app](nodes/app.md) - files: 154, source_glob: `app/**`
+- [agent](nodes/agent.md) - files: 60, source_glob: `agent/**`
+- [desktop](nodes/desktop.md) - files: 31, source_glob: `desktop/**`
 - [miniapp](nodes/miniapp.md) - files: 22, source_glob: `miniapp/**`
 - [tg](nodes/tg.md) - files: 17, source_glob: `tg/**`
 - [sessions](nodes/sessions.md) - files: 10, source_glob: `sessions/**`
 - [utils](nodes/utils.md) - files: 8, source_glob: `utils/**`
 - [i18n](nodes/i18n.md) - files: 5, source_glob: `i18n/**`
 - [locales](nodes/locales.md) - files: 4, source_glob: `locales/**`
+- [scripts](nodes/scripts.md) - files: 2, source_glob: `scripts/**`
 - [bot.py](nodes/bot-py.md) - files: 1, source_glob: `bot.py`
 - [code_stats.py](nodes/code-stats-py.md) - files: 1, source_glob: `code_stats.py`
 - [config.py](nodes/config-py.md) - files: 1, source_glob: `config.py`
@@ -58,7 +59,6 @@ These files are mandatory context and must be considered before major edits.
 - [parse_status.py](nodes/parse-status-py.md) - files: 1, source_glob: `parse_status.py`
 - [pytest.ini](nodes/pytest-ini.md) - files: 1, source_glob: `pytest.ini`
 - [requirements.txt](nodes/requirements-txt.md) - files: 1, source_glob: `requirements.txt`
-- [scripts](nodes/scripts.md) - files: 1, source_glob: `scripts/**`
 - [session.py](nodes/session-py.md) - files: 1, source_glob: `session.py`
 - [setup_bot.sh](nodes/setup-bot-sh.md) - files: 1, source_glob: `setup_bot.sh`
 - [skills-lock.json](nodes/skills-lock-json.md) - files: 1, source_glob: `skills-lock.json`

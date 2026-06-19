@@ -1,6 +1,6 @@
 # API Spec: `app/security/auth.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class TokenAuthStrategy` (line 13)
@@ -15,11 +15,11 @@ Generated: 2026-06-03T02:24:29Z
 - `def __init__()` (line 142)
 - `def authenticate(credentials)` (line 145)
 
-### `class ConfigAuthService` (line 205)
+### `class ConfigAuthService` (line 207)
 *Thin auth adapter over BotApp access checks plus pluggable auth strategies.*
-- `def __init__()` (line 208)
-- `def authorize(chat_id)` (line 225)
-- `def authenticate(credentials)` (line 248)
+- `def __init__()` (line 210)
+- `def authorize(chat_id)` (line 227)
+- `def authenticate(credentials)` (line 250)
 
 ## Symbols
-- `def build_auth_service(auth_config)` (line 272)
+- `def build_auth_service(auth_config)` (line 274)

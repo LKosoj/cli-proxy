@@ -86,6 +86,12 @@ BASELINE_MUTABLE_CALLBACK_DATA_INVENTORY = [
         "expected_session_uid": COMPLEX_SESSION_UID,
     },
     {
+        "prefix": "sess_snapshot",
+        "name": "snapshot",
+        "callback_data": f"sess_snapshot:{COMPLEX_SESSION_UID}",
+        "expected_session_uid": COMPLEX_SESSION_UID,
+    },
+    {
         "prefix": "ma:agent:plugins",
         "name": "agent_plugins",
         "callback_data": f"ma:agent:plugins:s={COMPLEX_SESSION_UID}",
@@ -119,6 +125,8 @@ def _extract_inventory_session_uid(case: dict) -> str:
     if prefix == "sess_transfer_yes":
         return data.split(":", 1)[1].rsplit(":", 1)[0]
     if prefix == "sess_transfer_no":
+        return data.split(":", 1)[1]
+    if prefix == "sess_snapshot":
         return data.split(":", 1)[1]
     if prefix in {"ma:agent:plugins", "ma:agent:plugin"}:
         payload = data.split(":", 3)[3]
@@ -171,6 +179,7 @@ def test_baseline_mutable_callback_data_inventory_has_colon_session_uid_payloads
         "sess_mode_pick",
         "sess_transfer_yes",
         "sess_transfer_no",
+        "sess_snapshot",
         "ma:agent:plugins",
         "ma:agent:plugin",
     }

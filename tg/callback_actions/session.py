@@ -1,5 +1,6 @@
 """Session/UI callback actions."""
 
+import asyncio
 import logging
 import os
 
@@ -652,6 +653,58 @@ class SessionActionsMixin:
 
         text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        return True
+
+    async def _cb_sess_snapshot(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
+        payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
+        _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
+        if session is None:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+
+        visibility_checker = getattr(getattr(self.bot_app, "handlers", None), "_is_session_visible_for_chat", None)
+        if callable(visibility_checker):
+            try:
+                if not bool(visibility_checker(owner_chat_id, session)):
+                    await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+                    return True
+            except Exception:
+                logging.getLogger(__name__).exception("session snapshot visibility check failed")
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+                return True
+
+        service = getattr(self.bot_app, "session_snapshot_report_service", None)
+        if service is None:
+            await self._edit_msg(context, query, t("msg.report.snapshot_unavailable", lang))
+            return True
+        try:
+            summary = await asyncio.to_thread(service.save_html_report, session)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "session snapshot report failed session_id=%s",
+                getattr(session, "id", None),
+            )
+            await self._edit_msg(context, query, t("msg.report.snapshot_failed", lang))
+            return True
+
+        target_kwargs = self._session_reply_kwargs(session, ui_chat_id=int(chat_id))
+        with open(summary.path, "rb") as f:
+            ok = await self.bot_app._send_document(
+                context,
+                document=f,
+                filename=summary.name,
+                **target_kwargs,
+            )
+        if not ok:
+            await self._edit_msg(context, query, t("msg.report.send_failed", lang))
+            return True
+        await self._edit_msg(
+            context,
+            query,
+            t("msg.report.snapshot_generated", lang, name=summary.report_id),
+        )
         return True
 
     async def _cb_lang_menu(self, *, data: str, chat_id: int, query, context) -> bool:

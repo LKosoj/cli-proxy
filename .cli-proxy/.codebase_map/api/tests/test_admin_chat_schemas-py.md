@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_chat_schemas.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def test_parse_answer_requires_text()` (line 56)

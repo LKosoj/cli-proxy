@@ -1,6 +1,6 @@
 # API Spec: `modes/analyst/__init__.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class _LazyAnalystMode(BaseMode)` (line 6)

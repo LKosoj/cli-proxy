@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_config_store.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def test_admin_config_store_uses_session_local_cli_proxy_path(tmp_path)` (line 40)

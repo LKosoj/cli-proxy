@@ -1,6 +1,6 @@
 # API Spec: `modes/admin/allowlist.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def is_valid_action_id(action_id)` (line 10)

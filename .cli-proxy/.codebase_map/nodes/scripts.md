@@ -1,43 +1,58 @@
 # Node: scripts
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Purpose
-Операционные (provisioning) shell-скрипты для подготовки хоста под запуск CLI Proxy. Это не код приложения — скрипты выполняются с правами root и настраивают системное окружение. Сейчас в каталоге один скрипт — `scripts/setup-claude-bot.sh`, который создаёт системного пользователя `claude-bot`, общую группу и устанавливает Claude CLI.
+Instruction node for `scripts` area.
 
 ## Scope
 - Source glob: `scripts/**`
-- Файлы (1): `scripts/setup-claude-bot.sh`
-- Граница: host-provisioning, запуск `sudo`/root, bash (`set -e`). Не содержит Python и бизнес-логики режимов.
+- Estimated files: 2
 
 ## Instructions for agent
-- Перед правками прочитать `scripts/setup-claude-bot.sh` целиком; это root-скрипт с `set -e`.
-- Сохранять идемпотентность проверок (`id`, `getent group`, `command -v`) — повторный запуск не должен ломать состояние.
-- Не хардкодить секреты: `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` дописываются в `~/.bashrc` пользователя.
-- Проверка после правок: `bash -n scripts/setup-claude-bot.sh` (синтаксис), при наличии — `shellcheck`. Pytest-тестов для этой области нет.
-- Сообщения вывода — на русском, с цветовыми кодами; держать единый стиль echo.
+- Read only files relevant to the active task.
+- Prefer deterministic checks before edits.
+- Keep changes minimal and validate with tests/linters where applicable.
 
 ## Source of truth
+- `scripts/**`
+- `scripts/check_i18n_parity.py`
 - `scripts/setup-claude-bot.sh`
 
-Ключевое поведение (проверено по коду):
-- Создаёт пользователя (по умолчанию `claude-bot`) и группу `cli-proxy-workgroup`, выставляет setgid и `g+rwxs` на WORKDIR (по умолчанию `/srv/git_projects`).
-- Ставит Claude CLI через `curl -fsSL https://claude.ai/install.sh | bash`, добавляет `~/.local/bin` в PATH.
-- Аргументы: `--workdir`, `--username`, `--version`.
-- Финальный шаг подсказывает запуск бота: `python <WORKDIR>/cli-proxy/bot.py`.
+## Module API
+Детальные интерфейсы модулей этой области:
+
+- [scripts/check_i18n_parity.py](../api/scripts/check_i18n_parity-py.md)
 
 ## When to update
-- Любой коммит, затрагивающий `scripts/**`.
-- Изменения provisioning-логики: пользователь/группа/права, поток установки Claude CLI, набор env-переменных, дефолтные `--workdir`/`--username`.
-- Изменение пути/способа запуска бота, на который ссылается скрипт (`bot.py`).
+- Any commit touching `scripts/**`.
+- Any commit touching `agent/**` because this node has import/call dependency on it.
+- Any commit touching `app/**` because this node has import/call dependency on it.
+- Any commit touching `bot.py` because this node has import/call dependency on it.
+- Any commit touching `desktop/**` because this node has import/call dependency on it.
+- Any commit touching `miniapp/**` because this node has import/call dependency on it.
+- Any architecture or behavior change affecting this area.
 
 ## Related nodes
-- `nodes/setup-bot-sh.md` — родственный provisioning-скрипт `setup_bot.sh` в корне репозитория.
-- `nodes/bot-py.md` — конечный шаг скрипта запускает `bot.py`.
-- В `graph.json` рёбра для `scripts` не объявлены (узел изолирован по графу).
+- `nodes/agent.md`
+- `nodes/app.md`
+- `nodes/bot-py.md`
+- `nodes/desktop.md`
+- `nodes/miniapp.md`
+- `nodes/modes.md`
+- `nodes/sessions.md`
+- `nodes/summary-py.md`
+- `agent` confidence=0.66 via L0
+- `app` confidence=0.66 via L0
+- `bot.py` confidence=0.66 via L0
+- `desktop` confidence=0.66 via L0
+- `miniapp` confidence=0.66 via L0
+- `modes` confidence=0.66 via L0
+- `sessions` confidence=0.66 via L0
+- `summary.py` confidence=0.66 via L0
 
 ## Owner
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-03T02:24:29Z
+- 2026-06-17T10:46:18Z

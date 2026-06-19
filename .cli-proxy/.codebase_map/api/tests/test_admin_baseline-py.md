@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_baseline.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class _FakeResult` (line 23)

@@ -1,6 +1,6 @@
 # API Spec: `utils/text.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def strip_ansi(text)` (line 22)

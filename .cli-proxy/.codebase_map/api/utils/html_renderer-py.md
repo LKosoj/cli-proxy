@@ -1,6 +1,6 @@
 # API Spec: `utils/html_renderer.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def render_html(text, theme_colors, fragment, allow_network_fetch)` (line 43)

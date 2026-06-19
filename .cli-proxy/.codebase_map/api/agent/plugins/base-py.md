@@ -1,6 +1,6 @@
 # API Spec: `agent/plugins/base.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class ToolPlugin(ABC)` (line 13)

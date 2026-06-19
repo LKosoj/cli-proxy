@@ -200,6 +200,7 @@ class BotApp:
         self.advanced_orchestrator_service = self.container.advanced_orchestrator_service
         self.artifact_intent_service = self.container.artifact_intent_service
         self.report_history_service = self.container.report_history_service
+        self.session_snapshot_report_service = self.container.session_snapshot_report_service
         self.config_service = self.container.config_service
         self.orchestrator_chat_completion = chat_completion
         self.mode_callback_router = ModeCallbackRouterService(

@@ -1,6 +1,6 @@
 # API Spec: `app/config_runtime/models.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class ConfigModel(BaseModel)` (line 22)
@@ -11,26 +11,26 @@ Generated: 2026-06-03T02:24:29Z
 
 ### `class DefaultsConfigModel(ConfigModel)` (line 115)
 
-### `class MCPConfigModel(ConfigModel)` (line 197)
+### `class MCPConfigModel(ConfigModel)` (line 198)
 
-### `class MCPClientConfigModel(ConfigModel)` (line 204)
+### `class MCPClientConfigModel(ConfigModel)` (line 205)
 
-### `class PresetConfigModel(ConfigModel)` (line 231)
+### `class PresetConfigModel(ConfigModel)` (line 232)
 
-### `class MiniAppConfigModel(ConfigModel)` (line 236)
+### `class MiniAppConfigModel(ConfigModel)` (line 237)
 
-### `class ThreadModeConfigModel(ConfigModel)` (line 253)
+### `class ThreadModeConfigModel(ConfigModel)` (line 254)
 
-### `class WebhooksConfigModel(ConfigModel)` (line 267)
+### `class WebhooksConfigModel(ConfigModel)` (line 268)
 
-### `class SchedulerConfigModel(ConfigModel)` (line 283)
+### `class SchedulerConfigModel(ConfigModel)` (line 284)
 
-### `class SecurityRateLimitPolicyConfigModel(ConfigModel)` (line 292)
+### `class SecurityRateLimitPolicyConfigModel(ConfigModel)` (line 293)
 
-### `class SecurityRateLimitsConfigModel(ConfigModel)` (line 311)
+### `class SecurityRateLimitsConfigModel(ConfigModel)` (line 312)
 
-### `class SecurityConfigModel(ConfigModel)` (line 325)
+### `class SecurityConfigModel(ConfigModel)` (line 326)
 
-### `class LintEvolutionConfigModel(ConfigModel)` (line 329)
+### `class LintEvolutionConfigModel(ConfigModel)` (line 330)
 
-### `class AppConfigModel(ConfigModel)` (line 342)
+### `class AppConfigModel(ConfigModel)` (line 343)

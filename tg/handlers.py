@@ -799,6 +799,13 @@ class BotHandlers:
             overview_buttons.append(InlineKeyboardButton(t("btn.session.clearqueue", lang), callback_data=f"sess_clearqueue:{s.id}"))
         if visibility.allows("state"):
             overview_buttons.append(InlineKeyboardButton(t("btn.session.state", lang), callback_data=f"sess_state:{s.id}"))
+        if visibility.allows("snapshot_report"):
+            overview_buttons.append(
+                InlineKeyboardButton(
+                    t("btn.session.snapshot_report", lang),
+                    callback_data=f"sess_snapshot:{explicit_session_uid or s.id}",
+                )
+            )
         if visibility.allows("close"):
             overview_buttons.append(InlineKeyboardButton(t("btn.session.close", lang), callback_data=f"sess_close:{s.id}"))
         if visibility.allows("reset"):
@@ -1088,6 +1095,9 @@ class BotHandlers:
         if action.lower() == "generate":
             await self._generate_and_send_report(context, route, session, lang)
             return
+        if action.lower() == "snapshot":
+            await self._generate_and_send_session_snapshot(context, route, session, lang)
+            return
         if action.lower() == "latest":
             await self._send_report_document(context, route, session, None, lang)
             return
@@ -1174,6 +1184,41 @@ class BotHandlers:
         await self.bot_app._send_message(
             context,
             text=t("msg.report.generated", lang, name=summary.report_id),
+            **route.reply_kwargs(),
+        )
+        await self._send_report_document(context, route, session, summary.report_id, lang)
+
+    async def _generate_and_send_session_snapshot(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        route,
+        session: Session,
+        lang: str,
+    ) -> None:
+        service = getattr(self.bot_app, "session_snapshot_report_service", None)
+        if service is None:
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.snapshot_unavailable", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        try:
+            summary = await asyncio.to_thread(service.save_html_report, session)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "session snapshot report failed session_uid=%s",
+                session_runtime_uid(session),
+            )
+            await self.bot_app._send_message(
+                context,
+                text=t("msg.report.snapshot_failed", lang),
+                **route.reply_kwargs(),
+            )
+            return
+        await self.bot_app._send_message(
+            context,
+            text=t("msg.report.snapshot_generated", lang, name=summary.report_id),
             **route.reply_kwargs(),
         )
         await self._send_report_document(context, route, session, summary.report_id, lang)

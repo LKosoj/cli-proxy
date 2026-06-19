@@ -1,6 +1,6 @@
 # API Spec: `desktop/main.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `async def bootstrap_facade()` (line 35)

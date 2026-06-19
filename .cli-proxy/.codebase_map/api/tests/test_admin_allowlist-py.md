@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_allowlist.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def test_admin_allowlist_function_is_exported_and_checks_targets()` (line 17)

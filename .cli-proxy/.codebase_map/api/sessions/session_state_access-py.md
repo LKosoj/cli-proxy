@@ -1,6 +1,6 @@
 # API Spec: `sessions/session_state_access.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def get_active_mode(session, default)` (line 24)

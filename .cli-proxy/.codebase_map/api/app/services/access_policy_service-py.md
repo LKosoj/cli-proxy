@@ -1,6 +1,6 @@
 # API Spec: `app/services/access_policy_service.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class AccessPolicyService` (line 15)

@@ -1,11 +1,12 @@
 # API Spec: `desktop/widgets/admin_chat_section.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
-### `class AdminChatSection(QGroupBox)` (line 30)
+### `class AdminChatSection(QGroupBox)` (line 31)
 *Секция Chat админ-панели: диалог, pending approvals, MEMORY.md.*
-- `def __init__(facade)` (line 33)
-- `def start()` (line 134)
-- `def stop()` (line 138)
-- `def on_session_changed()` (line 141)
+- `def __init__(facade)` (line 34)
+- `def start()` (line 135)
+- `def stop()` (line 139)
+- `def on_session_changed()` (line 142)
+- `def retranslate_ui(lang)` (line 485)

@@ -36,6 +36,7 @@ from app.services.remote_control_service import RemoteControlService
 from app.services.run_operations_service import RunOperationsService
 from app.services.scheduled_job_repository import ScheduledJobRecord, ScheduledJobRepository
 from app.services.scheduler_service import SchedulerService
+from app.services.session_snapshot_report_service import SessionSnapshotReportService
 from app.services.session_mutation_service import SessionMutationService
 from app.services.session_thread_manager import SessionThreadManager
 from app.services.session_thread_repository import SessionThreadRepository
@@ -91,6 +92,7 @@ class ApplicationContainer:
     advanced_orchestrator_service: AdvancedOrchestratorService
     artifact_intent_service: ArtifactIntentService
     report_history_service: ReportHistoryService
+    session_snapshot_report_service: SessionSnapshotReportService
 
 
 ToolRegistryFactory = Callable[[AppConfig], ToolRegistry]
@@ -293,6 +295,21 @@ def _build_report_history_service() -> ReportHistoryService:
         raise
 
 
+def _build_session_snapshot_report_service(
+    *,
+    report_history_service: ReportHistoryService,
+    run_artifacts_service: RunArtifactsService,
+) -> SessionSnapshotReportService:
+    try:
+        return SessionSnapshotReportService(
+            report_history_service=report_history_service,
+            run_artifacts_service=run_artifacts_service,
+        )
+    except Exception:
+        logger.exception("session snapshot report service init failed during bootstrap")
+        raise
+
+
 def build_application(
     config: AppConfig,
     *,
@@ -356,6 +373,10 @@ def build_application(
     )
     mode_pipeline = ModePipelineService(run_mode_pipeline_fn=run_mode_pipeline_fn)
     foundation_services = build_mode_foundation_services(config)
+    session_snapshot_report_service = _build_session_snapshot_report_service(
+        report_history_service=report_history_service,
+        run_artifacts_service=foundation_services.run_artifacts,
+    )
     run_operations_service = _build_run_operations_service(
         foundation_services,
         bot_app_provider=bot_app_provider,
@@ -439,4 +460,5 @@ def build_application(
         advanced_orchestrator_service=advanced_orchestrator_service,
         artifact_intent_service=artifact_intent_service,
         report_history_service=report_history_service,
+        session_snapshot_report_service=session_snapshot_report_service,
     )

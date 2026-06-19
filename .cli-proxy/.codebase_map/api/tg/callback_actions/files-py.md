@@ -1,6 +1,6 @@
 # API Spec: `tg/callback_actions/files.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
-### `class FileActionsMixin` (line 13)
+### `class FileActionsMixin` (line 14)

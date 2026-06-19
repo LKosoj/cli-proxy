@@ -30,6 +30,18 @@ def test_save_and_read_markdown_report(tmp_path):
     assert content.summary.to_dict()["content_type"] == "text/markdown"
 
 
+def test_save_and_read_html_report(tmp_path):
+    service = ReportHistoryService()
+    session = _session(tmp_path)
+
+    summary = service.save_html_report(session, "<h1>Report</h1>", now=1000)
+    content = service.get_report(session, summary.report_id)
+
+    assert summary.report_id == "report_19700101_001640.html"
+    assert content.content == "<h1>Report</h1>"
+    assert content.summary.to_dict()["content_type"] == "text/html"
+
+
 def test_list_reports_sorts_newest_first_and_ignores_unknown_extensions(tmp_path):
     service = ReportHistoryService()
     session = _session(tmp_path)

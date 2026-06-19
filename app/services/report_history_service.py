@@ -144,8 +144,50 @@ class ReportHistoryService:
         title: str = "",
         now: Optional[float] = None,
     ) -> ReportSummary:
+        return self._save_text_report(
+            session,
+            content,
+            prefix=prefix,
+            extension=".md",
+            title=title,
+            now=now,
+        )
+
+    def save_html_report(
+        self,
+        session: Any,
+        content: str,
+        *,
+        prefix: str = "report",
+        title: str = "",
+        now: Optional[float] = None,
+    ) -> ReportSummary:
+        return self._save_text_report(
+            session,
+            content,
+            prefix=prefix,
+            extension=".html",
+            title=title,
+            now=now,
+        )
+
+    def _save_text_report(
+        self,
+        session: Any,
+        content: str,
+        *,
+        prefix: str,
+        extension: str,
+        title: str,
+        now: Optional[float],
+    ) -> ReportSummary:
         reports_dir = self.ensure_reports_dir(session)
-        filename = self._next_report_filename(reports_dir, prefix=prefix, now=now)
+        filename = self._next_report_filename(
+            reports_dir,
+            prefix=prefix,
+            extension=extension,
+            now=now,
+        )
         path = os.path.join(reports_dir, filename)
         if not is_within_root(path, reports_dir):
             raise InvalidReportIdError("invalid report target")
@@ -259,14 +301,26 @@ class ReportHistoryService:
             raise InvalidReportIdError("invalid report extension")
         return name
 
-    def _next_report_filename(self, reports_dir: str, *, prefix: str, now: Optional[float]) -> str:
+    def _next_report_filename(
+        self,
+        reports_dir: str,
+        *,
+        prefix: str,
+        extension: str = ".md",
+        now: Optional[float],
+    ) -> str:
         safe_prefix = _SAFE_PREFIX_RE.sub("_", str(prefix or "report")).strip("._-") or "report"
+        ext = str(extension or ".md").strip().lower()
+        if not ext.startswith("."):
+            ext = f".{ext}"
+        if ext not in _ALLOWED_EXTENSIONS:
+            raise InvalidReportIdError("invalid report extension")
         timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime(now if now is not None else time.time()))
-        filename = f"{safe_prefix}_{timestamp}.md"
+        filename = f"{safe_prefix}_{timestamp}{ext}"
         if not os.path.exists(os.path.join(reports_dir, filename)):
             return filename
         for idx in range(1, 1000):
-            candidate = f"{safe_prefix}_{timestamp}_{idx}.md"
+            candidate = f"{safe_prefix}_{timestamp}_{idx}{ext}"
             if not os.path.exists(os.path.join(reports_dir, candidate)):
                 return candidate
         raise ReportHistoryError("unable to allocate report filename")

@@ -1,36 +1,31 @@
 # Node: desktop
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Purpose
-Транспортный слой: десктоп-клиент с GUI на PySide6/Qt для управления CLI-агентами, сессиями и режимами. Бизнес-логики не содержит — работает через фасад `desktop/services/application_facade.py` (`ApplicationFacade`) и SDK-сервисы. Композиционный корень и точка входа — `desktop/main.py` (`bootstrap_facade`, `main`); главное окно — `desktop/main_window.py` (`MainWindow`).
+Instruction node for `desktop` area.
 
 ## Scope
 - Source glob: `desktop/**`
-- Current files: 32 under `desktop/**` as of last review.
-- Подкаталоги: `desktop/services/` (фасады и сервисы UI), `desktop/widgets/` (Qt-виджеты панелей и диалогов).
+- Estimated files: 31
 
 ## Instructions for agent
-- Это транспортный слой: бизнес-логику не размещать здесь, маршрутизировать через `ApplicationFacade` и SDK-сервисы (см. `modes/sdk/`).
-- Соблюдать порядок bootstrap из `desktop/main.py:35` (`bootstrap_facade`): Registry → Services → Facade → UI state service.
-- Запуск режимов из десктопа — fail-closed: актор должен резолвиться в numeric Telegram `chat_id` через `desktop/services/desktop_identity_provider.py`; иначе deny с reason `actor_unresolved`. Политика описана в `desktop/README.md` и реализована в `desktop/services/application_facade.py`.
-- Синхронизировать функциональность с ботом (`tg/`) и MiniApp (`miniapp/`) — общий контракт сервисов (требование `CLAUDE.md`).
-- Qt-виджеты — в `desktop/widgets/`; сервисы и фасады — в `desktop/services/`.
-- Читать только файлы, относящиеся к задаче; изменения держать минимальными и проверять `pytest -q`.
+- Read only files relevant to the active task.
+- Prefer deterministic checks before edits.
+- Keep changes minimal and validate with tests/linters where applicable.
 
 ## Source of truth
-- `desktop/README.md` — Desktop Mode Launch Policy (fail-closed, allowlist).
-- `desktop/main.py` — bootstrap и точка входа (`bootstrap_facade`, `main`).
-- `desktop/main_window.py` — `MainWindow`, навигация и сборка виджетов.
-- `desktop/services/__init__.py` — экспорт фасада и сервисов слоя.
-- `desktop/services/application_facade.py` — `ApplicationFacade`, вычисление `launch_policy`.
-- `desktop/services/desktop_admin_facade.py` — админ-операции UI.
-- `desktop/services/desktop_git_service.py` — `DesktopGitService`.
-- `desktop/services/desktop_identity_provider.py` — резолв owning actor.
-- `desktop/services/desktop_state_service.py` — `DesktopUiStateService`, состояние UI.
-- `desktop/services/theme_service.py` — `ThemeService`.
-- `desktop/services/pending_input_ui.py` — UI для отложенного ввода.
-- `desktop/widgets/**` — Qt-виджеты (chat_view, files_panel, git_panel, mode_panel, admin_panel, scheduler_panel, command_palette и др.).
+- `desktop/**`
+- `desktop/main.py`
+- `desktop/services/__init__.py`
+- `desktop/widgets/admin_chat_section.py`
+- `desktop/main_window.py`
+- `desktop/services/application_facade.py`
+- `desktop/services/desktop_admin_facade.py`
+- `desktop/services/desktop_git_service.py`
+- `desktop/services/desktop_identity_provider.py`
+- `desktop/services/desktop_state_service.py`
+- `desktop/services/pending_input_ui.py`
 
 ## Module API
 Детальные интерфейсы модулей этой области:
@@ -57,7 +52,7 @@ Generated: 2026-06-03T02:24:29Z
 - Any commit touching `app/**` because this node has import/call dependency on it.
 - Any commit touching `bot.py` because this node has import/call dependency on it.
 - Any commit touching `config.py` because this node has import/call dependency on it.
-- Any commit touching `miniapp/**` because this node has import/call dependency on it.
+- Any commit touching `config_example.yaml` because this node has import/call dependency on it.
 - Any architecture or behavior change affecting this area.
 
 ## Related nodes
@@ -65,21 +60,21 @@ Generated: 2026-06-03T02:24:29Z
 - `nodes/app.md`
 - `nodes/bot-py.md`
 - `nodes/config-py.md`
+- `nodes/config-example-yaml.md`
+- `nodes/i18n.md`
+- `nodes/locales.md`
 - `nodes/miniapp.md`
-- `nodes/modes.md`
-- `nodes/session-py.md`
-- `nodes/sessions.md`
-- `agent` confidence=0.90 via L0/L1/L2
-- `app` confidence=0.90 via L0/L1/L2
-- `bot.py` confidence=0.76 via L0
-- `config.py` confidence=0.90 via L2
-- `miniapp` confidence=0.76 via L0
-- `modes` confidence=0.90 via L0/L1/L2
-- `session.py` confidence=0.90 via L0/L2
-- `sessions` confidence=0.90 via L0/L1/L2
+- `agent` confidence=0.95 via L0/L1/L2
+- `app` confidence=0.95 via L0/L1/L2
+- `bot.py` confidence=0.95 via L0
+- `config.py` confidence=0.90 via L0/L2
+- `config_example.yaml` confidence=0.66 via L0
+- `i18n` confidence=0.90 via L0/L1/L2
+- `locales` confidence=0.95 via L0
+- `miniapp` confidence=0.95 via L0
 
 ## Owner
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17 (ReportViewerWidget uses ApplicationFacade report history contract)
+- 2026-06-17T10:46:18Z

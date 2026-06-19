@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_autonomy_policy.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def test_defaults_when_empty_cfg()` (line 14)

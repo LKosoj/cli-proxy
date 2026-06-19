@@ -1,6 +1,6 @@
 # API Spec: `tests/test_admin_chat_memory.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def test_paths_under_admin_chat_dir(tmp_path)` (line 16)

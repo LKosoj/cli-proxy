@@ -1,6 +1,6 @@
 # API Spec: `tests/smoke/test_startup_smoke.py`
 
-Generated: 2026-06-03T02:24:28Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Symbols
 - `def test_bot_startup_smoke_builds_local_runtime(tmp_path)` (line 44)

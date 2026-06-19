@@ -15,6 +15,7 @@ _ADMIN_SESSION_ACTIONS = frozenset(
         "resume",
         "queue",
         "state",
+        "snapshot_report",
         "close",
         "reset",
         "ssh",
@@ -25,7 +26,7 @@ _ADMIN_SESSION_ACTIONS = frozenset(
     }
 )
 
-_USER_SESSION_ACTIONS = frozenset({"status", "reset", "new_session"})
+_USER_SESSION_ACTIONS = frozenset({"status", "snapshot_report", "reset", "new_session"})
 
 _ADMIN_MODE_ACTIONS = {
     "agent": frozenset(

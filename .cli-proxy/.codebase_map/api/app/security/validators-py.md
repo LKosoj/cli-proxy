@@ -1,6 +1,6 @@
 # API Spec: `app/security/validators.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class BasicValidatorService` (line 10)

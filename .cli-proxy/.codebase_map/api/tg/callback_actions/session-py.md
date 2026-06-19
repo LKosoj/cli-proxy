@@ -1,6 +1,6 @@
 # API Spec: `tg/callback_actions/session.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
-### `class SessionActionsMixin` (line 19)
+### `class SessionActionsMixin` (line 21)

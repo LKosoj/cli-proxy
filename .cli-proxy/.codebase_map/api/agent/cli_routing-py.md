@@ -1,6 +1,6 @@
 # API Spec: `agent/cli_routing.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class RoutedCallError(Exception)` (line 126)

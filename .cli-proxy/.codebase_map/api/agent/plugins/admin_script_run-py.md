@@ -1,6 +1,6 @@
 # API Spec: `agent/plugins/admin_script_run.py`
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Classes
 ### `class AdminScriptRunTool(ToolPlugin)` (line 11)

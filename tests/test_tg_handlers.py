@@ -323,6 +323,131 @@ async def test_cmd_reports_generate_saves_plan_report_and_sends_document(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_cmd_reports_snapshot_saves_html_and_sends_document(tmp_path: Path) -> None:
+    service = ReportHistoryService()
+    session = types.SimpleNamespace(id="s1", workdir=str(tmp_path), chat_id=101)
+    messages: list[str] = []
+    documents: list[tuple[str, bytes]] = []
+
+    class _SnapshotService:
+        def save_html_report(self, target_session):
+            return service.save_html_report(
+                target_session,
+                "<!doctype html><h1>Snapshot</h1>",
+                prefix="session_snapshot",
+                now=1000,
+            )
+
+    async def _send_message(_ctx, *, text: str, **_kw):
+        messages.append(str(text))
+
+    async def _send_document(_ctx, *, document, filename: str, **_kw):
+        documents.append((filename, document.read()))
+        return True
+
+    route = types.SimpleNamespace(
+        owner_chat_id=101,
+        reply_kwargs=lambda: {"chat_id": 101},
+    )
+    bot_app = types.SimpleNamespace(
+        report_history_service=service,
+        session_snapshot_report_service=_SnapshotService(),
+        ensure_telegram_inbound_session=AsyncMock(return_value=(route, session)),
+        _send_message=_send_message,
+        _send_document=_send_document,
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+    )
+    handlers = BotHandlers(bot_app)
+    update = types.SimpleNamespace(effective_chat=types.SimpleNamespace(id=101))
+    context = types.SimpleNamespace(args=["snapshot"])
+
+    await handlers.cmd_reports(update, context)
+
+    assert messages == ["HTML-снимок сессии создан: session_snapshot_19700101_001640.html"]
+    assert documents == [("session_snapshot_19700101_001640.html", b"<!doctype html><h1>Snapshot</h1>")]
+
+
+@pytest.mark.asyncio
+async def test_session_snapshot_callback_sends_html_document(tmp_path: Path) -> None:
+    service = ReportHistoryService()
+    session_uid = "chat:101:s1"
+    session = types.SimpleNamespace(
+        id="s1",
+        chat_id=101,
+        workdir=str(tmp_path),
+        conversation_scope=types.SimpleNamespace(session_uid=session_uid),
+        tool=types.SimpleNamespace(name="codex"),
+        cli=types.SimpleNamespace(active_cli="codex", resume_tokens={}),
+        modes=types.SimpleNamespace(active_mode="agent"),
+        queue=[],
+    )
+    summary = service.save_html_report(
+        session,
+        "<!doctype html><h1>Callback snapshot</h1>",
+        prefix="session_snapshot",
+        now=1000,
+    )
+    documents: list[tuple[str, bytes, dict]] = []
+    edits: list[str] = []
+
+    class _Manager:
+        def get_by_uid(self, token):
+            return session if str(token) == session_uid else None
+
+    class _SnapshotService:
+        def save_html_report(self, target_session):
+            assert target_session is session
+            return summary
+
+    async def _send_document(_ctx, *, document, filename: str, **kwargs):
+        documents.append((filename, document.read(), dict(kwargs)))
+        return True
+
+    async def _edit_message(_ctx, *, text: str, **_kwargs):
+        edits.append(str(text))
+        return True
+
+    bot_app = types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+        manager=_Manager(),
+        handlers=types.SimpleNamespace(_is_session_visible_for_chat=lambda _chat_id, _session: True),
+        session_snapshot_report_service=_SnapshotService(),
+        _send_document=_send_document,
+        _edit_message=_edit_message,
+        build_telegram_reply_dest=lambda _session, chat_id: {"chat_id": int(chat_id)},
+        resolve_telegram_callback_scope=lambda _query: (101, None, 101, session),
+    )
+    handler = CallbackHandler(bot_app)
+    query = types.SimpleNamespace(
+        data=f"sess_snapshot:{session_uid}",
+        message=types.SimpleNamespace(chat_id=101, message_id=7),
+    )
+
+    ok = await handler._cb_sess_snapshot(
+        data=f"sess_snapshot:{session_uid}",
+        chat_id=101,
+        query=query,
+        context=object(),
+    )
+
+    assert ok is True
+    assert documents == [
+        (
+            "session_snapshot_19700101_001640.html",
+            b"<!doctype html><h1>Callback snapshot</h1>",
+            {"chat_id": 101},
+        )
+    ]
+    assert edits[-1] == "HTML-снимок сессии создан: session_snapshot_19700101_001640.html"
+
+
+@pytest.mark.asyncio
 async def test_cmd_git_branch_sends_usage_when_no_args() -> None:
     sent: list[str] = []
 

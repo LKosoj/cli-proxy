@@ -1,46 +1,31 @@
 # Node: miniapp
 
-Generated: 2026-06-03T02:24:29Z
+Generated: 2026-06-17T10:46:18Z
 
 ## Purpose
-Транспортный слой: aiohttp-веб-интерфейс администратора/оператора, открываемый как Telegram Mini App. Бизнес-логики не содержит — делегирует в `app/services/*`, SDK-сервисы и mode-плагины. Сервер `miniapp/server.py` (`MiniAppServer`) монтируется на общий ingress (`app/services/shared_http_ingress.py`) под `config.miniapp.base_path` (по умолчанию `/cli-proxy`); создаётся в `bot.py:280`, запускается/останавливается из `app/services/lifecycle_service.py:36`/`:99`. Standalone-запуск для разработки — `start_miniapp.py` (форсирует `config.miniapp.enabled=True`, отдаёт на `http://127.0.0.1:8088/cli-proxy/`).
+Instruction node for `miniapp` area.
 
 ## Scope
 - Source glob: `miniapp/**`
-- Current files: 22 under `miniapp/**` as of last review.
-- Подкаталоги: `miniapp/services/` (бекенд-сервисы UI: config draft, файлы, логи), `miniapp/static/` (SPA на vanilla JS: `index.html`, `app.js`, `styles.css`).
+- Estimated files: 22
 
 ## Instructions for agent
-- Это транспортный слой: бизнес-логику не размещать здесь; маршрутизировать через `app/services/*`, SDK-сервисы и mode-плагины (`modes/`). Доступ к `BotApp` — только как к контейнеру сервисов.
-- Доступ fail-closed: каждый хендлер начинается с `_require_access`/`_require_admin` (`miniapp/routes.py`). Поток: `_extract_init_data` (header `X-Telegram-Init-Data`) → `bot_app.security.authenticate(strategy="telegram_init_data")` → rate limit `miniapp.ingress` → `authorize(scope="miniapp")`; админ-эндпоинты дополнительно `scope="miniapp.admin"`. Подпись initData проверяется в `miniapp/auth.py` (`verify_telegram_init_data`, HMAC-SHA256).
-- WebSocket-эндпоинты (`/api/status/ws`, логи) аутентифицируются короткоживущими HMAC-тикетами (`_issue_ws_ticket`/`_consume_ws_ticket`, TTL 60с), а не initData напрямую.
-- Новые эндпоинты добавлять как `routes_<area>.py`: dataclass `<Area>RouteServices` + `register_<area>_routes(app, ctx, services)`, общие зависимости через `MiniAppRouteContext` (`miniapp/route_context.py`); регистрировать в `MiniAppRoutes.register` (`miniapp/routes.py:4522`).
-- Синхронизировать функциональность с ботом (`tg/`) и Desktop (`desktop/`) — общий контракт сервисов (требование `CLAUDE.md`).
-- Новые опции конфигурации добавлять и в `config.yaml`, и в `config_example.yaml`; секреты в ответах редактировать (см. `miniapp/services/config_service.py`).
-- Для локального тестирования auth-пути генерировать валидный `initData` через `gen_init_data.py` (та же схема HMAC `WebAppData`/SHA256, что и `miniapp/auth.py:verify_telegram_init_data`) и передавать в заголовке `X-Telegram-Init-Data`.
-- Читать только файлы под задачу (`miniapp/routes.py` ~4600 строк, `miniapp/static/app.js` ~7200 строк — точечно через Grep); изменения держать минимальными и проверять `pytest -q tests/test_miniapp_routes_integration.py tests/test_shared_http_ingress.py`.
+- Read only files relevant to the active task.
+- Prefer deterministic checks before edits.
+- Keep changes minimal and validate with tests/linters where applicable.
 
 ## Source of truth
-- `miniapp/server.py` — `MiniAppServer`, монтаж на shared ingress, `_runtime_guard` (gate по `enabled`/`base_path`), `start`/`stop`.
-- `miniapp/auth.py` — `verify_telegram_init_data`, `TelegramMiniAppUser`, `MiniAppAuthError`.
-- `miniapp/routes.py` — `MiniAppRoutes`: композиция submodule-роутов, гварды доступа, WS-тикеты, сериализация runs/sessions; `register()` на строке 4522.
-- `miniapp/route_context.py` — `MiniAppRouteContext` (общие зависимости route-модулей).
-- `miniapp/routes_config.py` — config view/draft/validate/save (`ConfigRouteServices`).
-- `miniapp/routes_admin.py` — админ-конфиг и операции (`AdminRouteServices`).
-- `miniapp/routes_scheduler.py` — планировщик задач (`SchedulerRouteServices`).
-- `miniapp/routes_logs.py` — чтение/стрим логов, WS (`LogsRouteServices`).
-- `miniapp/routes_ssh.py` — SSH-хосты/секреты (`SshRouteServices`).
-- `miniapp/routes_json.py` — парсинг/валидация JSON-тел (`JsonRouteServices`).
-- `miniapp/routes_tasks.py` — Task Progress (`TasksRouteServices`): list/cancel активных SDK-задач.
-- `miniapp/routes_reports.py` — отчёты менеджера (`ReportsRouteServices`): list/content/download `.md` под `<workdir>/.cli-proxy/.manager_reports/`.
-- `miniapp/session_visibility.py` — `collect_visible_sessions(bot_app, user_id, is_admin)`: общий гард для route-модулей, фильтрует сессии по правам пользователя.
-- `miniapp/routes_foundation.py` — шаблон route-модуля (`FoundationRouteServices`).
-- `miniapp/services/config_service.py` — валидация/диф/редактирование секретов config-черновика.
-- `miniapp/services/files_service.py` — compat-реэкспорт `app/services/session_files_service.py`.
-- `miniapp/services/logs_service.py` — чтение и парсинг логов сессий.
-- `miniapp/static/index.html`, `miniapp/static/app.js`, `miniapp/static/styles.css` — SPA на vanilla JS; вкладки: config, files, logs, status, scheduler, tasks, settings, admin. Внешние зависимости с CDN: Telegram WebApp JS SDK (`telegram.org/js/telegram-web-app.js`), Ace editor `1.43.6` и шрифты IBM Plex Sans/Mono (fontsource, jsdelivr). Дизайн-система (редизайн 2026-06-10): токены в `:root` `styles.css` (включая legacy-алиасы `--card-bg`/`--button-primary`/`--bg-secondary`/`--border-color`/`--fg-muted`/`--warn`), тёмная тема через `:root[data-color-scheme]` + `prefers-color-scheme` (синхронизация с `tg.colorScheme` в `syncColorScheme()`, app.js), «терминальные» панели raw-вывода (`--terminal-bg`). Диалоги — только через `uiConfirm`/`uiAlert` (app.js, обёртки над `tg.showConfirm`/`tg.showAlert` с фолбэком на `window.*`: нативные `confirm/alert` заблокированы в Telegram WebView на iOS/Android). При изменении статики бампать query-версии `?v=` в `index.html`. Тест-харнесс `tests/test_miniapp_config_tab_js.py` исполняет app.js в node VM с минимальным DOM — top-level код app.js обязан переживать отсутствие `document.documentElement`.
-- `miniapp/routes_tasks.py` — панель Task Progress: GET `/api/tasks` (список активных задач из `bot_app.mode_tasks`), POST `/api/tasks/{session_uid}/cancel` (`TasksRouteServices`).
-- `start_miniapp.py` — standalone dev-лаунчер.
+- `miniapp/**`
+- `miniapp/__init__.py`
+- `miniapp/services/__init__.py`
+- `miniapp/static/app.js`
+- `miniapp/static/index.html`
+- `miniapp/static/styles.css`
+- `miniapp/auth.py`
+- `miniapp/route_context.py`
+- `miniapp/routes.py`
+- `miniapp/routes_admin.py`
+- `miniapp/routes_config.py`
 
 ## Module API
 Детальные интерфейсы модулей этой области:
@@ -53,9 +38,7 @@ Generated: 2026-06-03T02:24:29Z
 - [miniapp/routes_foundation.py](../api/miniapp/routes_foundation-py.md)
 - [miniapp/routes_json.py](../api/miniapp/routes_json-py.md)
 - [miniapp/routes_logs.py](../api/miniapp/routes_logs-py.md)
-- [miniapp/routes_scheduler.py](../api/miniapp/routes_scheduler-py.md)
-- [miniapp/routes_ssh.py](../api/miniapp/routes_ssh-py.md)
-- [miniapp/server.py](../api/miniapp/server-py.md)
+- [miniapp/routes_reports.py](../api/miniapp/routes_reports-py.md)
 
 ## When to update
 - Any commit touching `miniapp/**`.
@@ -73,19 +56,19 @@ Generated: 2026-06-03T02:24:29Z
 - `nodes/config-py.md`
 - `nodes/config-example-yaml.md`
 - `nodes/desktop.md`
-- `nodes/modes.md`
-- `nodes/session-py.md`
+- `nodes/i18n.md`
+- `nodes/locales.md`
 - `agent` confidence=0.95 via L0
 - `app` confidence=0.95 via L0/L1/L2
-- `bot.py` confidence=0.76 via L0
+- `bot.py` confidence=0.94 via L0
 - `config.py` confidence=0.90 via L2
-- `config_example.yaml` confidence=0.89 via L0
-- `desktop` confidence=0.76 via L0
-- `modes` confidence=0.90 via L0/L1/L2
-- `session.py` confidence=0.95 via L0/L2
+- `config_example.yaml` confidence=0.77 via L0
+- `desktop` confidence=0.95 via L0
+- `i18n` confidence=0.90 via L1/L2
+- `locales` confidence=0.94 via L0
 
 ## Owner
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-10T00:00:00Z
+- 2026-06-17T10:46:18Z

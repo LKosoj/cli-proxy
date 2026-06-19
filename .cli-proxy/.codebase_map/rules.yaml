@@ -110,6 +110,16 @@ node_rules:
     policy:
       severity: medium
       self_heal: true
+  - id: update-nodescripts
+    when:
+      any_path_matches:
+        - "scripts/**"
+    update:
+      docs:
+        - "nodes/scripts.md"
+    policy:
+      severity: medium
+      self_heal: true
   - id: update-nodebot-py
     when:
       any_path_matches:
@@ -200,16 +210,6 @@ node_rules:
     policy:
       severity: medium
       self_heal: true
-  - id: update-nodescripts
-    when:
-      any_path_matches:
-        - "scripts/**"
-    update:
-      docs:
-        - "nodes/scripts.md"
-    policy:
-      severity: medium
-      self_heal: true
   - id: update-nodesession-py
     when:
       any_path_matches:
@@ -264,9 +264,9 @@ organizational_rules:
   - id: rule-sync-readme-en-md-agent
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -276,13 +276,13 @@ organizational_rules:
         - "README_EN.MD"
         - "agent"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-readme-en-md-app
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -292,13 +292,29 @@ organizational_rules:
         - "README_EN.MD"
         - "app"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:4/22"
+  - id: rule-sync-readme-en-md-bot-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "bot.py"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "bot.py"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-readme-en-md-config-example-yaml
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -308,13 +324,29 @@ organizational_rules:
         - "README_EN.MD"
         - "config_example.yaml"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-readme-en-md-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-readme-en-md-miniapp
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -324,13 +356,13 @@ organizational_rules:
         - "README_EN.MD"
         - "miniapp"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-readme-en-md-modes
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -340,13 +372,13 @@ organizational_rules:
         - "README_EN.MD"
         - "modes"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-readme-en-md-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -356,13 +388,13 @@ organizational_rules:
         - "README_EN.MD"
         - "session.py"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-readme-en-md-setup-bot-sh
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -372,13 +404,13 @@ organizational_rules:
         - "README_EN.MD"
         - "setup_bot.sh"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-readme-en-md-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "README_EN.MD"
@@ -388,13 +420,29 @@ organizational_rules:
         - "README_EN.MD"
         - "tests"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:4/22"
+  - id: rule-sync-readme-en-md-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "README_EN.MD"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "README_EN.MD"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-app
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -404,13 +452,13 @@ organizational_rules:
         - "agent"
         - "app"
     evidence:
-      - "observed:git_cochange:5/8"
+      - "observed:git_cochange:9/22"
   - id: rule-sync-agent-bot-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -420,13 +468,29 @@ organizational_rules:
         - "agent"
         - "bot.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:5/22"
+  - id: rule-sync-agent-config-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "config.py"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "config.py"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-config-example-yaml
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -436,13 +500,13 @@ organizational_rules:
         - "agent"
         - "config_example.yaml"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-agent-crocodile-continuation-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -452,13 +516,13 @@ organizational_rules:
         - "agent"
         - "crocodile_continuation.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-crocodile-emerging-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -468,13 +532,13 @@ organizational_rules:
         - "agent"
         - "crocodile_emerging.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-crocodile-extended-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -484,13 +548,13 @@ organizational_rules:
         - "agent"
         - "crocodile_extended.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-crocodile-threat-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -500,13 +564,13 @@ organizational_rules:
         - "agent"
         - "crocodile_threat.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-desktop
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -516,13 +580,45 @@ organizational_rules:
         - "agent"
         - "desktop"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:6/22"
+  - id: rule-sync-agent-i18n
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "i18n/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "i18n"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-agent-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.88
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:4/22"
   - id: rule-sync-agent-miniapp
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -532,13 +628,13 @@ organizational_rules:
         - "agent"
         - "miniapp"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:6/22"
   - id: rule-sync-agent-modes
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -548,13 +644,29 @@ organizational_rules:
         - "agent"
         - "modes"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:7/22"
+  - id: rule-sync-agent-scripts
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "agent/**"
+        - "scripts/**"
+    then:
+      enforce_sync_with:
+        - "agent"
+        - "scripts"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.95
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -564,13 +676,13 @@ organizational_rules:
         - "agent"
         - "session.py"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:5/22"
   - id: rule-sync-agent-sessions
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -580,13 +692,13 @@ organizational_rules:
         - "agent"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-agent-setup-bot-sh
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -596,13 +708,13 @@ organizational_rules:
         - "agent"
         - "setup_bot.sh"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-agent-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -612,13 +724,13 @@ organizational_rules:
         - "agent"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-agent-tests
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -628,13 +740,13 @@ organizational_rules:
         - "agent"
         - "tests"
     evidence:
-      - "observed:git_cochange:5/8"
+      - "observed:git_cochange:9/22"
   - id: rule-sync-agent-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -644,13 +756,13 @@ organizational_rules:
         - "agent"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:6/22"
   - id: rule-sync-agent-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "agent/**"
@@ -660,13 +772,13 @@ organizational_rules:
         - "agent"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-app-bot-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -676,13 +788,13 @@ organizational_rules:
         - "app"
         - "bot.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:7/22"
   - id: rule-sync-app-config-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -692,13 +804,13 @@ organizational_rules:
         - "app"
         - "config.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-app-config-example-yaml
     kind: sync_areas
     source_class: observed
-    confidence: 0.95
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -708,13 +820,13 @@ organizational_rules:
         - "app"
         - "config_example.yaml"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:5/22"
   - id: rule-sync-app-crocodile-continuation-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -724,13 +836,13 @@ organizational_rules:
         - "app"
         - "crocodile_continuation.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-app-crocodile-emerging-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -740,13 +852,13 @@ organizational_rules:
         - "app"
         - "crocodile_emerging.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-app-crocodile-extended-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -756,13 +868,13 @@ organizational_rules:
         - "app"
         - "crocodile_extended.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-app-crocodile-threat-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -772,7 +884,7 @@ organizational_rules:
         - "app"
         - "crocodile_threat.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-app-desktop
     kind: sync_areas
     source_class: declared
@@ -788,15 +900,47 @@ organizational_rules:
         - "app"
         - "desktop"
     evidence:
-      - "observed:git_cochange:2/8"
-      - "declared:README_EN.MD"
+      - "observed:git_cochange:8/22"
       - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-app-i18n
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.77
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "app/**"
+        - "i18n/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "i18n"
+    evidence:
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-app-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "app/**"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:7/22"
   - id: rule-sync-app-miniapp
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -806,7 +950,7 @@ organizational_rules:
         - "app"
         - "miniapp"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:8/22"
   - id: rule-sync-app-modes
     kind: sync_areas
     source_class: declared
@@ -822,15 +966,31 @@ organizational_rules:
         - "app"
         - "modes"
     evidence:
-      - "observed:git_cochange:4/8"
-      - "declared:README_EN.MD"
+      - "observed:git_cochange:8/22"
       - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-app-scripts
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "app/**"
+        - "scripts/**"
+    then:
+      enforce_sync_with:
+        - "app"
+        - "scripts"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-app-session-py
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -840,7 +1000,7 @@ organizational_rules:
         - "app"
         - "session.py"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:6/22"
   - id: rule-sync-app-sessions
     kind: sync_areas
     source_class: declared
@@ -856,15 +1016,15 @@ organizational_rules:
         - "app"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
-      - "declared:README_EN.MD"
+      - "observed:git_cochange:4/22"
       - "declared:README.md"
+      - "declared:README_EN.MD"
   - id: rule-sync-app-setup-bot-sh
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -874,13 +1034,13 @@ organizational_rules:
         - "app"
         - "setup_bot.sh"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-app-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -890,13 +1050,13 @@ organizational_rules:
         - "app"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-app-tests
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -906,13 +1066,13 @@ organizational_rules:
         - "app"
         - "tests"
     evidence:
-      - "observed:git_cochange:7/8"
+      - "observed:git_cochange:14/22"
   - id: rule-sync-app-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -922,13 +1082,13 @@ organizational_rules:
         - "app"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:8/22"
   - id: rule-sync-app-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "app/**"
@@ -938,13 +1098,45 @@ organizational_rules:
         - "app"
         - "utils"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:4/22"
+  - id: rule-sync-bot-py-config-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "config.py"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "config.py"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-bot-py-config-example-yaml
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "config_example.yaml"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "config_example.yaml"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-bot-py-desktop
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -954,13 +1146,29 @@ organizational_rules:
         - "bot.py"
         - "desktop"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:7/22"
+  - id: rule-sync-bot-py-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.94
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:5/22"
   - id: rule-sync-bot-py-miniapp
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -970,13 +1178,13 @@ organizational_rules:
         - "bot.py"
         - "miniapp"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:5/22"
   - id: rule-sync-bot-py-modes
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -986,13 +1194,29 @@ organizational_rules:
         - "bot.py"
         - "modes"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:5/22"
+  - id: rule-sync-bot-py-scripts
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "bot.py"
+        - "scripts/**"
+    then:
+      enforce_sync_with:
+        - "bot.py"
+        - "scripts"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-bot-py-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -1002,13 +1226,13 @@ organizational_rules:
         - "bot.py"
         - "session.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-bot-py-sessions
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -1018,13 +1242,13 @@ organizational_rules:
         - "bot.py"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-bot-py-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -1034,13 +1258,13 @@ organizational_rules:
         - "bot.py"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-bot-py-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -1050,13 +1274,13 @@ organizational_rules:
         - "bot.py"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:7/22"
   - id: rule-sync-bot-py-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -1066,13 +1290,13 @@ organizational_rules:
         - "bot.py"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:7/22"
   - id: rule-sync-bot-py-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "bot.py"
@@ -1082,13 +1306,13 @@ organizational_rules:
         - "bot.py"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-config-py-config-example-yaml
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config.py"
@@ -1098,13 +1322,93 @@ organizational_rules:
         - "config.py"
         - "config_example.yaml"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-config-py-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config.py"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-py-i18n
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config.py"
+        - "i18n/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "i18n"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-py-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config.py"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-py-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config.py"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-py-summary-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config.py"
+        - "summary.py"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "summary.py"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-config-py-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config.py"
@@ -1114,13 +1418,29 @@ organizational_rules:
         - "config.py"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-config-py-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config.py"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "config.py"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-config-py-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config.py"
@@ -1130,13 +1450,61 @@ organizational_rules:
         - "config.py"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-example-yaml-desktop
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "desktop/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "desktop"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-example-yaml-i18n
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "i18n/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "i18n"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-example-yaml-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-config-example-yaml-miniapp
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config_example.yaml"
@@ -1146,13 +1514,13 @@ organizational_rules:
         - "config_example.yaml"
         - "miniapp"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-config-example-yaml-modes
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config_example.yaml"
@@ -1162,13 +1530,13 @@ organizational_rules:
         - "config_example.yaml"
         - "modes"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-config-example-yaml-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config_example.yaml"
@@ -1178,13 +1546,13 @@ organizational_rules:
         - "config_example.yaml"
         - "session.py"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-config-example-yaml-setup-bot-sh
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config_example.yaml"
@@ -1194,13 +1562,29 @@ organizational_rules:
         - "config_example.yaml"
         - "setup_bot.sh"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-config-example-yaml-summary-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "summary.py"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "summary.py"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-config-example-yaml-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.95
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config_example.yaml"
@@ -1210,13 +1594,29 @@ organizational_rules:
         - "config_example.yaml"
         - "tests"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:5/22"
+  - id: rule-sync-config-example-yaml-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "config_example.yaml"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "config_example.yaml"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-config-example-yaml-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "config_example.yaml"
@@ -1226,13 +1626,13 @@ organizational_rules:
         - "config_example.yaml"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-continuation-mp4-crocodile-emerging-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_continuation.mp4"
@@ -1242,13 +1642,13 @@ organizational_rules:
         - "crocodile_continuation.mp4"
         - "crocodile_emerging.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-continuation-mp4-crocodile-extended-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_continuation.mp4"
@@ -1258,13 +1658,13 @@ organizational_rules:
         - "crocodile_continuation.mp4"
         - "crocodile_extended.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-continuation-mp4-crocodile-threat-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_continuation.mp4"
@@ -1274,13 +1674,13 @@ organizational_rules:
         - "crocodile_continuation.mp4"
         - "crocodile_threat.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-continuation-mp4-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_continuation.mp4"
@@ -1290,13 +1690,13 @@ organizational_rules:
         - "crocodile_continuation.mp4"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-emerging-mp4-crocodile-extended-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_emerging.mp4"
@@ -1306,13 +1706,13 @@ organizational_rules:
         - "crocodile_emerging.mp4"
         - "crocodile_extended.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-emerging-mp4-crocodile-threat-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_emerging.mp4"
@@ -1322,13 +1722,13 @@ organizational_rules:
         - "crocodile_emerging.mp4"
         - "crocodile_threat.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-emerging-mp4-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_emerging.mp4"
@@ -1338,13 +1738,13 @@ organizational_rules:
         - "crocodile_emerging.mp4"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-extended-mp4-crocodile-threat-mp4
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_extended.mp4"
@@ -1354,13 +1754,13 @@ organizational_rules:
         - "crocodile_extended.mp4"
         - "crocodile_threat.mp4"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-extended-mp4-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_extended.mp4"
@@ -1370,13 +1770,13 @@ organizational_rules:
         - "crocodile_extended.mp4"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-crocodile-threat-mp4-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "crocodile_threat.mp4"
@@ -1386,7 +1786,39 @@ organizational_rules:
         - "crocodile_threat.mp4"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-desktop-i18n
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "i18n/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "i18n"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-desktop-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:6/22"
   - id: rule-sync-desktop-miniapp
     kind: sync_areas
     source_class: declared
@@ -1402,7 +1834,7 @@ organizational_rules:
         - "desktop"
         - "miniapp"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:6/22"
       - "declared:README_EN.MD"
   - id: rule-sync-desktop-modes
     kind: sync_areas
@@ -1419,15 +1851,31 @@ organizational_rules:
         - "desktop"
         - "modes"
     evidence:
-      - "observed:git_cochange:2/8"
-      - "declared:README_EN.MD"
+      - "observed:git_cochange:6/22"
       - "declared:README.md"
+      - "declared:README_EN.MD"
+  - id: rule-sync-desktop-scripts
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "desktop/**"
+        - "scripts/**"
+    then:
+      enforce_sync_with:
+        - "desktop"
+        - "scripts"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-desktop-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "desktop/**"
@@ -1437,7 +1885,7 @@ organizational_rules:
         - "desktop"
         - "session.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-desktop-sessions
     kind: sync_areas
     source_class: declared
@@ -1453,15 +1901,15 @@ organizational_rules:
         - "desktop"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
-      - "declared:README_EN.MD"
+      - "observed:git_cochange:4/22"
       - "declared:README.md"
+      - "declared:README_EN.MD"
   - id: rule-sync-desktop-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "desktop/**"
@@ -1471,13 +1919,13 @@ organizational_rules:
         - "desktop"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-desktop-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "desktop/**"
@@ -1487,13 +1935,13 @@ organizational_rules:
         - "desktop"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:8/22"
   - id: rule-sync-desktop-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "desktop/**"
@@ -1503,13 +1951,13 @@ organizational_rules:
         - "desktop"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:8/22"
   - id: rule-sync-desktop-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "desktop/**"
@@ -1519,13 +1967,205 @@ organizational_rules:
         - "desktop"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-i18n-locales
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.77
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "i18n/**"
+        - "locales/**"
+    then:
+      enforce_sync_with:
+        - "i18n"
+        - "locales"
+    evidence:
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-i18n-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "i18n/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "i18n"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-i18n-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.77
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "i18n/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "i18n"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-i18n-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "i18n/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "i18n"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-i18n-utils
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "i18n/**"
+        - "utils/**"
+    then:
+      enforce_sync_with:
+        - "i18n"
+        - "utils"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-locales-miniapp
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.94
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "miniapp/**"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "miniapp"
+    evidence:
+      - "observed:git_cochange:5/22"
+  - id: rule-sync-locales-modes
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.88
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "modes/**"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "modes"
+    evidence:
+      - "observed:git_cochange:4/22"
+  - id: rule-sync-locales-sessions
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-locales-summary-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "summary.py"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "summary.py"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-locales-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:8/22"
+  - id: rule-sync-locales-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.95
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:7/22"
+  - id: rule-sync-locales-utils
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "locales/**"
+        - "utils/**"
+    then:
+      enforce_sync_with:
+        - "locales"
+        - "utils"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-miniapp-modes
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1535,13 +2175,29 @@ organizational_rules:
         - "miniapp"
         - "modes"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:6/22"
+  - id: rule-sync-miniapp-scripts
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "miniapp/**"
+        - "scripts/**"
+    then:
+      enforce_sync_with:
+        - "miniapp"
+        - "scripts"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-miniapp-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.95
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1551,13 +2207,13 @@ organizational_rules:
         - "miniapp"
         - "session.py"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:5/22"
   - id: rule-sync-miniapp-sessions
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1567,13 +2223,13 @@ organizational_rules:
         - "miniapp"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-miniapp-setup-bot-sh
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1583,13 +2239,13 @@ organizational_rules:
         - "miniapp"
         - "setup_bot.sh"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-miniapp-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1599,13 +2255,13 @@ organizational_rules:
         - "miniapp"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-miniapp-tests
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1615,13 +2271,13 @@ organizational_rules:
         - "miniapp"
         - "tests"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:10/22"
   - id: rule-sync-miniapp-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1631,13 +2287,13 @@ organizational_rules:
         - "miniapp"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:7/22"
   - id: rule-sync-miniapp-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "miniapp/**"
@@ -1647,13 +2303,29 @@ organizational_rules:
         - "miniapp"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-modes-scripts
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "modes/**"
+        - "scripts/**"
+    then:
+      enforce_sync_with:
+        - "modes"
+        - "scripts"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-modes-session-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "modes/**"
@@ -1663,7 +2335,7 @@ organizational_rules:
         - "modes"
         - "session.py"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:5/22"
   - id: rule-sync-modes-sessions
     kind: sync_areas
     source_class: declared
@@ -1679,15 +2351,15 @@ organizational_rules:
         - "modes"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
-      - "declared:README_EN.MD"
+      - "observed:git_cochange:4/22"
       - "declared:README.md"
+      - "declared:README_EN.MD"
   - id: rule-sync-modes-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "modes/**"
@@ -1697,13 +2369,13 @@ organizational_rules:
         - "modes"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-modes-tests
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "modes/**"
@@ -1713,13 +2385,13 @@ organizational_rules:
         - "modes"
         - "tests"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:11/22"
   - id: rule-sync-modes-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "modes/**"
@@ -1729,13 +2401,13 @@ organizational_rules:
         - "modes"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:6/22"
   - id: rule-sync-modes-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "modes/**"
@@ -1745,13 +2417,77 @@ organizational_rules:
         - "modes"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
+  - id: rule-sync-scripts-sessions
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "scripts/**"
+        - "sessions/**"
+    then:
+      enforce_sync_with:
+        - "scripts"
+        - "sessions"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-scripts-summary-py
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "scripts/**"
+        - "summary.py"
+    then:
+      enforce_sync_with:
+        - "scripts"
+        - "summary.py"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-scripts-tests
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "scripts/**"
+        - "tests/**"
+    then:
+      enforce_sync_with:
+        - "scripts"
+        - "tests"
+    evidence:
+      - "observed:git_cochange:2/22"
+  - id: rule-sync-scripts-tg
+    kind: sync_areas
+    source_class: observed
+    confidence: 0.66
+    status: active
+    needs_review: false
+    when:
+      any_path_matches:
+        - "scripts/**"
+        - "tg/**"
+    then:
+      enforce_sync_with:
+        - "scripts"
+        - "tg"
+    evidence:
+      - "observed:git_cochange:2/22"
   - id: rule-sync-session-py-sessions
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "session.py"
@@ -1761,13 +2497,13 @@ organizational_rules:
         - "session.py"
         - "sessions"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-session-py-setup-bot-sh
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "session.py"
@@ -1777,13 +2513,13 @@ organizational_rules:
         - "session.py"
         - "setup_bot.sh"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-session-py-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "session.py"
@@ -1793,13 +2529,13 @@ organizational_rules:
         - "session.py"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-session-py-tests
     kind: sync_areas
     source_class: observed
     confidence: 0.95
-    status: proposed
-    needs_review: true
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "session.py"
@@ -1809,13 +2545,13 @@ organizational_rules:
         - "session.py"
         - "tests"
     evidence:
-      - "observed:git_cochange:4/8"
+      - "observed:git_cochange:7/22"
   - id: rule-sync-session-py-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "session.py"
@@ -1825,13 +2561,13 @@ organizational_rules:
         - "session.py"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-session-py-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "session.py"
@@ -1841,13 +2577,13 @@ organizational_rules:
         - "session.py"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-sessions-summary-py
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "sessions/**"
@@ -1857,13 +2593,13 @@ organizational_rules:
         - "sessions"
         - "summary.py"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-sessions-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "sessions/**"
@@ -1873,13 +2609,13 @@ organizational_rules:
         - "sessions"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-sessions-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "sessions/**"
@@ -1889,13 +2625,13 @@ organizational_rules:
         - "sessions"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-sessions-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "sessions/**"
@@ -1905,13 +2641,13 @@ organizational_rules:
         - "sessions"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
   - id: rule-sync-setup-bot-sh-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "setup_bot.sh"
@@ -1921,13 +2657,13 @@ organizational_rules:
         - "setup_bot.sh"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-summary-py-tests
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "summary.py"
@@ -1937,13 +2673,13 @@ organizational_rules:
         - "summary.py"
         - "tests"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-summary-py-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.88
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "summary.py"
@@ -1953,13 +2689,13 @@ organizational_rules:
         - "summary.py"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:4/22"
   - id: rule-sync-summary-py-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.66
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "summary.py"
@@ -1969,13 +2705,13 @@ organizational_rules:
         - "summary.py"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:2/22"
   - id: rule-sync-tests-tg
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.95
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "tests/**"
@@ -1985,13 +2721,13 @@ organizational_rules:
         - "tests"
         - "tg"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:9/22"
   - id: rule-sync-tests-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.89
-    status: proposed
-    needs_review: true
+    confidence: 0.94
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "tests/**"
@@ -2001,13 +2737,13 @@ organizational_rules:
         - "tests"
         - "utils"
     evidence:
-      - "observed:git_cochange:3/8"
+      - "observed:git_cochange:5/22"
   - id: rule-sync-tg-utils
     kind: sync_areas
     source_class: observed
-    confidence: 0.76
-    status: proposed
-    needs_review: true
+    confidence: 0.77
+    status: active
+    needs_review: false
     when:
       any_path_matches:
         - "tg/**"
@@ -2017,4 +2753,4 @@ organizational_rules:
         - "tg"
         - "utils"
     evidence:
-      - "observed:git_cochange:2/8"
+      - "observed:git_cochange:3/22"
