@@ -66,10 +66,17 @@ def test_session_snapshot_report_collects_active_mode_runs_reports_and_chat(tmp_
     content = reports.get_report(session, summary.report_id).content or ""
 
     assert summary.report_id == "session_snapshot_19700101_003320.html"
-    assert "Session snapshot: chat:101:s1" in content
+    assert '<html lang="ru">' in content
+    assert "Отчёт по сессии: chat:101:s1" in content
+    assert "Короткая версия для чтения человеком" in content
+    assert "Коротко" in content
+    assert "Что важно" in content
+    assert "План содержит 1 шаг" in content
+    assert "Технические данные запуска" in content
     assert "run_analyst" in content
     assert "fact_pack.md" in content
     assert "report_19700101_001640.md" in content
+    assert "Пользователь" in content
     assert "initial task" in content
     assert "run_manager" not in content
 
@@ -86,4 +93,4 @@ def test_session_snapshot_report_handles_disabled_run_artifacts(tmp_path: Path) 
     summary = service.save_html_report(_session(tmp_path), now=2000)
     content = reports.get_report(_session(tmp_path), summary.report_id).content or ""
 
-    assert "Run artifacts are disabled in runtime config." in content
+    assert "Артефакты запусков отключены в runtime config." in content

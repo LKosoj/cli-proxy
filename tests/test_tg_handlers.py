@@ -366,7 +366,7 @@ async def test_cmd_reports_snapshot_saves_html_and_sends_document(tmp_path: Path
 
     await handlers.cmd_reports(update, context)
 
-    assert messages == ["HTML-снимок сессии создан: session_snapshot_19700101_001640.html"]
+    assert messages == ["HTML-отчёт по сессии создан: session_snapshot_19700101_001640.html"]
     assert documents == [("session_snapshot_19700101_001640.html", b"<!doctype html><h1>Snapshot</h1>")]
 
 
@@ -444,7 +444,7 @@ async def test_session_snapshot_callback_sends_html_document(tmp_path: Path) -> 
             {"chat_id": 101},
         )
     ]
-    assert edits[-1] == "HTML-снимок сессии создан: session_snapshot_19700101_001640.html"
+    assert edits[-1] == "HTML-отчёт по сессии создан: session_snapshot_19700101_001640.html"
 
 
 @pytest.mark.asyncio
