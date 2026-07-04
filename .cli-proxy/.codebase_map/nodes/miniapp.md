@@ -71,4 +71,4 @@ Instruction node for `miniapp` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:18Z
+- 2026-07-04T06:10:00Z

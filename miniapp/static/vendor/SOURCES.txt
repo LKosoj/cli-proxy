@@ -1,0 +1,7 @@
+telegram-web-app.js
+source: https://telegram.org/js/telegram-web-app.js?62
+retrieved: 2026-07-04
+
+ace/*
+source: https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/
+retrieved: 2026-07-04

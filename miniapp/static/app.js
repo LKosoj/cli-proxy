@@ -4,6 +4,12 @@
     tg.ready();
     tg.expand();
   }
+  if (window.ace && window.ace.config) {
+    window.ace.config.set("basePath", "./vendor/ace");
+    window.ace.config.set("modePath", "./vendor/ace");
+    window.ace.config.set("themePath", "./vendor/ace");
+    window.ace.config.set("workerPath", "./vendor/ace");
+  }
 
   function syncColorScheme() {
     const scheme = tg && tg.colorScheme === "dark" ? "dark" : "light";

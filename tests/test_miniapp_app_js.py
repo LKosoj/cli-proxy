@@ -1,4 +1,6 @@
+import hashlib
 import json
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -1877,7 +1879,6 @@ def test_miniapp_app_js_files_tab_uses_its_own_session_selector() -> None:
 
 def test_miniapp_status_header_meta_is_compact_without_duplicate_labels() -> None:
     index_html = (Path(__file__).resolve().parent.parent / "miniapp" / "static" / "index.html").read_text(encoding="utf-8")
-    app_js = (Path(__file__).resolve().parent.parent / "miniapp" / "static" / "app.js").read_text(encoding="utf-8")
 
     assert '<span id="stWorkdir">/path</span>' in index_html
     assert '<span id="stServerTime">-</span>' in index_html
@@ -1903,6 +1904,44 @@ def test_miniapp_status_header_meta_is_compact_without_duplicate_labels() -> Non
     assert "Orchestrator:" not in index_html
 
     assert "В работе:" not in index_html
+
+
+def test_miniapp_loads_blockable_runtime_assets_from_local_vendor() -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+    index_html = (repo_root / "miniapp" / "static" / "index.html").read_text(encoding="utf-8")
+    app_js = (repo_root / "miniapp" / "static" / "app.js").read_text(encoding="utf-8")
+    vendor_root = repo_root / "miniapp" / "static" / "vendor"
+
+    expected_assets = [
+        "telegram-web-app.js",
+        "ace/ace.min.js",
+        "ace/ace.min.css",
+        "ace/theme-textmate.js",
+        "ace/theme-tomorrow_night.js",
+        "ace/mode-text.js",
+        "ace/mode-python.js",
+        "ace/mode-markdown.js",
+        "ace/mode-json.js",
+        "ace/mode-yaml.js",
+        "ace/worker-json.js",
+        "ace/worker-yaml.js",
+    ]
+    for relative_path in expected_assets:
+        assert (vendor_root / relative_path).is_file()
+
+    def hash_prefix(relative_path: str) -> str:
+        return hashlib.sha256((vendor_root / relative_path).read_bytes()).hexdigest()[:12]
+
+    assert "https://telegram.org/js/telegram-web-app.js" not in index_html
+    assert "https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/src-min-noconflict/ace.min.js" not in index_html
+    assert "https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/css/ace.min.css" not in index_html
+
+    assert f'./vendor/telegram-web-app.js?v={hash_prefix("telegram-web-app.js")}' in index_html
+    assert f'./vendor/ace/ace.min.js?v={hash_prefix("ace/ace.min.js")}' in index_html
+    assert f'./vendor/ace/ace.min.css?v={hash_prefix("ace/ace.min.css")}' in index_html
+
+    assert re.search(r'ace\.config\.set\("basePath", "\./vendor/ace"\)', app_js)
+    assert re.search(r'ace\.config\.set\("workerPath", "\./vendor/ace"\)', app_js)
 
     assert "Сессий:" not in index_html
 
