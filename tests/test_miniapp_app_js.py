@@ -1925,6 +1925,12 @@ def test_miniapp_loads_blockable_runtime_assets_from_local_vendor() -> None:
         "ace/mode-yaml.js",
         "ace/worker-json.js",
         "ace/worker-yaml.js",
+        "fontsource/css/ibm-plex-sans-400.css",
+        "fontsource/css/ibm-plex-sans-500.css",
+        "fontsource/css/ibm-plex-sans-600.css",
+        "fontsource/css/ibm-plex-sans-700.css",
+        "fontsource/css/ibm-plex-mono-400.css",
+        "fontsource/css/ibm-plex-mono-600.css",
     ]
     for relative_path in expected_assets:
         assert (vendor_root / relative_path).is_file()
@@ -1933,12 +1939,24 @@ def test_miniapp_loads_blockable_runtime_assets_from_local_vendor() -> None:
         return hashlib.sha256((vendor_root / relative_path).read_bytes()).hexdigest()[:12]
 
     assert "https://telegram.org/js/telegram-web-app.js" not in index_html
+    assert "https://cdn.jsdelivr.net/" not in index_html
     assert "https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/src-min-noconflict/ace.min.js" not in index_html
     assert "https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/css/ace.min.css" not in index_html
+    assert "https://cdn.jsdelivr.net/fontsource/" not in index_html
 
     assert f'./vendor/telegram-web-app.js?v={hash_prefix("telegram-web-app.js")}' in index_html
     assert f'./vendor/ace/ace.min.js?v={hash_prefix("ace/ace.min.js")}' in index_html
     assert f'./vendor/ace/ace.min.css?v={hash_prefix("ace/ace.min.css")}' in index_html
+    assert f'./vendor/fontsource/css/ibm-plex-sans-400.css?v={hash_prefix("fontsource/css/ibm-plex-sans-400.css")}' in index_html
+    assert f'./vendor/fontsource/css/ibm-plex-sans-500.css?v={hash_prefix("fontsource/css/ibm-plex-sans-500.css")}' in index_html
+    assert f'./vendor/fontsource/css/ibm-plex-sans-600.css?v={hash_prefix("fontsource/css/ibm-plex-sans-600.css")}' in index_html
+    assert f'./vendor/fontsource/css/ibm-plex-sans-700.css?v={hash_prefix("fontsource/css/ibm-plex-sans-700.css")}' in index_html
+    assert f'./vendor/fontsource/css/ibm-plex-mono-400.css?v={hash_prefix("fontsource/css/ibm-plex-mono-400.css")}' in index_html
+    assert f'./vendor/fontsource/css/ibm-plex-mono-600.css?v={hash_prefix("fontsource/css/ibm-plex-mono-600.css")}' in index_html
+
+    for css_path in vendor_root.glob("fontsource/css/*.css"):
+        css_text = css_path.read_text(encoding="utf-8")
+        assert "https://cdn.jsdelivr.net/fontsource/" not in css_text
 
     assert re.search(r'ace\.config\.set\("basePath", "\./vendor/ace"\)', app_js)
     assert re.search(r'ace\.config\.set\("workerPath", "\./vendor/ace"\)', app_js)

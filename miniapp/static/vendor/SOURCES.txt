@@ -5,3 +5,10 @@ retrieved: 2026-07-04
 ace/*
 source: https://cdn.jsdelivr.net/npm/ace-builds@1.43.6/
 retrieved: 2026-07-04
+
+fontsource/*
+source:
+- https://cdn.jsdelivr.net/fontsource/css/ibm-plex-sans@latest/{400,500,600,700}.css
+- https://cdn.jsdelivr.net/fontsource/css/ibm-plex-mono@latest/{400,600}.css
+retrieved: 2026-07-04
+notes: CSS font URLs are rewritten to local ./fontsource/fonts/... assets.
