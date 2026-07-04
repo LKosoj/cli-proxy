@@ -6,8 +6,9 @@ import copy
 import dataclasses
 import logging
 import os
+from datetime import date
 from typing import Any, Dict, Optional
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.config_runtime.adapter import adapt_validated_settings
 from app.config_runtime.loader import load_validated_settings
@@ -84,6 +85,10 @@ class AppRuntimeService:
     def __init__(self, bot_app):
         self.bot_app = bot_app
 
+    @staticmethod
+    def _miniapp_daily_cache_buster() -> str:
+        return date.today().strftime("%Y%m%d")
+
     def build_miniapp_webapp_url(self) -> Optional[str]:
         cfg = self.bot_app.config
         raw_path = str(getattr(cfg.miniapp, "base_path", "/cli-proxy") or "/cli-proxy").strip()
@@ -102,7 +107,13 @@ class AppRuntimeService:
         elif not path.startswith("/"):
             path = "/" + path
         path = "/" if path == "/" else (path.rstrip("/") + "/")
-        return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+        query_items = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key != "v"
+        ]
+        query_items.append(("v", self._miniapp_daily_cache_buster()))
+        return urlunsplit((parsed.scheme, parsed.netloc, path, urlencode(query_items), ""))
 
     async def reload_runtime_config(self) -> Dict[str, Any]:
         logger = logging.getLogger("miniapp")

@@ -13,17 +13,29 @@ def _build_app(public_url: str, base_path: str = "/cli-proxy") -> BotApp:
         path="config.yaml",
         miniapp=MiniAppConfig(enabled=True, base_path=base_path, public_url=public_url),
     )
-    return BotApp(cfg)
+    app = BotApp(cfg)
+    app.runtime_service._miniapp_daily_cache_buster = lambda: "20260704"
+    return app
 
 
 def test_build_miniapp_webapp_url_appends_base_path_when_public_url_has_no_path() -> None:
     app = _build_app("https://example.com")
-    assert app._build_miniapp_webapp_url() == "https://example.com/cli-proxy/"
+    assert app._build_miniapp_webapp_url() == "https://example.com/cli-proxy/?v=20260704"
 
 
 def test_build_miniapp_webapp_url_adds_trailing_slash_when_public_url_has_path_without_slash() -> None:
     app = _build_app("https://example.com/cli-proxy")
-    assert app._build_miniapp_webapp_url() == "https://example.com/cli-proxy/"
+    assert app._build_miniapp_webapp_url() == "https://example.com/cli-proxy/?v=20260704"
+
+
+def test_build_miniapp_webapp_url_preserves_existing_query_and_adds_cache_buster() -> None:
+    app = _build_app("https://example.com/cli-proxy?source=telegram")
+    assert app._build_miniapp_webapp_url() == "https://example.com/cli-proxy/?source=telegram&v=20260704"
+
+
+def test_build_miniapp_webapp_url_replaces_existing_cache_buster() -> None:
+    app = _build_app("https://example.com/cli-proxy?v=old&source=telegram")
+    assert app._build_miniapp_webapp_url() == "https://example.com/cli-proxy/?source=telegram&v=20260704"
 
 
 def test_build_miniapp_webapp_url_rejects_relative_public_url() -> None:
