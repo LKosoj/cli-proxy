@@ -297,7 +297,7 @@ async def test_run_prompt_telegram_assistant_preview_clears_rich_draft_before_fi
 
     assert final_outputs == ["FINAL OUTPUT"]
     assert rich_drafts
-    assert rich_drafts[0]["rich_message"]["markdown"].startswith("00:00\n\nЧерновик ответа")
+    assert rich_drafts[0]["rich_message"]["markdown"].startswith("⏳ 00:00\n\nЧерновик ответа")
     assert preview_messages == []
     assert preview_edits == []
     assert preview_deletes == []

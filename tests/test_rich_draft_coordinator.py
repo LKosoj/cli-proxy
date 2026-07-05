@@ -52,7 +52,7 @@ def test_limit_preview_text_caps_body_before_rich_limit() -> None:
     assert len(preview) == DRAFT_PREVIEW_TEXT_LIMIT
     assert preview.endswith("...")
     assert len(rendered) <= RICH_DRAFT_TEXT_LIMIT
-    assert rendered.startswith("00:25")
+    assert rendered.startswith("⏳ 00:25")
 
 
 def test_update_reuses_draft_id_and_keeps_timer_from_first_output() -> None:
@@ -63,7 +63,7 @@ def test_update_reuses_draft_id_and_keeps_timer_from_first_output() -> None:
 
     assert second.draft_id == first.draft_id
     assert second.timer == "00:45"
-    assert second.text.startswith("00:45")
+    assert second.text.startswith("⏳ 00:45")
     assert "current text" in second.text
     assert "first text" not in second.text
     assert second.started_at == 100.0

@@ -5,6 +5,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+from app.services.assistant_preview_service import ASSISTANT_PREVIEW_MARKER
+
 
 REFRESH_INTERVAL_SECONDS = 20.0
 MAX_REFRESH_INTERVAL_SECONDS = 25.0
@@ -65,7 +67,7 @@ def build_draft_text(
     preview_limit: int = DRAFT_PREVIEW_TEXT_LIMIT,
     rich_limit: int = RICH_DRAFT_TEXT_LIMIT,
 ) -> str:
-    header = format_timer(now - started_at)
+    header = f"{ASSISTANT_PREVIEW_MARKER} {format_timer(now - started_at)}"
     limit = max(0, int(rich_limit))
     if len(header) >= limit:
         return limit_preview_text(header, max_chars=limit)
