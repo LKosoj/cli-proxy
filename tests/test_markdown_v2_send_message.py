@@ -8,6 +8,7 @@ from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolCon
 from bot import BotApp
 from app.services.telegram_transport import TelegramTransportContext
 from tg.markdown import escape_markdown_v2_all, to_markdown_v2
+from tg.rich import RICH_MARKDOWN_CHAR_LIMIT
 
 
 _MD2_FALSE_TEST_ALLOWLIST = {
@@ -19,7 +20,33 @@ _MD2_FALSE_TEST_ALLOWLIST = {
 }
 
 
-def test_send_message_md2_sends_entities(tmp_path, monkeypatch):
+def _build_transport_test_app(tmp_path):
+    cfg = AppConfig(
+        telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+        tools={
+            "dummy": ToolConfig(
+                name="dummy",
+                mode="headless",
+                cmd=["bash", "-lc", "cat"],
+            )
+        },
+        defaults=DefaultsConfig(
+            workdir=str(tmp_path),
+            state_path=str(tmp_path / "state.json"),
+            toolhelp_path=str(tmp_path / "toolhelp.json"),
+            log_path=str(tmp_path / "bot.log"),
+        ),
+        mcp=MCPConfig(enabled=False),
+        mcp_clients=[],
+        presets=[],
+        path=str(tmp_path / "config.yaml"),
+    )
+    app = BotApp(cfg)
+    app.get_runtime_by_capability("message_tracking").record_message = lambda *_args, **_kwargs: None
+    return app
+
+
+def test_send_message_md2_uses_raw_rich_first(tmp_path, monkeypatch):
     async def _run():
         cfg = AppConfig(
             telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
@@ -46,30 +73,39 @@ def test_send_message_md2_sends_entities(tmp_path, monkeypatch):
         app.get_runtime_by_capability("message_tracking").record_message = lambda *_args, **_kwargs: None
 
         captured = {}
+        raw_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            return types.SimpleNamespace(message_id=1)
 
         async def _send_message(**kwargs):
             captured.update(kwargs)
             return types.SimpleNamespace(message_id=1)
 
-        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message))
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message, _post=_post))
 
         await app._send_message(ctx, chat_id=1, text="**bold**", md2=True)
-        assert "parse_mode" not in captured
-        assert captured.get("text") == "bold"
-        entities = list(captured.get("entities") or [])
-        assert len(entities) == 1
-        assert entities[0].type == "bold"
-        assert entities[0].offset == 0
-        assert entities[0].length == 4
+        assert captured == {}
+        assert raw_calls == [
+            {
+                "endpoint": "sendRichMessage",
+                "data": {
+                    "chat_id": 1,
+                    "rich_message": {"markdown": "**bold**"},
+                },
+            }
+        ]
 
         captured.clear()
         await app._send_message(ctx, chat_id=1, text="plain", md2=False)
         assert "parse_mode" not in captured
+        assert len(raw_calls) == 1
 
     asyncio.run(_run())
 
 
-def test_send_message_fallbacks_to_safe_md2_on_parse_entities_error(tmp_path):
+def test_send_message_raw_rich_bad_request_falls_back_to_current_pipeline(tmp_path):
     async def _run():
         cfg = AppConfig(
             telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
@@ -96,6 +132,11 @@ def test_send_message_fallbacks_to_safe_md2_on_parse_entities_error(tmp_path):
         app.get_runtime_by_capability("message_tracking").record_message = lambda *_args, **_kwargs: None
 
         calls = []
+        raw_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            raise BadRequest("can't parse rich markdown")
 
         async def _send_message(**kwargs):
             calls.append(dict(kwargs))
@@ -103,9 +144,12 @@ def test_send_message_fallbacks_to_safe_md2_on_parse_entities_error(tmp_path):
                 raise BadRequest("Can't parse entities: can't find end of italic entity")
             return types.SimpleNamespace(message_id=2)
 
-        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message))
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message, _post=_post))
 
         await app._send_message(ctx, chat_id=1, text="_broken italic_", md2=True)
+        assert len(raw_calls) == 1
+        assert raw_calls[0]["endpoint"] == "sendRichMessage"
+        assert raw_calls[0]["data"]["rich_message"] == {"markdown": "_broken italic_"}
         assert len(calls) == 2
         assert "parse_mode" not in calls[0]
         assert calls[0].get("entities")
@@ -116,7 +160,7 @@ def test_send_message_fallbacks_to_safe_md2_on_parse_entities_error(tmp_path):
     asyncio.run(_run())
 
 
-def test_send_message_splits_long_text_into_multiple_chunks(tmp_path):
+def test_send_message_uses_legacy_fallback_for_text_over_raw_rich_limit(tmp_path):
     async def _run():
         cfg = AppConfig(
             telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
@@ -142,22 +186,29 @@ def test_send_message_splits_long_text_into_multiple_chunks(tmp_path):
         app = BotApp(cfg)
         app.get_runtime_by_capability("message_tracking").record_message = lambda *_args, **_kwargs: None
 
-        calls = []
+        raw_calls = []
+        legacy_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            return types.SimpleNamespace(message_id=len(raw_calls))
 
         async def _send_message(**kwargs):
-            calls.append(dict(kwargs))
+            legacy_calls.append(dict(kwargs))
             text = str(kwargs.get("text") or "")
             assert len(text) <= 4090
-            return types.SimpleNamespace(message_id=len(calls))
+            return types.SimpleNamespace(message_id=len(legacy_calls))
 
-        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message))
-        long_text = "**" + ("x" * 9500) + "**"
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message, _post=_post))
+        long_text = "**" + ("x" * (RICH_MARKDOWN_CHAR_LIMIT + 100)) + "**"
 
         await app._send_message(ctx, chat_id=1, text=long_text, md2=True)
-        assert len(calls) >= 3
-        assert all("parse_mode" not in c for c in calls)
-        assert "".join(str(c.get("text") or "") for c in calls) == "x" * 9500
-        assert all(list(c.get("entities") or []) for c in calls)
+        assert raw_calls == []
+        assert len(legacy_calls) > 1
+        assert "".join(
+            str(call.get("text") or "")
+            for call in legacy_calls
+        ) == "x" * (RICH_MARKDOWN_CHAR_LIMIT + 100)
 
     asyncio.run(_run())
 
@@ -189,16 +240,22 @@ def test_send_message_splits_before_markdown_block_start(tmp_path):
         app.get_runtime_by_capability("message_tracking").record_message = lambda *_args, **_kwargs: None
 
         calls = []
+        raw_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            raise BadRequest("can't parse rich markdown")
 
         async def _send_message(**kwargs):
             calls.append(dict(kwargs))
             return types.SimpleNamespace(message_id=len(calls))
 
-        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message))
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message, _post=_post))
         prefix = "x" * 4088
         text = prefix + " **bold-block** tail"
 
         await app._send_message(ctx, chat_id=1, text=text, md2=True)
+        assert len(raw_calls) == 1
         assert len(calls) >= 2
         first_chunk = str(calls[0].get("text") or "")
         second_chunk = str(calls[1].get("text") or "")
@@ -216,6 +273,69 @@ def test_send_message_splits_before_markdown_block_start(tmp_path):
         assert len(second_entities) == 1
         assert second_entities[0].type == "bold"
         assert second_entities[0].length == 9
+
+    asyncio.run(_run())
+
+
+def test_edit_message_md2_uses_raw_rich_first(tmp_path):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        raw_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            return True
+
+        async def _edit_message_text(**_kwargs):
+            raise AssertionError("legacy edit_message_text should not be used when raw rich succeeds")
+
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(_post=_post, edit_message_text=_edit_message_text))
+
+        ok = await app._edit_message(ctx, chat_id=1, message_id=9, text="**bold**", md2=True)
+
+        assert ok is True
+        assert raw_calls == [
+            {
+                "endpoint": "editMessageText",
+                "data": {
+                    "chat_id": 1,
+                    "message_id": 9,
+                    "rich_message": {"markdown": "**bold**"},
+                },
+            }
+        ]
+
+    asyncio.run(_run())
+
+
+def test_edit_message_md2_raw_rich_bad_request_falls_back_to_current_pipeline(tmp_path):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        raw_calls = []
+        edit_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            raise BadRequest("can't parse rich markdown")
+
+        async def _edit_message_text(**kwargs):
+            edit_calls.append(dict(kwargs))
+            return True
+
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(_post=_post, edit_message_text=_edit_message_text))
+
+        ok = await app._edit_message(ctx, chat_id=1, message_id=9, text="**bold**", md2=True)
+
+        assert ok is True
+        assert len(raw_calls) == 1
+        assert raw_calls[0]["endpoint"] == "editMessageText"
+        assert edit_calls
+        assert edit_calls[0]["chat_id"] == 1
+        assert edit_calls[0]["message_id"] == 9
+        assert edit_calls[0]["text"] == "bold"
+        entities = list(edit_calls[0].get("entities") or [])
+        assert len(entities) == 1
+        assert entities[0].type == "bold"
 
     asyncio.run(_run())
 

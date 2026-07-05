@@ -2,21 +2,33 @@
 
 Generated: 2026-06-17T10:39:27Z
 
-- total indexed files: 1095
+- total indexed files: 1190
 
 ## Top-level areas
-- `tests`: 549
-- `modes`: 219
-- `app`: 154
-- `agent`: 60
-- `desktop`: 31
-- `miniapp`: 22
-- `tg`: 17
+- `tests`: 552
+- `modes`: 221
+- `app`: 157
+- `agent`: 61
+- `desktop`: 32
+- `miniapp`: 120
+- `tg`: 18
 - `sessions`: 10
 - `utils`: 8
 - `i18n`: 5
 - `locales`: 4
 - `scripts`: 2
+
+| Area | Files |
+| --- | ---: |
+| `tests/` | 552 |
+| `modes/` | 221 |
+| `app/` | 157 |
+| `agent/` | 61 |
+| `desktop/` | 32 |
+| `miniapp/` | 120 |
+| `tg/` | 18 |
+| `sessions/` | 10 |
+| `utils/` | 8 |
 
 ## Representative paths
 - `locales/zh.json`

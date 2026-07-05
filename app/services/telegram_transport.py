@@ -1,9 +1,10 @@
 import asyncio
 from dataclasses import dataclass
 import logging
+from types import SimpleNamespace
 from typing import Optional
 
-from telegram import InlineKeyboardMarkup
+from telegram import InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, NetworkError, TimedOut
 
 from sessions.conversation_scope import ConversationScope
@@ -12,6 +13,10 @@ from tg.markdown import (
     split_telegram_entities,
     to_telegram_entities,
 )
+from tg.rich import build_input_rich_message, is_rich_markdown_eligible
+
+
+_RAW_API_UNAVAILABLE = object()
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,23 @@ class TelegramTransportService:
     _TELEGRAM_TEXT_LIMIT = 4090
     _MDV2_TOKENS_2CH = ("__", "||")
     _MDV2_TOKENS_1CH = ("*", "_", "~", "`")
+    _RICH_SEND_KEYS = frozenset(
+        (
+            "business_connection_id",
+            "chat_id",
+            "message_thread_id",
+            "direct_messages_topic_id",
+            "disable_notification",
+            "protect_content",
+            "allow_paid_broadcast",
+            "message_effect_id",
+            "suggested_post_parameters",
+            "reply_parameters",
+            "reply_markup",
+        )
+    )
+    _RICH_DRAFT_KEYS = frozenset(("chat_id", "message_thread_id"))
+    _RICH_EDIT_KEYS = frozenset(("business_connection_id", "chat_id", "message_id", "inline_message_id", "reply_markup"))
 
     def __init__(self, bot_app):
         self.bot_app = bot_app
@@ -141,6 +163,68 @@ class TelegramTransportService:
         }
 
     @staticmethod
+    def _filter_payload_kwargs(kwargs: dict, allowed_keys: frozenset[str]) -> dict:
+        return {
+            key: value
+            for key, value in dict(kwargs or {}).items()
+            if key in allowed_keys and value is not None
+        }
+
+    async def _call_raw_bot_api(self, context, *, endpoint: str, data: dict, operation: str):
+        raw_context, transport_context = self._unwrap_context(context)
+        bot = getattr(raw_context, "bot", None)
+        if bot is None:
+            route = self._route_log_fields(context, data)
+            logging.getLogger(__name__).warning(
+                "telegram raw api unavailable operation=%s endpoint=%s chat_id=%s "
+                "message_thread_id=%s direct_messages_topic_id=%s session_uid=%s reason=missing_bot_context",
+                operation,
+                endpoint,
+                route.get("chat_id"),
+                route.get("message_thread_id"),
+                route.get("direct_messages_topic_id"),
+                route.get("session_uid"),
+            )
+            return _RAW_API_UNAVAILABLE
+
+        post = getattr(bot, "_post", None)
+        if callable(post):
+            return await post(endpoint, data=data)
+
+        do_api_request = getattr(bot, "do_api_request", None)
+        if callable(do_api_request):
+            return await do_api_request(endpoint, api_kwargs=data)
+
+        route = self._route_log_fields(context, data)
+        session_uid = str(getattr(transport_context, "session_uid", "") or route.get("session_uid") or "-")
+        logging.getLogger(__name__).debug(
+            "telegram raw api unavailable operation=%s endpoint=%s chat_id=%s "
+            "message_thread_id=%s direct_messages_topic_id=%s session_uid=%s reason=missing_raw_api_method",
+            operation,
+            endpoint,
+            route.get("chat_id"),
+            route.get("message_thread_id"),
+            route.get("direct_messages_topic_id"),
+            session_uid,
+        )
+        return _RAW_API_UNAVAILABLE
+
+    @staticmethod
+    def _message_from_raw_result(bot, result):
+        if hasattr(result, "message_id"):
+            return result
+        if isinstance(result, dict):
+            try:
+                return Message.de_json(result, bot)
+            except Exception:
+                logging.getLogger(__name__).debug(
+                    "telegram raw message decode failed",
+                    exc_info=True,
+                )
+                return SimpleNamespace(message_id=result.get("message_id"), raw=result)
+        return result
+
+    @staticmethod
     def _is_missing_thread_error(exc: Exception) -> bool:
         message = str(exc or "").strip().lower()
         return any(
@@ -209,7 +293,8 @@ class TelegramTransportService:
         }
         try:
             if md2 and "text" in fallback_kwargs:
-                message, last_exc, used_variant = await self._send_markdown_variants(
+                message, last_exc, used_variant = await self._send_formatted_variants(
+                    context,
                     send_message,
                     str(raw_text or ""),
                     fallback_kwargs,
@@ -224,7 +309,7 @@ class TelegramTransportService:
                         last_exc,
                     )
                     return None
-                if used_variant and used_variant != "entities_preserve":
+                if used_variant and used_variant not in {"rich_raw", "entities_preserve"}:
                     logging.getLogger(__name__).info(
                         "telegram send_message threadless fallback used variant=%s",
                         used_variant,
@@ -413,12 +498,59 @@ class TelegramTransportService:
             last_message = await send_func(**chunk_kwargs)
         return last_message
 
+    async def _send_raw_rich_chunks(self, context, raw: str, base_kwargs: dict, route_log: dict):
+        if not is_rich_markdown_eligible(str(raw or "")):
+            return None, None, ""
+        payload = self._filter_payload_kwargs(base_kwargs, self._RICH_SEND_KEYS)
+        payload["rich_message"] = build_input_rich_message(str(raw or ""))
+        try:
+            result = await self._call_raw_bot_api(
+                context,
+                endpoint="sendRichMessage",
+                data=payload,
+                operation="send_rich_message",
+            )
+        except BadRequest as exc:
+            logging.getLogger(__name__).warning(
+                "telegram send_message variant=rich_raw rejected chat_id=%s "
+                "message_thread_id=%s direct_messages_topic_id=%s session_uid=%s: %s",
+                route_log.get("chat_id"),
+                route_log.get("message_thread_id"),
+                route_log.get("direct_messages_topic_id"),
+                route_log.get("session_uid"),
+                exc,
+            )
+            return None, exc, "rich_raw"
+        if result is _RAW_API_UNAVAILABLE:
+            return None, None, ""
+        raw_context, _transport_context = self._unwrap_context(context)
+        return self._message_from_raw_result(getattr(raw_context, "bot", None), result), None, "rich_raw"
+
     def _record_message(self, chat_id, message) -> None:
         if not chat_id or not message:
             return
         for runtime in (getattr(self.bot_app, "iter_mode_runtimes", lambda: [])() or []):
             if runtime and hasattr(runtime, "record_message"):
                 runtime.record_message(chat_id, message.message_id)
+
+    async def _send_formatted_variants(self, context, send_message, raw: str, base_kwargs: dict, route_log: dict):
+        message, last_exc, used_variant = await self._send_raw_rich_chunks(
+            context,
+            raw,
+            base_kwargs,
+            route_log,
+        )
+        if message is not None:
+            return message, last_exc, used_variant
+
+        rich_exc = last_exc
+        message, last_exc, used_variant = await self._send_markdown_variants(
+            send_message,
+            raw,
+            base_kwargs,
+            route_log,
+        )
+        return message, last_exc or rich_exc, used_variant
 
     async def _send_markdown_variants(self, send_message, raw: str, base_kwargs: dict, route_log: dict):
         send_variants = [
@@ -526,7 +658,8 @@ class TelegramTransportService:
                 base_kwargs = dict(current_kwargs)
                 route_log = self._route_log_fields(context, base_kwargs)
 
-                message, last_exc, used_variant = await self._send_markdown_variants(
+                message, last_exc, used_variant = await self._send_formatted_variants(
+                    context,
                     send_message,
                     raw,
                     base_kwargs,
@@ -562,7 +695,7 @@ class TelegramTransportService:
                         last_exc,
                     )
                     return
-                if used_variant and used_variant != "entities_preserve":
+                if used_variant and used_variant not in {"rich_raw", "entities_preserve"}:
                     logging.getLogger(__name__).info(
                         "telegram send_message used fallback variant=%s",
                         used_variant,
@@ -620,6 +753,43 @@ class TelegramTransportService:
             operation="send_message",
             factory=lambda: self._send_message_now(context, **kwargs),
         )
+
+    async def send_rich_message_draft(self, context, *, draft_id: int, rich_message: dict, **kwargs) -> bool:
+        current_kwargs = dict(kwargs or {})
+        try:
+            _raw_context, current_kwargs = self._prepare_send_kwargs(
+                context,
+                kwargs,
+                operation="send_rich_message_draft",
+            )
+            if current_kwargs is None:
+                return False
+            payload = self._filter_payload_kwargs(current_kwargs, self._RICH_DRAFT_KEYS)
+            if payload.get("chat_id") is None:
+                return False
+            payload["draft_id"] = int(draft_id)
+            payload["rich_message"] = dict(rich_message or {})
+            result = await self._call_raw_bot_api(
+                context,
+                endpoint="sendRichMessageDraft",
+                data=payload,
+                operation="send_rich_message_draft",
+            )
+            return result is not _RAW_API_UNAVAILABLE
+        except (BadRequest, NetworkError, TimedOut) as exc:
+            route_log = self._route_log_fields(context, current_kwargs)
+            logging.getLogger(__name__).warning(
+                "telegram send_rich_message_draft failed chat_id=%s message_thread_id=%s "
+                "session_uid=%s: %s",
+                route_log.get("chat_id"),
+                route_log.get("message_thread_id"),
+                route_log.get("session_uid"),
+                exc,
+            )
+            return False
+        except Exception:
+            logging.getLogger(__name__).exception("Не удалось отправить rich draft в Telegram.")
+            return False
 
     async def _send_document_now(self, context, **kwargs) -> bool:
         for attempt in range(5):
@@ -726,6 +896,33 @@ class TelegramTransportService:
                     reply_markup=reply_markup,
                 )
                 return True
+
+            if len(raw) <= self._TELEGRAM_TEXT_LIMIT:
+                payload = self._filter_payload_kwargs(
+                    {
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "reply_markup": reply_markup,
+                    },
+                    self._RICH_EDIT_KEYS,
+                )
+                payload["rich_message"] = build_input_rich_message(raw)
+                try:
+                    result = await self._call_raw_bot_api(
+                        context,
+                        endpoint="editMessageText",
+                        data=payload,
+                        operation="edit_message_rich",
+                    )
+                    if result is not _RAW_API_UNAVAILABLE:
+                        return True
+                except BadRequest as exc:
+                    if "Message text is empty" in str(exc):
+                        return False
+                    logging.getLogger(__name__).warning(
+                        "telegram edit_message variant=rich_raw rejected: %s",
+                        exc,
+                    )
 
             variants = [
                 ("entities_preserve", None),

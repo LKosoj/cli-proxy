@@ -148,6 +148,54 @@ def test_session_run_service_logs_assistant_preview_edit_fallback(caplog) -> Non
     assert "message_id=42" in caplog.text
 
 
+def test_session_run_service_keeps_direct_messages_topic_on_preview_fallback() -> None:
+    async def _run() -> None:
+        sent_messages: list[dict[str, object]] = []
+        rich_drafts: list[dict[str, object]] = []
+
+        async def _send_message(_context, *, text, **kwargs):
+            sent_messages.append({"text": text, **kwargs})
+            return SimpleNamespace(message_id=43)
+
+        async def _send_rich_message_draft(_context, **kwargs):
+            rich_drafts.append(dict(kwargs))
+            return True
+
+        bot_app = SimpleNamespace(
+            _send_message=_send_message,
+            _send_rich_message_draft=_send_rich_message_draft,
+        )
+        service = _build_service(bot_app)
+        session = SimpleNamespace(
+            id="s-preview",
+            send_lock=asyncio.Lock(),
+            assistant_preview_message_id=None,
+            assistant_preview_last_value=None,
+        )
+
+        await service._upsert_telegram_assistant_preview(
+            session,
+            {
+                "kind": "telegram",
+                "chat_id": 123,
+                "direct_messages_topic_id": 777,
+            },
+            object(),
+            "⏳ preview text",
+        )
+
+        assert rich_drafts == []
+        assert sent_messages == [
+            {
+                "chat_id": 123,
+                "direct_messages_topic_id": 777,
+                "text": "⏳ preview text",
+            }
+        ]
+
+    asyncio.run(_run())
+
+
 def test_session_run_service_logs_framework_output_policy_fallback(caplog) -> None:
     class _Mode:
         def framework_sends_output(self) -> bool:

@@ -7,7 +7,8 @@ Instruction node for `agent` area.
 
 ## Scope
 - Source glob: `agent/**`
-- Estimated files: 60
+- Estimated files: 61
+- Current files: 61 under `agent/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -77,4 +78,4 @@ Instruction node for `agent` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:18Z
+- 2026-07-05T00:00:00Z

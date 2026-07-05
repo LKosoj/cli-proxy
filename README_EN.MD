@@ -7,7 +7,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok) wit
 ## Features
 - Multiple CLI sessions in different directories.
 - Request queue and busy control.
-- Short output up to 3900 characters is sent as a regular Telegram message; long output or `force_html=True` is sent as an HTML file (Markdown rendering, ANSI colors, Mermaid diagrams as SVG; on render failure they remain as code blocks).
+- Short output within the Telegram Rich Message limit (up to 32768 UTF-8 characters) is sent as a Telegram message; long output or `force_html=True` is sent as an HTML file (Markdown rendering, ANSI colors, Mermaid diagrams as SVG; on render failure they remain as code blocks).
 - Summary/preview for long HTML output is sent as a separate message when summary delivery is enabled.
 - Prompt and resume token autodetection, saved in `state.json`.
 - Session and thread/scope mapping restore after restart.
@@ -216,7 +216,7 @@ For layering and placement rules, see `ARCHITECTURE.md`.
    - Queue can be inspected with `/queue` and cleared with `/clearqueue`.
 
 4. **Handle results**
-   - Short results up to 3900 characters arrive as regular Telegram messages.
+   - Short results within the Telegram Rich Message limit (up to 32768 UTF-8 characters) arrive as Telegram messages.
    - Long results arrive as HTML files; `force_html=True` forces an HTML file even for short results.
    - Summary or preview for long HTML output arrives as a separate message when summary delivery is enabled.
    - Use `/reports` for session reports; `/reports latest` sends the latest report, `/reports snapshot` creates a human-readable HTML session report in the user's language, `/reports generate` creates one from the current Manager plan, and `/reports <filename.md>` sends a specific report file.

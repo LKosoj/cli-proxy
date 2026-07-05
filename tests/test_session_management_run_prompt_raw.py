@@ -228,7 +228,7 @@ async def test_direct_run_prompt_notifies_and_uses_fallback_cli_after_restore(tm
 
 
 @pytest.mark.asyncio
-async def test_run_prompt_telegram_assistant_preview_deletes_before_final_output(tmp_path, monkeypatch):
+async def test_run_prompt_telegram_assistant_preview_clears_rich_draft_before_final_output(tmp_path, monkeypatch):
     app = _build_app(tmp_path)
     app.config.defaults.assistant_preview_enabled = True
     session = app.manager.create(1, "dummy", str(tmp_path))
@@ -238,13 +238,15 @@ async def test_run_prompt_telegram_assistant_preview_deletes_before_final_output
     preview_messages: list[dict[str, object]] = []
     preview_edits: list[dict[str, object]] = []
     preview_deletes: list[tuple[int, int]] = []
+    rich_drafts: list[dict[str, object]] = []
     final_outputs: list[str] = []
     events: list[str] = []
     output_sent = asyncio.Event()
 
-    async def _watch_preview(_session, *, emit_update, stop_event, poll_interval_sec=0.35):
+    async def _watch_preview(_session, *, emit_update, stop_event, poll_interval_sec=0.35, **kwargs):
         _ = poll_interval_sec
-        await emit_update("⏳ Черновик ответа")
+        assert kwargs["refresh_interval_sec"] <= 25.0
+        await emit_update("Черновик ответа")
         await stop_event.wait()
 
     monkeypatch.setattr(run_service_mod, "watch_session_assistant_preview", _watch_preview)
@@ -262,6 +264,11 @@ async def test_run_prompt_telegram_assistant_preview_deletes_before_final_output
         preview_deletes.append((chat_id, message_id))
         return True
 
+    async def _send_rich_message_draft(_context, *, draft_id: int, rich_message: dict, **kwargs):
+        events.append("rich_draft")
+        rich_drafts.append({"draft_id": draft_id, "rich_message": rich_message, **kwargs})
+        return True
+
     async def _send_output(_session, _dest, output, _context, **_kwargs):
         events.append("send_output")
         final_outputs.append(str(output))
@@ -270,6 +277,7 @@ async def test_run_prompt_telegram_assistant_preview_deletes_before_final_output
     app._send_message = _send_message
     app._edit_message = _edit_message
     app._delete_message = _delete_message
+    app._send_rich_message_draft = _send_rich_message_draft
     app.send_output = _send_output
 
     async def _fake_run_prompt(prompt: str, **_kwargs):
@@ -288,9 +296,10 @@ async def test_run_prompt_telegram_assistant_preview_deletes_before_final_output
     await asyncio.wait_for(output_sent.wait(), timeout=1.0)
 
     assert final_outputs == ["FINAL OUTPUT"]
-    assert preview_messages
-    assert preview_messages[0]["text"] == "⏳ Черновик ответа"
+    assert rich_drafts
+    assert rich_drafts[0]["rich_message"]["markdown"].startswith("00:00\n\nЧерновик ответа")
+    assert preview_messages == []
     assert preview_edits == []
-    assert preview_deletes == [(1, 501)]
-    assert events == ["delete_preview", "send_output"]
+    assert preview_deletes == []
+    assert events == ["rich_draft", "send_output"]
     app.shutdown_html_process_pool()

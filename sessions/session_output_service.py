@@ -6,6 +6,7 @@ from typing import Optional
 
 from i18n import t
 from sessions.conversation_scope import ConversationScope
+from tg.rich import is_rich_markdown_eligible
 from utils.text import build_preview, strip_ansi
 from utils.lang import resolve_user_lang
 
@@ -196,7 +197,7 @@ class SessionOutputService:
             reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
             self.bot_app.metrics.observe_output(len(output))
 
-            if not force_html and chat_id is not None and len(output) <= 3900:
+            if not force_html and chat_id is not None and is_rich_markdown_eligible(output):
                 await self.bot_app._send_message(context, text=output, **reply_kwargs)
                 try:
                     session.state_summary = build_preview(strip_ansi(output), self.bot_app.config.defaults.summary_max_chars)

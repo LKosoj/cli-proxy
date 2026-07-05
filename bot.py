@@ -52,6 +52,7 @@ from app.services.session_creation_service import SessionCreationService
 from app.services.sandbox_service import AgentSandboxService
 from app.services.lifecycle_service import build_error_handler, build_post_init, build_post_shutdown
 from app.services.i18n_service import maybe_persist_user_language
+from app.services.rich_draft_coordinator import RichDraftCoordinator
 from app.services.telegram_transport import TelegramTransportContext, TelegramTransportService
 from app.services.message_buffer_service import MessageBufferService
 from app.services.input_dispatch_service import InputDispatchService
@@ -184,6 +185,7 @@ class BotApp:
         self.session_creation_service = SessionCreationService(self)
         self.notification_queue_service = self.container.notification_queue_service
         self.transport_service = TelegramTransportService(self)
+        self.rich_draft_coordinator = RichDraftCoordinator()
         self.message_buffer_service = MessageBufferService(self)
         self.access_policy_service = AccessPolicyService(self)
         self.cli_limits_service = self.container.cli_limits_service
@@ -1265,6 +1267,9 @@ class BotApp:
         """Public wrapper over the internal Telegram send so callers outside BotApp
         do not depend on the private `_send_message`."""
         return await self._send_message(context, **kwargs)
+
+    async def _send_rich_message_draft(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> bool:
+        return await self.transport_service.send_rich_message_draft(context, **kwargs)
 
     async def _send_document(self, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> bool:
         return await self.transport_service.send_document(context, **kwargs)

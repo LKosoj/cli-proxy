@@ -7,7 +7,8 @@ Instruction node for `desktop` area.
 
 ## Scope
 - Source glob: `desktop/**`
-- Estimated files: 31
+- Estimated files: 32
+- Current files: 32 under `desktop/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -77,4 +78,4 @@ Instruction node for `desktop` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:18Z
+- 2026-07-05T00:00:00Z

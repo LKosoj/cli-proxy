@@ -9,9 +9,11 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from app.services.assistant_preview_service import (
     assistant_preview_enabled,
     assistant_preview_supported_dest,
+    build_assistant_preview_text,
     watch_session_assistant_preview,
 )
 from app.services.logging_service import bind_session_log_context
+from app.services.rich_draft_coordinator import REFRESH_INTERVAL_SECONDS, RichDraftCoordinator
 from app.services.runtime_progress_service import clear_runtime_progress, emit_runtime_progress
 from app.services.task_bearing_cli_hook_service import get_task_bearing_cli_hook_service
 from app.services.session_tick_history_store import clear_session_ticks
@@ -32,8 +34,9 @@ from sessions.session_state_access import (
 )
 from app.services.core_orchestration_service import CoreOrchestrationService
 from i18n import t
+from tg.rich import build_input_rich_message
 from utils.lang import resolve_user_lang
-from utils.text import build_preview, strip_ansi
+from utils.text import build_preview, is_time_only_text, strip_ansi
 
 _SESSION_TASK_MODE_ID = "__session__"
 _log = logging.getLogger(__name__)
@@ -262,6 +265,47 @@ class SessionRunService:
         reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
         return reply_kwargs.get("chat_id") is not None
 
+    def _telegram_rich_draft_supported(self, session, dest: Optional[dict]) -> bool:
+        send_draft = getattr(self.bot_app, "_send_rich_message_draft", None)
+        if not callable(send_draft):
+            return False
+        reply_kwargs = self._telegram_reply_kwargs(dest or {}, session=session)
+        chat_id = reply_kwargs.get("chat_id")
+        if chat_id is None:
+            return False
+        if reply_kwargs.get("direct_messages_topic_id") is not None:
+            return False
+        try:
+            return int(chat_id) > 0
+        except (TypeError, ValueError):
+            return False
+
+    def _rich_draft_coordinator(self) -> RichDraftCoordinator:
+        coordinator = getattr(self.bot_app, "rich_draft_coordinator", None)
+        if isinstance(coordinator, RichDraftCoordinator):
+            return coordinator
+        coordinator = RichDraftCoordinator()
+        try:
+            self.bot_app.rich_draft_coordinator = coordinator
+        except Exception:
+            _log.debug(
+                "legacy_fallback: failed to attach rich draft coordinator to bot_app",
+                exc_info=True,
+            )
+        return coordinator
+
+    @staticmethod
+    def _rich_draft_run_key(session) -> str:
+        started_at = getattr(session, "started_at", None) or time.time()
+        return f"{session_runtime_uid(session)}:{int(float(started_at) * 1000)}"
+
+    @staticmethod
+    def _build_rich_draft_source_text(text) -> Optional[str]:
+        raw = strip_ansi(str(text or "")).strip()
+        if not raw or is_time_only_text(raw):
+            return None
+        return raw
+
     async def _upsert_telegram_assistant_preview(self, session, dest: dict, context, text: Optional[str]) -> None:
         if not text:
             return
@@ -277,6 +321,24 @@ class SessionRunService:
             current_text = text
             if not current_text:
                 return
+            if self._telegram_rich_draft_supported(session, dest):
+                coordinator = self._rich_draft_coordinator()
+                run_key = self._rich_draft_run_key(session)
+                payload = coordinator.update(run_key, current_text)
+                send_draft = getattr(self.bot_app, "_send_rich_message_draft", None)
+                sent = False
+                if callable(send_draft):
+                    sent = bool(await send_draft(
+                        context,
+                        draft_id=payload.draft_id,
+                        rich_message=build_input_rich_message(payload.text),
+                        **reply_kwargs,
+                    ))
+                if sent:
+                    session.assistant_preview_last_value = payload.text
+                    return
+                coordinator.cancel(run_key)
+                current_text = build_assistant_preview_text(current_text) or current_text
             if (
                 session.assistant_preview_message_id is not None
                 and session.assistant_preview_last_value == current_text
@@ -313,6 +375,7 @@ class SessionRunService:
             session.assistant_preview_last_value = current_text
 
     async def _clear_telegram_assistant_preview(self, session, dest: Optional[dict], context) -> bool:
+        self._rich_draft_coordinator().cancel(self._rich_draft_run_key(session))
         message_id = getattr(session, "assistant_preview_message_id", None)
         if message_id is None:
             self._reset_assistant_preview_state(session)
@@ -491,6 +554,13 @@ class SessionRunService:
                 try:
                     if self._telegram_assistant_preview_enabled(session, dest):
                         preview_stop_event = asyncio.Event()
+                        rich_draft_supported = self._telegram_rich_draft_supported(session, dest)
+                        preview_kwargs = {}
+                        if rich_draft_supported:
+                            preview_kwargs = {
+                                "build_text": self._build_rich_draft_source_text,
+                                "refresh_interval_sec": REFRESH_INTERVAL_SECONDS,
+                            }
                         preview_task = self._safe_create_task(
                             watch_session_assistant_preview(
                                 session,
@@ -501,6 +571,7 @@ class SessionRunService:
                                     text,
                                 ),
                                 stop_event=preview_stop_event,
+                                **preview_kwargs,
                             ),
                             label=f"assistant_preview:{session.id}",
                         )

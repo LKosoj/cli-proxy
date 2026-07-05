@@ -8,6 +8,7 @@ Instruction node for `utils` area.
 ## Scope
 - Source glob: `utils/**`
 - Estimated files: 8
+- Current files: 8 under `utils/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -67,4 +68,4 @@ Instruction node for `utils` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:18Z
+- 2026-07-05T00:00:00Z

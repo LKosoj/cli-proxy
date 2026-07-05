@@ -7,7 +7,8 @@ Instruction node for `tg` area.
 
 ## Scope
 - Source glob: `tg/**`
-- Estimated files: 17
+- Estimated files: 18
+- Current files: 18 under `tg/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -72,4 +73,4 @@ Instruction node for `tg` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-19T00:00:00Z
+- 2026-07-05T00:00:00Z

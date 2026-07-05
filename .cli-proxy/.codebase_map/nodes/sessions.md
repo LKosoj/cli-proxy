@@ -8,6 +8,7 @@ Instruction node for `sessions` area.
 ## Scope
 - Source glob: `sessions/**`
 - Estimated files: 10
+- Current files: 10 under `sessions/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -71,4 +72,4 @@ Instruction node for `sessions` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:18Z
+- 2026-07-05T00:00:00Z

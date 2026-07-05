@@ -7,7 +7,8 @@ Instruction node for `modes` area.
 
 ## Scope
 - Source glob: `modes/**`
-- Estimated files: 219
+- Estimated files: 221
+- Current files: 221 under `modes/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -77,4 +78,4 @@ Instruction node for `modes` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:18Z
+- 2026-07-05T00:00:00Z

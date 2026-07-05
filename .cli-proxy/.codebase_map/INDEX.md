@@ -38,13 +38,13 @@ These files are mandatory context and must be considered before major edits.
 - `CONCERNS.md`: Риски, технический долг и зоны повышенного внимания.
 
 ## Nodes
-- [tests](nodes/tests.md) - files: 549, source_glob: `tests/**`
-- [modes](nodes/modes.md) - files: 219, source_glob: `modes/**`
-- [app](nodes/app.md) - files: 154, source_glob: `app/**`
-- [agent](nodes/agent.md) - files: 60, source_glob: `agent/**`
-- [desktop](nodes/desktop.md) - files: 31, source_glob: `desktop/**`
-- [miniapp](nodes/miniapp.md) - files: 22, source_glob: `miniapp/**`
-- [tg](nodes/tg.md) - files: 17, source_glob: `tg/**`
+- [tests](nodes/tests.md) - files: 552, source_glob: `tests/**`
+- [modes](nodes/modes.md) - files: 221, source_glob: `modes/**`
+- [app](nodes/app.md) - files: 157, source_glob: `app/**`
+- [agent](nodes/agent.md) - files: 61, source_glob: `agent/**`
+- [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`
+- [miniapp](nodes/miniapp.md) - files: 120, source_glob: `miniapp/**`
+- [tg](nodes/tg.md) - files: 18, source_glob: `tg/**`
 - [sessions](nodes/sessions.md) - files: 10, source_glob: `sessions/**`
 - [utils](nodes/utils.md) - files: 8, source_glob: `utils/**`
 - [i18n](nodes/i18n.md) - files: 5, source_glob: `i18n/**`

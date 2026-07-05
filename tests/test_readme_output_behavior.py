@@ -25,8 +25,8 @@ def test_readmes_describe_actual_output_delivery_without_always_html() -> None:
     for pattern in forbidden:
         assert re.search(pattern, combined, flags=re.IGNORECASE | re.DOTALL) is None
 
-    assert "до 3900 символов" in readme_ru
-    assert "up to 3900 characters" in readme_en
+    assert "до 32768 UTF-8 символов" in readme_ru
+    assert "up to 32768 UTF-8 characters" in readme_en
     assert "`force_html=True`" in readme_ru
     assert "`force_html=True`" in readme_en
     assert "Summary/preview" in readme_ru

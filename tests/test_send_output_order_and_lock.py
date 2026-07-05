@@ -87,7 +87,7 @@ def test_send_output_sends_html_before_summary(tmp_path, monkeypatch):
         monkeypatch.setattr(asyncio, "to_thread", _to_thread)
 
         dest = {"kind": "telegram", "chat_id": 1}
-        output = "x" * 5000
+        output = "x" * 33000
         # Let HTML generation proceed only after we've observed summary started.
 
         async def _release():
@@ -264,7 +264,7 @@ def test_send_output_uses_notification_queue_as_atomic_report_delivery(tmp_path,
         monkeypatch.setattr(asyncio, "to_thread", _to_thread)
 
         dest = {"kind": "telegram", "chat_id": -100777000111, "message_thread_id": 101}
-        report_task = asyncio.create_task(app.send_output(session, dest, "x" * 5000, context=context))
+        report_task = asyncio.create_task(app.send_output(session, dest, "x" * 33000, context=context))
 
         await asyncio.wait_for(header_started.wait(), timeout=1.0)
 
