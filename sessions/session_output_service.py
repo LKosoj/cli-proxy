@@ -198,7 +198,12 @@ class SessionOutputService:
             self.bot_app.metrics.observe_output(len(output))
 
             if not force_html and chat_id is not None and is_rich_markdown_eligible(output):
-                await self.bot_app._send_message(context, text=output, **reply_kwargs)
+                await self.bot_app._send_message(
+                    context,
+                    text=output,
+                    refresh_active_rich_drafts=False,
+                    **reply_kwargs,
+                )
                 try:
                     session.state_summary = build_preview(strip_ansi(output), self.bot_app.config.defaults.summary_max_chars)
                     session.state_updated_at = time.time()
@@ -233,7 +238,12 @@ class SessionOutputService:
                     delivery=delivery_tail,
                 )
                 if chat_id is not None:
-                    await self.bot_app._send_message(context, text=header, **reply_kwargs)
+                    await self.bot_app._send_message(
+                        context,
+                        text=header,
+                        refresh_active_rich_drafts=False,
+                        **reply_kwargs,
+                    )
 
             async def _render_html_to_file() -> str:
                 _so_log.info("[send_output] generating HTML (in thread)...")
@@ -306,7 +316,13 @@ class SessionOutputService:
                             pass
 
                     if summary:
-                        await self.bot_app._send_message(context, text=preview, md2=True, **reply_kwargs)
+                        await self.bot_app._send_message(
+                            context,
+                            text=preview,
+                            md2=True,
+                            refresh_active_rich_drafts=False,
+                            **reply_kwargs,
+                        )
                         return
 
                     suffix = t("run.summary_unavailable", lang, err=summary_error) if summary_error else ""
@@ -316,6 +332,7 @@ class SessionOutputService:
                         context,
                         text=f"{preview}\n\n{suffix}".strip(),
                         md2=True,
+                        refresh_active_rich_drafts=False,
                         **reply_kwargs,
                     )
 

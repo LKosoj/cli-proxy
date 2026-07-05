@@ -1260,8 +1260,26 @@ class BotApp:
     def _expected_tools(self) -> str:
         return ", ".join(sorted(self.config.tools.keys()))
 
-    async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
-        return await self.transport_service.send_message(context, **kwargs)
+    async def _refresh_active_rich_drafts_after_outbound(self, context: ContextTypes.DEFAULT_TYPE, reply_kwargs: dict) -> None:
+        refresh = getattr(self.session_management, "refresh_active_rich_drafts_for_reply_kwargs", None)
+        if not callable(refresh):
+            return
+        try:
+            await refresh(context, reply_kwargs)
+        except Exception:
+            logging.getLogger(__name__).exception("active rich draft refresh failed after telegram outbound")
+
+    async def _send_message(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        *,
+        refresh_active_rich_drafts: bool = True,
+        **kwargs,
+    ):
+        message = await self.transport_service.send_message(context, **kwargs)
+        if refresh_active_rich_drafts and message is not None:
+            await self._refresh_active_rich_drafts_after_outbound(context, dict(kwargs))
+        return message
 
     async def send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
         """Public wrapper over the internal Telegram send so callers outside BotApp
@@ -1552,8 +1570,10 @@ class BotApp:
     async def _edit_message(
         self, context: ContextTypes.DEFAULT_TYPE, chat_id: int,
         message_id: int, text: str, *, md2: bool = True, reply_markup: Optional[InlineKeyboardMarkup] = None,
+        refresh_active_rich_drafts: bool = True,
+        message_thread_id: Optional[int] = None,
     ) -> bool:
-        return await self.transport_service.edit_message(
+        edited = await self.transport_service.edit_message(
             context,
             chat_id=chat_id,
             message_id=message_id,
@@ -1561,6 +1581,12 @@ class BotApp:
             md2=md2,
             reply_markup=reply_markup,
         )
+        if refresh_active_rich_drafts and edited:
+            refresh_kwargs = {"chat_id": chat_id}
+            if message_thread_id is not None:
+                refresh_kwargs["message_thread_id"] = message_thread_id
+            await self._refresh_active_rich_drafts_after_outbound(context, refresh_kwargs)
+        return edited
 
     async def _clear_message_reply_markup(
         self,

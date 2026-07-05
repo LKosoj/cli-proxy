@@ -105,6 +105,48 @@ def test_send_message_md2_uses_raw_rich_first(tmp_path, monkeypatch):
     asyncio.run(_run())
 
 
+def test_bot_app_outbound_messages_touch_active_rich_draft(tmp_path):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        refreshes = []
+
+        async def _refresh(_context, reply_kwargs):
+            refreshes.append(dict(reply_kwargs))
+            return 1
+
+        app.session_management.refresh_active_rich_drafts_for_reply_kwargs = _refresh
+
+        async def _send_message(**kwargs):
+            return types.SimpleNamespace(message_id=1, payload=dict(kwargs))
+
+        async def _edit_message_text(**_kwargs):
+            return True
+
+        ctx = types.SimpleNamespace(
+            bot=types.SimpleNamespace(
+                send_message=_send_message,
+                edit_message_text=_edit_message_text,
+            )
+        )
+
+        await app._send_message(ctx, chat_id=1, text="menu", md2=False)
+        await app._edit_message(ctx, chat_id=1, message_id=2, text="menu", md2=False, message_thread_id=7)
+        await app._send_message(
+            ctx,
+            chat_id=1,
+            text="final",
+            md2=False,
+            refresh_active_rich_drafts=False,
+        )
+
+        assert refreshes == [
+            {"chat_id": 1, "text": "menu", "md2": False},
+            {"chat_id": 1, "message_thread_id": 7},
+        ]
+
+    asyncio.run(_run())
+
+
 def test_send_message_raw_rich_bad_request_falls_back_to_current_pipeline(tmp_path):
     async def _run():
         cfg = AppConfig(

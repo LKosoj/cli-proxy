@@ -3,6 +3,7 @@ import logging
 from collections import deque
 from types import SimpleNamespace
 
+from app.services.rich_draft_coordinator import RichDraftCoordinator
 from sessions.session_run_service import SessionRunService
 
 
@@ -192,6 +193,61 @@ def test_session_run_service_keeps_direct_messages_topic_on_preview_fallback() -
                 "text": "⏳ preview text",
             }
         ]
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_refreshes_active_rich_draft_after_ui_message() -> None:
+    async def _run() -> None:
+        clock_values = deque([100.0, 105.0, 110.0])
+
+        def _clock() -> float:
+            if clock_values:
+                return float(clock_values.popleft())
+            return 110.0
+
+        rich_drafts: list[dict[str, object]] = []
+
+        async def _send_message(_context, *, text, **_kwargs):
+            raise AssertionError(f"legacy preview must not be used: {text}")
+
+        async def _send_rich_message_draft(_context, **kwargs):
+            rich_drafts.append(dict(kwargs))
+            return True
+
+        bot_app = SimpleNamespace(
+            _send_message=_send_message,
+            _send_rich_message_draft=_send_rich_message_draft,
+            rich_draft_coordinator=RichDraftCoordinator(clock=_clock),
+        )
+        service = _build_service(bot_app)
+        session = SimpleNamespace(
+            id="s-preview",
+            send_lock=asyncio.Lock(),
+            assistant_preview_message_id=None,
+            assistant_preview_last_value=None,
+            started_at=10.0,
+        )
+        dest = {"kind": "telegram", "chat_id": 123}
+
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "draft text")
+        assert len(rich_drafts) == 1
+        assert rich_drafts[0]["rich_message"]["markdown"].startswith("⏳ 00:00\n\ndraft text")
+
+        refreshed = await service.refresh_active_rich_drafts_for_reply_kwargs(object(), {"chat_id": 123})
+        assert refreshed == 1
+        assert len(rich_drafts) == 2
+        assert rich_drafts[1]["draft_id"] == rich_drafts[0]["draft_id"]
+        assert rich_drafts[1]["rich_message"]["markdown"].startswith("⏳ 00:05\n\ndraft text")
+
+        ignored = await service.refresh_active_rich_drafts_for_reply_kwargs(object(), {"chat_id": 999})
+        assert ignored == 0
+        assert len(rich_drafts) == 2
+
+        await service._clear_telegram_assistant_preview(session, dest, object())
+        after_clear = await service.refresh_active_rich_drafts_for_reply_kwargs(object(), {"chat_id": 123})
+        assert after_clear == 0
+        assert len(rich_drafts) == 2
 
     asyncio.run(_run())
 

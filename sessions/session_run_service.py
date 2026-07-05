@@ -64,6 +64,7 @@ class SessionRunService:
         self._log_cli_dialog = log_cli_dialog
         self._reset_session_fields_like_sessions_reset = reset_session_fields_like_sessions_reset
         self._core_orchestration: Optional[CoreOrchestrationService] = None
+        self._active_rich_drafts_by_scope: dict[tuple[int, Optional[int]], dict[str, object]] = {}
 
     def _get_core_orchestration(self) -> CoreOrchestrationService:
         if self._core_orchestration is None:
@@ -300,11 +301,78 @@ class SessionRunService:
         return f"{session_runtime_uid(session)}:{int(float(started_at) * 1000)}"
 
     @staticmethod
+    def _telegram_reply_scope(reply_kwargs: Optional[Mapping]) -> Optional[tuple[int, Optional[int]]]:
+        if not isinstance(reply_kwargs, Mapping):
+            return None
+        if reply_kwargs.get("direct_messages_topic_id") is not None:
+            return None
+        try:
+            chat_id = int(reply_kwargs.get("chat_id"))
+        except (TypeError, ValueError):
+            return None
+        if chat_id <= 0:
+            return None
+        raw_thread_id = reply_kwargs.get("message_thread_id")
+        if raw_thread_id in (None, "", 0, "0"):
+            return chat_id, None
+        try:
+            return chat_id, int(raw_thread_id)
+        except (TypeError, ValueError):
+            return None
+
+    def _remember_active_rich_draft(self, run_key: str, reply_kwargs: Mapping) -> None:
+        scope = self._telegram_reply_scope(reply_kwargs)
+        if scope is None:
+            return
+        self._active_rich_drafts_by_scope[scope] = {
+            "run_key": str(run_key),
+            "reply_kwargs": dict(reply_kwargs),
+        }
+
+    def _forget_active_rich_draft(self, run_key: str) -> None:
+        key = str(run_key)
+        for scope, item in list(self._active_rich_drafts_by_scope.items()):
+            if str(item.get("run_key") or "") == key:
+                self._active_rich_drafts_by_scope.pop(scope, None)
+
+    @staticmethod
     def _build_rich_draft_source_text(text) -> Optional[str]:
         raw = strip_ansi(str(text or "")).strip()
         if not raw or is_time_only_text(raw):
             return None
         return raw
+
+    async def refresh_active_rich_drafts_for_reply_kwargs(self, context, reply_kwargs: Mapping) -> int:
+        scope = self._telegram_reply_scope(reply_kwargs)
+        if scope is None:
+            return 0
+        active = self._active_rich_drafts_by_scope.get(scope)
+        if not active:
+            return 0
+        run_key = str(active.get("run_key") or "")
+        if not run_key:
+            self._active_rich_drafts_by_scope.pop(scope, None)
+            return 0
+        coordinator = self._rich_draft_coordinator()
+        state = coordinator.get_state(run_key)
+        if state is None:
+            self._active_rich_drafts_by_scope.pop(scope, None)
+            return 0
+        send_draft = getattr(self.bot_app, "_send_rich_message_draft", None)
+        if not callable(send_draft):
+            return 0
+        stored_reply_kwargs = dict(active.get("reply_kwargs") or {})
+        if self._telegram_reply_scope(stored_reply_kwargs) != scope:
+            self._active_rich_drafts_by_scope.pop(scope, None)
+            return 0
+        payload = coordinator.update(run_key, state.current_text)
+        sent = bool(await send_draft(
+            context,
+            draft_id=payload.draft_id,
+            rich_message=build_input_rich_message(payload.text),
+            **stored_reply_kwargs,
+        ))
+        return 1 if sent else 0
 
     async def _upsert_telegram_assistant_preview(self, session, dest: dict, context, text: Optional[str]) -> None:
         if not text:
@@ -336,7 +404,9 @@ class SessionRunService:
                     ))
                 if sent:
                     session.assistant_preview_last_value = payload.text
+                    self._remember_active_rich_draft(run_key, reply_kwargs)
                     return
+                self._forget_active_rich_draft(run_key)
                 coordinator.cancel(run_key)
                 current_text = build_assistant_preview_text(current_text) or current_text
             if (
@@ -375,7 +445,9 @@ class SessionRunService:
             session.assistant_preview_last_value = current_text
 
     async def _clear_telegram_assistant_preview(self, session, dest: Optional[dict], context) -> bool:
-        self._rich_draft_coordinator().cancel(self._rich_draft_run_key(session))
+        run_key = self._rich_draft_run_key(session)
+        self._forget_active_rich_draft(run_key)
+        self._rich_draft_coordinator().cancel(run_key)
         message_id = getattr(session, "assistant_preview_message_id", None)
         if message_id is None:
             self._reset_assistant_preview_state(session)
