@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services.assistant_preview_service import watch_session_assistant_preview
 from bot import BotApp
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 from session import session_runtime_uid
@@ -228,6 +229,40 @@ async def test_direct_run_prompt_notifies_and_uses_fallback_cli_after_restore(tm
 
 
 @pytest.mark.asyncio
+async def test_watch_session_assistant_preview_adds_and_refreshes_elapsed_timer():
+    session = SimpleNamespace(last_assistant_text_value="Черновик ответа")
+    stop_event = asyncio.Event()
+    updates: list[str] = []
+    clock_values = iter((100.0, 120.0))
+
+    def _clock() -> float:
+        return next(clock_values, 120.0)
+
+    async def _emit_update(text: str) -> None:
+        updates.append(text)
+        if len(updates) == 2:
+            stop_event.set()
+
+    await asyncio.wait_for(
+        watch_session_assistant_preview(
+            session,
+            emit_update=_emit_update,
+            stop_event=stop_event,
+            poll_interval_sec=0.01,
+            refresh_interval_sec=20.0,
+            include_elapsed_time=True,
+            clock=_clock,
+        ),
+        timeout=1.0,
+    )
+
+    assert updates == [
+        "⏳ 00:00\n\nЧерновик ответа",
+        "⏳ 00:20\n\nЧерновик ответа",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_final_output(tmp_path, monkeypatch):
     app = _build_app(tmp_path)
     app.config.defaults.assistant_preview_enabled = True
@@ -247,7 +282,7 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     async def _watch_preview(_session, *, emit_update, stop_event, poll_interval_sec=0.35, **kwargs):
         _ = poll_interval_sec
         watch_kwargs.update(kwargs)
-        await emit_update("⏳ Черновик ответа")
+        await emit_update("⏳ 00:00\n\nЧерновик ответа")
         await stop_event.wait()
 
     monkeypatch.setattr(run_service_mod, "watch_session_assistant_preview", _watch_preview)
@@ -298,12 +333,15 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     await asyncio.wait_for(output_sent.wait(), timeout=1.0)
 
     assert final_outputs == ["FINAL OUTPUT"]
-    assert watch_kwargs == {}
+    assert watch_kwargs == {
+        "include_elapsed_time": True,
+        "refresh_interval_sec": 20.0,
+    }
     assert rich_drafts == []
     assert preview_messages == [
         {
             "chat_id": 1,
-            "text": "⏳ Черновик ответа",
+            "text": "⏳ 00:00\n\nЧерновик ответа",
             "prefer_rich": False,
         }
     ]

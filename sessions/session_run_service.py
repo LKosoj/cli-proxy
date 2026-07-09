@@ -7,6 +7,7 @@ from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.services.assistant_preview_service import (
+    ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC,
     assistant_preview_enabled,
     assistant_preview_supported_dest,
     watch_session_assistant_preview,
@@ -507,6 +508,8 @@ class SessionRunService:
                                     text,
                                 ),
                                 stop_event=preview_stop_event,
+                                include_elapsed_time=True,
+                                refresh_interval_sec=ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC,
                             ),
                             label=f"assistant_preview:{session.id}",
                         )

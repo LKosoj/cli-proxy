@@ -10,6 +10,7 @@ from utils.text import is_time_only_text, strip_ansi
 ASSISTANT_PREVIEW_MAX_CHARS = 1500
 ASSISTANT_PREVIEW_MARKER = "⏳"
 ASSISTANT_PREVIEW_POLL_INTERVAL_SEC = 0.35
+ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC = 20.0
 
 
 def assistant_preview_enabled(config: Any) -> bool:
@@ -38,6 +39,16 @@ def build_assistant_preview_text(text: Any, *, limit: int = ASSISTANT_PREVIEW_MA
     return prefix + "..." + raw[-(max_len - 3):] + truncated_suffix
 
 
+def _build_elapsed_preview_text(text: str, elapsed_seconds: float) -> str:
+    value = str(text or "").strip()
+    marker_prefix = ASSISTANT_PREVIEW_MARKER + " "
+    body = value[len(marker_prefix):] if value.startswith(marker_prefix) else value
+    total_seconds = max(0, int(elapsed_seconds))
+    minutes, seconds = divmod(total_seconds, 60)
+    header = f"{ASSISTANT_PREVIEW_MARKER} {minutes:02d}:{seconds:02d}"
+    return f"{header}\n\n{body}" if body else header
+
+
 async def watch_session_assistant_preview(
     session: Any,
     *,
@@ -46,26 +57,36 @@ async def watch_session_assistant_preview(
     poll_interval_sec: float = ASSISTANT_PREVIEW_POLL_INTERVAL_SEC,
     build_text: Callable[[Any], Optional[str]] = build_assistant_preview_text,
     refresh_interval_sec: Optional[float] = None,
+    include_elapsed_time: bool = False,
+    clock: Callable[[], float] = time.monotonic,
 ) -> None:
-    last_sent: Optional[str] = None
+    last_sent_source: Optional[str] = None
     last_sent_at: Optional[float] = None
+    started_at: Optional[float] = None
     interval = max(0.05, float(poll_interval_sec))
     refresh_interval = None
     if refresh_interval_sec is not None:
         refresh_interval = max(interval, float(refresh_interval_sec))
     while True:
-        current = build_text(getattr(session, "last_assistant_text_value", None))
-        now = time.monotonic()
+        source = build_text(getattr(session, "last_assistant_text_value", None))
+        now = clock()
         should_refresh = (
-            current
+            source
             and refresh_interval is not None
-            and last_sent is not None
+            and last_sent_source is not None
             and last_sent_at is not None
             and now - last_sent_at >= refresh_interval
         )
-        if current and (current != last_sent or should_refresh):
+        if source and (source != last_sent_source or should_refresh):
+            if started_at is None:
+                started_at = now
+            current = (
+                _build_elapsed_preview_text(source, now - started_at)
+                if include_elapsed_time
+                else source
+            )
             await emit_update(current)
-            last_sent = current
+            last_sent_source = source
             last_sent_at = now
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
