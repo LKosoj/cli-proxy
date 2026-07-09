@@ -134,7 +134,6 @@ class SessionUI:
             text=text,
             md2=True,
             reply_markup=reply_markup,
-            message_thread_id=getattr(query.message, "message_thread_id", None),
         )
 
     def build_sessions_menu(

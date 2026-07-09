@@ -257,6 +257,7 @@ class TelegramTransportService:
         current_kwargs: dict,
         raw_text: str,
         md2: bool,
+        prefer_rich: bool,
         route_log: dict,
         reason: Exception,
     ) -> object | None:
@@ -299,6 +300,7 @@ class TelegramTransportService:
                     str(raw_text or ""),
                     fallback_kwargs,
                     fallback_route_log,
+                    prefer_rich=prefer_rich,
                 )
                 if message is None:
                     logging.getLogger(__name__).warning(
@@ -533,17 +535,27 @@ class TelegramTransportService:
             if runtime and hasattr(runtime, "record_message"):
                 runtime.record_message(chat_id, message.message_id)
 
-    async def _send_formatted_variants(self, context, send_message, raw: str, base_kwargs: dict, route_log: dict):
-        message, last_exc, used_variant = await self._send_raw_rich_chunks(
-            context,
-            raw,
-            base_kwargs,
-            route_log,
-        )
-        if message is not None:
-            return message, last_exc, used_variant
+    async def _send_formatted_variants(
+        self,
+        context,
+        send_message,
+        raw: str,
+        base_kwargs: dict,
+        route_log: dict,
+        *,
+        prefer_rich: bool = True,
+    ):
+        rich_exc = None
+        if prefer_rich:
+            message, rich_exc, used_variant = await self._send_raw_rich_chunks(
+                context,
+                raw,
+                base_kwargs,
+                route_log,
+            )
+            if message is not None:
+                return message, rich_exc, used_variant
 
-        rich_exc = last_exc
         message, last_exc, used_variant = await self._send_markdown_variants(
             send_message,
             raw,
@@ -618,6 +630,7 @@ class TelegramTransportService:
         for attempt in range(5):
             current_kwargs = dict(kwargs or {})
             md2 = True
+            prefer_rich = True
             raw_text = None
             try:
                 # Never mutate caller kwargs across retries.
@@ -629,6 +642,7 @@ class TelegramTransportService:
                 if current_kwargs is None:
                     return
                 md2 = bool(current_kwargs.pop("md2", True))
+                prefer_rich = bool(current_kwargs.pop("prefer_rich", True))
                 raw_text = current_kwargs.get("text")
 
                 if "text" in current_kwargs and (raw_text is None or str(raw_text).strip() == ""):
@@ -664,6 +678,7 @@ class TelegramTransportService:
                     raw,
                     base_kwargs,
                     route_log,
+                    prefer_rich=prefer_rich,
                 )
 
                 if message is None:
@@ -678,6 +693,7 @@ class TelegramTransportService:
                                 current_kwargs=base_kwargs,
                                 raw_text=raw,
                                 md2=md2,
+                                prefer_rich=prefer_rich,
                                 route_log=route_log,
                                 reason=last_exc,
                             )
@@ -717,6 +733,7 @@ class TelegramTransportService:
                         current_kwargs=current_kwargs,
                         raw_text=str(raw_text or ""),
                         md2=md2,
+                        prefer_rich=prefer_rich,
                         route_log=route_log,
                         reason=exc,
                     )
@@ -883,6 +900,7 @@ class TelegramTransportService:
         text: str,
         *,
         md2: bool = True,
+        prefer_rich: bool = True,
         reply_markup: Optional[InlineKeyboardMarkup] = None,
     ) -> bool:
         raw_context, _transport_context = self._unwrap_context(context)
@@ -897,7 +915,7 @@ class TelegramTransportService:
                 )
                 return True
 
-            if len(raw) <= self._TELEGRAM_TEXT_LIMIT:
+            if prefer_rich and len(raw) <= self._TELEGRAM_TEXT_LIMIT:
                 payload = self._filter_payload_kwargs(
                     {
                         "chat_id": chat_id,

@@ -201,7 +201,6 @@ class SessionOutputService:
                 await self.bot_app._send_message(
                     context,
                     text=output,
-                    refresh_active_rich_drafts=False,
                     **reply_kwargs,
                 )
                 try:
@@ -241,7 +240,6 @@ class SessionOutputService:
                     await self.bot_app._send_message(
                         context,
                         text=header,
-                        refresh_active_rich_drafts=False,
                         **reply_kwargs,
                     )
 
@@ -320,7 +318,6 @@ class SessionOutputService:
                             context,
                             text=preview,
                             md2=True,
-                            refresh_active_rich_drafts=False,
                             **reply_kwargs,
                         )
                         return
@@ -332,7 +329,6 @@ class SessionOutputService:
                         context,
                         text=f"{preview}\n\n{suffix}".strip(),
                         md2=True,
-                        refresh_active_rich_drafts=False,
                         **reply_kwargs,
                     )
 

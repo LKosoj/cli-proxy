@@ -228,7 +228,7 @@ async def test_direct_run_prompt_notifies_and_uses_fallback_cli_after_restore(tm
 
 
 @pytest.mark.asyncio
-async def test_run_prompt_telegram_assistant_preview_clears_rich_draft_before_final_output(tmp_path, monkeypatch):
+async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_final_output(tmp_path, monkeypatch):
     app = _build_app(tmp_path)
     app.config.defaults.assistant_preview_enabled = True
     session = app.manager.create(1, "dummy", str(tmp_path))
@@ -241,17 +241,19 @@ async def test_run_prompt_telegram_assistant_preview_clears_rich_draft_before_fi
     rich_drafts: list[dict[str, object]] = []
     final_outputs: list[str] = []
     events: list[str] = []
+    watch_kwargs: dict[str, object] = {}
     output_sent = asyncio.Event()
 
     async def _watch_preview(_session, *, emit_update, stop_event, poll_interval_sec=0.35, **kwargs):
         _ = poll_interval_sec
-        assert kwargs["refresh_interval_sec"] <= 25.0
-        await emit_update("Черновик ответа")
+        watch_kwargs.update(kwargs)
+        await emit_update("⏳ Черновик ответа")
         await stop_event.wait()
 
     monkeypatch.setattr(run_service_mod, "watch_session_assistant_preview", _watch_preview)
 
     async def _send_message(_context, **kwargs):
+        events.append("send_preview")
         preview_messages.append(dict(kwargs))
         return SimpleNamespace(message_id=501)
 
@@ -296,10 +298,16 @@ async def test_run_prompt_telegram_assistant_preview_clears_rich_draft_before_fi
     await asyncio.wait_for(output_sent.wait(), timeout=1.0)
 
     assert final_outputs == ["FINAL OUTPUT"]
-    assert rich_drafts
-    assert rich_drafts[0]["rich_message"]["markdown"].startswith("⏳ 00:00\n\nЧерновик ответа")
-    assert preview_messages == []
+    assert watch_kwargs == {}
+    assert rich_drafts == []
+    assert preview_messages == [
+        {
+            "chat_id": 1,
+            "text": "⏳ Черновик ответа",
+            "prefer_rich": False,
+        }
+    ]
     assert preview_edits == []
-    assert preview_deletes == []
-    assert events == ["rich_draft", "send_output"]
+    assert preview_deletes == [(1, 501)]
+    assert events == ["send_preview", "delete_preview", "send_output"]
     app.shutdown_html_process_pool()

@@ -311,7 +311,6 @@ class CallbackHandler(CallbackActionsMixin):
                 text=text,
                 reply_markup=reply_markup,
                 md2=md2,
-                message_thread_id=getattr(query.message, "message_thread_id", None),
             )
         return False
 

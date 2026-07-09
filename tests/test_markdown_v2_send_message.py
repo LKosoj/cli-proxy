@@ -6,6 +6,7 @@ from telegram.error import BadRequest, TimedOut
 
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 from bot import BotApp
+from app.services.rich_draft_coordinator import RichDraftCoordinator
 from app.services.telegram_transport import TelegramTransportContext
 from tg.markdown import escape_markdown_v2_all, to_markdown_v2
 from tg.rich import RICH_MARKDOWN_CHAR_LIMIT
@@ -105,43 +106,91 @@ def test_send_message_md2_uses_raw_rich_first(tmp_path, monkeypatch):
     asyncio.run(_run())
 
 
-def test_bot_app_outbound_messages_touch_active_rich_draft(tmp_path):
+def test_send_and_edit_message_can_skip_raw_rich(tmp_path):
     async def _run():
         app = _build_transport_test_app(tmp_path)
-        refreshes = []
+        raw_calls = []
+        sent_messages = []
+        edited_messages = []
 
-        async def _refresh(_context, reply_kwargs):
-            refreshes.append(dict(reply_kwargs))
-            return 1
-
-        app.session_management.refresh_active_rich_drafts_for_reply_kwargs = _refresh
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            return types.SimpleNamespace(message_id=1)
 
         async def _send_message(**kwargs):
-            return types.SimpleNamespace(message_id=1, payload=dict(kwargs))
+            sent_messages.append(dict(kwargs))
+            return types.SimpleNamespace(message_id=1)
 
-        async def _edit_message_text(**_kwargs):
+        async def _edit_message_text(**kwargs):
+            edited_messages.append(dict(kwargs))
             return True
 
         ctx = types.SimpleNamespace(
             bot=types.SimpleNamespace(
+                _post=_post,
                 send_message=_send_message,
                 edit_message_text=_edit_message_text,
             )
         )
 
-        await app._send_message(ctx, chat_id=1, text="menu", md2=False)
-        await app._edit_message(ctx, chat_id=1, message_id=2, text="menu", md2=False, message_thread_id=7)
         await app._send_message(
             ctx,
             chat_id=1,
-            text="final",
-            md2=False,
-            refresh_active_rich_drafts=False,
+            text="**status**",
+            md2=True,
+            prefer_rich=False,
+        )
+        await app._edit_message(
+            ctx,
+            chat_id=1,
+            message_id=2,
+            text="**updated**",
+            md2=True,
+            prefer_rich=False,
         )
 
-        assert refreshes == [
-            {"chat_id": 1, "text": "menu", "md2": False},
-            {"chat_id": 1, "message_thread_id": 7},
+        assert raw_calls == []
+        assert sent_messages[0]["text"] == "status"
+        assert len(sent_messages[0]["entities"]) == 1
+        assert sent_messages[0]["entities"][0].type == "bold"
+        assert edited_messages[0]["text"] == "updated"
+        assert len(edited_messages[0]["entities"]) == 1
+        assert edited_messages[0]["entities"][0].type == "bold"
+
+    asyncio.run(_run())
+
+
+def test_rich_message_draft_api_remains_available(tmp_path):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        raw_calls = []
+
+        async def _post(endpoint, data=None, **_kwargs):
+            raw_calls.append({"endpoint": endpoint, "data": dict(data or {})})
+            return True
+
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(_post=_post))
+
+        sent = await app._send_rich_message_draft(
+            ctx,
+            chat_id=1,
+            message_thread_id=7,
+            draft_id=42,
+            rich_message={"markdown": "draft"},
+        )
+
+        assert sent is True
+        assert isinstance(app.rich_draft_coordinator, RichDraftCoordinator)
+        assert raw_calls == [
+            {
+                "endpoint": "sendRichMessageDraft",
+                "data": {
+                    "chat_id": 1,
+                    "message_thread_id": 7,
+                    "draft_id": 42,
+                    "rich_message": {"markdown": "draft"},
+                },
+            }
         ]
 
     asyncio.run(_run())
