@@ -244,6 +244,36 @@ def test_claude_rate_limit_event_via_system_subtype() -> None:
     assert events[0].payload["input_tokens"] == 1
 
 
+def test_claude_task_notification_becomes_short_progress_event() -> None:
+    adapter = ClaudeJsonStreamAdapter()
+    line = json.dumps(
+        {
+            "type": "system",
+            "subtype": "task_notification",
+            "task_id": "a86e8b34cd19c1b9b",
+            "status": "stopped",
+            "output_file": "/tmp/claude/tasks/a86e8b34cd19c1b9b.output",
+            "summary": (
+                'No completion record was found for background agent '
+                '"Pre-plan миссии E1 (транспорт)" from the previous session.'
+            ),
+            "session_id": "993f3c1a-9c37-45c7-9d1e-1797d9ec4177",
+        },
+        ensure_ascii=False,
+    )
+
+    events = adapter.feed_line(line)
+
+    assert [event.kind for event in events] == ["progress"]
+    event = events[0]
+    assert event.session_id == "993f3c1a-9c37-45c7-9d1e-1797d9ec4177"
+    assert event.turn_id == "a86e8b34cd19c1b9b"
+    assert event.text == "Claude background task stopped: Pre-plan миссии E1 (транспорт)"
+    assert "{" not in event.text
+    assert "output_file" not in event.text
+    assert "No completion record" not in event.text
+
+
 def test_claude_json_stream_adapter_normalizes_semantic_events() -> None:
     adapter = ClaudeJsonStreamAdapter()
     events = []

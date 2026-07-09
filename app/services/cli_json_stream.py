@@ -13,6 +13,7 @@ from modes.sdk.runtime.json_normalizer import loads_safe
 logger = logging.getLogger(__name__)
 
 _SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_CLAUDE_TASK_NOTIFICATION_AGENT_RE = re.compile(r'background agent "([^"]+)"')
 
 
 def _safe_token(value: Any) -> str:
@@ -307,6 +308,20 @@ def _tool_result_text(tool_label: str, *, detail: str, is_error: bool) -> str:
     if is_error:
         return f"{label} failed"
     return f"{label} completed"
+
+
+def _claude_task_notification_text(payload: dict[str, Any]) -> str:
+    status = str(payload.get("status") or "").strip().lower().replace("_", " ")
+    status = status or "updated"
+    summary = str(payload.get("summary") or "").strip()
+    match = _CLAUDE_TASK_NOTIFICATION_AGENT_RE.search(summary)
+    agent_name = match.group(1).strip() if match else ""
+    if agent_name:
+        return _truncate(f"Claude background task {status}: {agent_name}", 180)
+    task_id = str(payload.get("task_id") or "").strip()
+    if task_id:
+        return _truncate(f"Claude background task {status}: {task_id}", 180)
+    return f"Claude background task {status}"
 
 
 class GeminiJsonStreamAdapter(BaseCliJsonStreamAdapter):
@@ -809,6 +824,18 @@ class ClaudeJsonStreamAdapter(BaseCliJsonStreamAdapter):
                         )
                     ]
                 return []
+            if subtype == "task_notification":
+                task_id = str(payload.get("task_id") or "").strip() or None
+                return [
+                    CliJsonStreamEvent(
+                        kind="progress",
+                        cli_name=self.cli_name,
+                        session_id=self._session_id,
+                        turn_id=task_id,
+                        text=_claude_task_notification_text(payload),
+                        payload=payload,
+                    )
+                ]
             if subtype == "rate_limit_event":
                 return [self._build_rate_limit_event(payload)]
 
