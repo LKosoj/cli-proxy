@@ -73,4 +73,4 @@ Instruction node for `tg` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-07-05T02:18:54Z
+- 2026-07-06T00:00:00Z

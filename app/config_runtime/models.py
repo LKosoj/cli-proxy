@@ -11,6 +11,7 @@ NonNegativeInt = Annotated[int, Field(ge=0)]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 PortNumber = Annotated[int, Field(ge=1, le=65535)]
 SupportedLang = Literal["ru", "en", "zh", "de"]
+ExecutionBackendName = Literal["headless", "tmux"]
 
 
 def _normalize_string_or_list(value: Any) -> Any:
@@ -83,10 +84,14 @@ class ToolConfigModel(ConfigModel):
     mode: Literal["headless", "interactive"]
     cmd: list[NonEmptyStr] = Field(min_length=1)
     enabled: bool = True
+    execution_backends: Optional[list[ExecutionBackendName]] = Field(default=None, min_length=1)
+    default_execution_backend: Optional[ExecutionBackendName] = None
+    tmux_user: Optional[NonEmptyStr] = None
     headless_cmd: Optional[list[NonEmptyStr]] = Field(default=None, min_length=1)
     resume_cmd: Optional[list[NonEmptyStr]] = Field(default=None, min_length=1)
     image_cmd: Optional[list[NonEmptyStr]] = Field(default=None, min_length=1)
     interactive_cmd: Optional[list[NonEmptyStr]] = Field(default=None, min_length=1)
+    interactive_resume_cmd: Optional[list[NonEmptyStr]] = Field(default=None, min_length=1)
     prompt_regex: Optional[NonEmptyStr] = None
     resume_regex: Optional[NonEmptyStr] = None
     help_cmd: Optional[NonEmptyStr] = None
@@ -104,12 +109,27 @@ class ToolConfigModel(ConfigModel):
         "resume_cmd",
         "image_cmd",
         "interactive_cmd",
+        "interactive_resume_cmd",
         "auto_commands",
+        "execution_backends",
         mode="before",
     )
     @classmethod
     def _normalize_command_lists(cls, value: Any) -> Any:
         return _normalize_string_or_list(value)
+
+    @model_validator(mode="after")
+    def _validate_execution_backends(self) -> "ToolConfigModel":
+        backends = list(self.execution_backends or [])
+        if len(backends) != len(set(backends)):
+            raise ValueError("execution_backends must not contain duplicates")
+        if self.default_execution_backend and not backends:
+            raise ValueError("default_execution_backend requires execution_backends")
+        if self.default_execution_backend and self.default_execution_backend not in backends:
+            raise ValueError("default_execution_backend must be listed in execution_backends")
+        if "tmux" in backends and not self.interactive_cmd:
+            raise ValueError("interactive_cmd is required when tmux execution backend is enabled")
+        return self
 
 
 class DefaultsConfigModel(ConfigModel):
@@ -145,6 +165,7 @@ class DefaultsConfigModel(ConfigModel):
     clarification_enabled: bool = True
     pending_input_confirmation_enabled: bool = True
     default_cli: Optional[NonEmptyStr] = None
+    default_execution_backend: ExecutionBackendName = "headless"
     default_language: SupportedLang = "ru"
     clarification_keywords: list[NonEmptyStr] = Field(
         default_factory=lambda: [

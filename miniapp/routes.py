@@ -1316,6 +1316,33 @@ class MiniAppRoutes:
         git_conflict_files = getattr(git_state, "conflict_files", getattr(session, "git_conflict_files", []))
         resume_tokens = getattr(cli_state, "resume_tokens", getattr(session, "resume_tokens", {}))
         auto_commands_ran = bool(getattr(cli_state, "auto_commands_ran", getattr(session, "auto_commands_ran", False)))
+        try:
+            from session import (
+                available_execution_backends,
+                get_session_execution_backend,
+            )
+            from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+            execution_backend = get_session_execution_backend(session)
+            available_backends = available_execution_backends(session)
+            active_execution_backend = str(getattr(session, "_active_execution_backend", "") or "none")
+            tmux_paths = TmuxExecutionBackend().paths(session)
+            tmux_state = TmuxExecutionBackend._read_state(tmux_paths)
+            tmux_status = (
+                {
+                    "state": str(tmux_state.get("state") or "unknown"),
+                    "session_name": str(tmux_state.get("session_name") or tmux_paths["session_name"]),
+                    "pane_target": str(tmux_state.get("pane_target") or tmux_paths["pane_target"]),
+                    "last_activity_at": self._safe_status_value(tmux_state.get("last_activity_at")),
+                }
+                if tmux_state
+                else None
+            )
+        except Exception:
+            execution_backend = "headless"
+            available_backends = ["headless"]
+            active_execution_backend = str(getattr(session, "_active_execution_backend", "") or "none")
+            tmux_status = None
         analyst_template_id = str(
             getattr(
                 modes_state,
@@ -1679,6 +1706,12 @@ class MiniAppRoutes:
             "active_mode": str(get_active_mode(session, "") or ""),
             "executor_profile": str(getattr(session, "executor_profile", "") or ""),
             "cli_work_type": cli_work_type,
+            "execution_backend": execution_backend,
+            "available_execution_backends": self._safe_status_value(available_backends),
+            "active_execution_backend": active_execution_backend,
+            "backend_switch_allowed": False,
+            "backend_switch_blockers": self._safe_status_value(["configured in settings"]),
+            "tmux_status": self._safe_status_value(tmux_status),
             "busy": bool(getattr(session, "busy", False)),
             "git_busy": git_busy,
             "git_conflict": git_conflict,
@@ -3660,12 +3693,37 @@ class MiniAppRoutes:
                 "git_available": True,
             }
 
+        from session import (
+            available_execution_backends,
+            get_session_execution_backend,
+        )
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        execution_backend = get_session_execution_backend(session)
+        available_backends = available_execution_backends(session)
+        backend_blockers = ["configured in settings"]
+        active_execution_backend = str(getattr(session, "_active_execution_backend", "") or "none")
+        tmux_paths = TmuxExecutionBackend().paths(session)
+        tmux_state = TmuxExecutionBackend._read_state(tmux_paths)
+        tmux_status = (
+            {
+                "state": str(tmux_state.get("state") or "unknown"),
+                "session_name": str(tmux_state.get("session_name") or tmux_paths["session_name"]),
+                "pane_target": str(tmux_state.get("pane_target") or tmux_paths["pane_target"]),
+                "last_activity_at": self._safe_status_value(tmux_state.get("last_activity_at")),
+            }
+            if tmux_state
+            else None
+        )
+
         return web.json_response({
             "ok": True,
             "settings": {
                 "name": str(getattr(session, "name", "") or ""),
                 "active_cli": str(getattr(session, "active_cli", "") or ""),
                 "active_mode": str(get_active_mode(session, "") or ""),
+                "execution_backend": execution_backend,
+                "active_execution_backend": active_execution_backend,
                 "ssh_remote_enabled": bool(is_ssh_remote_enabled(session)),
                 "orchestrator_enabled": bool(is_orchestrator_enabled(session)),
                 "remote_control_enabled": rc_enabled,
@@ -3678,7 +3736,11 @@ class MiniAppRoutes:
                 "remote_control_hosts": rc_hosts,
                 "modes": mode_items,
                 "direct_cli_allowed": direct_cli_allowed,
+                "execution_backends": available_backends,
+                "backend_switch_allowed": False,
+                "backend_switch_blockers": backend_blockers,
             },
+            "tmux_status": tmux_status,
             # Backward-compatible duplicate during contract migration.
             "remote_control_hosts": rc_hosts,
             "effective": effective_payload,
@@ -3797,6 +3859,9 @@ class MiniAppRoutes:
             rc_transition_prevalidated = True
 
         settings_snapshot = self._snapshot_session_settings_state(session)
+        if "execution_backend" in body:
+            return await self._json_error(400, "execution backend is configured in settings")
+
         if "active_mode" in body:
             from sessions.session_state_access import get_active_mode
 
@@ -3813,6 +3878,7 @@ class MiniAppRoutes:
                 ),
             )
             if error_response is not None:
+                self._rollback_session_settings_state(session, settings_snapshot)
                 return error_response
             after_active_mode = str(get_active_mode(session, "") or "").strip()
             if before_active_mode != after_active_mode:

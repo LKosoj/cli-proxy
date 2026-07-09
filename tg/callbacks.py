@@ -50,6 +50,7 @@ class CallbackHandler(CallbackActionsMixin):
             (("eq", "sess_list"), self._cb_sess_list),
             (("eq", "sess_new"), self._cb_sess_new),
             (("prefix", "sess_cli:"), self._cb_sess_cli),
+            (("prefix", "sess_backend:"), self._cb_sess_backend),
             (("prefix", "sess_transfer_yes:"), self._cb_sess_transfer_yes),
             (("prefix", "sess_transfer_no:"), self._cb_sess_transfer_no),
             (("prefix", "sess_mode_pick:"), self._cb_sess_mode_pick),

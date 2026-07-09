@@ -902,6 +902,7 @@ def test_miniapp_settings_ui_smoke_playwright(tmp_path) -> None:
                 "    hasSettingsTab: html.includes('data-tab=\"settings\"'),"
                 "    hasSettingsSession: html.includes('id=\"settingsSession\"'),"
                 "    hasSettingsActiveMode: html.includes('id=\"settingsActiveMode\"'),"
+                "    hasSettingsExecutionBackend: html.includes('id=\"settingsExecutionBackend\"'),"
                 "    hasRemoteControlEnabled: html.includes('id=\"settingsRemoteControlEnabled\"'),"
                 "    hasRemoteControlHostField: html.includes('id=\"settingsRemoteControlHostField\"'),"
                 "    hasRemoteControlHost: html.includes('id=\"settingsRemoteControlHost\"'),"
@@ -915,6 +916,7 @@ def test_miniapp_settings_ui_smoke_playwright(tmp_path) -> None:
             assert ui_check["hasSettingsTab"] is True
             assert ui_check["hasSettingsSession"] is True
             assert ui_check["hasSettingsActiveMode"] is True
+            assert ui_check["hasSettingsExecutionBackend"] is True
             assert ui_check["hasRemoteControlEnabled"] is True
             assert ui_check["hasRemoteControlHostField"] is True
             assert ui_check["hasRemoteControlHost"] is True

@@ -9,6 +9,7 @@ import yaml
 from app.events.bus import SystemEventBus
 from app.services.memory_event_store import MemoryEventStore
 from app.services.app_runtime_service import AppRuntimeService
+from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 from config import AppConfig, load_config
 
 
@@ -103,6 +104,17 @@ def _payload(tmp_path, *, token: str, extra_tool: str | None = None) -> dict:
     }
 
 
+def _with_tmux_tool(payload: dict, *, backend: str = "tmux") -> dict:
+    payload["tools"]["dummy"].update(
+        {
+            "interactive_cmd": ["bash", "-lc", "cat"],
+            "execution_backends": ["headless", "tmux"],
+            "default_execution_backend": backend,
+        }
+    )
+    return payload
+
+
 def _write_config(path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=False), encoding="utf-8")
 
@@ -169,6 +181,102 @@ def test_runtime_reload_applies_typed_validated_config_and_publishes_event(tmp_p
     assert payload["restart_required"] == ["telegram.token"]
     assert payload["warnings"] == ["Some changes require process restart."]
     assert payload["applied"] == ["tools.*"]
+
+
+def test_runtime_reload_closes_idle_tmux_when_tool_backend_changes_to_headless(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "config.yaml"
+    _write_config(path, _with_tmux_tool(_payload(tmp_path, token="stable-token"), backend="tmux"))
+    previous = _build_initial_config(path)
+    bot_app, session, _runtime, _bus = _build_bot_app(previous)
+    service = AppRuntimeService(bot_app)
+    closed: list[tuple[str, str, bool]] = []
+
+    async def _close(_backend, close_session):
+        closed.append((close_session.tool.name, close_session.cli.active_cli, close_session.config is previous))
+
+    monkeypatch.setattr(TmuxExecutionBackend, "close", _close)
+    _write_config(path, _with_tmux_tool(_payload(tmp_path, token="stable-token"), backend="headless"))
+
+    result = asyncio.run(service.reload_runtime_config())
+
+    assert result["status"] == "success"
+    assert "session.s1.tmux_closed" in result["applied"]
+    assert closed == [("dummy", "dummy", True)]
+    assert session.tool is bot_app.config.tools["dummy"]
+    assert session.tool.default_execution_backend == "headless"
+
+
+def test_runtime_reload_closes_removed_active_tmux_tool_before_fallback_switch(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "config.yaml"
+    initial = _with_tmux_tool(_payload(tmp_path, token="stable-token", extra_tool="backup"), backend="tmux")
+    _write_config(path, initial)
+    previous = _build_initial_config(path)
+    bot_app, session, _runtime, _bus = _build_bot_app(previous)
+    service = AppRuntimeService(bot_app)
+    closed: list[tuple[str, str, bool]] = []
+
+    async def _close(_backend, close_session):
+        closed.append((close_session.tool.name, close_session.cli.active_cli, close_session.config is previous))
+
+    monkeypatch.setattr(TmuxExecutionBackend, "close", _close)
+    updated = _payload(tmp_path, token="stable-token", extra_tool="backup")
+    updated["tools"].pop("dummy")
+    _write_config(path, updated)
+
+    result = asyncio.run(service.reload_runtime_config())
+
+    assert result["status"] == "success"
+    assert "session.s1.tmux_closed" in result["applied"]
+    assert "session.s1.active_cli->backup" in result["applied"]
+    assert closed == [("dummy", "dummy", True)]
+    assert session.cli.active_cli == "backup"
+    assert session.tool is bot_app.config.tools["backup"]
+
+
+def test_runtime_reload_warns_instead_of_closing_busy_tmux_session(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "config.yaml"
+    _write_config(path, _with_tmux_tool(_payload(tmp_path, token="stable-token"), backend="tmux"))
+    previous = _build_initial_config(path)
+    bot_app, session, _runtime, _bus = _build_bot_app(previous)
+    session.busy = True
+    service = AppRuntimeService(bot_app)
+    closed: list[str] = []
+
+    async def _close(_backend, close_session):
+        closed.append(close_session.id)
+
+    monkeypatch.setattr(TmuxExecutionBackend, "close", _close)
+    _write_config(path, _with_tmux_tool(_payload(tmp_path, token="stable-token"), backend="headless"))
+
+    result = asyncio.run(service.reload_runtime_config())
+
+    assert result["status"] == "success_with_warnings"
+    assert "session.s1.tmux_backend" in result["restart_required"]
+    assert result["warnings"] == ["Some changes require process restart."]
+    assert closed == []
+
+
+def test_runtime_reload_closes_idle_tmux_even_when_tick_is_recent(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "config.yaml"
+    _write_config(path, _with_tmux_tool(_payload(tmp_path, token="stable-token"), backend="tmux"))
+    previous = _build_initial_config(path)
+    bot_app, session, _runtime, _bus = _build_bot_app(previous)
+    session.is_active_by_tick = lambda: True
+    service = AppRuntimeService(bot_app)
+    closed: list[str] = []
+
+    async def _close(_backend, close_session):
+        closed.append(close_session.id)
+
+    monkeypatch.setattr(TmuxExecutionBackend, "close", _close)
+    _write_config(path, _with_tmux_tool(_payload(tmp_path, token="stable-token"), backend="headless"))
+
+    result = asyncio.run(service.reload_runtime_config())
+
+    assert result["status"] == "success"
+    assert "session.s1.tmux_closed" in result["applied"]
+    assert "session.s1.tmux_backend" not in result["restart_required"]
+    assert closed == ["s1"]
 
 
 def test_runtime_reload_keeps_previous_config_and_logs_error_on_invalid_validation(tmp_path, caplog) -> None:

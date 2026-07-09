@@ -505,6 +505,8 @@ class ApplicationFacade:
                 return False
             if self.session_service.set_active_cli_by_uid(session_uid, str(value)):
                 changed = True
+        elif key == "execution_backend":
+            return False
         elif key == "active_mode":
             set_active_mode(session, value)
             changed = True
@@ -556,6 +558,38 @@ class ApplicationFacade:
             self.notify("ui:session_settings_changed", session_uid=session_uid, key=key, value=value)
             return True
         return False
+
+    def get_execution_backend_settings(self, session_uid: str) -> Optional[Dict[str, Any]]:
+        session = self.session_service.get_session_by_uid(session_uid)
+        if not session:
+            return None
+        from session import (
+            available_execution_backends,
+            get_session_execution_backend,
+        )
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        blockers = ["configured in settings"]
+        tmux_paths = TmuxExecutionBackend().paths(session)
+        tmux_state = TmuxExecutionBackend._read_state(tmux_paths)
+        tmux_status = (
+            {
+                "state": str(tmux_state.get("state") or "unknown"),
+                "session_name": str(tmux_state.get("session_name") or tmux_paths["session_name"]),
+                "pane_target": str(tmux_state.get("pane_target") or tmux_paths["pane_target"]),
+                "last_activity_at": tmux_state.get("last_activity_at"),
+            }
+            if tmux_state
+            else None
+        )
+        return {
+            "execution_backend": get_session_execution_backend(session),
+            "active_execution_backend": str(getattr(session, "_active_execution_backend", "") or "none"),
+            "available_execution_backends": available_execution_backends(session),
+            "backend_switch_allowed": False,
+            "backend_switch_blockers": blockers,
+            "tmux_status": tmux_status,
+        }
 
     def get_remote_control_settings(self, session_uid: str) -> Optional[Dict[str, Any]]:
         """Return remote control settings for a session (Desktop parity with MiniApp GET)."""

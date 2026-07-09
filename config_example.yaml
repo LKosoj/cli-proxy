@@ -38,7 +38,10 @@ tools:
     mode: headless
     cmd: ["codex", "exec", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
     enabled: true
-    interactive_cmd: ["codex"]
+    interactive_cmd: ["codex", "--no-alt-screen"]
+    interactive_resume_cmd: ["codex", "resume", "--no-alt-screen", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
     resume_cmd: ["codex", "exec", "resume", "{resume}", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
     image_cmd: ["--image", "{image}"]
     resume_regex: "\"thread_id\"\\s*:\\s*\"([^\"]+)\""
@@ -53,7 +56,11 @@ tools:
     mode: headless
     cmd: ["claude", "-p", "--verbose", "--output-format", "stream-json", "--continue", "--dangerously-skip-permissions", "{prompt}", "--resume", "{resume}"]
     enabled: true
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
+    tmux_user: "claude-bot"
     interactive_cmd: ["claude"]
+    interactive_resume_cmd: ["claude", "--resume", "{resume}"]
     help_cmd: "/help"
     # Opt-in: добавлять `--no-session-persistence` для fresh-стартов claude.
     # Уменьшает шум в ~/.claude/projects, НО ломает session_transfer
@@ -66,6 +73,9 @@ tools:
     cmd: ["gemini", "--output-format", "stream-json", "--approval-mode", "yolo", "--resume", "{resume}", "-p", "{prompt}"]
     enabled: true
     interactive_cmd: ["gemini"]
+    interactive_resume_cmd: ["gemini", "--resume", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
     help_cmd: "/help"
     env:
       ENV5: null
@@ -73,7 +83,10 @@ tools:
     mode: headless
     cmd: ["qwen", "--output-format", "stream-json", "--yolo", "--continue", "--prompt", "{prompt}", "--resume", "{resume}"]
     enabled: true
-    interactive_cmd: ["qwen"]
+    interactive_cmd: ["qwen", "--session-id", "{session_id}"]
+    interactive_resume_cmd: ["qwen", "--resume", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
     help_cmd: "/help"
     env:
       ENV6: null
@@ -81,7 +94,10 @@ tools:
     mode: headless
     cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "-p", "{prompt}", "--resume", "{resume}"]
     enabled: true
-    interactive_cmd: ["grok", "--no-auto-update"]
+    interactive_cmd: ["grok", "--no-auto-update", "--no-alt-screen"]
+    interactive_resume_cmd: ["grok", "--no-auto-update", "--no-alt-screen", "--resume", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
     resume_cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "--resume", "{resume}", "-p", "{prompt}"]
     help_cmd: "/help"
     separate_stderr: true
@@ -91,6 +107,9 @@ tools:
 defaults:
   workdir: "/Users/you/projects"
   default_cli: "qwen"
+  # Default execution backend for sessions when supported by the selected CLI.
+  # Runtime reload applies this setting to existing sessions; no session-level override is stored.
+  default_execution_backend: "headless"
   # Default language for UI and agent responses.
   # Used when user has no explicit preference (Desktop, unknown Telegram code).
   # Supported values: "ru", "en", "zh", "de".

@@ -331,12 +331,42 @@ Example:
 - The evidence pack contains `manifest.json`, `canonical.jsonl`, and `capsule.md`. The target agent gets these paths and should inspect them only when older context is needed.
 - Low-level native writers remain available for compatibility and tests, but the main user flow no longer injects the full transcript into the target CLI context.
 
+## Session Execution Backends
+Each CLI can expose a settings-level execution backend: `headless` or `tmux`. This does not replace `tools.<name>.mode`: `mode: headless` remains the compatibility mode for the existing headless path, while `execution_backends` controls which backends the CLI supports.
+
+Example:
+```yaml
+defaults:
+  default_execution_backend: headless
+
+tools:
+  qwen:
+    mode: headless
+    cmd: ["qwen", "--yolo", "--prompt", "{prompt}", "--resume", "{resume}"]
+    interactive_cmd: ["qwen", "--session-id", "{session_id}"]
+    interactive_resume_cmd: ["qwen", "--resume", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: headless
+```
+
+- `headless` uses the current per-request CLI execution path and preserves existing behavior.
+- `tmux` starts one long-lived interactive `tmux` session, writes runtime state under `.cli-proxy/runtime/tmux/` inside the workdir, and submits prompts through the pane/buffer path without the headless command.
+- On first start, the tmux backend can pin `resume_token` through `{session_id}` in `interactive_cmd` or through a CLI-specific session flag when the CLI supports it. If an interactive CLI prints a session id, configure `resume_regex` and the token is captured from the pane log.
+- For reboot recovery, the backend checks tmux session presence before every non-first request. If the tmux session disappeared and `resume_token` is known, it starts `interactive_resume_cmd` with `{resume}` or the built-in resume command for the supported CLI instead of the headless path.
+- Built-in resume commands exist for known CLIs: `claude --resume <token>`, `gemini --resume <token>`, `qwen --resume <token>`, `grok --resume <token>`, and `codex resume <token>`. Explicit `interactive_resume_cmd` takes precedence.
+- `tools.<name>.tmux_user` optionally runs tmux commands through `su - <user>`; for Claude Code in the root-service setup this is usually `claude-bot`.
+- Backend selection is configured only through settings: `tools.<name>.default_execution_backend` has priority for a concrete CLI, and `defaults.default_execution_backend` is the shared fallback.
+- Changing `default_execution_backend` during runtime reload applies to existing sessions when their CLI supports the selected backend; session-level overrides are no longer used, and the UI shows the backend as read-only state.
+- `tmux` v1 does not support image requests: image input is rejected explicitly, with no silent fallback to headless.
+- Rollback: set `defaults.default_execution_backend: headless` or `tools.<name>.default_execution_backend: headless` and run runtime reload. Idle tmux sessions are closed when the backend changes; busy sessions must finish first or be closed/recreated.
+- CI covers the tmux path with a guard test: the backend must not use `headless_cmd` or headless CLI execution.
+
 ## Configuration
 `config.yaml` supports:
 - `telegram.whitelist_chat_ids`: allowed Telegram chat id list (mandatory access control)
 - `telegram.user_modes`: per-user mode allowlist; supports registered modes (`agent`, `analyst`, `manager`, `sdd`, `webmaster`, `codebase_mapper`), virtual `direct_cli` and `orchestrator`, and `"all"` includes both registered modes and these virtual tokens
-- `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated resume commands) and `image_cmd` (appended to base command/resume_cmd for image handling)
-- `defaults.*`: base dir, timeouts, state path, OpenAI settings, `zai_api_key`/`tavily_api_key`/`jina_api_key` for web search/reader, `github_token` for HTTPS git, `gemini_oauth_client_secret` for refreshing Gemini quota credentials
+- `tools.*`: launch commands, mode, prompt/resume/help (including `resume_cmd` for dedicated headless resume commands), `image_cmd` (appended to base command/resume_cmd for image handling), plus `interactive_cmd`, `interactive_resume_cmd`, `execution_backends`, and `default_execution_backend` for settings-level `headless`/`tmux` selection
+- `defaults.*`: base dir, timeouts, state path, OpenAI settings, `zai_api_key`/`tavily_api_key`/`jina_api_key` for web search/reader, `github_token` for HTTPS git, `gemini_oauth_client_secret` for refreshing Gemini quota credentials, `default_execution_backend` for new sessions
 - `defaults.log_path`: bot log file path (main log). Errors are written to a separate `*_error.log` file with the same rotation rules.
 - `defaults.image_temp_dir`: temp image directory (relative to workdir or absolute).
 - `defaults.image_max_mb`: max size for a single image (default 10 MB).

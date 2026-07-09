@@ -12,6 +12,7 @@ from app.services.state_repository import get_state_repository
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.advanced_orchestrator_service import ORCHESTRATOR_MODE_ID
 from modes.sdk.services.callback_data import build_session_overview_callback_data
+from session import set_session_execution_backend
 from sessions.session_state_access import (
     is_orchestrator_enabled,
     reset_session_runtime_state,
@@ -318,6 +319,41 @@ class SessionUI:
                 await self._edit_msg(context, query, t("msg.session.cli_active", lang, cli_name=session.tool.name))
             except Exception:
                 await self._edit_msg(context, query, t("msg.error.cli_switch_failed", lang))
+            return True
+        if data.startswith("sess_backend:"):
+            payload = data.split(":", 1)[1].strip() if ":" in data else ""
+            if ":" not in payload:
+                await self._edit_msg(context, query, t("msg.error.callback_format", lang))
+                return True
+            session_token, backend = payload.rsplit(":", 1)
+            session_token = session_token.strip()
+            backend = backend.strip()
+            session = None
+            getter = getattr(self.manager, "get_by_uid", None)
+            if callable(getter) and session_token:
+                session = getter(session_token)
+            if session is None and session_token:
+                session = self.manager.get(owner_chat_id, session_token)
+            if not session:
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+                return True
+            if not self._can_access_session(owner_chat_id, session):
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+                return True
+            result = set_session_execution_backend(session, backend)
+            if result.reason:
+                if result.reason in {"unsupported backend", "backend not available for cli"}:
+                    await self._edit_msg(context, query, t("msg.error.execution_backend_unavailable", lang))
+                    return True
+                await self._edit_msg(
+                    context,
+                    query,
+                    t("msg.error.execution_backend_switch_failed", lang, reason=result.reason),
+                )
+                return True
+            self._persist_session(owner_chat_id, session.id)
+            text, keyboard = self._bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
+            await self._edit_msg(context, query, text, reply_markup=keyboard)
             return True
         if data.startswith("sess_state:"):
             session_id = data.split(":", 1)[1]

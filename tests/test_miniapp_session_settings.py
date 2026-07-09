@@ -18,7 +18,7 @@ from config import (
 )
 from miniapp.routes import MiniAppRoutes
 from miniapp.services.config_service import app_config_to_dict
-from session import session_runtime_uid
+from session import get_session_execution_backend, session_runtime_uid
 from sessions.session_state_access import (
     get_active_mode,
     is_remote_control_enabled,
@@ -168,10 +168,119 @@ def test_session_settings_get(tmp_path) -> None:
             body = await resp.json()
             assert body["ok"] is True
             assert body["settings"]["name"] == (session.name or "")
+            assert body["settings"]["execution_backend"] == "headless"
+            assert body["settings"]["active_execution_backend"] == "none"
             assert body["settings"]["ssh_remote_enabled"] is False
+            assert body["available"]["execution_backends"] == ["headless"]
+            assert body["available"]["backend_switch_allowed"] is False
+            assert body["available"]["backend_switch_blockers"] == ["configured in settings"]
             assert body["available"]["ssh_config_exists"] is True
             assert body["available"]["ssh_available"] is True
             assert body["available"]["project_workdir"] == str(tmp_path)
+
+        app_inst.shutdown_html_process_pool()
+
+    asyncio.run(_run())
+
+
+def test_session_settings_rejects_execution_backend_update(tmp_path) -> None:
+    async def _run() -> None:
+        cfg = _build_config(tmp_path)
+        cfg.tools["dummy"].execution_backends = ["headless", "tmux"]
+        cfg.tools["dummy"].default_execution_backend = "headless"
+        cfg.tools["dummy"].interactive_cmd = ["bash", "-lc", "cat"]
+        app_inst = BotApp(cfg)
+        session = app_inst.manager.create(1, "dummy", str(tmp_path))
+        suid = session_runtime_uid(session)
+        routes = MiniAppRoutes(app_inst)
+        web_app = web.Application()
+        routes.register(web_app)
+
+        init_data = _build_init_data("t", 1)
+        async with TestClient(TestServer(web_app)) as client:
+            resp = await client.put(
+                f"/api/session/{suid}/settings",
+                json={"execution_backend": "tmux"},
+                headers={"X-Telegram-Init-Data": init_data},
+            )
+
+            assert resp.status == 400
+            body = await resp.json()
+            assert body["ok"] is False
+            assert body["error"] == "execution backend is configured in settings"
+            assert get_session_execution_backend(session) == "headless"
+
+            get_resp = await client.get(
+                f"/api/session/{suid}/settings",
+                headers={"X-Telegram-Init-Data": init_data},
+            )
+            assert get_resp.status == 200
+            get_body = await get_resp.json()
+            assert get_body["settings"]["execution_backend"] == "headless"
+            assert get_body["available"]["execution_backends"] == ["headless", "tmux"]
+
+        app_inst.shutdown_html_process_pool()
+
+    asyncio.run(_run())
+
+
+def test_session_settings_execution_backend_rejects_before_busy_check(tmp_path) -> None:
+    async def _run() -> None:
+        cfg = _build_config(tmp_path)
+        cfg.tools["dummy"].execution_backends = ["headless", "tmux"]
+        cfg.tools["dummy"].interactive_cmd = ["bash", "-lc", "cat"]
+        app_inst = BotApp(cfg)
+        session = app_inst.manager.create(1, "dummy", str(tmp_path))
+        session.busy = True
+        suid = session_runtime_uid(session)
+        routes = MiniAppRoutes(app_inst)
+        web_app = web.Application()
+        routes.register(web_app)
+
+        init_data = _build_init_data("t", 1)
+        async with TestClient(TestServer(web_app)) as client:
+            resp = await client.put(
+                f"/api/session/{suid}/settings",
+                json={"execution_backend": "tmux"},
+                headers={"X-Telegram-Init-Data": init_data},
+            )
+
+            assert resp.status == 400
+            body = await resp.json()
+            assert body["ok"] is False
+            assert body["error"] == "execution backend is configured in settings"
+            assert get_session_execution_backend(session) == "headless"
+
+        app_inst.shutdown_html_process_pool()
+
+    asyncio.run(_run())
+
+
+def test_session_settings_rejects_execution_backend_before_active_mode_update(tmp_path) -> None:
+    async def _run() -> None:
+        cfg = _build_config(tmp_path)
+        cfg.tools["dummy"].execution_backends = ["headless", "tmux"]
+        cfg.tools["dummy"].interactive_cmd = ["bash", "-lc", "cat"]
+        app_inst = BotApp(cfg)
+        session = app_inst.manager.create(1, "dummy", str(tmp_path))
+        suid = session_runtime_uid(session)
+        routes = MiniAppRoutes(app_inst)
+        web_app = web.Application()
+        routes.register(web_app)
+
+        init_data = _build_init_data("t", 1)
+        async with TestClient(TestServer(web_app)) as client:
+            resp = await client.put(
+                f"/api/session/{suid}/settings",
+                json={"execution_backend": "tmux", "active_mode": "missing-mode"},
+                headers={"X-Telegram-Init-Data": init_data},
+            )
+
+            assert resp.status == 400
+            body = await resp.json()
+            assert body["ok"] is False
+            assert body["error"] == "execution backend is configured in settings"
+            assert get_session_execution_backend(session) == "headless"
 
         app_inst.shutdown_html_process_pool()
 

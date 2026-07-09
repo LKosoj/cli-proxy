@@ -31,6 +31,7 @@ def _build_payload() -> dict:
                 "mode": "headless",
                 "cmd": "codex",
                 "interactive_cmd": ["codex"],
+                "interactive_resume_cmd": ["codex", "resume", "{resume}"],
                 "resume_cmd": ["codex", "exec", "resume", "{resume}"],
                 "image_cmd": ["--image", "{image}"],
                 "help_cmd": "/status",
@@ -264,6 +265,7 @@ def test_config_model_accepts_grok_tool_contract() -> None:
             "{prompt}",
         ],
         "interactive_cmd": ["grok", "--no-auto-update"],
+        "interactive_resume_cmd": ["grok", "--no-auto-update", "--resume", "{resume}"],
         "help_cmd": "/help",
         "env": {"XAI_API_KEY": None},
         "separate_stderr": True,
@@ -275,6 +277,7 @@ def test_config_model_accepts_grok_tool_contract() -> None:
 
     assert model.tools["grok"].cmd[0] == "grok"
     assert model.tools["grok"].resume_cmd[-3:] == ["{resume}", "-p", "{prompt}"]
+    assert model.tools["grok"].interactive_resume_cmd == ["grok", "--no-auto-update", "--resume", "{resume}"]
     assert model.tools["grok"].env == {"XAI_API_KEY": None}
     assert model.tools["grok"].separate_stderr is True
     assert model.defaults.default_cli == "grok"
@@ -323,6 +326,74 @@ def test_defaults_reject_invalid_skill_discovery_mode() -> None:
         AppConfigModel.model_validate(payload)
 
     assert "defaults.skill_discovery_mode" in str(exc_info.value)
+
+
+def test_tool_execution_backends_accept_headless_tmux() -> None:
+    payload = _build_payload()
+    payload["tools"]["codex"]["execution_backends"] = ["headless", "tmux"]
+    payload["tools"]["codex"]["default_execution_backend"] = "tmux"
+    payload["tools"]["codex"]["tmux_user"] = "claude-bot"
+
+    model = AppConfigModel.model_validate(payload)
+
+    assert model.tools["codex"].execution_backends == ["headless", "tmux"]
+    assert model.tools["codex"].default_execution_backend == "tmux"
+    assert model.tools["codex"].tmux_user == "claude-bot"
+    assert model.tools["codex"].interactive_resume_cmd == ["codex", "resume", "{resume}"]
+    assert model.defaults.default_execution_backend == "headless"
+
+
+def test_tool_execution_backends_reject_unknown_backend() -> None:
+    payload = _build_payload()
+    payload["tools"]["codex"]["execution_backends"] = ["headless", "screen"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "tools.codex.execution_backends.1" in str(exc_info.value)
+    assert "Input should be 'headless' or 'tmux'" in str(exc_info.value)
+
+
+def test_tool_execution_backends_reject_duplicates() -> None:
+    payload = _build_payload()
+    payload["tools"]["codex"]["execution_backends"] = ["headless", "headless"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "execution_backends must not contain duplicates" in str(exc_info.value)
+
+
+def test_tool_default_execution_backend_must_be_available() -> None:
+    payload = _build_payload()
+    payload["tools"]["codex"]["execution_backends"] = ["headless"]
+    payload["tools"]["codex"]["default_execution_backend"] = "tmux"
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "default_execution_backend must be listed in execution_backends" in str(exc_info.value)
+
+
+def test_tool_default_execution_backend_requires_execution_backends() -> None:
+    payload = _build_payload()
+    payload["tools"]["codex"]["default_execution_backend"] = "tmux"
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "default_execution_backend requires execution_backends" in str(exc_info.value)
+
+
+def test_tmux_execution_backend_requires_interactive_cmd() -> None:
+    payload = _build_payload()
+    payload["tools"]["codex"].pop("interactive_cmd", None)
+    payload["tools"]["codex"]["execution_backends"] = ["headless", "tmux"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "interactive_cmd is required when tmux execution backend is enabled" in str(exc_info.value)
 
 
 def test_webhooks_are_enabled_by_default_when_section_is_omitted() -> None:

@@ -53,6 +53,7 @@ class ToolConfig:
     resume_cmd: Optional[List[str]] = None
     image_cmd: Optional[List[str]] = None
     interactive_cmd: Optional[List[str]] = None
+    interactive_resume_cmd: Optional[List[str]] = None
     prompt_regex: Optional[str] = None
     resume_regex: Optional[str] = None
     help_cmd: Optional[str] = None
@@ -60,6 +61,9 @@ class ToolConfig:
     auto_commands: Optional[List[str]] = None
     separate_stderr: bool = False
     no_session_persistence_on_fresh: bool = False
+    execution_backends: Optional[List[str]] = None
+    default_execution_backend: Optional[str] = None
+    tmux_user: Optional[str] = None
 
 
 @dataclasses.dataclass
@@ -98,6 +102,9 @@ class DefaultsConfig:
     # Default CLI to activate when creating a new session (if not specified explicitly).
     # If not set, runtime falls back to "qwen".
     default_cli: Optional[str] = None
+    # Default execution backend for sessions when supported by the active CLI.
+    # Runtime reload applies this setting to existing sessions; no session-level override is stored.
+    default_execution_backend: str = "headless"
     # Global default language for users without explicit preference.
     # Used by Desktop (single-user) and as final fallback in Telegram.
     # Supported values: "ru", "en", "zh", "de". Default: "ru".

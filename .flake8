@@ -7,4 +7,5 @@ per-file-ignores =
 exclude =
     .venv,
     __pycache__,
-    .git
+    .git,
+    .cli-proxy

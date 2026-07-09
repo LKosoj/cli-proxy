@@ -227,6 +227,117 @@ class SessionCliSwitchResult:
     source_session_id: Optional[str] = None
 
 
+EXECUTION_BACKEND_HEADLESS = "headless"
+EXECUTION_BACKEND_TMUX = "tmux"
+EXECUTION_BACKEND_INTERACTIVE = "interactive"
+SESSION_EXECUTION_BACKENDS = frozenset({EXECUTION_BACKEND_HEADLESS, EXECUTION_BACKEND_TMUX})
+RUNTIME_EXECUTION_BACKENDS = frozenset(
+    {EXECUTION_BACKEND_HEADLESS, EXECUTION_BACKEND_TMUX, EXECUTION_BACKEND_INTERACTIVE}
+)
+
+
+@dataclass(frozen=True)
+class SessionBackendSwitchResult:
+    switched: bool
+    previous_backend: Optional[str]
+    active_backend: Optional[str]
+    active_cli: Optional[str]
+    reason: Optional[str] = None
+
+
+def _normalize_execution_backend(value: Any) -> str:
+    return str(value or "").strip().lower().replace("_", "-")
+
+
+def _tool_execution_backends(tool: Any) -> list[str]:
+    configured = getattr(tool, "execution_backends", None)
+    if isinstance(configured, (list, tuple)):
+        result: list[str] = []
+        for item in configured:
+            backend = _normalize_execution_backend(item)
+            if backend in SESSION_EXECUTION_BACKENDS and backend not in result:
+                result.append(backend)
+        if result:
+            return result
+    mode = str(getattr(tool, "mode", "") or "").strip().lower()
+    if mode == "headless":
+        return [EXECUTION_BACKEND_HEADLESS]
+    if mode == "interactive":
+        return [EXECUTION_BACKEND_INTERACTIVE]
+    return []
+
+
+def available_execution_backends(session: Any, cli_name: Optional[str] = None) -> list[str]:
+    config = getattr(session, "config", None)
+    tool = getattr(session, "tool", None)
+    name = str(cli_name or session_active_cli_name(session) or "").strip()
+    if config is not None and name and name in (getattr(config, "tools", None) or {}):
+        tool = config.tools[name]
+    return _tool_execution_backends(tool)
+
+
+def get_session_execution_backend(session: Any, cli_name: Optional[str] = None) -> str:
+    active_cli = str(cli_name or session_active_cli_name(session) or "").strip()
+    available = available_execution_backends(session, active_cli)
+    config = getattr(session, "config", None)
+    tool = getattr(session, "tool", None)
+    if config is not None and active_cli and active_cli in (getattr(config, "tools", None) or {}):
+        tool = config.tools[active_cli]
+
+    for candidate in (
+        _normalize_execution_backend(getattr(tool, "default_execution_backend", None)),
+        _normalize_execution_backend(getattr(getattr(config, "defaults", None), "default_execution_backend", None)),
+        EXECUTION_BACKEND_HEADLESS if str(getattr(tool, "mode", "") or "").strip().lower() == "headless" else "",
+        EXECUTION_BACKEND_INTERACTIVE if str(getattr(tool, "mode", "") or "").strip().lower() == "interactive" else "",
+    ):
+        if candidate in available:
+            return candidate
+    return available[0] if available else EXECUTION_BACKEND_HEADLESS
+
+
+def session_execution_backend_switch_blockers(session: Any) -> list[str]:
+    blockers: list[str] = []
+    if bool(getattr(session, "busy", False)):
+        blockers.append("busy")
+    run_lock = getattr(session, "run_lock", None)
+    if run_lock is not None and hasattr(run_lock, "locked") and run_lock.locked():
+        blockers.append("run_lock")
+    if len(getattr(session, "queue", None) or []) > 0:
+        blockers.append("queue")
+    is_active_by_tick = getattr(session, "is_active_by_tick", None)
+    if callable(is_active_by_tick):
+        try:
+            if bool(is_active_by_tick()):
+                blockers.append("tick_active")
+        except Exception:
+            logger.exception("session backend switch tick activity check failed session_id=%s", getattr(session, "id", None))
+    return blockers
+
+
+def set_session_execution_backend(
+    session: Any,
+    backend: str,
+    cli_name: Optional[str] = None,
+) -> SessionBackendSwitchResult:
+    active_cli = str(cli_name or session_active_cli_name(session) or "").strip()
+    requested = _normalize_execution_backend(backend)
+    previous = get_session_execution_backend(session, active_cli)
+    available = available_execution_backends(session, active_cli)
+    if requested == previous and requested in available:
+        return SessionBackendSwitchResult(False, previous, previous, active_cli)
+    if requested not in SESSION_EXECUTION_BACKENDS:
+        return SessionBackendSwitchResult(False, previous, previous, active_cli, reason="unsupported backend")
+    if requested not in available:
+        return SessionBackendSwitchResult(False, previous, previous, active_cli, reason="backend not available for cli")
+    return SessionBackendSwitchResult(
+        switched=False,
+        previous_backend=previous,
+        active_backend=previous,
+        active_cli=active_cli,
+        reason="execution backend is configured in settings",
+    )
+
+
 def switch_session_active_cli_if_needed(session: Any) -> SessionCliSwitchResult:
     """
     Ensure the session points to an executable CLI before direct execution.
@@ -290,6 +401,7 @@ def session_runtime_uid(session: Any) -> str:
 class CliState:
     active_cli: Optional[str] = None
     resume_tokens: Dict[str, Optional[str]] = field(default_factory=dict)
+    execution_backends: Dict[str, str] = field(default_factory=dict)
     cli_work_type: Optional[str] = None
     auto_commands_ran: bool = False
     pending_switch_notice: Optional[Dict[str, str]] = field(default=None, repr=False)
@@ -444,6 +556,8 @@ class Session:
             self.cli.resume_tokens = dict(resume_tokens)
         elif not isinstance(self.cli.resume_tokens, dict):
             self.cli.resume_tokens = {}
+        if not isinstance(getattr(self.cli, "execution_backends", None), dict):
+            self.cli.execution_backends = {}
         if auto_commands_ran is not None:
             self.cli.auto_commands_ran = bool(auto_commands_ran)
         if cli_work_type is not None:
@@ -632,6 +746,9 @@ class Session:
                 image_paths = None
             else:
                 image_paths = valid_paths
+        selected_backend = get_session_execution_backend(self)
+        if selected_backend == EXECUTION_BACKEND_TMUX and (image_paths or image_path):
+            raise RuntimeError("tmux backend does not support image requests in v1")
         if image_paths:
             is_gemini = (self.tool.name or "").strip().lower() == "gemini"
             is_qwen = (self.tool.name or "").strip().lower() == "qwen"
@@ -707,6 +824,8 @@ class Session:
             # Images are never executed in "fresh" mode: image flows are typically interactive and
             # provider-specific; keep behavior unchanged unless explicitly required later.
             return await self._run_headless(prompt_to_send, cmd_template=cmd_template, image_path=image_path)
+        if selected_backend == EXECUTION_BACKEND_TMUX:
+            return await self._run_tmux(prompt, force_fresh=force_fresh)
         if self.tool.mode == "headless":
             try:
                 return await self._run_headless(prompt, force_fresh=force_fresh)
@@ -717,6 +836,22 @@ class Session:
                 # switch to interactive mode when headless run fails
                 return await self._run_interactive(prompt, force_fresh=force_fresh)
         return await self._run_interactive(prompt, force_fresh=force_fresh)
+
+    async def _run_tmux(self, prompt: str, *, force_fresh: bool = False) -> str:
+        from app.services.cli_backends import TmuxExecutionBackend
+
+        self._active_execution_backend = EXECUTION_BACKEND_TMUX
+        try:
+            backend = TmuxExecutionBackend()
+            result = await backend.run(self, prompt, force_fresh=force_fresh)
+            paths = backend.paths(self)
+            self.last_cli_raw_stream_path = paths.get("pane_log")
+            if result.abnormal_stop:
+                self.headless_forced_stop = "tmux_idle_timeout"
+            return result.text
+        finally:
+            if self._active_execution_backend == EXECUTION_BACKEND_TMUX:
+                self._active_execution_backend = "none"
 
     async def _run_headless(
         self,
@@ -1376,6 +1511,20 @@ class Session:
 
     def interrupt(self) -> None:
         active_backend = str(getattr(self, "_active_execution_backend", "") or "").strip().lower()
+        if active_backend == EXECUTION_BACKEND_TMUX:
+            try:
+                from app.services.cli_backends import TmuxExecutionBackend
+
+                coro = TmuxExecutionBackend().interrupt(self)
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    asyncio.run(coro)
+                else:
+                    loop.create_task(coro)
+            except Exception:
+                logger.exception("tmux interrupt failed session_id=%s", self.id)
+            return
         if active_backend == "interactive":
             if self.child and self.child.isalive():
                 try:
@@ -1530,6 +1679,60 @@ class Session:
             except Exception:
                 logging.getLogger(__name__).exception("interactive child close failed")
         self.close_headless_process()
+        try:
+            from app.services.cli_backends import TmuxExecutionBackend
+
+            tmux_backend = TmuxExecutionBackend()
+            active_cli = str(getattr(getattr(self, "cli", None), "active_cli", "") or "").strip()
+            candidate_clis = [active_cli, *[str(name or "").strip() for name in (getattr(self.config, "tools", None) or {})]]
+            for cli_name, backend_name in (getattr(self.cli, "execution_backends", None) or {}).items():
+                if str(backend_name or "").strip().lower() == EXECUTION_BACKEND_TMUX:
+                    candidate_clis.append(str(cli_name or "").strip())
+            errors: list[BaseException] = []
+            seen_clis: set[str] = set()
+
+            def _close_tmux_candidates() -> None:
+                original_cli = str(getattr(self.cli, "active_cli", "") or "").strip()
+                original_tool = self.tool
+                try:
+                    try:
+                        for cli_name in candidate_clis:
+                            if not cli_name or cli_name in seen_clis:
+                                continue
+                            seen_clis.add(cli_name)
+                            if cli_name in (getattr(self.config, "tools", None) or {}):
+                                self.cli.active_cli = cli_name
+                                self.tool = self.config.tools[cli_name]
+                            paths = tmux_backend.paths(self)
+                            should_close = (
+                                str(getattr(self, "_active_execution_backend", "") or "").strip().lower() == "tmux"
+                                or os.path.exists(paths["state_path"])
+                            )
+                            if should_close:
+                                asyncio.run(TmuxExecutionBackend().close(self))
+                    except BaseException as exc:
+                        errors.append(exc)
+                finally:
+                    self.cli.active_cli = original_cli
+                    self.tool = original_tool
+
+            if candidate_clis:
+                try:
+                    asyncio.get_running_loop()
+                except RuntimeError:
+                    _close_tmux_candidates()
+                    if errors:
+                        raise errors[0]
+                else:
+                    thread = threading.Thread(target=_close_tmux_candidates, daemon=True)
+                    thread.start()
+                    thread.join(timeout=2.0)
+                    if thread.is_alive():
+                        logging.getLogger(__name__).warning("tmux backend close still running after timeout")
+                    if errors:
+                        raise errors[0]
+        except Exception:
+            logging.getLogger(__name__).exception("tmux backend close failed")
 
     def _maybe_update_resume(self, output: str) -> None:
         if not self.tool.resume_regex:

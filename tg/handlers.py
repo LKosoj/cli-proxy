@@ -35,7 +35,11 @@ from app.services.input_dispatch_models import PendingInput as PendingInput  # n
 from app.services.session_files_service import FilesServiceError
 from app.services.path_normalization import normalize_optional_state_path
 from app.services.state_repository import get_state_repository
-from session import Session, session_runtime_uid, session_scoped_key
+from session import (
+    Session,
+    session_runtime_uid,
+    session_scoped_key,
+)
 from app.services.report_history_service import InvalidReportIdError, ReportNotFoundError
 from sessions.session_state_access import get_active_mode, is_orchestrator_enabled, is_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available

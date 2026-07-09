@@ -92,6 +92,7 @@ DESKTOP_EDITABLE_CONFIG_FIELDS = frozenset({
     "defaults.clarification_enabled",
     "defaults.pending_input_confirmation_enabled",
     "defaults.default_cli",
+    "defaults.default_execution_backend",
     "defaults.clarification_keywords",
     "defaults.cli_json_stream_archive_enabled",
     "defaults.assistant_preview_enabled",
@@ -131,10 +132,14 @@ DESKTOP_EDITABLE_CONFIG_FIELDS = frozenset({
     "tools.*.mode",
     "tools.*.cmd",
     "tools.*.headless_cmd",
+    "tools.*.execution_backends",
+    "tools.*.default_execution_backend",
+    "tools.*.tmux_user",
     "tools.*.prompt_regex",
     "tools.*.resume_cmd",
     "tools.*.image_cmd",
     "tools.*.interactive_cmd",
+    "tools.*.interactive_resume_cmd",
     "tools.*.resume_regex",
     "tools.*.help_cmd",
     "tools.*.env",
@@ -789,6 +794,10 @@ class ConfigEditorWidget(QWidget):
             getattr(cfg, "clarification_keywords", []))
         self._widgets["defaults.default_cli"] = self._add_line_edit(
             layout, t("desktop.cfgedit.default_cli", lang), getattr(cfg, "default_cli", None))
+        self._widgets["defaults.default_execution_backend"] = self._add_combo(
+            layout, t("desktop.cfgedit.default_execution_backend", lang),
+            ["headless", "tmux"],
+            getattr(cfg, "default_execution_backend", "headless"))
         self._widgets["defaults.codebase_mapper_usage"] = self._add_combo(
             layout, t("desktop.cfgedit.codebase_mapper_usage", lang),
             ["auto", "enabled", "disabled"],
@@ -994,9 +1003,22 @@ class ConfigEditorWidget(QWidget):
             layout, t("desktop.cfgedit.command", lang), cfg.cmd)
         self._widgets[f"{prefix}headless_cmd"] = self._add_list_edit(
             layout, t("desktop.cfgedit.headless_command", lang), cfg.headless_cmd or [])
+        self._widgets[f"{prefix}execution_backends"] = self._add_list_edit(
+            layout, t("desktop.cfgedit.execution_backends", lang),
+            getattr(cfg, "execution_backends", None) or [])
+        self._widgets[f"{prefix}default_execution_backend"] = self._add_combo(
+            layout, t("desktop.cfgedit.default_execution_backend", lang),
+            ["", "headless", "tmux"],
+            getattr(cfg, "default_execution_backend", None) or "")
+        self._widgets[f"{prefix}tmux_user"] = self._add_line_edit(
+            layout, t("desktop.cfgedit.tmux_user", lang),
+            getattr(cfg, "tmux_user", None) or "")
         self._widgets[f"{prefix}interactive_cmd"] = self._add_list_edit(
             layout, t("desktop.cfgedit.interactive_command", lang),
             getattr(cfg, "interactive_cmd", None) or [])
+        self._widgets[f"{prefix}interactive_resume_cmd"] = self._add_list_edit(
+            layout, t("desktop.cfgedit.interactive_resume_command", lang),
+            getattr(cfg, "interactive_resume_cmd", None) or [])
         self._widgets[f"{prefix}resume_cmd"] = self._add_list_edit(
             layout, t("desktop.cfgedit.resume_command", lang),
             getattr(cfg, "resume_cmd", None) or [])
@@ -1456,6 +1478,9 @@ class ConfigEditorWidget(QWidget):
                 "defaults.pending_input_confirmation_enabled"
             ].isChecked()
             new_cfg.defaults.default_cli = self._widgets["defaults.default_cli"].text() or None
+            new_cfg.defaults.default_execution_backend = self._widgets[
+                "defaults.default_execution_backend"
+            ].currentText() or "headless"
             new_cfg.defaults.clarification_keywords = self._parse_str_list(
                 self._widgets["defaults.clarification_keywords"].toPlainText()
             )
@@ -1551,8 +1576,16 @@ class ConfigEditorWidget(QWidget):
                     self._widgets[f"{prefix}cmd"].toPlainText())
                 new_cfg.tools[name].headless_cmd = self._parse_str_list(
                     self._widgets[f"{prefix}headless_cmd"].toPlainText()) or None
+                new_cfg.tools[name].execution_backends = self._parse_str_list(
+                    self._widgets[f"{prefix}execution_backends"].toPlainText()) or None
+                new_cfg.tools[name].default_execution_backend = (
+                    self._widgets[f"{prefix}default_execution_backend"].currentText() or None
+                )
+                new_cfg.tools[name].tmux_user = self._widgets[f"{prefix}tmux_user"].text().strip() or None
                 new_cfg.tools[name].interactive_cmd = self._parse_str_list(
                     self._widgets[f"{prefix}interactive_cmd"].toPlainText()) or None
+                new_cfg.tools[name].interactive_resume_cmd = self._parse_str_list(
+                    self._widgets[f"{prefix}interactive_resume_cmd"].toPlainText()) or None
                 new_cfg.tools[name].resume_cmd = self._parse_str_list(
                     self._widgets[f"{prefix}resume_cmd"].toPlainText()) or None
                 new_cfg.tools[name].image_cmd = self._parse_str_list(

@@ -216,6 +216,18 @@ def build_session_status_text(
         lines.append(f"Runtime: {runtime_brief}")
     queue_len = get_session_queue_len(session)
     resume_txt = t("session_status.yes", lang) if getattr(session, "resume_token", None) else t("session_status.no", lang)
+    try:
+        from session import available_execution_backends, get_session_execution_backend
+
+        selected_backend = get_session_execution_backend(session)
+        available_backends = ", ".join(available_execution_backends(session)) or "-"
+    except Exception:
+        selected_backend = "-"
+        available_backends = "-"
+    active_backend = str(getattr(session, "_active_execution_backend", "") or "none")
+    lines.append(
+        f"Execution backend: {selected_backend} | active runtime: {active_backend} | available: {available_backends}"
+    )
     queue_line = f"{t('session_status.queue', lang)}: {queue_len} | {t('session_status.resume', lang)}: {resume_txt}"
     if show_orchestrator:
         orchestrator = (

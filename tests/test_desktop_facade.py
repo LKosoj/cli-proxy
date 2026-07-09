@@ -17,7 +17,7 @@ from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, Telegram
 from desktop.services.application_facade import ApplicationFacade
 from modes.registry import ModeRegistry
 from modes.sdk import BaseMode, ModeRegistryService, ToolResult
-from session import SessionManager, session_runtime_uid
+from session import SessionManager, get_session_execution_backend, session_runtime_uid
 
 
 class _InMemoryConfigProvider(ConfigProvider):
@@ -135,6 +135,49 @@ def _build_desktop_facade_runtime(tmp_path: Path, *, intent: str, mode_id: str =
         "facade": facade,
         "session": session,
     }
+
+
+@pytest.mark.asyncio
+async def test_desktop_facade_rejects_session_execution_backend_update(tmp_path: Path) -> None:
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="execution_backend")
+    cfg: AppConfig = runtime["config"]
+    session = runtime["session"]
+    facade: ApplicationFacade = runtime["facade"]
+
+    cfg.tools["dummy"].execution_backends = ["headless", "tmux"]
+    cfg.tools["dummy"].interactive_cmd = ["bash", "-lc", "cat"]
+    session_uid = session_runtime_uid(session)
+
+    ok = await facade.update_session_setting(session_uid, "execution_backend", "tmux")
+
+    assert ok is False
+    assert get_session_execution_backend(session) == "headless"
+    settings = facade.get_execution_backend_settings(session_uid)
+    assert settings is not None
+    assert settings["execution_backend"] == "headless"
+    assert settings["available_execution_backends"] == ["headless", "tmux"]
+    assert settings["backend_switch_allowed"] is False
+    assert settings["backend_switch_blockers"] == ["configured in settings"]
+
+
+@pytest.mark.asyncio
+async def test_desktop_facade_execution_backend_follows_config_default(tmp_path: Path) -> None:
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="execution_backend_busy")
+    cfg: AppConfig = runtime["config"]
+    session = runtime["session"]
+    facade: ApplicationFacade = runtime["facade"]
+
+    cfg.tools["dummy"].execution_backends = ["headless", "tmux"]
+    cfg.tools["dummy"].interactive_cmd = ["bash", "-lc", "cat"]
+    cfg.tools["dummy"].default_execution_backend = "tmux"
+    session_uid = session_runtime_uid(session)
+
+    assert get_session_execution_backend(session) == "tmux"
+    settings = facade.get_execution_backend_settings(session_uid)
+    assert settings is not None
+    assert settings["execution_backend"] == "tmux"
+    assert settings["backend_switch_allowed"] is False
+    assert settings["backend_switch_blockers"] == ["configured in settings"]
 
 
 class _EditTextCallbackPlugin:

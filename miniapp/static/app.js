@@ -1353,6 +1353,8 @@
     const sshEnabled = document.getElementById("settingsSshEnabled");
     const sshNote = document.getElementById("settingsSshNote");
     const sshHostsCard = document.getElementById("settingsSshHostsCard");
+    const executionBackend = document.getElementById("settingsExecutionBackend");
+    const executionBackendNote = document.getElementById("settingsExecutionBackendNote");
 
     // NEW Remote Control elements
     const rcEnabled = document.getElementById("settingsRemoteControlEnabled");
@@ -1380,6 +1382,22 @@
     ];
     activeMode.innerHTML = activeModeOptions.join("");
     activeMode.value = String(data.settings.active_mode || "");
+
+    const backendOptions = Array.isArray(data.available?.execution_backends)
+      ? data.available.execution_backends
+      : [];
+    executionBackend.innerHTML = backendOptions
+      .map((backend) => `<option value="${escapeHtml(String(backend))}">${escapeHtml(String(backend))}</option>`)
+      .join("");
+    if (data.settings.execution_backend) {
+      executionBackend.value = String(data.settings.execution_backend || "");
+    }
+    const backendBlockers = Array.isArray(data.available?.backend_switch_blockers)
+      ? data.available.backend_switch_blockers
+      : [];
+    executionBackendNote.textContent = backendBlockers.length
+      ? `${t("miniapp.settings.backend_configured", "Backend настраивается в Config settings")}: ${backendBlockers.join(", ")}`
+      : t("miniapp.settings.backend_configured", "Backend настраивается в Config settings");
 
     sshEnabled.checked = sshRemoteEnabled;
     sshEnabled.disabled = false;
@@ -1448,6 +1466,7 @@
     // Busy session lock
     const isBusy = !!state.statusLastPayload?.active_session?.busy;
     activeMode.disabled = isBusy;
+    executionBackend.disabled = true;
     sshEnabled.disabled = isBusy;
     rcEnabled.disabled = isBusy;
     rcHostSelect.disabled = isBusy || validHosts.length === 0;
@@ -4479,6 +4498,9 @@
     if (!String(cfg.defaults?.workdir || "").trim()) {
       errors.push(t("miniapp.cfg.err_defaults_workdir", "defaults.workdir обязателен"));
     }
+    if (!["headless", "tmux"].includes(String(cfg.defaults?.default_execution_backend || "headless"))) {
+      errors.push(t("miniapp.cfg.err_default_backend", "defaults.default_execution_backend должен быть headless или tmux"));
+    }
     if (!String(cfg.miniapp?.base_path || "").trim()) {
       errors.push(t("miniapp.cfg.err_miniapp_base_path", "miniapp.base_path обязателен"));
     }
@@ -4495,6 +4517,34 @@
       }
       if (!["headless", "interactive"].includes(String(tool.mode || ""))) {
         errors.push(`tools.${toolName}.mode ${t("miniapp.cfg.err_tool_mode", "должен быть headless или interactive")}`);
+      }
+      const executionBackends = Array.isArray(tool.execution_backends)
+        ? tool.execution_backends.map((x) => String(x).trim()).filter(Boolean)
+        : [];
+      const validBackends = ["headless", "tmux"];
+      executionBackends.forEach((backend) => {
+        if (!validBackends.includes(backend)) {
+          errors.push(`tools.${toolName}.execution_backends ${t("miniapp.cfg.err_backend", "должен содержать только headless/tmux")}`);
+        }
+      });
+      if (new Set(executionBackends).size !== executionBackends.length) {
+        errors.push(`tools.${toolName}.execution_backends ${t("miniapp.cfg.err_backend_dupes", "не должен содержать дубликаты")}`);
+      }
+      const toolDefaultBackend = String(tool.default_execution_backend || "").trim();
+      if (toolDefaultBackend && (!executionBackends.length || !executionBackends.includes(toolDefaultBackend))) {
+        errors.push(`tools.${toolName}.default_execution_backend ${t("miniapp.cfg.err_backend_default", "должен входить в execution_backends")}`);
+      }
+      if (tool.tmux_user != null && typeof tool.tmux_user !== "string") {
+        errors.push(`tools.${toolName}.tmux_user ${t("miniapp.cfg.err_string", "должен быть строкой")}`);
+      }
+      const interactiveCmd = Array.isArray(tool.interactive_cmd)
+        ? tool.interactive_cmd.map((x) => String(x).trim()).filter(Boolean)
+        : [];
+      if (executionBackends.includes("tmux") && !interactiveCmd.length) {
+        errors.push(`tools.${toolName}.interactive_cmd ${t("miniapp.cfg.err_tmux_interactive_cmd", "обязателен для tmux backend")}`);
+      }
+      if (tool.interactive_resume_cmd != null && !Array.isArray(tool.interactive_resume_cmd)) {
+        errors.push(`tools.${toolName}.interactive_resume_cmd ${t("miniapp.cfg.err_array", "должен быть списком")}`);
       }
       const cmd = Array.isArray(tool.cmd) ? tool.cmd.map((x) => String(x).trim()).filter(Boolean) : [];
       if (!cmd.length) {
@@ -4931,6 +4981,9 @@
     cfg.lint_evolution = cfg.lint_evolution || {};
     cfg.defaults.pending_input_confirmation_enabled =
       cfg.defaults.pending_input_confirmation_enabled !== undefined ? !!cfg.defaults.pending_input_confirmation_enabled : true;
+    cfg.defaults.default_execution_backend = ["headless", "tmux"].includes(String(cfg.defaults.default_execution_backend || ""))
+      ? String(cfg.defaults.default_execution_backend)
+      : "headless";
     if (!String(cfg.miniapp.bind_host || "").trim()) {
       cfg.miniapp.bind_host = "127.0.0.1";
     }
@@ -5118,6 +5171,7 @@
               fieldHtml({ id: "def-run-metrics-enabled", label: "run_metrics_enabled", kind: "checkbox", hint: "Сбор метрик запусков; restart required" }),
               fieldHtml({ id: "def-cli-json-stream-archive-enabled", label: "cli_json_stream_archive_enabled", kind: "checkbox", hint: "Архивировать JSON-поток CLI" }),
               fieldHtml({ id: "def-assistant-preview-enabled", label: "assistant_preview_enabled", kind: "checkbox", hint: "Превью ассистента во время выполнения" }),
+              fieldHtml({ id: "def-default-execution-backend", label: "default_execution_backend", kind: "select", options: ["headless", "tmux"], hint: "Default backend for new sessions" }),
               fieldHtml({ id: "def-tool-disclosure", label: "tool_disclosure", kind: "select", options: ["full", "progressive"], hint: "full — все схемы, progressive — суммари + meta-tool" }),
               fieldHtml({ id: "def-context-window-tokens", label: "context_window_tokens", kind: "number", hint: "Размер контекстного окна (токены)" }),
               fieldHtml({ id: "def-context-reserve-tokens", label: "context_reserve_tokens", kind: "number", hint: "Резерв токенов для ответа LLM" }),
@@ -5148,11 +5202,15 @@
                     ${fieldHtml({ id: `${idPrefix}-name`, label: "name", readonly: true, hint: "ключ секции tools" })}
                     ${fieldHtml({ id: `${idPrefix}-enabled`, label: "enabled", kind: "checkbox" })}
                     ${fieldHtml({ id: `${idPrefix}-mode`, label: "mode", kind: "select", options: ["headless", "interactive"] })}
+                    ${fieldHtml({ id: `${idPrefix}-execution-backends`, label: "execution_backends", kind: "textarea", hint: "headless/tmux, one per line" })}
+                    ${fieldHtml({ id: `${idPrefix}-default-execution-backend`, label: "default_execution_backend", kind: "select", options: ["", "headless", "tmux"], hint: "optional" })}
+                    ${fieldHtml({ id: `${idPrefix}-tmux-user`, label: "tmux_user", hint: "optional user for tmux backend" })}
                     ${fieldHtml({ id: `${idPrefix}-cmd`, label: "cmd", kind: "textarea", hint: "по одному аргументу в строке" })}
                     ${fieldHtml({ id: `${idPrefix}-headless-cmd`, label: "headless_cmd", kind: "textarea", hint: "optional" })}
                     ${fieldHtml({ id: `${idPrefix}-resume-cmd`, label: "resume_cmd", kind: "textarea", hint: "optional" })}
                     ${fieldHtml({ id: `${idPrefix}-image-cmd`, label: "image_cmd", kind: "textarea", hint: "optional" })}
                     ${fieldHtml({ id: `${idPrefix}-interactive-cmd`, label: "interactive_cmd", kind: "textarea", hint: "optional" })}
+                    ${fieldHtml({ id: `${idPrefix}-interactive-resume-cmd`, label: "interactive_resume_cmd", kind: "textarea", hint: "optional, use {resume}" })}
                     ${fieldHtml({ id: `${idPrefix}-prompt-regex`, label: "prompt_regex" })}
                     ${fieldHtml({ id: `${idPrefix}-resume-regex`, label: "resume_regex" })}
                     ${fieldHtml({ id: `${idPrefix}-help-cmd`, label: "help_cmd" })}
@@ -5458,6 +5516,7 @@
       (v) => (cfg.defaults.skill_allowlisted_sources = multilineToStrArr(v))
     );
     bindInput("def-cli-routing", () => kvToLines(cfg.defaults.cli_routing || {}), (v) => (cfg.defaults.cli_routing = optionalMap(linesToKv(v, true))));
+    bindInput("def-default-execution-backend", () => cfg.defaults.default_execution_backend || "headless", (v) => (cfg.defaults.default_execution_backend = v || "headless"));
     bindInput("def-tool-disclosure", () => cfg.defaults.tool_disclosure || "full", (v) => (cfg.defaults.tool_disclosure = v || "full"));
     bindInput("def-context-window-tokens", () => cfg.defaults.context_window_tokens, (v) => (cfg.defaults.context_window_tokens = Number(v || 0)));
     bindInput("def-context-reserve-tokens", () => cfg.defaults.context_reserve_tokens, (v) => (cfg.defaults.context_reserve_tokens = Number(v || 0)));
@@ -5477,11 +5536,15 @@
       bindInput(`${idPrefix}-name`, () => toolName, () => {});
       bindInput(`${idPrefix}-enabled`, () => !!tool.enabled, (v) => (tool.enabled = !!v));
       bindInput(`${idPrefix}-mode`, () => tool.mode || "headless", (v) => (tool.mode = v || "headless"));
+      bindInput(`${idPrefix}-execution-backends`, () => arrToMultiline(tool.execution_backends || []), (v) => (tool.execution_backends = optionalList(multilineToStrArr(v))));
+      bindInput(`${idPrefix}-default-execution-backend`, () => tool.default_execution_backend || "", (v) => (tool.default_execution_backend = String(v || "").trim() || null));
+      bindInput(`${idPrefix}-tmux-user`, () => tool.tmux_user || "", (v) => (tool.tmux_user = String(v || "").trim() || null));
       bindInput(`${idPrefix}-cmd`, () => arrToMultiline(tool.cmd || []), (v) => (tool.cmd = multilineToStrArr(v)));
       bindInput(`${idPrefix}-headless-cmd`, () => arrToMultiline(tool.headless_cmd || []), (v) => (tool.headless_cmd = optionalList(multilineToStrArr(v))));
       bindInput(`${idPrefix}-resume-cmd`, () => arrToMultiline(tool.resume_cmd || []), (v) => (tool.resume_cmd = optionalList(multilineToStrArr(v))));
       bindInput(`${idPrefix}-image-cmd`, () => arrToMultiline(tool.image_cmd || []), (v) => (tool.image_cmd = optionalList(multilineToStrArr(v))));
       bindInput(`${idPrefix}-interactive-cmd`, () => arrToMultiline(tool.interactive_cmd || []), (v) => (tool.interactive_cmd = optionalList(multilineToStrArr(v))));
+      bindInput(`${idPrefix}-interactive-resume-cmd`, () => arrToMultiline(tool.interactive_resume_cmd || []), (v) => (tool.interactive_resume_cmd = optionalList(multilineToStrArr(v))));
       bindInput(`${idPrefix}-prompt-regex`, () => tool.prompt_regex || "", (v) => (tool.prompt_regex = optionalText(v)));
       bindInput(`${idPrefix}-resume-regex`, () => tool.resume_regex || "", (v) => (tool.resume_regex = optionalText(v)));
       bindInput(`${idPrefix}-help-cmd`, () => tool.help_cmd || "", (v) => (tool.help_cmd = optionalText(v)));

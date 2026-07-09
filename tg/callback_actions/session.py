@@ -14,6 +14,7 @@ from modes.sdk.services.callback_data import (
 )
 from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled, set_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
+from session import set_session_execution_backend
 from tg.handlers import build_lang_menu, format_session_state
 from i18n import t, SUPPORTED_LANGS, lang_from_query
 from i18n.resolver import resolve_language
@@ -339,6 +340,44 @@ class SessionActionsMixin:
         else:
             text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
             await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        return True
+
+    async def _cb_sess_backend(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
+        payload = str(data).split(":", 1)[1].strip() if ":" in str(data) else ""
+        if ":" not in payload:
+            await self._edit_msg(context, query, t("msg.error.callback_format", lang))
+            return True
+        session_uid, backend = payload.rsplit(":", 1)
+        session_uid = session_uid.strip()
+        backend = backend.strip()
+        session = self.bot_app.manager.get_by_uid(session_uid) if session_uid else None
+        if session is None:
+            session = self.bot_app.manager.get(int(chat_id), session_uid) if session_uid else None
+        if not session:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        _reply_chat_id, callback_owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+        owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
+        access_chat_id = int(callback_owner_chat_id or chat_id)
+        access_checker = getattr(self.bot_app, "is_session_allowed_for_chat", None)
+        if callable(access_checker) and not bool(access_checker(access_chat_id, session)):
+            await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+            return True
+        result = set_session_execution_backend(session, backend)
+        if result.reason:
+            if result.reason == "unsupported backend" or result.reason == "backend not available for cli":
+                await self._edit_msg(context, query, t("msg.error.execution_backend_unavailable", lang))
+                return True
+            await self._edit_msg(
+                context,
+                query,
+                t("msg.error.execution_backend_switch_failed", lang, reason=result.reason),
+            )
+            return True
+        await self._persist_session_async(owner_chat_id, session.id)
+        text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
+        await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         return True
 
     async def _cb_sess_transfer_yes(self, *, data: str, chat_id: int, query, context) -> bool:

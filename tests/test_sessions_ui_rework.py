@@ -2,7 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from app.services.run_artifact_store import RunArtifactStore
-from session import session_runtime_uid
+from session import get_session_execution_backend, session_runtime_uid
 from modes.analyst.state_store import AnalystStateStore, build_context_key
 from tg.command_registry import build_command_registry
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,6 +21,8 @@ def _build_app(tmp_path):
                 name="dummy",
                 mode="headless",
                 cmd=["bash", "-lc", "cat"],
+                interactive_cmd=["bash", "-lc", "cat"],
+                execution_backends=["headless", "tmux"],
             )
         },
         defaults=DefaultsConfig(
@@ -140,6 +142,8 @@ def test_sessions_overview_with_active_session_has_expected_buttons(tmp_path):
     assert f"sess_close:{s.id}" in callbacks
     assert f"sess_reset:{s.id}" in callbacks
     assert f"sess_cli:{session_uid}:dummy" in callbacks
+    assert f"sess_backend:{session_uid}:headless" not in callbacks
+    assert f"sess_backend:{session_uid}:tmux" not in callbacks
     assert f"sess_mode_pick:{session_uid}:agent" in callbacks
     assert f"sess_mode_pick:{session_uid}:manager" in callbacks
     assert f"sess_mode_pick:{session_uid}:analyst" in callbacks
@@ -353,6 +357,146 @@ def test_session_reset_restores_single_allowed_mode_as_default(tmp_path):
         assert handled is True
         assert s.resume_token is None
         assert s.modes.active_mode == "agent"
+
+    asyncio.run(_run())
+
+
+def test_session_backend_callback_rejects_settings_only_backend(tmp_path):
+    async def _run() -> None:
+        app = _build_app(tmp_path)
+        s = app.manager.create(1, "dummy", str(tmp_path))
+        session_uid = session_runtime_uid(s)
+
+        class _Msg:
+            chat_id = 1
+            message_id = 1
+
+        class _Query:
+            data = f"sess_backend:{session_uid}:tmux"
+            message = _Msg()
+
+        sent = {"text": None, "reply_markup": None}
+
+        async def _fake_edit_msg(_context, _query, text, *, reply_markup=None):
+            sent["text"] = text
+            sent["reply_markup"] = reply_markup
+            return True
+
+        app.session_ui._edit_msg = _fake_edit_msg
+        handled = await app.session_ui.handle_callback(_Query(), 1, None)
+
+        assert handled is True
+        assert get_session_execution_backend(s) == "headless"
+        assert sent["text"] == (
+            "Не удалось переключить backend выполнения: "
+            "execution backend is configured in settings."
+        )
+        assert sent["reply_markup"] is None
+
+    asyncio.run(_run())
+
+
+def test_session_backend_callback_rejects_forbidden_session(tmp_path):
+    async def _run() -> None:
+        from tg.callbacks import CallbackHandler
+
+        cfg = AppConfig(
+            telegram=TelegramConfig(
+                token="",
+                whitelist_chat_ids=[1, 2],
+                admlist_chat_ids=[1],
+                user_workdirs={2: [str(tmp_path / "other")]},
+            ),
+            tools={
+                "dummy": ToolConfig(
+                    name="dummy",
+                    mode="headless",
+                    cmd=["bash", "-lc", "cat"],
+                    interactive_cmd=["bash", "-lc", "cat"],
+                    execution_backends=["headless", "tmux"],
+                )
+            },
+            defaults=DefaultsConfig(
+                workdir=str(tmp_path),
+                state_path=str(tmp_path / "state_acl.json"),
+                toolhelp_path=str(tmp_path / "toolhelp_acl.json"),
+                log_path=str(tmp_path / "bot_acl.log"),
+            ),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config_acl.yaml"),
+        )
+        app = BotApp(cfg)
+        s = app.manager.create(1, "dummy", str(tmp_path))
+        session_uid = session_runtime_uid(s)
+        handler = CallbackHandler(app)
+
+        class _Msg:
+            chat_id = 2
+            message_id = 1
+
+        class _Query:
+            data = f"sess_backend:{session_uid}:tmux"
+            message = _Msg()
+
+        sent = {"text": None}
+
+        async def _fake_edit_msg(_context, _query, text, *, reply_markup=None):
+            _ = reply_markup
+            sent["text"] = text
+            return True
+
+        handler._edit_msg = _fake_edit_msg
+        handled = await handler._cb_sess_backend(data=_Query.data, chat_id=2, query=_Query(), context=None)
+
+        assert handled is True
+        assert sent["text"] == "Сессия недоступна."
+        assert get_session_execution_backend(s) == "headless"
+
+    asyncio.run(_run())
+
+
+def test_session_backend_callback_uses_resolved_owner_for_thread_access(tmp_path):
+    async def _run() -> None:
+        from tg.callbacks import CallbackHandler
+
+        app = _build_app(tmp_path)
+        s = app.manager.create(1, "dummy", str(tmp_path))
+        session_uid = session_runtime_uid(s)
+        handler = CallbackHandler(app)
+        app.resolve_telegram_callback_scope = lambda _query: (-100777000111, 42, 1, None)
+
+        class _Msg:
+            chat_id = -100777000111
+            message_thread_id = 42
+            message_id = 1
+
+        class _Query:
+            data = f"sess_backend:{session_uid}:tmux"
+            message = _Msg()
+
+        sent = {"text": None}
+
+        async def _fake_edit_msg(_context, _query, text, *, reply_markup=None):
+            _ = reply_markup
+            sent["text"] = text
+            return True
+
+        handler._edit_msg = _fake_edit_msg
+        handled = await handler._cb_sess_backend(
+            data=_Query.data,
+            chat_id=-100777000111,
+            query=_Query(),
+            context=None,
+        )
+
+        assert handled is True
+        assert get_session_execution_backend(s) == "headless"
+        assert sent["text"] == (
+            "Не удалось переключить backend выполнения: "
+            "execution backend is configured in settings."
+        )
 
     asyncio.run(_run())
 

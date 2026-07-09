@@ -1161,7 +1161,11 @@ def test_miniapp_config_endpoints_happy_path(tmp_path) -> None:
 
             schema_resp = await client.get("/api/config/schema", headers=headers)
             assert schema_resp.status == 200
-            assert "sections" in await schema_resp.json()
+            schema_body = await schema_resp.json()
+            assert "sections" in schema_body
+            default_backend_meta = schema_body["sections"]["defaults"]["fields"]["default_execution_backend"]
+            assert default_backend_meta["type"] == "enum[headless,tmux]"
+            assert default_backend_meta["reloadable"] is True
 
             view_resp = await client.get("/api/config/view", headers=headers)
             assert view_resp.status == 200

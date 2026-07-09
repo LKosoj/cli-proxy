@@ -17,6 +17,8 @@ def _run_app_js_harness(
     settings_payload: dict | None = None,
     settings_responses: list[dict] | None = None,
     settings_session_value: str | None = None,
+    settings_form_values: dict | None = None,
+    click_settings_save: bool = False,
     status_snapshot: dict | None = None,
     status_snapshots: list[dict] | None = None,
     click_action: str | None = None,
@@ -49,6 +51,8 @@ def _run_app_js_harness(
         const settingsPayload = __SETTINGS_PAYLOAD__;
         const settingsResponses = __SETTINGS_RESPONSES__;
         const settingsSessionValue = __SETTINGS_SESSION_VALUE__;
+        const settingsFormValues = __SETTINGS_FORM_VALUES__;
+        const clickSettingsSave = __CLICK_SETTINGS_SAVE__;
         const statusSnapshot = __STATUS_SNAPSHOT__;
         const statusSnapshots = __STATUS_SNAPSHOTS__;
         const clickAction = __CLICK_ACTION__;
@@ -165,6 +169,7 @@ def _run_app_js_harness(
           "filesSession",
           "settingsSession",
           "settingsRemoteControlHost",
+          "settingsExecutionBackend",
           "statusSession",
           "adminSession",
           "schedulerProject",
@@ -493,6 +498,36 @@ def _run_app_js_harness(
               await wait(20);
             }
 
+            if (settingsFormValues && typeof settingsFormValues === "object") {
+              const assignSettingValue = (id, value) => {
+                const el = document.getElementById(id);
+                if (!el) {
+                  throw new Error(`missing settings form field: ${id}`);
+                }
+                if (typeof value === "boolean") {
+                  el.checked = value;
+                } else {
+                  el.value = String(value ?? "");
+                }
+              };
+              Object.entries({
+                settingsActiveMode: settingsFormValues.active_mode || "",
+                settingsExecutionBackend: settingsFormValues.execution_backend || "",
+                settingsSshEnabled: !!settingsFormValues.ssh_remote_enabled,
+                settingsRemoteControlEnabled: !!settingsFormValues.remote_control_enabled,
+                settingsRemoteControlHost: settingsFormValues.remote_control_host_alias || "",
+              }).forEach(([id, value]) => assignSettingValue(id, value));
+            }
+
+            if (clickSettingsSave) {
+              const settingsSave = document.getElementById("settingsSave");
+              if (!settingsSave || typeof settingsSave.onclick !== "function") {
+                throw new Error("settings save button handler missing");
+              }
+              await settingsSave.onclick();
+              await wait(20);
+            }
+
             if (sshFormValues && typeof sshFormValues === "object") {
               const assignValue = (id, value) => {
                 const el = document.getElementById(id);
@@ -668,6 +703,21 @@ def _run_app_js_harness(
               })(),
               lastFilesTreeUrl: String(fetchCalls.filter((item) => item.includes("./api/files/tree")).slice(-1)[0] || ""),
               settingsFetchCount: fetchCalls.filter((item) => item.includes("/api/session/") && item.endsWith("/settings")).length,
+              lastSettingsRequestBody: (() => {
+                const req = fetchRequests
+                  .filter((item) => (
+                    String(item.path || "").includes("/api/session/")
+                    && String(item.path || "").endsWith("/settings")
+                    && item.body
+                  ))
+                  .slice(-1)[0];
+                if (!req || !req.body) return null;
+                try {
+                  return JSON.parse(String(req.body));
+                } catch {
+                  return { raw: String(req.body) };
+                }
+              })(),
               lastSshHostRequestPath: String(
                 fetchRequests
                   .filter((item) => String(item.path || "").includes("./api/ssh/hosts") && item.body)
@@ -715,6 +765,14 @@ def _run_app_js_harness(
     script = script.replace(
         "__SETTINGS_SESSION_VALUE__",
         json.dumps(settings_session_value, ensure_ascii=False),
+    )
+    script = script.replace(
+        "__SETTINGS_FORM_VALUES__",
+        json.dumps(settings_form_values, ensure_ascii=False) if settings_form_values is not None else "null",
+    )
+    script = script.replace(
+        "__CLICK_SETTINGS_SAVE__",
+        "true" if click_settings_save else "false",
     )
     script = script.replace(
         "__STATUS_SNAPSHOT__",
@@ -2200,6 +2258,14 @@ def test_miniapp_admin_operations_separates_waiting_and_history_labels() -> None
     assert 'admin-section-eyebrow">Pending' not in app_js
 
 
+def test_miniapp_config_tools_exposes_interactive_resume_cmd() -> None:
+    app_js = (Path(__file__).resolve().parent.parent / "miniapp" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert 'label: "interactive_resume_cmd"' in app_js
+    assert "tool.interactive_resume_cmd" in app_js
+    assert "tools.${toolName}.interactive_resume_cmd" in app_js
+
+
 def test_miniapp_app_js_renders_admin_payload_fields_as_ui_sections() -> None:
     payload = _run_app_js_harness(
         {
@@ -3262,3 +3328,62 @@ def test_miniapp_app_js_save_ssh_host_refreshes_session_settings() -> None:
     assert payload["settingsFetchCount"] >= 2
     assert payload["lastSshHostRequestPath"].endswith("/api/ssh/hosts?workdir=%2Fprojects%2Fdemo")
     assert payload["lastSshHostRequestBody"]["remote_project_root"] == "/"
+
+
+def test_miniapp_app_js_does_not_save_execution_backend_session_setting() -> None:
+    settings_payload = {
+        "ok": True,
+        "settings": {
+            "active_mode": "",
+            "execution_backend": "headless",
+            "ssh_remote_enabled": False,
+            "remote_control_enabled": False,
+            "remote_control_host_alias": None,
+        },
+        "available": {
+            "modes": [],
+            "direct_cli_allowed": True,
+            "execution_backends": ["headless", "tmux"],
+            "backend_switch_allowed": False,
+            "backend_switch_blockers": ["configured in settings"],
+            "ssh_config_exists": False,
+            "ssh_available": False,
+            "project_workdir": "/projects/demo",
+            "remote_control_hosts": {},
+        },
+        "remote_control_hosts": {},
+        "effective": {
+            "execution_target": "local",
+            "host_alias": None,
+            "remote_project_root": None,
+            "git_available": True,
+        },
+    }
+
+    payload = _run_app_js_harness(
+        {
+            "mode": "admin",
+            "session_uid": "thread:1:55",
+            "session_id": "s1",
+            "active": True,
+            "busy": False,
+            "run_lock_locked": False,
+            "tick_active": False,
+            "mode_tasks_running": False,
+            "pipeline_status": "idle",
+            "analyzer_status": "idle",
+            "analyzer_message": "",
+            "executor_status": "idle",
+            "executor_message": "",
+        },
+        settings_payload=settings_payload,
+        settings_session_value="thread:1:55",
+        settings_form_values={
+            "execution_backend": "tmux",
+            "ssh_remote_enabled": False,
+            "remote_control_enabled": False,
+        },
+        click_settings_save=True,
+    )
+
+    assert "execution_backend" not in payload["lastSettingsRequestBody"]

@@ -480,6 +480,12 @@ class SessionSettingsWidget(QWidget):
         self.mode_label = QLabel(t("desktop.settings.active_mode", lang))
         self.form_layout.addRow(self.mode_label, self.mode_combo)
 
+        # Execution backend
+        self.backend_combo = QComboBox()
+        self.backend_combo.currentIndexChanged.connect(self._on_backend_changed)
+        self.backend_label = QLabel("Execution backend")
+        self.form_layout.addRow(self.backend_label, self.backend_combo)
+
         # SSH
         self.ssh_check = QCheckBox(t("desktop.settings.ssh_enable", lang))
         self.ssh_check.toggled.connect(self._on_ssh_toggled)
@@ -581,6 +587,9 @@ class SessionSettingsWidget(QWidget):
         # Mode
         self._rebuild_mode_combo()
 
+        # Execution backend
+        self._rebuild_backend_combo()
+
         # Orchestrator
         self.orch_check.setChecked(is_orchestrator_enabled(session, False))
 
@@ -616,6 +625,9 @@ class SessionSettingsWidget(QWidget):
         is_busy = getattr(session, "busy", False)
         self.name_edit.setEnabled(not is_busy)
         self.mode_combo.setEnabled(not is_busy)
+        backend_settings = self.facade.get_execution_backend_settings(self._session_uid)
+        backend_allowed = bool((backend_settings or {}).get("backend_switch_allowed", True))
+        self.backend_combo.setEnabled(not is_busy and backend_allowed)
         self.orch_check.setEnabled(not is_busy)
         self.ssh_check.setEnabled(not is_busy)
         self.rc_check.setEnabled(not is_busy)
@@ -810,6 +822,20 @@ class SessionSettingsWidget(QWidget):
                 self.mode_combo.setCurrentText(m)
         self.mode_combo.blockSignals(False)
 
+    def _rebuild_backend_combo(self):
+        self.backend_combo.blockSignals(True)
+        self.backend_combo.clear()
+        settings = self.facade.get_execution_backend_settings(self._session_uid) if self._session_uid else None
+        available = list((settings or {}).get("available_execution_backends") or [])
+        current = str((settings or {}).get("execution_backend") or "")
+        for backend in available:
+            self.backend_combo.addItem(str(backend), str(backend))
+            if str(backend) == current:
+                self.backend_combo.setCurrentText(str(backend))
+        if not available and current:
+            self.backend_combo.addItem(current, current)
+        self.backend_combo.blockSignals(False)
+
     def _on_name_changed(self):
         if self._loading or not self._session_uid:
             return
@@ -826,6 +852,17 @@ class SessionSettingsWidget(QWidget):
             return
         mode_id = self.mode_combo.currentData()
         ensure_async(self.facade.update_session_setting(self._session_uid, "active_mode", mode_id), parent=self)
+
+    def _on_backend_changed(self, index: int):
+        if self._loading or not self._session_uid:
+            return
+        backend = self.backend_combo.currentData()
+        if not backend:
+            return
+        ensure_async(
+            self.facade.update_session_setting(self._session_uid, "execution_backend", backend),
+            parent=self,
+        )
 
     def _on_ssh_toggled(self, checked: bool):
         if self._loading or not self._session_uid:

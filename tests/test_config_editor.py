@@ -18,7 +18,7 @@ from app.services.config_apply_policy import classify_config_path
 from app.services.config_service import ConfigDraftSaveResult, ConfigService
 from config import (
     AppConfig, TelegramConfig, DefaultsConfig, MCPConfig, MiniAppConfig,
-    ThreadModeConfig, WebhooksConfig, SchedulerConfig, SecurityConfig, LintEvolutionConfig,
+    ThreadModeConfig, ToolConfig, WebhooksConfig, SchedulerConfig, SecurityConfig, LintEvolutionConfig,
 )
 from i18n import t
 from qasync import QEventLoop
@@ -73,6 +73,7 @@ def mock_config(temp_dir):
         pending_input_confirmation_enabled=True,
         cli_json_stream_archive_enabled=True,
         assistant_preview_enabled=True,
+        default_execution_backend="headless",
     )
     cfg.tools = {}
     cfg.mcp = MCPConfig(enabled=False)
@@ -214,8 +215,43 @@ async def test_config_editor_load(qtbot, mock_config_service):
     assert widget._widgets["defaults.pending_input_confirmation_enabled"].isChecked() is True
     assert widget._widgets["defaults.cli_json_stream_archive_enabled"].isChecked() is True
     assert widget._widgets["defaults.assistant_preview_enabled"].isChecked() is True
+    assert widget._widgets["defaults.default_execution_backend"].currentText() == "headless"
     assert widget._widgets["miniapp.bind_host"].text() == "127.0.0.1"
     assert widget._widgets["miniapp.bind_port"].value() == 8088
+
+
+@pytest.mark.asyncio
+async def test_config_editor_collects_execution_backend_fields(qtbot, mock_config_service, mock_config):
+    mock_config.defaults.default_execution_backend = "headless"
+    mock_config.tools = {
+        "claude": ToolConfig(
+            name="claude",
+            mode="headless",
+            cmd=["claude"],
+            headless_cmd=["claude", "-p"],
+            execution_backends=["headless", "tmux"],
+            default_execution_backend="headless",
+            tmux_user="claude-bot",
+            interactive_cmd=["claude"],
+            interactive_resume_cmd=["claude", "--resume", "{resume}"],
+        )
+    }
+    widget = await _prepare_loaded_widget(qtbot, mock_config_service)
+
+    widget._widgets["defaults.default_execution_backend"].setCurrentText("tmux")
+    widget._widgets["tools.claude.execution_backends"].setPlainText("headless\ntmux\n")
+    widget._widgets["tools.claude.default_execution_backend"].setCurrentText("tmux")
+    widget._widgets["tools.claude.tmux_user"].setText("claude-runner")
+    widget._widgets["tools.claude.interactive_resume_cmd"].setPlainText("claude\n--resume\n{resume}\n")
+
+    collected = widget._collect_config()
+
+    assert collected is not None
+    assert collected.defaults.default_execution_backend == "tmux"
+    assert collected.tools["claude"].execution_backends == ["headless", "tmux"]
+    assert collected.tools["claude"].default_execution_backend == "tmux"
+    assert collected.tools["claude"].tmux_user == "claude-runner"
+    assert collected.tools["claude"].interactive_resume_cmd == ["claude", "--resume", "{resume}"]
 
 
 @pytest.mark.asyncio

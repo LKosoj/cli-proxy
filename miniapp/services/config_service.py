@@ -387,6 +387,11 @@ def config_schema() -> Dict[str, Any]:
                         "required": False,
                         "description": "Default CLI for new sessions.",
                     },
+                    "default_execution_backend": {
+                        "type": "enum[headless,tmux]",
+                        "required": True,
+                        "description": "Default CLI execution backend for new sessions.",
+                    },
                     "clarification_keywords": {
                         "type": "array[string]",
                         "required": True,

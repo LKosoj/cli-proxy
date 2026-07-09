@@ -7,6 +7,7 @@ import dataclasses
 import logging
 import os
 from datetime import date
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -63,6 +64,7 @@ class AppRuntimeService:
         "cli_json_stream_archive_enabled",
         "assistant_preview_enabled",
         "pending_input_confirmation_enabled",
+        "default_execution_backend",
         "openai_api_key",
         "zai_api_key",
         "github_token",
@@ -224,6 +226,23 @@ class AppRuntimeService:
         new_tool_keys = set((runtime_config.tools or {}).keys())
         for _chat_id, sessions in self.bot_app.manager.sessions_by_chat.items():
             for session in sessions.values():
+                old_active_cli = self._session_active_cli(session)
+                old_tool = (getattr(previous, "tools", None) or {}).get(old_active_cli) or getattr(session, "tool", None)
+                old_backend = self._selected_execution_backend(previous, old_active_cli, old_tool)
+                new_active_cli = old_active_cli if old_active_cli in new_tool_keys else (sorted(new_tool_keys)[0] if new_tool_keys else "")
+                new_tool = (runtime_config.tools or {}).get(new_active_cli)
+                new_backend = self._selected_execution_backend(runtime_config, new_active_cli, new_tool)
+                if old_backend == "tmux" and (old_active_cli != new_active_cli or new_backend != "tmux"):
+                    blockers = self._tmux_reload_blockers(session)
+                    if blockers:
+                        restart_required.append(f"session.{session.id}.tmux_backend")
+                    else:
+                        try:
+                            await self._close_tmux_with_session_view(session, previous, old_active_cli, old_tool)
+                            applied.append(f"session.{session.id}.tmux_closed")
+                        except Exception:
+                            logger.exception("runtime config reload failed to close old tmux session session_id=%s", session.id)
+                            restart_required.append(f"session.{session.id}.tmux_backend")
                 session.config = runtime_config
                 active_cli = str(
                     getattr(getattr(session, "cli", None), "active_cli", "")
@@ -267,6 +286,64 @@ class AppRuntimeService:
         }
         await self._publish_system_event(self.EVENT_RELOADED, previous.path, result)
         return result
+
+    @staticmethod
+    def _session_active_cli(session: Any) -> str:
+        return str(
+            getattr(getattr(session, "cli", None), "active_cli", "")
+            or getattr(session, "active_cli", "")
+            or getattr(getattr(session, "tool", None), "name", "")
+            or ""
+        ).strip()
+
+    @staticmethod
+    def _selected_execution_backend(config: Any, active_cli: str, tool: Any) -> str:
+        if not active_cli or tool is None:
+            return ""
+        from session import get_session_execution_backend
+
+        probe = SimpleNamespace(config=config, tool=tool, cli=SimpleNamespace(active_cli=active_cli))
+        return str(get_session_execution_backend(probe, active_cli) or "").strip().lower()
+
+    @staticmethod
+    def _tmux_reload_blockers(session: Any) -> list[str]:
+        blockers: list[str] = []
+        if bool(getattr(session, "busy", False)):
+            blockers.append("busy")
+        run_lock = getattr(session, "run_lock", None)
+        if run_lock is not None and hasattr(run_lock, "locked") and run_lock.locked():
+            blockers.append("run_lock")
+        if len(getattr(session, "queue", None) or []) > 0:
+            blockers.append("queue")
+        active_backend = str(getattr(session, "_active_execution_backend", "") or "").strip().lower()
+        if active_backend == "tmux" and "active_execution_backend" not in blockers:
+            blockers.append("active_execution_backend")
+        return blockers
+
+    @staticmethod
+    async def _close_tmux_with_session_view(session: Any, config: Any, active_cli: str, tool: Any) -> None:
+        from app.services.cli_backends import TmuxExecutionBackend
+
+        cli_state = getattr(session, "cli", None)
+        original_config = getattr(session, "config", None)
+        original_tool = getattr(session, "tool", None)
+        original_active_cli = getattr(session, "active_cli", None)
+        original_cli_active = getattr(cli_state, "active_cli", None) if cli_state is not None else None
+        try:
+            session.config = config
+            session.tool = tool
+            if hasattr(session, "active_cli"):
+                session.active_cli = active_cli
+            if cli_state is not None:
+                cli_state.active_cli = active_cli
+            await TmuxExecutionBackend().close(session)
+        finally:
+            session.config = original_config
+            session.tool = original_tool
+            if hasattr(session, "active_cli"):
+                session.active_cli = original_active_cli
+            if cli_state is not None:
+                cli_state.active_cli = original_cli_active
 
     async def _publish_system_event(self, event: str, path: str, result: Dict[str, Any]) -> None:
         bus = getattr(self.bot_app, "system_event_bus", None)

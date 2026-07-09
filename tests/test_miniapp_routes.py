@@ -23,6 +23,7 @@ from miniapp.routes_logs import LogsRouteServices, register_logs_routes
 from miniapp.routes_scheduler import SchedulerRouteServices, register_scheduler_routes
 from miniapp.routes_ssh import SshRouteServices, register_ssh_routes
 from miniapp.services.config_service import SECRET_UNCHANGED_SENTINEL, app_config_to_dict
+from sessions.conversation_scope import ConversationScope
 from session import session_runtime_uid
 
 
@@ -162,6 +163,41 @@ def test_miniapp_routes_uses_container_config_service_for_real_botapp(tmp_path) 
         routes = MiniAppRoutes(app)
 
         assert routes.config_route_services.config_service is app.container.config_service
+    finally:
+        app.shutdown_html_process_pool()
+
+
+def test_miniapp_status_payload_reports_backend_switch_read_only(tmp_path) -> None:
+    cfg = _build_config(tmp_path, token="t")
+    cfg.tools["dummy"].interactive_cmd = ["bash", "-lc", "cat"]
+    cfg.tools["dummy"].execution_backends = ["headless", "tmux"]
+    cfg.tools["dummy"].default_execution_backend = "headless"
+    app = BotApp(cfg)
+    try:
+        routes = MiniAppRoutes(app)
+        session = SimpleNamespace(
+            id="s1",
+            name="Status session",
+            chat_id=1,
+            conversation_scope=ConversationScope.from_parts(1),
+            config=cfg,
+            tool=cfg.tools["dummy"],
+            workdir=str(tmp_path),
+            cli=SimpleNamespace(active_cli="dummy", resume_tokens={}),
+            git=SimpleNamespace(busy=False, conflict=False, conflict_files=[]),
+            modes=SimpleNamespace(),
+            queue=[],
+            busy=False,
+            current_proc=None,
+            child=None,
+            _active_execution_backend="none",
+        )
+
+        payload = routes._build_session_payload(session, session_chat_id=1, is_admin=True)
+
+        assert payload["available_execution_backends"] == ["headless", "tmux"]
+        assert payload["backend_switch_allowed"] is False
+        assert payload["backend_switch_blockers"] == ["configured in settings"]
     finally:
         app.shutdown_html_process_pool()
 

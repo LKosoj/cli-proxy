@@ -22,6 +22,7 @@ def _base_payload(tmp_path) -> dict:
                 "mode": "headless",
                 "cmd": "codex",
                 "interactive_cmd": ["codex"],
+                "interactive_resume_cmd": ["codex", "resume", "{resume}"],
                 "env": {"OPENAI_API_KEY": None},
             }
         },
@@ -214,6 +215,7 @@ def test_config_serialization_preserves_new_sections(tmp_path) -> None:
     assert serialized["defaults"]["run_artifacts_enabled"] is False
     assert serialized["defaults"]["skill_discovery_mode"] == "auto"
     assert serialized["defaults"]["skill_registry_paths"] == [".cli-proxy/skills", ".cli-proxy/project-skills"]
+    assert serialized["tools"]["codex"]["interactive_resume_cmd"] == ["codex", "resume", "{resume}"]
 
 
 def test_config_service_serialize_config_includes_new_sections(tmp_path) -> None:
@@ -229,4 +231,5 @@ def test_config_service_serialize_config_includes_new_sections(tmp_path) -> None
     assert loaded["webhooks"]["public_base_url"] == "https://bot.example.com"
     assert loaded["scheduler"]["misfire_grace_sec"] == 10
     assert loaded["defaults"]["pending_input_confirmation_enabled"] is False
+    assert loaded["tools"]["codex"]["interactive_resume_cmd"] == ["codex", "resume", "{resume}"]
     assert loaded["security"]["rate_limits"]["policies"]["miniapp.auth"]["burst_limit"] == 2

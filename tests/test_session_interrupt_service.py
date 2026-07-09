@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.session_interrupt_service import SessionInterruptService
+from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 from sessions.conversation_scope import ConversationScope
 
 
@@ -27,6 +28,8 @@ def _build_session(tmp_path, *, busy: bool = True):
         child=None,
         _active_execution_backend="none",
         conversation_scope=ConversationScope.from_parts(-100777000111, 101),
+        tool=SimpleNamespace(name="dummy"),
+        cli=SimpleNamespace(active_cli="dummy", execution_backends={}),
         config=SimpleNamespace(defaults=SimpleNamespace(state_path=str(tmp_path / "state.json"))),
         workdir=str(tmp_path),
         last_tick_ts=time.time(),
@@ -170,3 +173,66 @@ async def test_session_interrupt_service_reports_partial_timeout_when_runtime_st
     assert report.backend_state == "interactive_active"
     assert report.cleared_busy_signals is False
     assert session.busy is True
+
+
+@pytest.mark.asyncio
+async def test_session_interrupt_service_treats_idle_tmux_as_completed(tmp_path) -> None:
+    async def _cancel_session(_session_uid: str, _timeout_s: float) -> int:
+        return 0
+
+    session = _build_session(tmp_path)
+    session.queue = deque()
+    session.busy = False
+    session.last_tick_ts = None
+    session._active_execution_backend = "tmux"
+    paths = TmuxExecutionBackend().paths(session)
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "idle",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": time.time(),
+        },
+    )
+
+    service = SessionInterruptService(
+        cancel_session_tasks=_cancel_session,
+        list_session_tasks=lambda _session_uid: [],
+    )
+
+    report = await service.interrupt_session_runtime(
+        session,
+        owner_chat_id=None,
+        reason="test_tmux_idle",
+    )
+
+    assert report.status == "completed"
+    assert report.backend_state == "tmux_idle"
+
+
+@pytest.mark.asyncio
+async def test_session_interrupt_service_treats_selected_unstarted_tmux_as_stopped(tmp_path) -> None:
+    async def _cancel_session(_session_uid: str, _timeout_s: float) -> int:
+        return 0
+
+    session = _build_session(tmp_path)
+    session.queue = deque()
+    session.busy = False
+    session.last_tick_ts = None
+    session.tool.execution_backends = ["headless", "tmux"]
+    session.tool.default_execution_backend = "tmux"
+
+    service = SessionInterruptService(
+        cancel_session_tasks=_cancel_session,
+        list_session_tasks=lambda _session_uid: [],
+    )
+
+    report = await service.interrupt_session_runtime(
+        session,
+        owner_chat_id=None,
+        reason="test_tmux_selected_unstarted",
+    )
+
+    assert report.status == "completed"
+    assert report.backend_state == "stopped"

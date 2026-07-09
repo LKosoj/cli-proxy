@@ -182,7 +182,7 @@ class SessionInterruptService:
         cleared_busy_signals = self._busy_signals_cleared(session, remaining_task_names=remaining_task_names)
 
         status = "completed"
-        if remaining_task_names or backend_state not in {"stopped", "idle"} or not cleared_busy_signals:
+        if remaining_task_names or backend_state not in {"stopped", "idle", "tmux_idle"} or not cleared_busy_signals:
             status = "partial_timeout"
         if "session_interrupt_failed" in warnings and status == "partial_timeout":
             status = "failed"
@@ -244,6 +244,13 @@ class SessionInterruptService:
     @staticmethod
     def _backend_state(session: Any) -> str:
         backend = str(getattr(session, "_active_execution_backend", "") or "").strip().lower()
+        selected_backend = ""
+        try:
+            from session import get_session_execution_backend
+
+            selected_backend = str(get_session_execution_backend(session) or "").strip().lower()
+        except Exception:
+            selected_backend = ""
         proc = getattr(session, "current_proc", None)
         child = getattr(session, "child", None)
         try:
@@ -255,6 +262,24 @@ class SessionInterruptService:
             return "headless_running"
         if backend == "headless":
             return "headless_running"
+        if backend == "tmux" or selected_backend == "tmux":
+            try:
+                from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+                paths = TmuxExecutionBackend().paths(session)
+                state = TmuxExecutionBackend._read_state(paths)
+                tmux_state = str(state.get("state") or "").strip().lower() if isinstance(state, dict) else ""
+                if not tmux_state:
+                    return "tmux_unknown" if backend == "tmux" else "stopped"
+                if tmux_state == "active":
+                    return "tmux_active"
+                if tmux_state == "idle":
+                    return "tmux_idle"
+                if tmux_state == "stopped":
+                    return "stopped"
+                return "tmux_unknown"
+            except Exception:
+                return "tmux_unknown"
         if backend == "interactive":
             return "interactive_active" if child_alive else "interactive_unknown"
         if child_alive:

@@ -4,8 +4,10 @@ import asyncio
 from pathlib import Path
 
 import yaml
+import pytest
+from pydantic import ValidationError
 
-from app.config_runtime.models import DefaultsConfigModel, LintEvolutionConfigModel
+from app.config_runtime.models import AppConfigModel, DefaultsConfigModel, LintEvolutionConfigModel
 from app.services.config_apply_policy import classify_config_path
 from app.services.config_service import ConfigService, FileConfigProvider
 from config import load_config
@@ -23,11 +25,13 @@ def _payload(tmp_path) -> dict:
                 "mode": "headless",
                 "cmd": ["codex"],
                 "interactive_cmd": ["codex"],
+                "interactive_resume_cmd": ["codex", "resume", "{resume}"],
             }
         },
         "defaults": {
             "workdir": str(tmp_path),
             "default_language": "en",
+            "default_execution_backend": "headless",
             "clarification_keywords_by_lang": {
                 "ru": ["уточни", "уточните"],
                 "en": ["clarify", "unclear"],
@@ -125,6 +129,9 @@ def test_serialize_config_roundtrip_preserves_canonical_mcp_clients(tmp_path) ->
     ul = {int(k): v for k, v in first_payload["telegram"]["user_languages"].items()}
     assert ul == {111111111: "en"}
     assert first_payload["defaults"]["default_language"] == "en"
+    assert first_payload["defaults"]["default_execution_backend"] == "headless"
+    assert first_payload["tools"]["codex"]["execution_backends"] is None
+    assert first_payload["tools"]["codex"]["default_execution_backend"] is None
     by_lang = first_payload["defaults"].get("clarification_keywords_by_lang", {})
     assert by_lang.get("en") == ["clarify", "unclear"]
 
@@ -144,6 +151,57 @@ def test_config_service_diff_against_disk_is_stable_for_canonical_mcp_clients(tm
     diff = asyncio.run(service.diff_against_disk(cfg))
 
     assert diff == ""
+
+
+def test_execution_backend_config_roundtrip(tmp_path) -> None:
+    payload = _payload(tmp_path)
+    payload["tools"]["claude"] = {
+        "mode": "headless",
+        "cmd": ["claude", "-p", "{prompt}"],
+        "interactive_cmd": ["claude"],
+        "interactive_resume_cmd": ["claude", "--resume", "{resume}"],
+        "execution_backends": ["headless", "tmux"],
+        "default_execution_backend": "tmux",
+        "tmux_user": "claude-bot",
+    }
+    path = _write_config(tmp_path, payload)
+    service = ConfigService(FileConfigProvider(str(path)))
+
+    cfg = load_config(str(path))
+    serialized = asyncio.run(service.serialize_config(cfg))
+    roundtrip = yaml.safe_load(serialized)
+
+    assert cfg.defaults.default_execution_backend == "headless"
+    assert cfg.tools["claude"].execution_backends == ["headless", "tmux"]
+    assert cfg.tools["claude"].default_execution_backend == "tmux"
+    assert cfg.tools["claude"].tmux_user == "claude-bot"
+    assert cfg.tools["claude"].interactive_resume_cmd == ["claude", "--resume", "{resume}"]
+    assert roundtrip["tools"]["claude"]["execution_backends"] == ["headless", "tmux"]
+    assert roundtrip["tools"]["claude"]["default_execution_backend"] == "tmux"
+    assert roundtrip["tools"]["claude"]["tmux_user"] == "claude-bot"
+    assert roundtrip["tools"]["claude"]["interactive_resume_cmd"] == ["claude", "--resume", "{resume}"]
+
+
+def test_execution_backend_config_validation() -> None:
+    payload = _payload(Path("/tmp"))
+    payload["tools"]["codex"]["execution_backends"] = ["headless"]
+    payload["tools"]["codex"]["default_execution_backend"] = "tmux"
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "default_execution_backend must be listed in execution_backends" in str(exc_info.value)
+
+
+def test_tmux_execution_backend_requires_interactive_cmd() -> None:
+    payload = _payload(Path("/tmp"))
+    payload["tools"]["codex"].pop("interactive_cmd", None)
+    payload["tools"]["codex"]["execution_backends"] = ["headless", "tmux"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppConfigModel.model_validate(payload)
+
+    assert "interactive_cmd is required when tmux execution backend is enabled" in str(exc_info.value)
 
 
 def test_save_atomic_no_false_diff_for_unchanged_config(tmp_path) -> None:
@@ -215,8 +273,11 @@ def test_config_files_match_runtime_policy_contract() -> None:
 
     assert classify_config_path("telegram.user_languages").apply_mode == "hot_reload"
     assert classify_config_path("defaults.default_language").apply_mode == "hot_reload"
+    assert classify_config_path("defaults.default_execution_backend").apply_mode == "hot_reload"
     assert "default_language" in DefaultsConfigModel.model_fields
+    assert "default_execution_backend" in DefaultsConfigModel.model_fields
     assert example["defaults"]["default_language"] == "ru"
+    assert example["defaults"]["default_execution_backend"] == "headless"
 
     assert "clarification_keywords_by_lang" in DefaultsConfigModel.model_fields
     assert "clarification_keywords_by_lang" in example["defaults"]
@@ -225,5 +286,11 @@ def test_config_files_match_runtime_policy_contract() -> None:
     if local_config_path.exists():
         config = yaml.safe_load(local_config_path.read_text(encoding="utf-8"))
         assert config["defaults"]["toolhelp_path"] == "toolhelp.json"
+        assert config["defaults"]["default_execution_backend"] == "headless"
+        assert config["tools"]["claude"]["execution_backends"] == ["headless", "tmux"]
+        assert config["tools"]["claude"]["default_execution_backend"] == "headless"
+        assert config["tools"]["claude"]["interactive_resume_cmd"] == ["claude", "--resume", "{resume}"]
+        assert config["tools"]["qwen"]["interactive_cmd"][-2:] == ["--session-id", "{session_id}"]
+        assert config["tools"]["qwen"]["interactive_resume_cmd"] == ["qwen", "--resume", "{resume}"]
         assert "lint_evolution" in config
         assert set(config["lint_evolution"]) == set(LintEvolutionConfigModel.model_fields)

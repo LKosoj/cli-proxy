@@ -16,10 +16,16 @@ def _serialize_tool(tool: "ToolConfig") -> dict[str, Any]:
         "mode": tool.mode,
         "cmd": list(tool.cmd),
         "enabled": bool(getattr(tool, "enabled", True)),
+        "execution_backends": list(tool.execution_backends) if getattr(tool, "execution_backends", None) else None,
+        "default_execution_backend": getattr(tool, "default_execution_backend", None),
+        "tmux_user": getattr(tool, "tmux_user", None),
         "headless_cmd": list(tool.headless_cmd) if tool.headless_cmd else None,
         "resume_cmd": list(tool.resume_cmd) if tool.resume_cmd else None,
         "image_cmd": list(tool.image_cmd) if tool.image_cmd else None,
         "interactive_cmd": list(tool.interactive_cmd) if tool.interactive_cmd else None,
+        "interactive_resume_cmd": (
+            list(tool.interactive_resume_cmd) if getattr(tool, "interactive_resume_cmd", None) else None
+        ),
         "prompt_regex": tool.prompt_regex,
         "resume_regex": tool.resume_regex,
         "help_cmd": tool.help_cmd,
