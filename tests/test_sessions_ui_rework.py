@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
+from app.services.cli_backends.tmux_backend import tmux_runtime_paths
 from app.services.run_artifact_store import RunArtifactStore
 from session import get_session_execution_backend, session_runtime_uid
 from modes.analyst.state_store import AnalystStateStore, build_context_key
@@ -128,9 +129,12 @@ def test_sessions_overview_without_sessions_has_new_and_cancel_buttons(tmp_path)
 def test_sessions_overview_with_active_session_has_expected_buttons(tmp_path):
     app = _build_app(tmp_path)
     s = app.manager.create(1, "dummy", str(tmp_path))
+    s.resume_token = "resume-session-123"
     session_uid = session_runtime_uid(s)
     text, keyboard = app.handlers.build_sessions_active_overview(1)
     assert "Активная сессия:" in text
+    assert "Resume: resume-session-123" in text
+    assert "Tmux attach:" not in text
     callbacks = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
     assert f"sess_status:{s.id}" in callbacks
     assert f"sess_rename:{s.id}" in callbacks
@@ -151,6 +155,17 @@ def test_sessions_overview_with_active_session_has_expected_buttons(tmp_path):
     assert "sess_new" in callbacks
     assert "sess_list" in callbacks
     assert "sess_close_menu" in callbacks
+
+
+def test_sessions_overview_shows_exact_tmux_attach_command(tmp_path):
+    app = _build_app(tmp_path)
+    app.config.defaults.default_execution_backend = "tmux"
+    session = app.manager.create(1, "dummy", str(tmp_path))
+    session_name = tmux_runtime_paths(session)["session_name"]
+
+    text, _keyboard = app.handlers.build_sessions_active_overview(1)
+
+    assert f"Tmux attach: `tmux attach-session -r -t {session_name}`" in text
 
 
 def test_sessions_overview_shows_queue_buttons_only_when_queue_not_empty(tmp_path):

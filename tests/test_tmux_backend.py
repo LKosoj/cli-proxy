@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from config import ToolConfig
-from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, build_tmux_attach_command
 from app.services.cli_backends.tmux_driver import TmuxDriverError
 from app.services.cli_backends.tmux_parser import done_marker, request_marker
 
@@ -139,6 +139,16 @@ def test_tmux_runtime_paths_are_stable_across_thread_rebind(tmp_path):
     assert after["session_name"] == before["session_name"]
     assert other["runtime_dir"] != before["runtime_dir"]
     assert other["session_name"] != before["session_name"]
+
+
+def test_tmux_attach_command_uses_exact_session_name_and_tmux_user(tmp_path):
+    session = _session(tmp_path)
+    session.tool.tmux_user = "claude-bot"
+    session_name = TmuxExecutionBackend().paths(session)["session_name"]
+
+    command = build_tmux_attach_command(session)
+
+    assert command == f"su - claude-bot -c 'tmux attach-session -r -t {session_name}'"
 
 
 @pytest.mark.asyncio

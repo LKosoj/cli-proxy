@@ -62,7 +62,7 @@ def test_status_body_russian(monkeypatch):
     assert "занята" in text
     assert "Статус" in text
     assert "Очередь" in text
-    assert "Resume: есть" in text
+    assert "Resume: tok" in text
     assert "Оркестратор: выкл" in text
 
 
@@ -72,7 +72,7 @@ def test_status_body_english(monkeypatch):
     assert "busy" in text
     assert "Status" in text
     assert "Queue" in text
-    assert "Resume: yes" in text
+    assert "Resume: tok" in text
     assert "Orchestrator: off" in text
     # The switch must actually change the text — no Russian leaking through.
     assert "Активная сессия" not in text

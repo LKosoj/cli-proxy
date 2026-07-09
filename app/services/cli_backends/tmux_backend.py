@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import stat
 import time
 import uuid
@@ -106,6 +107,11 @@ def tmux_runtime_paths(session: Any) -> dict[str, str]:
 def _driver_for_session(session: Any) -> TmuxDriver:
     user = str(getattr(getattr(session, "tool", None), "tmux_user", "") or "").strip() or None
     return TmuxDriver(user=user)
+
+
+def build_tmux_attach_command(session: Any) -> str:
+    session_name = tmux_runtime_paths(session)["session_name"]
+    return shlex.join(_driver_for_session(session).command("attach-session", "-r", "-t", session_name))
 
 
 def _get_resume_token(session: Any) -> Optional[str]:
