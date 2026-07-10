@@ -7,6 +7,9 @@ import logging
 import os
 import pwd
 import re
+import shutil
+import subprocess
+import tempfile
 import time
 import tomllib
 import urllib.error
@@ -53,6 +56,11 @@ class CliLimitsService:
     _GEMINI_USER_AGENT = "GeminiCLI/0.31.0/load-code-assist (linux; x86_64)"
     _GEMINI_API_CLIENT_HEADER = "google-genai-sdk/1.41.0 gl-node/v22.19.0"
     _GEMINI_OAUTH_CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
+    _GROK_USAGE_WINDOW_RE = re.compile(
+        r"^\s*(Weekly|Monthly)\s+limit:\s*(\d+(?:\.\d+)?)%\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    _GROK_USAGE_RESET_RE = re.compile(r"^\s*Next\s+reset:\s*([^\r\n]+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
     def __init__(
         self,
@@ -418,9 +426,17 @@ class CliLimitsService:
         )
 
     def _collect_grok_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
+        direct_usage = self._read_grok_direct_usage()
+        quota_line = self._format_grok_direct_quota_line(direct_usage)
         target_workdirs = {os.path.realpath(ref.workdir) for ref in refs}
         session_candidates = self._iter_matching_grok_session_dirs(target_workdirs)
         if not session_candidates:
+            if quota_line:
+                return CliLimitsSnapshot(
+                    cli_name="grok",
+                    status="ok",
+                    lines=(quota_line,),
+                )
             return CliLimitsSnapshot(
                 cli_name="grok",
                 status="no_data",
@@ -436,16 +452,133 @@ class CliLimitsService:
         ).strip()
         project_label = os.path.basename(matched_workdir.rstrip(os.sep)) or matched_workdir
         subtitle = " · ".join(part for part in (project_label, model) if part)
-        lines = self._format_grok_usage_lines(summary, signals)
-        if not lines:
-            lines = ["⚠️ session найден, но usage в signals.json отсутствует"]
-        lines.append("quota: недоступно через Grok CLI/API; см. https://console.x.ai/team/default/usage")
+        local_usage_lines = self._format_grok_usage_lines(summary, signals)
+        if not local_usage_lines:
+            local_usage_lines = ["⚠️ session найден, но usage в signals.json отсутствует"]
+        lines = ([quota_line] if quota_line else []) + local_usage_lines
+        if not quota_line:
+            lines.append("quota: недоступно через Grok CLI; см. https://console.x.ai/team/default/usage")
         return CliLimitsSnapshot(
             cli_name="grok",
-            status="partial",
+            status="ok" if quota_line else "partial",
             lines=tuple(lines),
             subtitle=subtitle,
         )
+
+    def _read_grok_direct_usage(self) -> Optional[dict[str, Any]]:
+        tmux_path = shutil.which("tmux")
+        grok_path = shutil.which("grok")
+        if not tmux_path or not grok_path:
+            return None
+        deadline = time.monotonic() + self._network_timeout_sec
+
+        with tempfile.TemporaryDirectory(prefix="cli-proxy-grok-usage-") as temp_dir:
+            tmux_socket = str(Path(temp_dir) / "tmux.sock")
+            grok_socket = str(Path(temp_dir) / "grok.sock")
+            probe_workdir = Path(temp_dir) / "workdir"
+            probe_workdir.mkdir()
+            tmux_prefix = [tmux_path, "-S", tmux_socket]
+            probe_env = os.environ.copy()
+            real_grok_home = Path(probe_env.get("GROK_HOME") or (Path.home() / ".grok"))
+            auth_path = str(probe_env.get("GROK_AUTH_PATH") or (real_grok_home / "auth.json"))
+            probe_env["GROK_HOME"] = str(Path(temp_dir) / "grok-home")
+            if Path(auth_path).is_file():
+                probe_env["GROK_AUTH_PATH"] = auth_path
+
+            def run_tmux(*args: str) -> subprocess.CompletedProcess[str]:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Grok usage query timed out")
+                return subprocess.run(
+                    [*tmux_prefix, *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=max(0.1, remaining),
+                    env=probe_env,
+                )
+
+            try:
+                run_tmux(
+                    "new-session",
+                    "-d",
+                    "-x",
+                    "200",
+                    "-y",
+                    "50",
+                    "-s",
+                    "grok-usage",
+                    "-c",
+                    str(probe_workdir),
+                    grok_path,
+                    "--leader-socket",
+                    grok_socket,
+                    "--no-auto-update",
+                    "--no-alt-screen",
+                    "--minimal",
+                    "--no-memory",
+                    "--no-subagents",
+                )
+                while time.monotonic() < deadline:
+                    pane_text = run_tmux("capture-pane", "-p", "-t", "grok-usage:0.0").stdout
+                    if "❯" in pane_text:
+                        break
+                    time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+                else:
+                    raise TimeoutError("Grok interactive prompt did not become ready")
+
+                run_tmux("send-keys", "-l", "-t", "grok-usage:0.0", "--", "/usage show")
+                run_tmux("send-keys", "-t", "grok-usage:0.0", "Enter")
+                while time.monotonic() < deadline:
+                    pane_text = run_tmux("capture-pane", "-p", "-t", "grok-usage:0.0").stdout
+                    usage = self._parse_grok_direct_usage_output(pane_text)
+                    if usage is not None:
+                        return usage
+                    time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+                raise TimeoutError("Grok usage output did not become ready")
+            except Exception:
+                logger.warning("failed to query Grok usage through isolated TUI", exc_info=True)
+                return None
+            finally:
+                try:
+                    subprocess.run(
+                        [*tmux_prefix, "kill-server"],
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=1.0,
+                    )
+                except Exception:
+                    logger.warning("failed to stop isolated Grok usage tmux server", exc_info=True)
+
+    @classmethod
+    def _parse_grok_direct_usage_output(cls, text: str) -> Optional[dict[str, Any]]:
+        window_match = cls._GROK_USAGE_WINDOW_RE.search(str(text or ""))
+        if window_match is None:
+            return None
+        reset_match = cls._GROK_USAGE_RESET_RE.search(str(text or ""))
+        return {
+            "window": window_match.group(1).lower(),
+            "used_percent": max(0.0, min(100.0, float(window_match.group(2)))),
+            "resets_at": reset_match.group(1).strip() if reset_match is not None else "",
+        }
+
+    @staticmethod
+    def _format_grok_direct_quota_line(usage: Optional[dict[str, Any]]) -> Optional[str]:
+        if not isinstance(usage, dict) or usage.get("used_percent") is None:
+            return None
+        used_percent = CliLimitsService._safe_float(usage.get("used_percent"), default=-1.0)
+        if used_percent < 0:
+            return None
+        remaining_percent = max(0.0, min(100.0, 100.0 - used_percent))
+        indicator = CliLimitsService._status_indicator(remaining_percent)
+        bar = CliLimitsService._progress_bar(remaining_percent)
+        pct = CliLimitsService._format_percent(remaining_percent)
+        window = str(usage.get("window") or "weekly").strip().lower()
+        label = "месяц" if window == "monthly" else "неделя"
+        reset_text = str(usage.get("resets_at") or "").strip()
+        reset_suffix = f" ↻{reset_text}" if reset_text else ""
+        return f"{indicator} {label} {bar} {pct} осталось{reset_suffix}"
 
     @staticmethod
     def _read_gemini_active_model() -> Optional[str]:

@@ -260,7 +260,10 @@ async def test_describe_for_sessions_reads_gemini_direct_usage(tmp_path: Path, m
 
 
 @pytest.mark.asyncio
-async def test_describe_for_sessions_reads_grok_local_usage(tmp_path: Path) -> None:
+async def test_describe_for_sessions_reads_grok_local_usage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     project_dir = tmp_path / "repo-grok"
     project_dir.mkdir()
     encoded = urllib.parse.quote(str(project_dir.resolve()), safe="")
@@ -295,6 +298,15 @@ async def test_describe_for_sessions_reads_grok_local_usage(tmp_path: Path) -> N
         claude_projects_roots=[tmp_path / "claude" / "projects"],
         grok_sessions_roots=[tmp_path / "grok" / "sessions"],
     )
+    monkeypatch.setattr(
+        service,
+        "_read_grok_direct_usage",
+        lambda: {
+            "window": "weekly",
+            "used_percent": 25.0,
+            "resets_at": "July 11, 17:03 PT",
+        },
+    )
 
     text = await service.describe_for_sessions([_session("grok", project_dir)])
 
@@ -302,9 +314,81 @@ async def test_describe_for_sessions_reads_grok_local_usage(tmp_path: Path) -> N
     assert "✕ grok — repo-grok · grok-build" in text
     assert "context" in text
     assert "90%" in text
+    assert "неделя" in text
+    assert "75% осталось" in text
+    assert "↻July 11, 17:03 PT" in text
     assert "📊 context 50K / 500K" in text
     assert "turns 4 · tools 7 · messages 4/4" in text
-    assert "quota: недоступно через Grok CLI/API; см. https://console.x.ai/team/default/usage" in text
+    assert "quota: недоступно" not in text
+
+
+def test_read_grok_direct_usage_uses_isolated_tmux(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService(network_timeout_sec=2.0)
+    calls: list[list[str]] = []
+    call_environments: list[dict[str, str]] = []
+    capture_count = 0
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GROK_AUTH_PATH", str(auth_path))
+
+    monkeypatch.setattr(
+        "app.services.cli_limits_service.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+
+    def fake_run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        nonlocal capture_count
+        calls.append(argv)
+        env = kwargs.get("env")
+        if isinstance(env, dict):
+            call_environments.append(env)
+        stdout = ""
+        if "capture-pane" in argv:
+            capture_count += 1
+            stdout = (
+                "❯\n"
+                if capture_count == 1
+                else "Weekly limit: 12.5%\nNext reset: July 11, 17:03 PT\n❯\n"
+            )
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr("app.services.cli_limits_service.subprocess.run", fake_run)
+
+    usage = service._read_grok_direct_usage()
+
+    assert usage == {
+        "window": "weekly",
+        "used_percent": 12.5,
+        "resets_at": "July 11, 17:03 PT",
+    }
+    new_session_call = next(call for call in calls if "new-session" in call)
+    assert new_session_call[:2] == ["/usr/bin/tmux", "-S"]
+    assert "/usr/bin/grok" in new_session_call
+    assert "--leader-socket" in new_session_call
+    assert "--no-memory" in new_session_call
+    assert "--no-subagents" in new_session_call
+    assert any("kill-server" in call for call in calls)
+    assert call_environments[0]["GROK_AUTH_PATH"] == str(auth_path)
+    assert Path(call_environments[0]["GROK_HOME"]).name == "grok-home"
+    assert call_environments[0]["GROK_HOME"] != str(Path.home() / ".grok")
+
+
+def test_parse_grok_direct_usage_supports_monthly_limit() -> None:
+    usage = CliLimitsService._parse_grok_direct_usage_output(
+        "Monthly limit: 40%\nNext reset: August 1, 00:00 PT\n"
+    )
+
+    assert usage == {
+        "window": "monthly",
+        "used_percent": 40.0,
+        "resets_at": "August 1, 00:00 PT",
+    }
+    assert CliLimitsService._format_grok_direct_quota_line(usage) == (
+        "🟡 месяц ██████░░░░ 60% осталось ↻August 1, 00:00 PT"
+    )
 
 
 @pytest.mark.asyncio
@@ -427,6 +511,15 @@ async def test_describe_for_sessions_collects_all_available_clis(tmp_path: Path,
         if str(workdir) == str(project_dir)
         else None,
     )
+    monkeypatch.setattr(
+        service,
+        "_read_grok_direct_usage",
+        lambda: {
+            "window": "weekly",
+            "used_percent": 20.0,
+            "resets_at": "July 11, 17:03 PT",
+        },
+    )
 
     text = await service.describe_for_sessions(
         [_session("codex", project_dir)],
@@ -444,7 +537,8 @@ async def test_describe_for_sessions_collects_all_available_clis(tmp_path: Path,
     assert "gemini-2.5-pro" in text
     assert "67%" in text
     assert "✕ grok" in text
-    assert "session file не найден" in text
+    assert "80% осталось" in text
+    assert "session file не найден" not in text
     assert "🔮 qwen" in text
     assert "квоты недоступны (non-interactive)" in text
 
