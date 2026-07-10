@@ -703,7 +703,13 @@ class TestWriterGrok:
         assert session_dir.name == new_id
         summary = json.loads((session_dir / "summary.json").read_text(encoding="utf-8"))
         assert summary["current_model_id"] == "grok-build"
-        assert summary["info"]["transferred_from_cli"] == "codex"
+        assert summary["info"] == {
+            "id": new_id,
+            "cwd": workspace,
+            "transferred_from_cli": "codex",
+            "source_session_id": "test-session-id",
+            "target_session_id": new_id,
+        }
         updates = [
             json.loads(line)
             for line in (session_dir / "updates.jsonl").read_text(encoding="utf-8").splitlines()

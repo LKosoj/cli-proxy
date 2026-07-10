@@ -129,6 +129,8 @@ def _build_summary(
         "agent_name": DEFAULT_GROK_MODEL,
         "request_id": str(uuid.uuid4()),
         "info": {
+            "id": session_id,
+            "cwd": os.path.realpath(workspace),
             "transferred_from_cli": canonical.source_cli,
             "source_session_id": canonical.session_id,
             "target_session_id": session_id,
