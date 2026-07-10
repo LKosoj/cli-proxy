@@ -38,6 +38,8 @@ tools:
     mode: headless
     cmd: ["codex", "exec", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]
     enabled: true
+    # Для root systemd-service укажите "root", чтобы tmux переживал restart сервиса.
+    tmux_user: null
     interactive_cmd: ["codex", "--no-alt-screen"]
     interactive_resume_cmd: ["codex", "resume", "--no-alt-screen", "{resume}"]
     execution_backends: ["headless", "tmux"]
@@ -94,8 +96,10 @@ tools:
     mode: headless
     cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "-p", "{prompt}", "--resume", "{resume}"]
     enabled: true
-    interactive_cmd: ["grok", "--no-auto-update", "--no-alt-screen"]
-    interactive_resume_cmd: ["grok", "--no-auto-update", "--no-alt-screen", "--resume", "{resume}"]
+    # Для root systemd-service укажите "root", чтобы tmux переживал restart сервиса.
+    tmux_user: null
+    interactive_cmd: ["grok", "--no-auto-update", "--no-alt-screen", "--minimal"]
+    interactive_resume_cmd: ["grok", "--no-auto-update", "--no-alt-screen", "--minimal", "--resume", "{resume}"]
     execution_backends: ["headless", "tmux"]
     default_execution_backend: "headless"
     resume_cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "--resume", "{resume}", "-p", "{prompt}"]

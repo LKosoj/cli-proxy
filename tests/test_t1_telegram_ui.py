@@ -309,6 +309,45 @@ async def test_cb_lang_set_no_user_id() -> None:
     config_service.set_user_language.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_cb_sess_cli_uses_persistent_switch_that_closes_previous_tmux() -> None:
+    from tg.callback_actions.session import SessionActionsMixin
+
+    session = types.SimpleNamespace(
+        id="s1",
+        chat_id=101,
+        busy=False,
+        run_lock=None,
+        is_active_by_tick=None,
+        cli=types.SimpleNamespace(active_cli="claude", resume_tokens={}),
+        tool=types.SimpleNamespace(name="claude"),
+        set_active_cli_persistent_when_idle=AsyncMock(),
+    )
+    bot_app = MagicMock()
+    bot_app.config = _make_config(default_language="ru")
+    bot_app._available_tools = MagicMock(return_value=["claude", "codex"])
+    bot_app.manager.get_by_uid = MagicMock(return_value=session)
+    bot_app.handlers.build_sessions_active_overview = MagicMock(return_value=("overview", None))
+
+    mixin = SessionActionsMixin()
+    mixin.bot_app = bot_app
+    mixin._edit_msg = AsyncMock()
+    mixin._persist_session_async = AsyncMock()
+    query = MagicMock()
+    query.from_user = MagicMock(id=101, language_code="ru")
+
+    handled = await mixin._cb_sess_cli(
+        data="sess_cli:chat:101:s1:codex",
+        chat_id=101,
+        query=query,
+        context=MagicMock(),
+    )
+
+    assert handled is True
+    session.set_active_cli_persistent_when_idle.assert_awaited_once_with("codex")
+    mixin._persist_session_async.assert_awaited_once_with(101, "s1")
+
+
 # ---------------------------------------------------------------------------
 # build_sessions_active_overview with lang
 # ---------------------------------------------------------------------------

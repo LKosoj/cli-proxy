@@ -8,6 +8,7 @@ import uuid
 import shutil
 from collections import deque
 from dataclasses import InitVar, dataclass, field
+from types import SimpleNamespace
 from typing import Any, Callable, Deque, Dict, List, Optional
 
 import logging
@@ -338,7 +339,7 @@ def set_session_execution_backend(
     )
 
 
-def switch_session_active_cli_if_needed(session: Any) -> SessionCliSwitchResult:
+async def switch_session_active_cli_if_needed(session: Any) -> SessionCliSwitchResult:
     """
     Ensure the session points to an executable CLI before direct execution.
 
@@ -369,7 +370,7 @@ def switch_session_active_cli_if_needed(session: Any) -> SessionCliSwitchResult:
             raise RuntimeError(f"Нет доступных CLI: текущий {current} больше не настроен.")
         raise RuntimeError("Нет доступных CLI для этой сессии.")
 
-    session.set_active_cli(fallback)
+    await session.set_active_cli_persistent(fallback)
     remember_session_cli_switch_notice(session, current, fallback)
     has_transfer = bool(source_token and str(source_token).strip())
     return SessionCliSwitchResult(
@@ -402,6 +403,7 @@ class CliState:
     active_cli: Optional[str] = None
     resume_tokens: Dict[str, Optional[str]] = field(default_factory=dict)
     execution_backends: Dict[str, str] = field(default_factory=dict)
+    tmux_users: Dict[str, Optional[str]] = field(default_factory=dict)
     cli_work_type: Optional[str] = None
     auto_commands_ran: bool = False
     pending_switch_notice: Optional[Dict[str, str]] = field(default=None, repr=False)
@@ -477,6 +479,8 @@ class Session:
     current_proc: Optional[asyncio.subprocess.Process] = None
     _headless_interrupt_flag: bool = False
     _active_execution_backend: str = field(default="none", init=False, repr=False)
+    _preserve_tmux_on_shutdown: bool = field(default=False, init=False, repr=False)
+    last_tmux_request_id: Optional[str] = field(default=None, init=False, repr=False)
     cli: CliState = field(default_factory=CliState)
     git: GitState = field(default_factory=GitState)
     modes: ModeState = field(default_factory=ModeState)
@@ -558,6 +562,13 @@ class Session:
             self.cli.resume_tokens = {}
         if not isinstance(getattr(self.cli, "execution_backends", None), dict):
             self.cli.execution_backends = {}
+        if not isinstance(getattr(self.cli, "tmux_users", None), dict):
+            self.cli.tmux_users = {}
+        for cli_name, configured_tool in (getattr(self.config, "tools", None) or {}).items():
+            self.cli.tmux_users.setdefault(
+                str(cli_name),
+                str(getattr(configured_tool, "tmux_user", "") or "").strip() or None,
+            )
         if auto_commands_ran is not None:
             self.cli.auto_commands_ran = bool(auto_commands_ran)
         if cli_work_type is not None:
@@ -686,7 +697,105 @@ class Session:
             self.cli.resume_tokens = {}
         self.cli.resume_tokens[active] = value
 
-    def set_active_cli(self, cli_name: str) -> None:
+    async def _close_tmux_for_cli_async(self, cli_name: str, *, tool_override: Any = None) -> bool:
+        name = str(cli_name or "").strip()
+        if not name:
+            return False
+        configured_tools = getattr(self.config, "tools", None) or {}
+        stored_tmux_users = getattr(self.cli, "tmux_users", None) or {}
+        tool = tool_override
+        if tool is None:
+            if name in stored_tmux_users:
+                tool = SimpleNamespace(name=name, tmux_user=stored_tmux_users.get(name))
+            else:
+                tool = configured_tools.get(name)
+        if tool is None and str(getattr(self.tool, "name", "") or "").strip() == name:
+            tool = self.tool
+        if tool is None:
+            tool = SimpleNamespace(name=name, tmux_user=None)
+
+        from app.services.cli_backends import TmuxExecutionBackend
+        from app.services.cli_backends.tmux_driver import TmuxDriver
+
+        view = SimpleNamespace(
+            id=self.id,
+            workdir=self.workdir,
+            config=self.config,
+            tool=tool,
+            cli=SimpleNamespace(
+                active_cli=name,
+                resume_tokens=dict(getattr(self.cli, "resume_tokens", None) or {}),
+                execution_backends=dict(getattr(self.cli, "execution_backends", None) or {}),
+            ),
+            conversation_scope=self.conversation_scope,
+            scope=self.scope,
+            _active_execution_backend=self._active_execution_backend,
+        )
+        paths = TmuxExecutionBackend().paths(view)
+        state = TmuxExecutionBackend._read_state(paths)
+        if name not in stored_tmux_users and "tmux_user" in state:
+            tool = SimpleNamespace(name=name, tmux_user=state.get("tmux_user"))
+            view.tool = tool
+        tmux_user = str(getattr(tool, "tmux_user", "") or "").strip() or None
+        backend = TmuxExecutionBackend(driver=TmuxDriver(user=tmux_user, timeout_sec=2.0))
+        has_state = os.path.exists(paths["state_path"])
+        if not TmuxDriver.tmux_available():
+            if not has_state:
+                return False
+            raise RuntimeError(f"tmux is unavailable while closing session {self.id} cli {name}")
+        try:
+            return bool(await backend.close(view))
+        except Exception as exc:
+            raise RuntimeError(
+                f"tmux close failed for session {self.id} cli {name}: {exc}"
+            ) from exc
+
+    def _close_tmux_for_cli(self, cli_name: str, *, tool_override: Any = None) -> bool:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return bool(
+                asyncio.run(
+                    self._close_tmux_for_cli_async(
+                        cli_name,
+                        tool_override=tool_override,
+                    )
+                )
+            )
+        raise RuntimeError("synchronous tmux close is not allowed from a running event loop")
+
+    async def set_active_cli_persistent(self, cli_name: str) -> None:
+        name = str(cli_name or "").strip()
+        if not name:
+            raise ValueError("cli_name is empty")
+        if not self.config or name not in (self.config.tools or {}):
+            raise ValueError(f"unknown cli: {name}")
+        previous = session_active_cli_name(self)
+        if previous and previous != name:
+            await self._close_tmux_for_cli_async(previous)
+        self.cli.active_cli = name
+        self.tool = self.config.tools[name]
+        self.cli.tmux_users[name] = str(getattr(self.tool, "tmux_user", "") or "").strip() or None
+        self.resume_token = (self.cli.resume_tokens or {}).get(name)
+
+    async def set_active_cli_persistent_when_idle(self, cli_name: str) -> None:
+        if self.busy or self.run_lock.locked():
+            raise RuntimeError(f"session {self.id} is busy")
+        is_active_by_tick = getattr(self, "is_active_by_tick", None)
+        if callable(is_active_by_tick) and is_active_by_tick():
+            raise RuntimeError(f"session {self.id} is active")
+
+        await self.run_lock.acquire()
+        try:
+            if self.busy:
+                raise RuntimeError(f"session {self.id} is busy")
+            if callable(is_active_by_tick) and is_active_by_tick():
+                raise RuntimeError(f"session {self.id} is active")
+            await self.set_active_cli_persistent(cli_name)
+        finally:
+            self.run_lock.release()
+
+    def set_active_cli(self, cli_name: str, *, close_previous_tmux: bool = False) -> None:
         """
         Switch the active CLI for this session.
 
@@ -699,8 +808,12 @@ class Session:
             raise ValueError("cli_name is empty")
         if not self.config or name not in (self.config.tools or {}):
             raise ValueError(f"unknown cli: {name}")
+        previous = session_active_cli_name(self)
+        if close_previous_tmux and previous and previous != name:
+            self._close_tmux_for_cli(previous)
         self.cli.active_cli = name
         self.tool = self.config.tools[name]
+        self.cli.tmux_users[name] = str(getattr(self.tool, "tmux_user", "") or "").strip() or None
         # Update active resume token view from per-cli mapping.
         self.resume_token = (self.cli.resume_tokens or {}).get(name)
 
@@ -736,6 +849,7 @@ class Session:
         image_paths: Optional[List[str]] = None,
         *,
         force_fresh: bool = False,
+        tmux_request_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         directive = self._cli_language_directive()
         if directive:
@@ -825,7 +939,11 @@ class Session:
             # provider-specific; keep behavior unchanged unless explicitly required later.
             return await self._run_headless(prompt_to_send, cmd_template=cmd_template, image_path=image_path)
         if selected_backend == EXECUTION_BACKEND_TMUX:
-            return await self._run_tmux(prompt, force_fresh=force_fresh)
+            return await self._run_tmux(
+                prompt,
+                force_fresh=force_fresh,
+                request_context=tmux_request_context,
+            )
         if self.tool.mode == "headless":
             try:
                 return await self._run_headless(prompt, force_fresh=force_fresh)
@@ -837,17 +955,48 @@ class Session:
                 return await self._run_interactive(prompt, force_fresh=force_fresh)
         return await self._run_interactive(prompt, force_fresh=force_fresh)
 
-    async def _run_tmux(self, prompt: str, *, force_fresh: bool = False) -> str:
+    async def _run_tmux(
+        self,
+        prompt: str,
+        *,
+        force_fresh: bool = False,
+        request_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         from app.services.cli_backends import TmuxExecutionBackend
 
         self._active_execution_backend = EXECUTION_BACKEND_TMUX
         try:
             backend = TmuxExecutionBackend()
-            result = await backend.run(self, prompt, force_fresh=force_fresh)
+            result = await backend.run(
+                self,
+                prompt,
+                force_fresh=force_fresh,
+                request_context=request_context,
+            )
+            self.last_tmux_request_id = result.request_id
             paths = backend.paths(self)
             self.last_cli_raw_stream_path = paths.get("pane_log")
+            self.last_cli_normalized_stream_path = str(result.diagnostics.get("transcript_path") or "") or None
             if result.abnormal_stop:
-                self.headless_forced_stop = "tmux_idle_timeout"
+                self.headless_forced_stop = str(result.diagnostics.get("failure_reason") or "tmux_request_failed")
+            return result.text
+        finally:
+            if self._active_execution_backend == EXECUTION_BACKEND_TMUX:
+                self._active_execution_backend = "none"
+
+    async def recover_tmux_request(self, request: Any) -> str:
+        from app.services.cli_backends import TmuxExecutionBackend
+
+        self._active_execution_backend = EXECUTION_BACKEND_TMUX
+        try:
+            backend = TmuxExecutionBackend()
+            result = await backend.recover(self, request)
+            self.last_tmux_request_id = result.request_id
+            paths = backend.paths(self)
+            self.last_cli_raw_stream_path = paths.get("pane_log")
+            self.last_cli_normalized_stream_path = str(result.diagnostics.get("transcript_path") or "") or None
+            if result.abnormal_stop:
+                self.headless_forced_stop = str(result.diagnostics.get("failure_reason") or "tmux_request_failed")
             return result.text
         finally:
             if self._active_execution_backend == EXECUTION_BACKEND_TMUX:
@@ -1512,6 +1661,9 @@ class Session:
     def interrupt(self) -> None:
         active_backend = str(getattr(self, "_active_execution_backend", "") or "").strip().lower()
         if active_backend == EXECUTION_BACKEND_TMUX:
+            if self._preserve_tmux_on_shutdown:
+                logger.info("tmux interrupt skipped during shutdown session_id=%s", self.id)
+                return
             try:
                 from app.services.cli_backends import TmuxExecutionBackend
 
@@ -1663,7 +1815,7 @@ class Session:
             if self._active_execution_backend == "headless":
                 self._active_execution_backend = "none"
 
-    def close(self) -> None:
+    def close(self, *, preserve_tmux: bool = False) -> None:
         if self._ssh_service is not None:
             try:
                 loop = asyncio.get_running_loop()
@@ -1679,6 +1831,8 @@ class Session:
             except Exception:
                 logging.getLogger(__name__).exception("interactive child close failed")
         self.close_headless_process()
+        if preserve_tmux:
+            return
         try:
             from app.services.cli_backends import TmuxExecutionBackend
 
@@ -2643,6 +2797,7 @@ class SessionManager:
         cli_payload = {
             "active_cli": session.cli.active_cli or session.tool.name,
             "resume_tokens": dict(session.cli.resume_tokens or {}),
+            "tmux_users": dict(getattr(session.cli, "tmux_users", None) or {}),
             "cli_work_type": session.cli.cli_work_type,
             "auto_commands_ran": bool(session.cli.auto_commands_ran),
         }
@@ -2833,6 +2988,14 @@ class SessionManager:
                     resume_tokens = cli_payload.get("resume_tokens", val.get("resume_tokens"))
                     if not isinstance(resume_tokens, dict):
                         resume_tokens = {}
+                    tmux_users = cli_payload.get("tmux_users")
+                    if not isinstance(tmux_users, dict):
+                        tmux_users = {}
+                    tmux_users = {
+                        str(cli_name): str(tmux_user or "").strip() or None
+                        for cli_name, tmux_user in tmux_users.items()
+                        if str(cli_name or "").strip()
+                    }
                     cli_work_type = cli_payload.get("cli_work_type", val.get("cli_work_type"))
                     cli_work_type = str(cli_work_type).strip() if cli_work_type is not None else None
                     auto_commands_ran = bool(cli_payload.get("auto_commands_ran", val.get("auto_commands_ran", False)))
@@ -2883,6 +3046,46 @@ class SessionManager:
                         conversation_scope=conversation_scope,
                         scoped_key=str(val.get("scoped_key") or "").strip() or None,
                     )
+                    session.cli.tmux_users.update(tmux_users)
+                    if requested_cli and requested_cli != active_cli:
+                        if requested_cli in self.config.tools:
+                            try:
+                                session._close_tmux_for_cli(requested_cli)
+                            except Exception:
+                                logger.exception(
+                                    "startup CLI fallback could not close previous tmux session_id=%s "
+                                    "previous_cli=%s fallback_cli=%s",
+                                    sid,
+                                    requested_cli,
+                                    active_cli,
+                                )
+                                session.cli.active_cli = requested_cli
+                                session.tool = self.config.tools[requested_cli]
+                                active_cli = requested_cli
+                        else:
+                            removed_tool = ToolConfig(
+                                name=requested_cli,
+                                mode="headless",
+                                cmd=[],
+                                enabled=False,
+                                tmux_user=session.cli.tmux_users.get(requested_cli),
+                            )
+                            try:
+                                session._close_tmux_for_cli(
+                                    requested_cli,
+                                    tool_override=removed_tool,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "startup CLI fallback could not close removed CLI tmux "
+                                    "session_id=%s previous_cli=%s fallback_cli=%s",
+                                    sid,
+                                    requested_cli,
+                                    active_cli,
+                                )
+                                session.cli.active_cli = requested_cli
+                                session.tool = removed_tool
+                                active_cli = requested_cli
                     session.name = val.get("name") or f"{active_cli}@{workdir}"
                     session.state_summary = val.get("summary")
                     try:

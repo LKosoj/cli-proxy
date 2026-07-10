@@ -280,6 +280,9 @@ class SessionManagement:
             )
         )
 
+    async def recover_tmux_sessions(self, context: ContextTypes.DEFAULT_TYPE) -> int:
+        return await self._run_service.recover_tmux_sessions(context)
+
     async def run_mode_pipeline(
         self,
         session: Session,
@@ -367,25 +370,25 @@ class SessionManagement:
         with bind_session_log_context(session=session, chat_id=chat_id):
             async with session.run_lock:
                 session.busy = True
-                cli_switch = switch_session_active_cli_if_needed(session)
-                if cli_switch.switched:
-                    self._persist_single_session(chat_id, session.id)
                 hook = None
                 prepared = None
                 prompt_for_cli = text
                 hook_config = getattr(session, "config", None) or getattr(self.bot_app, "config", None)
-                if hook_config is not None:
-                    hook = get_task_bearing_cli_hook_service(hook_config)
-                    prepared = await hook.prepare_prompt(
-                        session=session,
-                        prompt=text,
-                        source=str(source or "raw_prompt"),
-                        phase="execute",
-                        task_bearing=task_bearing,
-                        technical_command=technical_command,
-                    )
-                    prompt_for_cli = prepared.prompt_for_cli
                 try:
+                    cli_switch = await switch_session_active_cli_if_needed(session)
+                    if cli_switch.switched:
+                        self._persist_single_session(chat_id, session.id)
+                    if hook_config is not None:
+                        hook = get_task_bearing_cli_hook_service(hook_config)
+                        prepared = await hook.prepare_prompt(
+                            session=session,
+                            prompt=text,
+                            source=str(source or "raw_prompt"),
+                            phase="execute",
+                            task_bearing=task_bearing,
+                            technical_command=technical_command,
+                        )
+                        prompt_for_cli = prepared.prompt_for_cli
                     output = await session.run_prompt(prompt_for_cli)
                     if hook is not None and prepared is not None:
                         hook.record_success(prepared, output=output)

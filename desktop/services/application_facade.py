@@ -88,6 +88,7 @@ from desktop.services.desktop_admin_facade import DesktopAdminFacade
 from i18n import SUPPORTED_LANGS, FALLBACK_LANG, t
 from session import (
     consume_session_cli_switch_notice_text,
+    get_session_execution_backend,
     session_scoped_key,
     session_runtime_uid,
     switch_session_active_cli_if_needed,
@@ -503,7 +504,7 @@ class ApplicationFacade:
             idle_check = self.remote_control_service.validate_idle(session)
             if not idle_check.ok:
                 return False
-            if self.session_service.set_active_cli_by_uid(session_uid, str(value)):
+            if await self.session_service.set_active_cli_by_uid_async(session_uid, str(value)):
                 changed = True
         elif key == "execution_backend":
             return False
@@ -1039,14 +1040,14 @@ class ApplicationFacade:
         """Generate a new SSH key pair for a host."""
         return await self.ssh_service.generate_key(workdir, alias)
 
-    def set_active_cli(self, session_uid: str, cli_name: str) -> bool:
+    async def set_active_cli(self, session_uid: str, cli_name: str) -> bool:
         session = self.session_service.get_session_by_uid(session_uid)
         if session is None:
             return False
         # Capture previous CLI info before switching.
         previous_cli = str(getattr(getattr(session, "cli", None), "active_cli", "") or "").strip()
         previous_token = (getattr(getattr(session, "cli", None), "resume_tokens", None) or {}).get(previous_cli)
-        if not self.session_service.set_active_cli_by_uid(session_uid, str(cli_name)):
+        if not await self.session_service.set_active_cli_by_uid_async(session_uid, str(cli_name)):
             return False
         try:
             self.session_service._manager._persist_sessions()
@@ -2864,6 +2865,7 @@ class ApplicationFacade:
 
     async def start(self, *, validate_secrets: bool = True) -> AppRuntimeParams:
         self.notify("startup:begin")
+        self._shutdown_in_progress = False
         previous_config = self.config
         cfg = await self.config_service.load()
         scheduler_service_to_stop: Optional[SchedulerService] = None
@@ -2918,8 +2920,71 @@ class ApplicationFacade:
         self._ensure_modes_ready()
         await self._ensure_desktop_event_runtime_started()
         self.started = True
+        await self._recover_tmux_sessions()
         self.notify("startup:ready")
         return params
+
+    async def _recover_tmux_sessions(self) -> int:
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        recovered = 0
+        for session in list(self.session_service.list_desktop_sessions() or []):
+            if get_session_execution_backend(session) != "tmux":
+                continue
+            if str(getattr(session, "_tmux_recovery_request_id", "") or "").strip():
+                continue
+            try:
+                request = await TmuxExecutionBackend().get_recovery_request(session)
+            except Exception:
+                self.logger.exception("desktop tmux startup reconciliation failed session_uid=%s", session_runtime_uid(session))
+                continue
+            if request is None:
+                continue
+            session_uid = session_runtime_uid(session)
+            session._tmux_recovery_request_id = request.request_id
+            session._active_execution_backend = "tmux"
+            session.busy = True
+
+            async def _runner(_token, *, target=session, recovery=request, target_uid=session_uid):
+                delivered = False
+                try:
+                    output = await target.recover_tmux_request(recovery)
+                    if str(output or "").strip():
+                        self.notify(
+                            "ui:message",
+                            session_id=target_uid,
+                            role="agent",
+                            text=str(output),
+                            md2=True,
+                        )
+                    delivered = TmuxExecutionBackend.mark_request_delivered(target, recovery.request_id)
+                    if not delivered:
+                        self.logger.error(
+                            "desktop tmux delivery marker was not persisted session_uid=%s request_id=%s",
+                            target_uid,
+                            recovery.request_id,
+                        )
+                    return output
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    self.logger.exception("desktop tmux recovery failed session_uid=%s", target_uid)
+                    return ""
+                finally:
+                    target.busy = False
+                    target._tmux_recovery_request_id = None
+                    if str(getattr(target, "_active_execution_backend", "") or "") == "tmux":
+                        target._active_execution_backend = "none"
+                    if delivered:
+                        self._schedule_queue_kick(session_uid=target_uid)
+
+            self.task_service.create(
+                name=f"tmux_recovery:{request.request_id}",
+                session_id=session_uid,
+                runner=_runner,
+            )
+            recovered += 1
+        return recovered
 
     def _ensure_modes_ready(self) -> None:
         if self._modes_initialized:
@@ -3029,31 +3094,33 @@ class ApplicationFacade:
         cfg = getattr(session, "config", None) or self.config
         if cfg is None:
             cfg = self._require_desktop_config()
-        cli_switch = switch_session_active_cli_if_needed(session)
-        if cli_switch.switched:
-            self._persist_sessions_best_effort(reason="desktop_cli_switch")
-        switch_notice = consume_session_cli_switch_notice_text(session)
-        if switch_notice:
-            self.notify(
-                "ui:message",
-                session_uid=session_runtime_uid(session),
-                role="agent",
-                text=switch_notice,
-                md2=True,
-            )
-        hook = get_task_bearing_cli_hook_service(cfg)
-        prepared = await hook.prepare_prompt(
-            session=session,
-            prompt=str(prompt or ""),
-            source=str(source or "desktop_direct"),
-            phase="execute",
-            task_bearing=task_bearing,
-            technical_command=technical_command,
-        )
+        hook = None
+        prepared = None
         preview_stop_event: Optional[asyncio.Event] = None
         preview_task: Optional[asyncio.Task] = None
         session_uid = session_runtime_uid(session)
         try:
+            cli_switch = await switch_session_active_cli_if_needed(session)
+            if cli_switch.switched:
+                self._persist_sessions_best_effort(reason="desktop_cli_switch")
+            switch_notice = consume_session_cli_switch_notice_text(session)
+            if switch_notice:
+                self.notify(
+                    "ui:message",
+                    session_uid=session_uid,
+                    role="agent",
+                    text=switch_notice,
+                    md2=True,
+                )
+            hook = get_task_bearing_cli_hook_service(cfg)
+            prepared = await hook.prepare_prompt(
+                session=session,
+                prompt=str(prompt or ""),
+                source=str(source or "desktop_direct"),
+                phase="execute",
+                task_bearing=task_bearing,
+                technical_command=technical_command,
+            )
             if assistant_preview_enabled(cfg):
                 preview_stop_event = asyncio.Event()
 
@@ -3074,7 +3141,13 @@ class ApplicationFacade:
                     ),
                     name=f"desktop-assistant-preview:{session_uid}",
                 )
-            output = await session.run_prompt(str(prepared.prompt_for_cli or ""), image_paths=image_paths or None)
+            run_kwargs: Dict[str, Any] = {"image_paths": image_paths or None}
+            if get_session_execution_backend(session) == "tmux":
+                run_kwargs["tmux_request_context"] = {
+                    "prompt": str(prompt or ""),
+                    "dest": {"kind": "desktop", "session_uid": session_uid},
+                }
+            output = await session.run_prompt(str(prepared.prompt_for_cli or ""), **run_kwargs)
         except asyncio.CancelledError:
             if preview_stop_event is not None:
                 preview_stop_event.set()
@@ -3088,7 +3161,8 @@ class ApplicationFacade:
             if preview_task is not None:
                 await asyncio.gather(preview_task, return_exceptions=True)
             self.notify("ui:assistant_preview_clear", session_uid=session_uid)
-            hook.record_error(prepared, error=exc)
+            if hook is not None and prepared is not None:
+                hook.record_error(prepared, error=exc)
             raise
         if preview_stop_event is not None:
             final_preview_text = build_assistant_preview_text(getattr(session, "last_assistant_text_value", None))
@@ -3098,7 +3172,14 @@ class ApplicationFacade:
         if preview_task is not None:
             await asyncio.gather(preview_task, return_exceptions=True)
         self.notify("ui:assistant_preview_clear", session_uid=session_uid)
-        hook.record_success(prepared, output=output)
+        if hook is not None and prepared is not None:
+            hook.record_success(prepared, output=output)
+        if get_session_execution_backend(session) == "tmux":
+            request_id = str(getattr(session, "last_tmux_request_id", "") or "").strip()
+            if request_id:
+                from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+                TmuxExecutionBackend.mark_request_delivered(session, request_id)
         return str(output or "")
 
     @staticmethod
@@ -5446,6 +5527,15 @@ class ApplicationFacade:
                 except Exception:
                     self.logger.exception("desktop system event bus shutdown failed")
 
+            manager = getattr(self.session_service, "_manager", None)
+            sessions_by_chat = getattr(manager, "sessions_by_chat", None)
+            if isinstance(sessions_by_chat, dict):
+                for sessions in sessions_by_chat.values():
+                    if not isinstance(sessions, dict):
+                        continue
+                    for session in sessions.values():
+                        session._preserve_tmux_on_shutdown = True
+
             for rec in list(self.task_service.list_active()):
                 try:
                     await self.task_service.cancel(
@@ -5459,8 +5549,6 @@ class ApplicationFacade:
                         getattr(rec, "task_id", None),
                     )
 
-            manager = getattr(self.session_service, "_manager", None)
-            sessions_by_chat = getattr(manager, "sessions_by_chat", None)
             if isinstance(sessions_by_chat, dict):
                 for chat_id, sessions in list(sessions_by_chat.items()):
                     if not isinstance(sessions, dict):
@@ -5474,13 +5562,12 @@ class ApplicationFacade:
                                 getattr(session, "id", session_uid),
                             )
                         try:
-                            session.close()
+                            session.close(preserve_tmux=True)
                         except Exception:
                             self.logger.exception(
                                 "session close failed on desktop shutdown sid=%s",
                                 getattr(session, "id", session_uid),
                             )
-                    sessions.clear()
                 try:
                     manager._persist_sessions()
                 except Exception:

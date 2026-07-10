@@ -301,15 +301,21 @@ class SessionActionsMixin:
             await self._edit_msg(context, query, t("msg.error.session_busy", lang))
             return True
         try:
-            if not hasattr(session, "set_active_cli"):
+            if not hasattr(session, "set_active_cli_persistent_when_idle"):
                 await self._edit_msg(context, query, t("msg.error.cli_switch_unsupported", lang))
                 return True
             # Capture previous CLI info for transfer offer.
             previous_cli = str(getattr(getattr(session, "cli", None), "active_cli", "") or "").strip()
             previous_token = (getattr(getattr(session, "cli", None), "resume_tokens", None) or {}).get(previous_cli)
-            session.set_active_cli(cli)
+            await session.set_active_cli_persistent_when_idle(cli)
             await self._persist_session_async(owner_chat_id, session.id)
         except Exception:
+            logging.getLogger(__name__).exception(
+                "session CLI switch failed session_id=%s previous_cli=%s target_cli=%s",
+                getattr(session, "id", ""),
+                previous_cli,
+                cli,
+            )
             await self._edit_msg(context, query, t("msg.error.cli_switch_failed", lang))
             return True
         # Offer session transfer if source CLI had a session.

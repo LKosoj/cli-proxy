@@ -313,10 +313,15 @@ class SessionUI:
                 await self._edit_msg(context, query, t("msg.error.session_busy", lang))
                 return True
             try:
-                session.set_active_cli(cli)
+                await session.set_active_cli_persistent_when_idle(cli)
                 self._persist_session(owner_chat_id, session.id)
                 await self._edit_msg(context, query, t("msg.session.cli_active", lang, cli_name=session.tool.name))
             except Exception:
+                logger.exception(
+                    "session UI CLI switch failed session_id=%s target_cli=%s",
+                    getattr(session, "id", ""),
+                    cli,
+                )
                 await self._edit_msg(context, query, t("msg.error.cli_switch_failed", lang))
             return True
         if data.startswith("sess_backend:"):

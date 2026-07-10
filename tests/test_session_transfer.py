@@ -5,6 +5,8 @@ import time
 import urllib.parse
 from unittest.mock import patch
 
+import pytest
+
 from app.services.session_transfer import service as transfer_service
 from app.services.session_transfer.canonical import CanonicalMessage, CanonicalSession
 from app.services.session_transfer.service import (
@@ -207,27 +209,29 @@ class TestSwitchResult:
 
 
 class TestSwitchWithTransfer:
-    def test_switch_returns_transfer_available_when_token_exists(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_switch_returns_transfer_available_when_token_exists(self, tmp_path):
         cfg = _cfg(tmp_path, a_enabled=False, b_enabled=True)
         cfg_initial = _cfg(tmp_path, a_enabled=True, b_enabled=True)
         mgr_initial = SessionManager(cfg_initial)
         s = mgr_initial.create(1, "a", str(tmp_path))
         s.resume_token = "tok-a"
         s.config = cfg
-        result = switch_session_active_cli_if_needed(s)
+        result = await switch_session_active_cli_if_needed(s)
         assert result.switched is True
         assert result.previous_cli == "a"
         assert result.active_cli == "b"
         assert result.transfer_available is True
         assert result.source_session_id == "tok-a"
 
-    def test_switch_no_transfer_when_no_token(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_switch_no_transfer_when_no_token(self, tmp_path):
         cfg = _cfg(tmp_path, a_enabled=False, b_enabled=True)
         cfg_initial = _cfg(tmp_path, a_enabled=True, b_enabled=True)
         mgr_initial = SessionManager(cfg_initial)
         s = mgr_initial.create(1, "a", str(tmp_path))
         s.config = cfg
-        result = switch_session_active_cli_if_needed(s)
+        result = await switch_session_active_cli_if_needed(s)
         assert result.switched is True
         assert result.transfer_available is False
 

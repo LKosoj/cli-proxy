@@ -3,7 +3,13 @@ import stat
 
 import pytest
 
-from app.services.cli_backends.tmux_driver import TmuxCommandResult, TmuxDriver, wrap_user_command, write_prompt_temp
+from app.services.cli_backends.tmux_driver import (
+    TmuxCommandResult,
+    TmuxDriver,
+    TmuxDriverError,
+    wrap_user_command,
+    write_prompt_temp,
+)
 
 
 def test_wrap_user_command_uses_su_without_losing_argv_boundaries() -> None:
@@ -59,3 +65,24 @@ async def test_tmux_driver_uses_named_buffer_commands(monkeypatch) -> None:
         (("paste-buffer", "-d", "-b", "cli-proxy-req", "-t", "pane:0.0"), {}),
         (("delete-buffer", "-b", "cli-proxy-req"), {"check": False}),
     ]
+
+
+@pytest.mark.asyncio
+async def test_tmux_driver_kill_session_treats_missing_session_as_absent(monkeypatch) -> None:
+    async def _run(self, *args, **kwargs):
+        return TmuxCommandResult(returncode=1, stdout="", stderr="can't find session: missing")
+
+    monkeypatch.setattr(TmuxDriver, "run", _run)
+
+    assert await TmuxDriver().kill_session("missing") is False
+
+
+@pytest.mark.asyncio
+async def test_tmux_driver_kill_session_raises_for_real_error(monkeypatch) -> None:
+    async def _run(self, *args, **kwargs):
+        return TmuxCommandResult(returncode=1, stdout="", stderr="permission denied")
+
+    monkeypatch.setattr(TmuxDriver, "run", _run)
+
+    with pytest.raises(TmuxDriverError, match="permission denied"):
+        await TmuxDriver().kill_session("blocked")

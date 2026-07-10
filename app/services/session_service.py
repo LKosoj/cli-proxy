@@ -93,7 +93,7 @@ class SessionService:
             if not self._session_is_idle(session):
                 return False
             try:
-                session.set_active_cli(str(cli_name))
+                session.set_active_cli(str(cli_name), close_previous_tmux=True)
                 return True
             except ValueError:
                 logger.warning(
@@ -104,6 +104,38 @@ class SessionService:
                     exc_info=True,
                 )
                 return False
+            except Exception:
+                logger.exception(
+                    "set_active_cli failed to close previous tmux chat_id=%s session_id=%s cli_name=%s",
+                    chat_id,
+                    session_id,
+                    cli_name,
+                )
+                return False
+        return False
+
+    async def set_active_cli_async(self, chat_id: int, session_id: str, cli_name: str) -> bool:
+        session = self.get_session(chat_id, session_id)
+        if session is None or not self._session_is_idle(session):
+            return False
+        try:
+            await session.set_active_cli_persistent_when_idle(str(cli_name))
+            return True
+        except ValueError:
+            logger.warning(
+                "set_active_cli_async rejected invalid cli chat_id=%s session_id=%s cli_name=%s",
+                chat_id,
+                session_id,
+                cli_name,
+                exc_info=True,
+            )
+        except Exception:
+            logger.exception(
+                "set_active_cli_async failed to close previous tmux chat_id=%s session_id=%s cli_name=%s",
+                chat_id,
+                session_id,
+                cli_name,
+            )
         return False
 
     async def close_session(self, chat_id: int, session_id: str, *, cancel_timeout_s: float = 1.0) -> bool:
@@ -254,7 +286,7 @@ class SessionService:
             if not self._session_is_idle(session):
                 return False
             try:
-                session.set_active_cli(str(cli_name))
+                session.set_active_cli(str(cli_name), close_previous_tmux=True)
                 return True
             except ValueError:
                 logger.warning(
@@ -265,4 +297,36 @@ class SessionService:
                     exc_info=True,
                 )
                 return False
+            except Exception:
+                logger.exception(
+                    "set_active_cli_by_uid failed to close previous tmux session_uid=%s session_id=%s cli_name=%s",
+                    session_uid,
+                    getattr(session, "id", ""),
+                    cli_name,
+                )
+                return False
+        return False
+
+    async def set_active_cli_by_uid_async(self, session_uid: str, cli_name: str) -> bool:
+        session = self.get_session_by_uid(session_uid)
+        if session is None or not self._session_is_idle(session):
+            return False
+        try:
+            await session.set_active_cli_persistent_when_idle(str(cli_name))
+            return True
+        except ValueError:
+            logger.warning(
+                "set_active_cli_by_uid_async rejected invalid cli session_uid=%s session_id=%s cli_name=%s",
+                session_uid,
+                getattr(session, "id", ""),
+                cli_name,
+                exc_info=True,
+            )
+        except Exception:
+            logger.exception(
+                "set_active_cli_by_uid_async failed to close previous tmux session_uid=%s session_id=%s cli_name=%s",
+                session_uid,
+                getattr(session, "id", ""),
+                cli_name,
+            )
         return False

@@ -541,8 +541,11 @@ class SessionManagerWidget(QWidget):
             t("desktop.session.select_tool", lang), tools, current_idx, False
         )
         if ok and tool:
-            self.facade.set_active_cli(session_uid, tool)
-            self.refresh_sessions()
+            async def _switch_cli() -> None:
+                if await self.facade.set_active_cli(session_uid, tool):
+                    self.refresh_sessions()
+
+            ensure_async(_switch_cli(), parent=self)
 
     def _on_resume_edit(self):
         items = self.session_list.selectedItems()

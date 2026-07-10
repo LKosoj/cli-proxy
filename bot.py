@@ -2712,6 +2712,7 @@ class BotApp:
             sessions = []
 
         for session in sessions:
+            session._preserve_tmux_on_shutdown = True
             try:
                 session.interrupt()
             except Exception:
@@ -2736,7 +2737,7 @@ class BotApp:
 
         for session in sessions:
             try:
-                session.close()
+                session.close(preserve_tmux=True)
             except Exception:
                 logging.getLogger(__name__).exception("session close failed on shutdown sid=%s", session.id)
 

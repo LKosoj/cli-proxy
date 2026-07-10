@@ -231,3 +231,37 @@ async def test_queue_fifo_order_preserved() -> None:
         if "queue_next" in name
     ]
     assert len(followup_coroutines) == 1
+
+
+@pytest.mark.asyncio
+async def test_cli_switch_failure_resets_busy_and_keeps_queue() -> None:
+    session = _make_session()
+    queue_item = {"text": "queued-prompt", "dest": {"kind": "telegram", "chat_id": 42}}
+    session.queue.append(queue_item)
+    svc = _make_service()
+    svc.bot_app._send_message = AsyncMock()
+
+    with (
+        patch(
+            "sessions.session_run_service.switch_session_active_cli_if_needed",
+            new=AsyncMock(side_effect=RuntimeError("tmux close failed")),
+        ),
+        patch("sessions.session_run_service.clear_session_ticks"),
+        patch("sessions.session_run_service.clear_runtime_progress"),
+        patch("sessions.session_run_service.bind_session_log_context") as mock_ctx,
+    ):
+        mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
+        mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        session.run_prompt = AsyncMock(return_value="must not run")  # type: ignore[attr-defined]
+
+        await svc.run_prompt(
+            session,
+            "first-prompt",
+            {"kind": "telegram", "chat_id": 42},
+            context=object(),
+        )
+
+    assert session.busy is False
+    assert list(session.queue) == [queue_item]
+    session.run_prompt.assert_not_awaited()
+    svc.bot_app._send_message.assert_awaited_once()

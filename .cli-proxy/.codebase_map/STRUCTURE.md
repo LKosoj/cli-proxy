@@ -2,12 +2,12 @@
 
 Generated: 2026-06-17T10:39:27Z
 
-- total indexed files: 1201
+- total indexed files: 1204
 
 ## Top-level areas
-- `tests`: 558
+- `tests`: 560
 - `modes`: 221
-- `app`: 162
+- `app`: 163
 - `agent`: 61
 - `desktop`: 32
 - `miniapp`: 120
@@ -20,9 +20,9 @@ Generated: 2026-06-17T10:39:27Z
 
 | Area | Files |
 | --- | ---: |
-| `tests/` | 558 |
+| `tests/` | 560 |
 | `modes/` | 221 |
-| `app/` | 162 |
+| `app/` | 163 |
 | `agent/` | 61 |
 | `desktop/` | 32 |
 | `miniapp/` | 120 |

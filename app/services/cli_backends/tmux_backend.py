@@ -10,6 +10,7 @@ import shlex
 import stat
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,6 +18,7 @@ from utils.cli import resolve_env_value
 from utils.text import strip_ansi
 
 from .models import ExecutionBackendStatus, ExecutionResult
+from .transcript_reader import CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
 from .tmux_parser import build_prompt_with_markers, normalize_terminal_text, parse_tmux_delta
 
@@ -31,6 +33,7 @@ _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
 _SESSION_ID_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--session-id"},
     "qwen": {"--session-id"},
+    "grok": {"--session-id"},
 }
 _RESUME_FLAGS_BY_CLI: dict[str, list[str]] = {
     "claude": ["--resume"],
@@ -41,11 +44,30 @@ _RESUME_FLAGS_BY_CLI: dict[str, list[str]] = {
 _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
     "claude": ["--session-id"],
     "qwen": ["--session-id"],
+    "grok": ["--session-id"],
 }
 _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok"}
 _SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
+_RECOVERY_DEST_KEYS = (
+    "kind",
+    "chat_id",
+    "user_id",
+    "message_thread_id",
+    "direct_messages_topic_id",
+    "session_uid",
+)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TmuxRecoveryRequest:
+    request_id: str
+    started_at: float
+    offset: int
+    prompt: str
+    dest: dict[str, Any]
+    transcript_locator: Optional[TranscriptLocator] = None
 
 
 def _session_uid(session: Any) -> str:
@@ -269,6 +291,39 @@ def _new_request_id() -> str:
     return uuid.uuid4().hex[:16]
 
 
+def _request_recovery_payload(request_context: Optional[dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(request_context, dict):
+        return {"delivery_state": "unmanaged"}
+    raw_dest = request_context.get("dest")
+    dest = {
+        key: raw_dest.get(key)
+        for key in _RECOVERY_DEST_KEYS
+        if isinstance(raw_dest, dict) and key in raw_dest
+    }
+    return {
+        "prompt": str(request_context.get("prompt") or ""),
+        "dest": dest,
+        "delivery_state": "pending",
+    }
+
+
+def _transcript_locator_from_payload(payload: dict[str, Any]) -> Optional[TranscriptLocator]:
+    provider = str(payload.get("transcript_provider") or "").strip()
+    path = str(payload.get("transcript_path") or "").strip()
+    if not provider or not path:
+        return None
+    try:
+        offset = max(0, int(payload.get("transcript_offset") or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    return TranscriptLocator(
+        provider=provider,
+        path=path,
+        start_offset=offset,
+        session_id=str(payload.get("transcript_session_id") or "").strip(),
+    )
+
+
 def _prepare_interactive_command(session: Any, state: dict[str, Any], *, force_fresh: bool = False) -> list[str]:
     tool = getattr(session, "tool", None)
     command = [str(part) for part in (getattr(tool, "interactive_cmd", None) or [])]
@@ -452,10 +507,6 @@ class TmuxExecutionBackend:
             _ensure_private_runtime_permissions(paths)
         state = self._read_state(paths)
         has_session = await driver.has_session(paths["session_name"])
-        state_name = str(state.get("state") or "").strip().lower()
-        if has_session and state_name in {"", "active", "failed", "stopped", "unknown"}:
-            await driver.kill_session(paths["session_name"])
-            has_session = False
         created_session = False
         if not has_session:
             await driver.new_session(
@@ -467,6 +518,10 @@ class TmuxExecutionBackend:
         if created_session:
             await driver.pipe_pane(paths["pane_target"], paths["pane_log"])
         resume_token = _get_resume_token(session)
+        cli_state = getattr(session, "cli", None)
+        tmux_users = getattr(cli_state, "tmux_users", None)
+        if isinstance(tmux_users, dict):
+            tmux_users[_active_cli(session)] = str(getattr(driver, "user", "") or "").strip() or None
         self._write_state(
             paths,
             {
@@ -477,6 +532,7 @@ class TmuxExecutionBackend:
                 "session_runtime_uid": _session_uid(session),
                 "active_cli": _active_cli(session),
                 "workdir": str(getattr(session, "workdir", "") or ""),
+                "tmux_user": str(getattr(driver, "user", "") or "").strip() or None,
                 "resume_token": resume_token,
                 "claude_resume_token": _legacy_claude_resume_token(session),
                 "last_activity_at": time.time(),
@@ -599,8 +655,324 @@ class TmuxExecutionBackend:
 
     @staticmethod
     def _write_last_request(paths: dict[str, str], payload: dict[str, Any]) -> None:
-        with open(paths["last_request_path"], "w", encoding="utf-8") as handle:
+        Path(paths["runtime_dir"]).mkdir(parents=True, exist_ok=True)
+        tmp = f"{paths['last_request_path']}.tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+        os.replace(tmp, paths["last_request_path"])
+
+    @staticmethod
+    def _read_last_request(paths: dict[str, str]) -> dict[str, Any]:
+        try:
+            with open(paths["last_request_path"], "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except Exception:
+            logger.exception("failed to read tmux last request path=%s", paths["last_request_path"])
+            return {}
+
+    @staticmethod
+    def _read_request_delta(paths: dict[str, str], offset: int) -> str:
+        log_path = paths["pane_log"]
+        if not os.path.exists(log_path):
+            return ""
+        size = os.path.getsize(log_path)
+        safe_offset = max(0, int(offset))
+        if safe_offset > size:
+            safe_offset = 0
+        with open(log_path, "rb") as handle:
+            handle.seek(safe_offset)
+            return handle.read().decode("utf-8", errors="replace")
+
+    @classmethod
+    def mark_request_delivered(cls, session: Any, request_id: str) -> bool:
+        paths = tmux_runtime_paths(session)
+        payload = cls._read_last_request(paths)
+        if str(payload.get("request_id") or "").strip() != str(request_id or "").strip():
+            return False
+        payload.update({"delivery_state": "delivered", "delivered_at": time.time()})
+        cls._write_last_request(paths, payload)
+        return True
+
+    @classmethod
+    def _persist_transcript_locator(
+        cls,
+        paths: dict[str, str],
+        request_id: str,
+        locator: TranscriptLocator,
+    ) -> bool:
+        payload = cls._read_last_request(paths)
+        if str(payload.get("request_id") or "").strip() != str(request_id or "").strip():
+            return False
+        payload.update(
+            {
+                "transcript_provider": locator.provider,
+                "transcript_path": locator.path,
+                "transcript_offset": locator.start_offset,
+                "transcript_session_id": locator.session_id,
+            }
+        )
+        cls._write_last_request(paths, payload)
+        return True
+
+    @staticmethod
+    def _build_transcript_reader(
+        session: Any,
+        request: TmuxRecoveryRequest,
+    ) -> Optional[CliTranscriptReader]:
+        tool = getattr(session, "tool", None)
+        return CliTranscriptReader(
+            cli_name=_active_cli(session),
+            request_id=request.request_id,
+            workdir=str(getattr(session, "workdir", "") or ""),
+            started_at=request.started_at,
+            username=str(getattr(tool, "tmux_user", "") or ""),
+            session_id=_get_resume_token(session) or "",
+            locator=request.transcript_locator,
+        )
+
+    async def get_recovery_request(self, session: Any) -> Optional[TmuxRecoveryRequest]:
+        paths = self.paths(session)
+        state = self._read_state(paths)
+        if not state:
+            return None
+        state_name = str(state.get("state") or "").strip().lower()
+        active_request_id = str(state.get("active_request_id") or "").strip()
+        payload = self._read_last_request(paths)
+        payload_request_id = str(payload.get("request_id") or "").strip()
+        driver = self._driver(session)
+        if not await driver.has_session(paths["session_name"]):
+            if state_name in {"active", "idle", "running"}:
+                missing_state = "failed" if state_name == "active" else "stopped"
+                state.update({"state": missing_state, "active_request_id": None, "last_activity_at": time.time()})
+                self._write_state(paths, state)
+            return None
+        request_id = active_request_id if state_name == "active" and active_request_id else payload_request_id
+        if not request_id:
+            return None
+        delivery_state = str(payload.get("delivery_state") or "").strip().lower()
+        if delivery_state in {"delivered", "unmanaged"}:
+            return None
+
+        metadata_matches = not payload_request_id or payload_request_id == request_id
+        try:
+            started_at = float(payload.get("started_at") or state.get("last_activity_at") or time.time())
+        except (TypeError, ValueError):
+            started_at = time.time()
+        try:
+            offset = int(payload.get("offset") or 0) if metadata_matches else 0
+        except (TypeError, ValueError):
+            offset = 0
+        prompt = str(payload.get("prompt") or "") if metadata_matches else ""
+        raw_dest = payload.get("dest") if metadata_matches else None
+        dest = dict(raw_dest) if isinstance(raw_dest, dict) else {}
+        recovery = TmuxRecoveryRequest(
+            request_id=request_id,
+            started_at=started_at,
+            offset=max(0, offset),
+            prompt=prompt,
+            dest=dest,
+            transcript_locator=_transcript_locator_from_payload(payload) if metadata_matches else None,
+        )
+        if state_name == "active":
+            return recovery
+        if delivery_state != "pending":
+            return None
+        parsed = parse_tmux_delta(
+            self._read_request_delta(paths, recovery.offset),
+            recovery.request_id,
+            claude_screen_reader=self._uses_claude_screen_reader(session),
+        )
+        if parsed.complete:
+            return recovery
+        try:
+            transcript_reader = self._build_transcript_reader(session, recovery)
+            transcript = await asyncio.to_thread(transcript_reader.poll) if transcript_reader is not None else None
+        except Exception:
+            logger.exception(
+                "structured transcript recovery check failed session_id=%s request_id=%s",
+                getattr(session, "id", "?"),
+                recovery.request_id,
+            )
+            return None
+        return recovery if transcript is not None and transcript.complete else None
+
+    async def _handle_request_cancellation(self, session: Any, paths: dict[str, str]) -> None:
+        if bool(getattr(session, "_preserve_tmux_on_shutdown", False)):
+            logger.info(
+                "tmux request monitor detached for shutdown session_id=%s request_id=%s",
+                getattr(session, "id", "?"),
+                self._read_state(paths).get("active_request_id"),
+            )
+            return
+        sent = False
+        try:
+            sent = bool(await self._driver(session).send_ctrl_c(paths["pane_target"]))
+        except Exception:
+            logger.exception("failed to interrupt cancelled tmux request session_id=%s", getattr(session, "id", "?"))
+        state = self._read_state(paths)
+        state.update(
+            {
+                "state": "idle" if sent else "failed",
+                "active_request_id": None,
+                "last_activity_at": time.time(),
+            }
+        )
+        self._write_state(paths, state)
+
+    async def _monitor_request(
+        self,
+        session: Any,
+        paths: dict[str, str],
+        request: TmuxRecoveryRequest,
+    ) -> ExecutionResult:
+        idle_probe_interval = self.idle_fallback_sec
+        if idle_probe_interval is None:
+            idle_probe_interval = max(1.0, float(getattr(session, "idle_timeout_sec", 100) or 100))
+        driver = self._driver(session)
+        log_path = paths["pane_log"]
+        last_size = request.offset
+        last_change = time.time()
+        pane_latest_text = ""
+        transcript_latest_text = ""
+        latest_text = ""
+        last_reported_text = ""
+        last_progress_text = ""
+        complete = False
+        completion_source = "pane"
+        transcript_authoritative = False
+        transcript_reader = None
+        persisted_locator = request.transcript_locator
+        try:
+            transcript_reader = self._build_transcript_reader(session, request)
+        except Exception:
+            logger.exception(
+                "failed to initialize structured transcript reader session_id=%s request_id=%s",
+                getattr(session, "id", "?"),
+                request.request_id,
+            )
+        try:
+            while True:
+                await asyncio.sleep(self.poll_interval_sec)
+                size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+                if size != last_size:
+                    last_size = size
+                    last_change = time.time()
+                delta = self._read_request_delta(paths, request.offset)
+                if delta:
+                    _capture_resume_token_from_output(session, delta)
+                parsed = parse_tmux_delta(
+                    delta,
+                    request.request_id,
+                    claude_screen_reader=self._uses_claude_screen_reader(session),
+                )
+                pane_latest_text = parsed.text or pane_latest_text
+
+                transcript_update = None
+                if transcript_reader is not None:
+                    try:
+                        transcript_update = await asyncio.to_thread(transcript_reader.poll)
+                    except Exception:
+                        logger.exception(
+                            "structured transcript reader failed session_id=%s request_id=%s",
+                            getattr(session, "id", "?"),
+                            request.request_id,
+                        )
+                        transcript_reader = None
+                if transcript_update is not None:
+                    transcript_authoritative = transcript_authoritative or (
+                        transcript_update.available and transcript_update.recognized
+                    )
+                    if transcript_update.assistant_text:
+                        transcript_latest_text = transcript_update.assistant_text
+                    if transcript_update.progress_text and transcript_update.progress_text != last_progress_text:
+                        last_progress_text = transcript_update.progress_text
+                        update_activity = getattr(session, "_update_activity", None)
+                        if callable(update_activity):
+                            try:
+                                update_activity(last_progress_text)
+                            except Exception:
+                                logger.exception(
+                                    "structured transcript progress update failed session_id=%s",
+                                    getattr(session, "id", "?"),
+                                )
+                    if transcript_update.session_id and transcript_update.session_id != _get_resume_token(session):
+                        _set_resume_token(session, transcript_update.session_id)
+                        active_state = self._read_state(paths)
+                        active_state.update(
+                            {
+                                "resume_token": _get_resume_token(session),
+                                "claude_resume_token": _legacy_claude_resume_token(session),
+                            }
+                        )
+                        self._write_state(paths, active_state)
+                    if transcript_update.locator is not None and transcript_update.locator != persisted_locator:
+                        if self._persist_transcript_locator(paths, request.request_id, transcript_update.locator):
+                            persisted_locator = transcript_update.locator
+                    if transcript_update.complete:
+                        complete = True
+                        completion_source = "transcript"
+
+                latest_text = transcript_latest_text or pane_latest_text
+                if latest_text and latest_text != last_reported_text:
+                    last_reported_text = latest_text
+                    setattr(session, "last_output_ts", time.time())
+                    setattr(session, "last_assistant_text_ts", time.time())
+                    setattr(session, "last_assistant_text_value", latest_text[-1000:])
+                if complete:
+                    break
+                if parsed.complete and not transcript_authoritative:
+                    complete = True
+                    completion_source = "pane"
+                    break
+                if time.time() - last_change >= idle_probe_interval:
+                    if not await driver.has_session(paths["session_name"]):
+                        logger.warning(
+                            "tmux session disappeared while request was active session_id=%s request_id=%s",
+                            getattr(session, "id", "?"),
+                            request.request_id,
+                        )
+                        break
+                    last_change = time.time()
+        except asyncio.CancelledError:
+            await self._handle_request_cancellation(session, paths)
+            raise
+
+        finished_at = time.time()
+        state = self._read_state(paths)
+        state.update(
+            {
+                "state": "idle" if complete else "failed",
+                "active_request_id": None,
+                "last_activity_at": finished_at,
+                "resume_token": _get_resume_token(session),
+                "claude_resume_token": _legacy_claude_resume_token(session),
+            }
+        )
+        self._write_state(paths, state)
+        return ExecutionResult(
+            text=latest_text.strip(),
+            backend=self.name,
+            request_id=request.request_id,
+            started_at=request.started_at,
+            finished_at=finished_at,
+            abnormal_stop=not complete,
+            diagnostics={
+                "session_name": paths["session_name"],
+                "pane_target": paths["pane_target"],
+                "completion_source": completion_source,
+                "transcript_path": persisted_locator.path if persisted_locator is not None else "",
+                "failure_reason": "" if complete else "tmux_session_missing",
+            },
+        )
+
+    async def recover(self, session: Any, request: TmuxRecoveryRequest) -> ExecutionResult:
+        paths = self.paths(session)
+        if not await self._driver(session).has_session(paths["session_name"]):
+            raise TmuxDriverError(f"tmux session disappeared during recovery: {paths['session_name']}")
+        return await self._monitor_request(session, paths, request)
 
     async def run(
         self,
@@ -610,14 +982,15 @@ class TmuxExecutionBackend:
         image_path: Optional[str] = None,
         image_paths: Optional[list[str]] = None,
         force_fresh: bool = False,
+        request_context: Optional[dict[str, Any]] = None,
     ) -> ExecutionResult:
         if image_path or image_paths:
             raise RuntimeError("tmux backend does not support image requests in v1")
         paths = self.paths(session)
         if force_fresh:
             await self.close(session)
-        created_session = await self._ensure_started(session, paths, force_fresh=force_fresh)
-        if created_session and self._uses_ready_wait(session):
+        await self._ensure_started(session, paths, force_fresh=force_fresh)
+        if self._uses_ready_wait(session):
             try:
                 await self._wait_for_interactive_ready(session, paths)
             except Exception:
@@ -650,7 +1023,15 @@ class TmuxExecutionBackend:
             }
         )
         self._write_state(paths, state)
-        self._write_last_request(paths, {"request_id": request_id, "started_at": started_at, "offset": offset})
+        self._write_last_request(
+            paths,
+            {
+                "request_id": request_id,
+                "started_at": started_at,
+                "offset": offset,
+                **_request_recovery_payload(request_context),
+            },
+        )
 
         buffer_loaded = False
         buffer_pasted = False
@@ -664,21 +1045,7 @@ class TmuxExecutionBackend:
                     await self._wait_for_pasted_text(session, paths, request_id)
                 await driver.send_enter(paths["pane_target"])
         except asyncio.CancelledError:
-            sent = False
-            try:
-                sent = bool(await driver.send_ctrl_c(paths["pane_target"]))
-            except Exception:
-                sent = False
-            cancelled_at = time.time()
-            state = self._read_state(paths)
-            state.update(
-                {
-                    "state": "idle" if sent else "failed",
-                    "active_request_id": None,
-                    "last_activity_at": cancelled_at,
-                }
-            )
-            self._write_state(paths, state)
+            await self._handle_request_cancellation(session, paths)
             raise
         except Exception:
             failed_at = time.time()
@@ -702,85 +1069,16 @@ class TmuxExecutionBackend:
                 os.remove(prompt_path)
             except OSError:
                 pass
-
-        idle_timeout = self.idle_fallback_sec
-        if idle_timeout is None:
-            idle_timeout = max(1.0, float(getattr(session, "idle_timeout_sec", 100) or 100))
-        last_size = offset
-        last_change = time.time()
-        latest_text = ""
-        complete = False
-        try:
-            while True:
-                await asyncio.sleep(self.poll_interval_sec)
-                size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
-                if size != last_size:
-                    last_size = size
-                    last_change = time.time()
-                delta = ""
-                if os.path.exists(log_path):
-                    with open(log_path, "rb") as handle:
-                        handle.seek(offset)
-                        delta = handle.read().decode("utf-8", errors="replace")
-                if delta:
-                    _capture_resume_token_from_output(session, delta)
-                parsed = parse_tmux_delta(
-                    delta,
-                    request_id,
-                    claude_screen_reader=self._uses_claude_screen_reader(session),
-                )
-                latest_text = parsed.text or latest_text
-                if parsed.text:
-                    setattr(session, "last_output_ts", time.time())
-                    setattr(session, "last_assistant_text_ts", time.time())
-                    setattr(session, "last_assistant_text_value", parsed.text[-1000:])
-                if parsed.complete:
-                    complete = True
-                    break
-                if time.time() - last_change >= idle_timeout:
-                    try:
-                        await driver.send_ctrl_c(paths["pane_target"])
-                    except Exception:
-                        logger.exception("failed to interrupt tmux request after idle timeout")
-                    break
-        except asyncio.CancelledError:
-            sent = False
-            try:
-                sent = bool(await driver.send_ctrl_c(paths["pane_target"]))
-            except Exception:
-                sent = False
-            cancelled_at = time.time()
-            state = self._read_state(paths)
-            state.update(
-                {
-                    "state": "idle" if sent else "failed",
-                    "active_request_id": None,
-                    "last_activity_at": cancelled_at,
-                }
-            )
-            self._write_state(paths, state)
-            raise
-
-        finished_at = time.time()
-        state = self._read_state(paths)
-        state.update(
-            {
-                "state": "idle" if complete else "failed",
-                "active_request_id": None,
-                "last_activity_at": finished_at,
-                "resume_token": _get_resume_token(session),
-                "claude_resume_token": _legacy_claude_resume_token(session),
-            }
-        )
-        self._write_state(paths, state)
-        return ExecutionResult(
-            text=latest_text.strip(),
-            backend=self.name,
-            request_id=request_id,
-            started_at=started_at,
-            finished_at=finished_at,
-            abnormal_stop=not complete,
-            diagnostics={"session_name": paths["session_name"], "pane_target": paths["pane_target"]},
+        return await self._monitor_request(
+            session,
+            paths,
+            TmuxRecoveryRequest(
+                request_id=request_id,
+                started_at=started_at,
+                offset=offset,
+                prompt=str((request_context or {}).get("prompt") or ""),
+                dest=dict((request_context or {}).get("dest") or {}),
+            ),
         )
 
     async def interrupt(self, session: Any) -> bool:
@@ -805,16 +1103,24 @@ class TmuxExecutionBackend:
             self._write_state(paths, state)
         return sent
 
-    async def close(self, session: Any) -> None:
+    async def close(self, session: Any) -> bool:
         paths = self.paths(session)
-        await self._driver(session).kill_session(paths["session_name"])
-        state = self._read_state(paths) or {
+        existing_state = self._read_state(paths)
+        driver = self._driver(session)
+        killed = await driver.kill_session(paths["session_name"])
+        if not killed and await driver.has_session(paths["session_name"]):
+            raise TmuxDriverError(f"tmux session is still running after close: {paths['session_name']}")
+        if not killed and not existing_state:
+            return False
+        state = existing_state or {
             "backend": self.name,
             "session_name": paths["session_name"],
             "pane_target": paths["pane_target"],
+            "tmux_user": str(getattr(driver, "user", "") or "").strip() or None,
         }
         state.update({"state": "stopped", "active_request_id": None, "last_activity_at": time.time()})
         self._write_state(paths, state)
+        return killed
 
     async def status(self, session: Any) -> ExecutionBackendStatus:
         paths = self.paths(session)

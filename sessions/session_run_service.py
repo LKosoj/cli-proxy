@@ -12,12 +12,14 @@ from app.services.assistant_preview_service import (
     assistant_preview_supported_dest,
     watch_session_assistant_preview,
 )
+from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
 from app.services.logging_service import bind_session_log_context
 from app.services.runtime_progress_service import clear_runtime_progress, emit_runtime_progress
 from app.services.task_bearing_cli_hook_service import get_task_bearing_cli_hook_service
 from app.services.session_tick_history_store import clear_session_ticks
 from session import (
     consume_session_cli_switch_notice_text,
+    get_session_execution_backend,
     session_runtime_uid,
     switch_session_active_cli_if_needed,
 )
@@ -171,7 +173,86 @@ class SessionRunService:
             name=task_name,
         )
 
-    async def _send_output_task(self, session, dest: dict, output: str, context) -> None:
+    def _recovery_dest(self, session, request: TmuxRecoveryRequest) -> dict:
+        persisted = dict(request.dest or {})
+        chat_id = persisted.get("chat_id")
+        if chat_id is None:
+            scope = getattr(session, "conversation_scope", None)
+            chat_id = getattr(scope, "chat_id", None)
+        if chat_id is None:
+            chat_id = getattr(session, "chat_id", None)
+        base: dict = {"kind": "telegram"}
+        builder = getattr(self.bot_app, "build_telegram_reply_dest", None)
+        if chat_id is not None and callable(builder):
+            base = builder(
+                session,
+                int(chat_id),
+                user_id=persisted.get("user_id"),
+                direct_messages_topic_id=persisted.get("direct_messages_topic_id"),
+            )
+        elif chat_id is not None:
+            base["chat_id"] = int(chat_id)
+        base.update(persisted)
+        return base
+
+    async def recover_tmux_sessions(self, context) -> int:
+        manager = getattr(self.bot_app, "manager", None)
+        sessions_by_chat = getattr(manager, "sessions_by_chat", None)
+        if not isinstance(sessions_by_chat, dict):
+            return 0
+        recovered = 0
+        seen: set[int] = set()
+        for sessions in sessions_by_chat.values():
+            if not isinstance(sessions, dict):
+                continue
+            for session in sessions.values():
+                if id(session) in seen:
+                    continue
+                seen.add(id(session))
+                if get_session_execution_backend(session) != "tmux":
+                    continue
+                request_id = str(getattr(session, "_tmux_recovery_request_id", "") or "").strip()
+                if request_id:
+                    continue
+                try:
+                    request = await TmuxExecutionBackend().get_recovery_request(session)
+                except Exception:
+                    _log.exception("tmux startup reconciliation failed session=%s", getattr(session, "id", "?"))
+                    continue
+                if request is None:
+                    continue
+                dest = self._recovery_dest(session, request)
+                if str(dest.get("kind") or "telegram").strip().lower() == "telegram" and dest.get("chat_id") is None:
+                    _log.error(
+                        "tmux recovery skipped: Telegram destination is missing session=%s request_id=%s",
+                        getattr(session, "id", "?"),
+                        request.request_id,
+                    )
+                    continue
+                session._tmux_recovery_request_id = request.request_id
+                session._active_execution_backend = "tmux"
+                session.busy = True
+                prompt = request.prompt or f"Recovered tmux request {request.request_id}"
+                started = self.start_session_task(
+                    session,
+                    coro=self.run_prompt(
+                        session,
+                        prompt,
+                        dest,
+                        context,
+                        recovery_request=request,
+                    ),
+                    name=f"tmux_recovery:{request.request_id}",
+                )
+                if not started:
+                    session._tmux_recovery_request_id = None
+                    session._active_execution_backend = "none"
+                    session.busy = False
+                    continue
+                recovered += 1
+        return recovered
+
+    async def _send_output_task(self, session, dest: dict, output: str, context) -> bool:
         sent = False
         try:
             await self.bot_app.send_output(session, dest, output, context)
@@ -183,6 +264,7 @@ class SessionRunService:
         finally:
             if sent or not str(output or "").strip():
                 await self._clear_telegram_assistant_preview(session, dest, context)
+        return sent or not str(output or "").strip()
 
     @staticmethod
     def _telegram_reply_kwargs(
@@ -447,7 +529,15 @@ class SessionRunService:
             **reply_kwargs,
         )
 
-    async def run_prompt(self, session, prompt: str, dest: dict, context) -> None:
+    async def run_prompt(
+        self,
+        session,
+        prompt: str,
+        dest: dict,
+        context,
+        *,
+        recovery_request: Optional[TmuxRecoveryRequest] = None,
+    ) -> None:
         self._track_session_task(session, name="run_prompt")
         _rp_log = logging.getLogger("bot.run_prompt")
         with bind_session_log_context(session=session, chat_id=dest.get("chat_id")):
@@ -468,34 +558,41 @@ class SessionRunService:
                 image_path = dest.get("image_path")
                 image_paths = dest.get("image_paths")
                 source = "telegram_direct" if str((dest or {}).get("kind") or "").strip().lower() == "telegram" else "session_run_service"
-                cli_switch = switch_session_active_cli_if_needed(session)
-                if cli_switch.switched:
-                    self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
-                switch_notice = consume_session_cli_switch_notice_text(session, lang=self._dest_lang(dest))
-                if switch_notice and dest.get("chat_id") is not None:
-                    await self.bot_app._send_message(
-                        context,
-                        text=switch_notice,
-                        **self._telegram_reply_kwargs(dest, session=session),
-                    )
                 hook = None
                 prepared = None
                 prompt_for_cli = prompt
                 preview_stop_event: Optional[asyncio.Event] = None
                 preview_task: Optional[asyncio.Task] = None
                 send_output_scheduled = False
+                managed_tmux = False
+                queue_drain_allowed = False
                 hook_config = getattr(session, "config", None) or getattr(self.bot_app, "config", None)
-                if hook_config is not None:
-                    hook = get_task_bearing_cli_hook_service(hook_config)
-                    prepared = await hook.prepare_prompt(
-                        session=session,
-                        prompt=prompt,
-                        source=source,
-                        phase="execute",
-                        task_bearing=True,
-                    )
-                    prompt_for_cli = prepared.prompt_for_cli
                 try:
+                    if recovery_request is None:
+                        cli_switch = await switch_session_active_cli_if_needed(session)
+                        if cli_switch.switched:
+                            self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
+                        switch_notice = consume_session_cli_switch_notice_text(session, lang=self._dest_lang(dest))
+                    else:
+                        switch_notice = None
+                    if switch_notice and dest.get("chat_id") is not None:
+                        await self.bot_app._send_message(
+                            context,
+                            text=switch_notice,
+                            **self._telegram_reply_kwargs(dest, session=session),
+                        )
+                    managed_tmux = recovery_request is not None or get_session_execution_backend(session) == "tmux"
+                    queue_drain_allowed = not managed_tmux
+                    if hook_config is not None and recovery_request is None:
+                        hook = get_task_bearing_cli_hook_service(hook_config)
+                        prepared = await hook.prepare_prompt(
+                            session=session,
+                            prompt=prompt,
+                            source=source,
+                            phase="execute",
+                            task_bearing=True,
+                        )
+                        prompt_for_cli = prepared.prompt_for_cli
                     if self._telegram_assistant_preview_enabled(session, dest):
                         preview_stop_event = asyncio.Event()
                         preview_task = self._safe_create_task(
@@ -514,11 +611,19 @@ class SessionRunService:
                             label=f"assistant_preview:{session.id}",
                         )
                     _rp_log.info("[run_prompt] calling session.run_prompt session=%s", session.id)
-                    output = await session.run_prompt(
-                        prompt_for_cli,
-                        image_path=image_path,
-                        image_paths=image_paths,
-                    )
+                    if recovery_request is not None:
+                        output = await session.recover_tmux_request(recovery_request)
+                    else:
+                        run_kwargs = {
+                            "image_path": image_path,
+                            "image_paths": image_paths,
+                        }
+                        if managed_tmux:
+                            run_kwargs["tmux_request_context"] = {
+                                "prompt": prompt,
+                                "dest": dict(dest or {}),
+                            }
+                        output = await session.run_prompt(prompt_for_cli, **run_kwargs)
                     _rp_log.info("[run_prompt] session.run_prompt returned session=%s output_len=%d", session.id, len(output))
                     if preview_stop_event is not None:
                         preview_stop_event.set()
@@ -535,11 +640,31 @@ class SessionRunService:
                         image_path=image_path,
                         image_paths=image_paths,
                     )
-                    send_output_scheduled = self.start_session_task(
-                        session,
-                        coro=self._send_output_task(session, dest, output, context),
-                        name="send_output",
-                    )
+                    tmux_request_id = ""
+                    if recovery_request is not None:
+                        tmux_request_id = recovery_request.request_id
+                    elif managed_tmux:
+                        tmux_request_id = str(getattr(session, "last_tmux_request_id", "") or "").strip()
+                    if tmux_request_id:
+                        send_output_scheduled = True
+                        delivered = await self._send_output_task(session, dest, output, context)
+                        if delivered:
+                            queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(
+                                session,
+                                tmux_request_id,
+                            )
+                            if not queue_drain_allowed:
+                                _log.error(
+                                    "tmux delivery marker was not persisted session=%s request_id=%s",
+                                    session.id,
+                                    tmux_request_id,
+                                )
+                    else:
+                        send_output_scheduled = self.start_session_task(
+                            session,
+                            coro=self._send_output_task(session, dest, output, context),
+                            name="send_output",
+                        )
                     if not send_output_scheduled:
                         await self._clear_telegram_assistant_preview(session, dest, context)
                     forced = getattr(session, "headless_forced_stop", None)
@@ -577,7 +702,7 @@ class SessionRunService:
                         await self._clear_telegram_assistant_preview(session, dest, context)
                     session.busy = False
                     try:
-                        if session.queue:
+                        if queue_drain_allowed and session.queue:
                             raw_next_item = session.queue.popleft()
                             try:
                                 fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
@@ -616,6 +741,8 @@ class SessionRunService:
                         _log.exception(
                             "prompt queue drain failed session=%s", session.id,
                         )
+                    if recovery_request is not None:
+                        setattr(session, "_tmux_recovery_request_id", None)
 
     async def run_mode_pipeline(self, session, prompt: str, dest: dict, context, *, mode_id: str) -> None:
         mode_id = str(mode_id or "").strip()

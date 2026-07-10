@@ -7,8 +7,8 @@ Instruction node for `tests` area.
 
 ## Scope
 - Source glob: `tests/**`
-- Estimated files: 558
-- Current files: 558 under `tests/**` as of last review.
+- Estimated files: 560
+- Current files: 560 under `tests/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.

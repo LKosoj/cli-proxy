@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from types import SimpleNamespace
 from typing import Callable
 
 from telegram.error import BadRequest, NetworkError, TimedOut
@@ -22,6 +23,14 @@ def build_post_init(bot_app) -> Callable[[Application], asyncio.Future]:
         notification_queue_service = getattr(bot_app, "notification_queue_service", None)
         if notification_queue_service is not None:
             await notification_queue_service.start()
+        session_management = getattr(bot_app, "session_management", None)
+        if session_management is not None:
+            try:
+                recovered = await session_management.recover_tmux_sessions(SimpleNamespace(bot=application.bot))
+                if recovered:
+                    logging.getLogger(__name__).info("restored %d active tmux request(s)", recovered)
+            except Exception:
+                logging.getLogger(__name__).exception("tmux startup reconciliation failed")
         scheduler_service = getattr(bot_app, "scheduler_service", None)
         if scheduler_service is not None:
             await scheduler_service.start()

@@ -1,7 +1,7 @@
 import os
 
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
-from session import SessionManager
+from session import Session, SessionManager
 from utils import legacy_sandbox_session_dir, sandbox_session_dir
 
 
@@ -76,11 +76,18 @@ def test_persist_and_restore_multi_cli_tokens(tmp_path):
     assert s2.resume_token == "tok-b"
 
 
-def test_restore_switches_from_disabled_cli_and_keeps_notice(tmp_path):
+def test_restore_switches_from_disabled_cli_closes_old_tmux_and_keeps_notice(tmp_path, monkeypatch):
     cfg = _cfg(tmp_path, a_enabled=True, b_enabled=True)
     mgr = SessionManager(cfg)
     mgr.create(1, "a", str(tmp_path))
     mgr._persist_sessions()
+    closed: list[tuple[str, str]] = []
+
+    def _close_previous(session, cli_name):
+        closed.append((session.id, str(cli_name)))
+        return True
+
+    monkeypatch.setattr(Session, "_close_tmux_for_cli", _close_previous)
 
     restored_cfg = _cfg(tmp_path, a_enabled=False, b_enabled=True)
     restored = SessionManager(restored_cfg)
@@ -91,6 +98,82 @@ def test_restore_switches_from_disabled_cli_and_keeps_notice(tmp_path):
     assert restored_session.active_cli == "b"
     assert restored_session.tool.name == "b"
     assert restored_session.cli.pending_switch_notice == {"from": "a", "to": "b"}
+    assert closed == [(restored_session.id, "a")]
+
+
+def test_restore_closes_removed_cli_tmux_with_persisted_user(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, a_enabled=True, b_enabled=True)
+    cfg.tools["a"].tmux_user = "claude-bot"
+    manager = SessionManager(cfg)
+    manager.create(1, "a", str(tmp_path))
+    manager._persist_sessions()
+    closed: list[tuple[str, str, str | None]] = []
+
+    def _close_previous(session, cli_name, *, tool_override=None):
+        closed.append(
+            (
+                session.id,
+                str(cli_name),
+                getattr(tool_override, "tmux_user", None),
+            )
+        )
+        return True
+
+    monkeypatch.setattr(Session, "_close_tmux_for_cli", _close_previous)
+    restored_cfg = _cfg(tmp_path, a_enabled=True, b_enabled=True)
+    restored_cfg.tools.pop("a")
+
+    restored = SessionManager(restored_cfg)
+    restored_session = next(iter(restored.sessions_for_chat(1).values()))
+
+    assert restored_session.active_cli == "b"
+    assert restored_session.tool.name == "b"
+    assert closed == [(restored_session.id, "a", "claude-bot")]
+    assert restored_session.cli.pending_switch_notice == {"from": "a", "to": "b"}
+
+
+def test_restore_keeps_removed_cli_placeholder_if_tmux_close_fails(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, a_enabled=True, b_enabled=True)
+    cfg.tools["a"].tmux_user = "claude-bot"
+    manager = SessionManager(cfg)
+    manager.create(1, "a", str(tmp_path))
+    manager._persist_sessions()
+
+    def _fail_close(_session, _cli_name, *, tool_override=None):
+        assert getattr(tool_override, "tmux_user", None) == "claude-bot"
+        raise RuntimeError("tmux close failed")
+
+    monkeypatch.setattr(Session, "_close_tmux_for_cli", _fail_close)
+    restored_cfg = _cfg(tmp_path, a_enabled=True, b_enabled=True)
+    restored_cfg.tools.pop("a")
+
+    restored = SessionManager(restored_cfg)
+    restored_session = next(iter(restored.sessions_for_chat(1).values()))
+
+    assert restored_session.active_cli == "a"
+    assert restored_session.tool.name == "a"
+    assert restored_session.tool.enabled is False
+    assert "a" not in restored_session.config.tools
+    assert restored_session.cli.pending_switch_notice is None
+
+
+def test_restore_keeps_previous_cli_if_tmux_close_fails(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, a_enabled=True, b_enabled=True)
+    mgr = SessionManager(cfg)
+    mgr.create(1, "a", str(tmp_path))
+    mgr._persist_sessions()
+
+    def _fail_close(_session, _cli_name):
+        raise RuntimeError("tmux close failed")
+
+    monkeypatch.setattr(Session, "_close_tmux_for_cli", _fail_close)
+    restored_cfg = _cfg(tmp_path, a_enabled=False, b_enabled=True)
+    restored = SessionManager(restored_cfg)
+    restored_session = next(iter(restored.sessions_for_chat(1).values()))
+
+    assert restored_session.active_cli == "a"
+    assert restored_session.tool.name == "a"
+    assert restored_session.cli.pending_switch_notice is None
 
 
 def test_session_reset_clears_all_tokens(tmp_path):
@@ -235,6 +318,7 @@ def test_session_nested_state_payload_roundtrip(tmp_path):
     assert payload["scoped_key"] == s.scoped_key
     assert payload["cli"]["active_cli"] == "a"
     assert payload["cli"]["resume_tokens"]["a"] == "tok-a"
+    assert payload["cli"]["tmux_users"]["a"] is None
     assert payload["cli"]["cli_work_type"] == "analytics"
     assert payload["cli"]["auto_commands_ran"] is True
     assert payload["git"]["busy"] is True

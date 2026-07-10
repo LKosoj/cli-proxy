@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import pwd
+import signal
 import shlex
 import shutil
 import stat
@@ -60,11 +61,15 @@ class TmuxDriver:
             *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
         try:
             stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec or self.timeout_sec)
         except asyncio.TimeoutError as exc:
-            proc.kill()
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                proc.kill()
             await proc.communicate()
             raise TmuxDriverError(f"tmux command timed out: {' '.join(args)}") from exc
         result = TmuxCommandResult(
@@ -140,7 +145,21 @@ class TmuxDriver:
 
     async def kill_session(self, session_name: str) -> bool:
         result = await self.run("kill-session", "-t", session_name, check=False)
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
+        error = str(result.stderr or "").strip()
+        lower = error.lower()
+        if any(
+            marker in lower
+            for marker in (
+                "can't find session:",
+                "no server running on",
+                "no sessions",
+                "no such file or directory",
+            )
+        ):
+            return False
+        raise TmuxDriverError(error or f"tmux session could not be killed: {session_name}")
 
 
 def write_prompt_temp(runtime_dir: str, content: str, *, owner_user: Optional[str] = None) -> str:
