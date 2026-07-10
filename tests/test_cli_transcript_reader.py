@@ -71,6 +71,7 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
         {
             "type": "system",
             "subtype": "turn_duration",
+            "pendingBackgroundAgentCount": 0,
             "sessionId": session_id,
             "timestamp": "2026-07-10T09:00:03Z",
         },
@@ -82,6 +83,120 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
     assert final.complete is True
     assert final.locator is not None
     assert final.locator.path == str(path.resolve())
+
+
+def test_claude_transcript_reader_completes_on_done_marker(tmp_path):
+    request_id = "claude-done-marker"
+    session_id = "66666666-6666-4666-8666-666666666666"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+    _append_jsonl(
+        path,
+        {
+            "type": "user",
+            "sessionId": session_id,
+            "message": {"role": "user", "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> do work"},
+        },
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": f"Финальный ответ\n<<<DONE:{request_id}>>>"}],
+            },
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="claude",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        username="claude-bot",
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.assistant_text == "Финальный ответ"
+    assert result.complete is True
+
+
+def test_claude_transcript_reader_waits_for_done_after_background_turn(tmp_path):
+    request_id = "claude-background"
+    session_id = "77777777-7777-4777-8777-777777777777"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+    _append_jsonl(
+        path,
+        {
+            "type": "user",
+            "sessionId": session_id,
+            "message": {"role": "user", "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> do work"},
+        },
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "Жду агентов"}]},
+        },
+        {
+            "type": "system",
+            "subtype": "turn_duration",
+            "pendingBackgroundAgentCount": 10,
+            "sessionId": session_id,
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="claude",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        username="claude-bot",
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    intermediate = reader.poll()
+
+    assert intermediate.assistant_text == "Жду агентов"
+    assert intermediate.complete is False
+
+    _append_jsonl(
+        path,
+        {
+            "type": "system",
+            "subtype": "turn_duration",
+            "pendingBackgroundAgentCount": 0,
+            "sessionId": session_id,
+        },
+    )
+
+    all_agents_finished = reader.poll()
+
+    assert all_agents_finished.complete is False
+
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Итоговый ответ"}],
+            },
+        },
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": f"<<<DONE:{request_id}>>>"}],
+            },
+        },
+    )
+
+    final = reader.poll()
+
+    assert final.assistant_text == "Итоговый ответ"
+    assert final.complete is True
 
 
 def test_codex_transcript_reader_uses_task_complete(tmp_path):

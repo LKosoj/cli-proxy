@@ -223,6 +223,7 @@ def test_parse_tmux_delta_filters_claude_localized_progress_and_repaint_tail() -
     ui_lines = (
         "Строю PromptBudgetBuilder…   ( 1m 2s  ·  1.9k tokens )",
         "$Baked for 1m 2s · 1 shell, 1 monitor still running",
+        "Cogitated for 12m 41s",
         "$(B(B",
     )
 

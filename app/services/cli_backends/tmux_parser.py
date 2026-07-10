@@ -30,7 +30,7 @@ _CLAUDE_SCREEN_READER_UI_LINE_RE = re.compile(
     r"\s+·\s+\d+(?:\.\d+)?k?\s+tokens(?:\s+·[^)]*)?\s*\)"
     r"|(?:don't ask|[a-z][a-z -]*permissions) on(?:\s|$)"
     r"|effort:\s*"
-    r"|\$?(?:Baked|Cooked) for(?:\s|$)"
+    r"|\$?(?:Baked|Cogitated|Cooked) for(?:\s|$)"
     r"|\(ctrl\+b\s+ctrl\+b\b"
     r"|<{2,3}DONE:"
     r"|\$(?:\(B)*\s*$"

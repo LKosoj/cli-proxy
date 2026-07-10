@@ -101,6 +101,7 @@ class CliTranscriptReader:
         self.complete = False
         self.recognized = False
         self.activity_at: Optional[float] = None
+        self._claude_requires_done_marker = False
         self._grok_stream_key = ""
         self._grok_stream_chunks: list[str] = []
         if locator is not None:
@@ -228,9 +229,11 @@ class CliTranscriptReader:
                 self.session_id = session_id
             return
 
+    def _done_marker(self) -> str:
+        return f"<<<DONE:{self.request_id}>>>"
+
     def _clean_assistant_text(self, text: str) -> str:
-        marker = f"<<<DONE:{self.request_id}>>>"
-        return str(text or "").replace(marker, "").strip()
+        return str(text or "").replace(self._done_marker(), "").strip()
 
     def _handle_claude(self, record: dict[str, Any]) -> None:
         event_type = str(record.get("type") or "").strip()
@@ -242,7 +245,11 @@ class CliTranscriptReader:
             content = message.get("content")
             text = _content_text(content)
             if text:
-                self.latest_assistant_text = self._clean_assistant_text(text)
+                if self._done_marker() in text:
+                    self.complete = True
+                cleaned_text = self._clean_assistant_text(text)
+                if cleaned_text:
+                    self.latest_assistant_text = cleaned_text
             if isinstance(content, list):
                 for item in content:
                     if not isinstance(item, dict) or str(item.get("type") or "").strip() != "tool_use":
@@ -251,7 +258,11 @@ class CliTranscriptReader:
                     if tool_name:
                         self.latest_progress_text = tool_name
         elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
-            self.complete = True
+            pending_count = record.get("pendingBackgroundAgentCount")
+            if isinstance(pending_count, int) and pending_count > 0:
+                self._claude_requires_done_marker = True
+            elif not self._claude_requires_done_marker:
+                self.complete = True
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         if str(record.get("type") or "").strip() != "event_msg":
