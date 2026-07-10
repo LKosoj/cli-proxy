@@ -214,6 +214,31 @@ def test_parse_tmux_delta_filters_real_claude_screen_reader_preview_status() -> 
         assert parsed.text == "Выполняю команду sleep 10 и жду её завершения."
 
 
+def test_parse_tmux_delta_filters_claude_localized_progress_and_repaint_tail() -> None:
+    request_id = "req-screen-reader-localized-progress"
+    commentary = (
+        "Монитор поставлен — жду события о завершении сьюта. "
+        "Как только придёт итоговая строка pytest, дам финальный отчёт."
+    )
+    ui_lines = (
+        "Строю PromptBudgetBuilder…   ( 1m 2s  ·  1.9k tokens )",
+        "$Baked for 1m 2s · 1 shell, 1 monitor still running",
+        "$(B(B",
+    )
+
+    for ui_line in ui_lines:
+        delta = (
+            build_prompt_with_markers("continue", request_id)
+            + f"$claude: {commentary}\n"
+            + f"{ui_line}\n"
+        )
+
+        parsed = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+        assert parsed.complete is False
+        assert parsed.text == commentary
+
+
 def test_parse_tmux_delta_filters_real_claude_bypass_footer_and_partial_done_marker() -> None:
     request_id = "req-screen-reader-bypass"
     delta = (
@@ -375,3 +400,16 @@ def test_build_prompt_with_markers_contains_unique_request_and_done() -> None:
     assert request_marker("abc") in prompt
     assert done_marker("abc") in prompt
     assert "do work" in prompt
+
+
+def test_build_prompt_with_markers_keeps_boundaries_when_tui_flattens_newlines() -> None:
+    request_id = "req-flattened-prompt"
+
+    prompt = build_prompt_with_markers("Исходная задача:\nпродолжи", request_id)
+
+    assert "продолжи\n\n --- CLI-PROXY COMPLETION PROTOCOL --- \n" in prompt
+    assert f"{_DONE_INSTRUCTION} \n{done_marker(request_id)}\n" in prompt
+
+    flattened = prompt.replace("\n", "")
+    assert "продолжи --- CLI-PROXY COMPLETION PROTOCOL --- When" in flattened
+    assert f"own line: {done_marker(request_id)}" in flattened

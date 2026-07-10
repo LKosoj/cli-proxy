@@ -15,6 +15,7 @@ _DONE_INSTRUCTION_MARKER_COMPACT = "exactmarker"
 _DONE_INSTRUCTION_START_COMPACT = "whenyouarecompletelyfinished"
 _DONE_INSTRUCTION_PRINT_MARKER_COMPACT = "printthisexactmarker"
 _DONE_INSTRUCTION_CONTINUATION_COMPACTS = {"ownline:", "onitsownline:"}
+_PROMPT_COMPLETION_SEPARATOR = "--- CLI-PROXY COMPLETION PROTOCOL ---"
 _CLAUDE_SCREEN_READER_EVENT_RE = re.compile(
     r"(?im)(?:"
     r"(?:^[ \t]*|\$+(?:\(B)?)(?P<role>claude|tool):[ \t]*"
@@ -24,12 +25,15 @@ _CLAUDE_SCREEN_READER_EVENT_RE = re.compile(
 _CLAUDE_SCREEN_READER_UI_LINE_RE = re.compile(
     r"(?i)^(?:"
     r"[A-Za-z][A-Za-z-]*(?:…|\.{3})(?:\s|$)"
+    r"|.+(?:…|\.{3})\s*\(\s*"
+    r"\d+(?:\.\d+)?\s*[hms](?:\s+\d+(?:\.\d+)?\s*[hms])*"
+    r"\s+·\s+\d+(?:\.\d+)?k?\s+tokens(?:\s+·[^)]*)?\s*\)"
     r"|(?:don't ask|[a-z][a-z -]*permissions) on(?:\s|$)"
     r"|effort:\s*"
-    r"|Cooked for(?:\s|$)"
+    r"|\$?(?:Baked|Cooked) for(?:\s|$)"
     r"|\(ctrl\+b\s+ctrl\+b\b"
     r"|<{2,3}DONE:"
-    r"|\$\s*$"
+    r"|\$(?:\(B)*\s*$"
     r")"
 )
 
@@ -150,7 +154,8 @@ def build_prompt_with_markers(prompt: str, request_id: str, *, multiline: bool =
     return (
         f"{request_marker(request_id)}\n"
         f"{prompt.rstrip()}\n\n"
-        "When you are completely finished, print this exact marker on its own line:\n"
+        f" {_PROMPT_COMPLETION_SEPARATOR} \n"
+        f"{_DONE_INSTRUCTION} \n"
         f"{done_marker(request_id)}\n"
     )
 
