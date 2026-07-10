@@ -35,6 +35,7 @@ class FakeTmuxDriver:
         self.events = []
         self.has_session_calls = []
         self.response_text = "assistant answer"
+        self.sent_prompts = []
 
     async def has_session(self, session_name):
         self.has_session_calls.append(session_name)
@@ -71,7 +72,11 @@ class FakeTmuxDriver:
     async def send_enter(self, pane_target):
         self.events.append("send_enter")
         prompt = open(self.loaded_prompt_path, encoding="utf-8").read()
-        request_id = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", prompt).group(1)
+        self.sent_prompts.append(prompt)
+        match = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", prompt)
+        if match is None:
+            return
+        request_id = match.group(1)
         with open(self.log_path, "a", encoding="utf-8") as handle:
             handle.write(f"{request_marker(request_id)}\n{self.response_text}\n")
             if self.write_done_marker:
@@ -170,6 +175,64 @@ async def test_tmux_backend_run_returns_delta_and_state(tmp_path):
     assert str(driver.loaded_buffer_name).startswith("cli-proxy-")
     assert driver.paste_delete is True
     assert driver.deleted_buffers == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": 1.0,
+        },
+    )
+
+    assert await backend.is_active(session) is True
+    await backend.send_input(session, "steer the active request")
+
+    state = TmuxExecutionBackend._read_state(paths)
+    assert driver.sent_prompts[-1] == "steer the active request"
+    assert "CLI_PROXY_REQUEST" not in driver.sent_prompts[-1]
+    assert driver.paste_delete is True
+    paste_index = driver.events.index("paste_buffer")
+    enter_index = driver.events.index("send_enter")
+    assert "capture_pane" in driver.events[paste_index + 1:enter_index]
+    assert state["state"] == "active"
+    assert state["active_request_id"] == "request-1"
+    assert state["last_activity_at"] > 1.0
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_rejects_direct_input_when_request_is_not_active(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "idle",
+            "active_request_id": None,
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+        },
+    )
+
+    with pytest.raises(TmuxDriverError, match="active tmux session is unavailable"):
+        await backend.send_input(session, "must stay pending")
+
+    assert driver.sent_prompts == []
 
 
 @pytest.mark.asyncio
@@ -490,6 +553,39 @@ async def test_tmux_backend_waits_for_claude_prompt_before_pasting(tmp_path):
     assert result.abnormal_stop is False
     assert driver.capture_calls >= 3
     assert driver.events.index("capture_pane") < driver.events.index("load_buffer")
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_accepts_configured_claude_screen_reader_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [
+        "Claude Code v2.1.206\nLoading...",
+        "Conversation compacted\nSkills restored\n$",
+        *(["Claude Code v2.1.206\nLoading..."] * 20),
+    ]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.05,
+    )
+    session = _session(tmp_path)
+    session.tool.interactive_cmd = ["claude", "--ax-screen-reader"]
+
+    result = await backend.run(session, "do work")
+
+    assert result.abnormal_stop is False
+    assert driver.capture_calls >= 2
+    assert driver.events.index("capture_pane") < driver.events.index("load_buffer")
+
+
+def test_tmux_backend_does_not_treat_plain_shell_prompt_as_ready_claude() -> None:
+    session = SimpleNamespace(
+        tool=ToolConfig(name="claude", mode="headless", cmd=["claude"], interactive_cmd=["claude"]),
+        cli=SimpleNamespace(active_cli="claude"),
+    )
+
+    assert TmuxExecutionBackend._is_interactive_ready(session, "bash\nuser@host:/tmp$") is False
 
 
 @pytest.mark.asyncio

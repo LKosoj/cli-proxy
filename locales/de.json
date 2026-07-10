@@ -549,6 +549,7 @@
     "input": {
       "queue_new": "🆕 Neue Warteschlange",
       "queue_confirm": "🆕 In Warteschlange",
+      "tmux_current": "➡️ An aktuelle tmux-Sitzung senden",
       "orch_apply": "✅ Anwenden",
       "queue_append": "➕ Zur aktuellen hinzufügen",
       "orch_cancel": "⛔ Abbrechen",
@@ -653,6 +654,7 @@
       "callback_handler": "Fehler bei der Schaltflächenverarbeitung: {e}",
       "queue_failed": "Input konnte nicht in die Warteschlange gestellt werden. Bitte erneut versuchen.",
       "queue_append_failed": "Nachricht in der Warteschlange konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+      "tmux_current_send_failed": "Die Nachricht konnte nicht an die aktuelle tmux-Sitzung gesendet werden. Die Nachricht wurde beibehalten.",
       "unknown_tool": "Unbekanntes Werkzeug.",
       "session_closed_stale": "Sitzung ist bereits geschlossen.",
       "config_service_unavailable": "ConfigService nicht verfügbar: prompt_regex nicht gespeichert.",
@@ -673,6 +675,7 @@
       "taken": "Übernommen.",
       "queued": "Input in Warteschlange.",
       "appended": "Input zur aktuellen Warteschlangennachricht hinzugefügt.",
+      "tmux_current_sent": "Nachricht an die aktuelle tmux-Sitzung gesendet.",
       "discarded": "Input verworfen.",
       "busy_queued": "Sitzung beschäftigt. Input wird in Warteschlange gestellt.",
       "interrupted": "Aktuelle Generierung unterbrochen. Input verworfen.",
@@ -687,6 +690,7 @@
       "take_in_work_prompt": "Nachricht empfangen. In Arbeit nehmen?",
       "busy_prompt": "In der Warteschlange ist bereits eine Nachricht. Was soll mit der neuen Eingabe gemacht werden?",
       "queue_confirm_prompt": "Sitzung ist beschäftigt. Nachricht in die Warteschlange stellen?",
+      "tmux_busy_prompt": "Die CLI läuft in tmux. Was soll mit der neuen Nachricht geschehen?",
       "queued_immediately": "Eingabe wurde in die Warteschlange gestellt.",
       "pending_limit_overflow": "Die Warteschlange für ausstehende Eingaben ist voll (Limit {limit}). Bitte warten Sie, bis die aktuellen Anfragen verarbeitet wurden.",
       "direct_cli_denied": "Direktes CLI ist für Ihren Benutzer nicht verfügbar."

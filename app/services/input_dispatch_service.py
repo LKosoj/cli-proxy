@@ -12,6 +12,8 @@ from app.services.input_dispatch_models import (
     PENDING_ACTION_ORCHESTRATOR_TRANSITION as MODEL_PENDING_ACTION_ORCHESTRATOR_TRANSITION,
     PENDING_ACTION_QUEUE_CHOICE as MODEL_PENDING_ACTION_QUEUE_CHOICE,
     PENDING_ACTION_QUEUE_CONFIRM as MODEL_PENDING_ACTION_QUEUE_CONFIRM,
+    PENDING_ACTION_TMUX_QUEUE_CHOICE as MODEL_PENDING_ACTION_TMUX_QUEUE_CHOICE,
+    PENDING_ACTION_TMUX_QUEUE_CONFIRM as MODEL_PENDING_ACTION_TMUX_QUEUE_CONFIRM,
     PendingInput,
     PendingInputDecision,
 )
@@ -48,6 +50,8 @@ class InputDispatchService:
     PENDING_ACTION_CONFIRM = MODEL_PENDING_ACTION_CONFIRM
     PENDING_ACTION_QUEUE_CONFIRM = MODEL_PENDING_ACTION_QUEUE_CONFIRM
     PENDING_ACTION_QUEUE_CHOICE = MODEL_PENDING_ACTION_QUEUE_CHOICE
+    PENDING_ACTION_TMUX_QUEUE_CONFIRM = MODEL_PENDING_ACTION_TMUX_QUEUE_CONFIRM
+    PENDING_ACTION_TMUX_QUEUE_CHOICE = MODEL_PENDING_ACTION_TMUX_QUEUE_CHOICE
     PENDING_ACTION_ORCHESTRATOR_TRANSITION = MODEL_PENDING_ACTION_ORCHESTRATOR_TRANSITION
 
     def __init__(self, bot_app, *, pending_input_ui=None):
@@ -302,6 +306,10 @@ class InputDispatchService:
     def queue_confirm_prompt_text(cls, lang: str = "ru") -> str:
         return t("msg.input.queue_confirm_prompt", lang)
 
+    @classmethod
+    def tmux_busy_prompt_text(cls, lang: str = "ru") -> str:
+        return t("msg.input.tmux_busy_prompt", lang)
+
     @staticmethod
     def queued_immediately_text(lang: str = "ru") -> str:
         return t("msg.input.queued_immediately", lang)
@@ -315,7 +323,12 @@ class InputDispatchService:
         lang: str = "ru",
     ) -> PendingInputDecision:
         normalized = str(action or cls.PENDING_ACTION_CONFIRM).strip() or cls.PENDING_ACTION_CONFIRM
-        if normalized == cls.PENDING_ACTION_QUEUE_CHOICE:
+        if normalized in {
+            cls.PENDING_ACTION_TMUX_QUEUE_CHOICE,
+            cls.PENDING_ACTION_TMUX_QUEUE_CONFIRM,
+        }:
+            text = cls.tmux_busy_prompt_text(lang)
+        elif normalized == cls.PENDING_ACTION_QUEUE_CHOICE:
             text = cls.busy_prompt_text(lang)
         elif normalized == cls.PENDING_ACTION_QUEUE_CONFIRM:
             text = cls.queue_confirm_prompt_text(lang)
@@ -689,6 +702,62 @@ class InputDispatchService:
             return True
         return False
 
+    @classmethod
+    def _pending_has_attachments(cls, pending_input: PendingInput) -> bool:
+        dest = dict(getattr(pending_input, "dest", {}) or {})
+        return bool(
+            cls._normalize_image_paths(
+                image_path=getattr(pending_input, "image_path", None),
+                image_paths=getattr(pending_input, "image_paths", None),
+                dest=dest,
+            )
+            or dest.get("attachments")
+        )
+
+    @classmethod
+    async def can_send_pending_to_active_tmux(cls, session, pending_input: PendingInput) -> bool:
+        if cls._pending_has_attachments(pending_input):
+            return False
+        try:
+            from app.services.cli_backends import TmuxExecutionBackend
+
+            return await TmuxExecutionBackend().is_active(session)
+        except Exception:
+            logger.exception(
+                "input dispatch: active tmux availability check failed session_id=%s",
+                getattr(session, "id", "?"),
+            )
+            return False
+
+    @classmethod
+    async def send_pending_to_active_tmux(cls, session, pending_input: PendingInput) -> None:
+        if cls._pending_has_attachments(pending_input):
+            raise RuntimeError("attachments cannot be sent to the active tmux session")
+        from app.services.cli_backends import TmuxExecutionBackend
+
+        await TmuxExecutionBackend().send_input(
+            session,
+            str(getattr(pending_input, "text", "") or ""),
+        )
+
+    async def refresh_busy_pending_action(self, session, pending_input: PendingInput) -> str:
+        queue_has_items = bool(getattr(session, "queue", None))
+        tmux_active = await self.can_send_pending_to_active_tmux(session, pending_input)
+        if tmux_active:
+            action = (
+                self.PENDING_ACTION_TMUX_QUEUE_CHOICE
+                if queue_has_items
+                else self.PENDING_ACTION_TMUX_QUEUE_CONFIRM
+            )
+        else:
+            action = (
+                self.PENDING_ACTION_QUEUE_CHOICE
+                if queue_has_items
+                else self.PENDING_ACTION_QUEUE_CONFIRM
+            )
+        pending_input.action = action
+        return action
+
     async def _handle_busy_pending_input(
         self,
         *,
@@ -704,13 +773,6 @@ class InputDispatchService:
         if queue_ref is None:
             queue_ref = []
             setattr(session, "queue", queue_ref)
-        queue_has_items = bool(queue_ref)
-        target_action = (
-            self.PENDING_ACTION_QUEUE_CHOICE
-            if queue_has_items
-            else self.PENDING_ACTION_QUEUE_CONFIRM
-        )
-        pending_input.action = target_action
         accepted, merged = self.upsert_pending(pending_map, ui_key, pending_input)
         if not accepted:
             await self.send_pending_input_decision(
@@ -720,6 +782,7 @@ class InputDispatchService:
                 chat_id=chat_id,
             )
             return
+        await self.refresh_busy_pending_action(session, merged)
         self._record_queue_metric()
         await self._show_pending_prompt(ui_key=ui_key, pending_input=merged, chat_id=chat_id, context=context, lang=lang)
 

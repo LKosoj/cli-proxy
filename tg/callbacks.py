@@ -756,6 +756,64 @@ class CallbackHandler(CallbackActionsMixin):
                 dest=dict(getattr(pending, "dest", {}) or {}),
             )
             return
+        if query.data == "send_current_tmux":
+            pending_map = self.bot_app.ui_state.pending
+            pending, session, purged = self._next_live_pending_input(ui_key=ui_key)
+            if not pending:
+                await self._respond_callback(
+                    context=context,
+                    query=query,
+                    chat_id=int(chat_id),
+                    text=t("msg.error.session_closed_stale", lang) if purged else t("msg.input.no_pending", lang),
+                )
+                return
+            dispatch = getattr(self.bot_app, "input_dispatch_service", None)
+            sender = getattr(dispatch, "send_pending_to_active_tmux", None) if dispatch is not None else None
+            if not callable(sender):
+                await self._respond_callback(
+                    context=context,
+                    query=query,
+                    chat_id=int(chat_id),
+                    text=t("msg.error.tmux_current_send_failed", lang),
+                )
+                return
+            try:
+                await sender(session, pending)
+            except Exception:
+                logging.exception(
+                    "failed to send pending input to active tmux session_id=%s",
+                    getattr(session, "id", "?"),
+                )
+                await dispatch.refresh_busy_pending_action(session, pending)
+                await self._respond_callback(
+                    context=context,
+                    query=query,
+                    chat_id=int(chat_id),
+                    text=t("msg.error.tmux_current_send_failed", lang),
+                )
+                await dispatch._show_pending_prompt(
+                    ui_key=ui_key,
+                    pending_input=pending,
+                    chat_id=int(chat_id),
+                    context=context,
+                    lang=lang,
+                )
+                return
+            if hasattr(dispatch, "clear_pending_prompt_record"):
+                dispatch.clear_pending_prompt_record(ui_key)
+            InputDispatchService.pop_pending(pending_map, ui_key)
+            await self._respond_callback(
+                context=context,
+                query=query,
+                chat_id=int(chat_id),
+                text=t("msg.input.tmux_current_sent", lang),
+            )
+            await self._show_next_pending_input(
+                chat_id=int(chat_id),
+                context=context,
+                message_thread_id=ui_key.message_thread_id,
+            )
+            return
         if query.data == "queue_append_pending":
             pending_map = self.bot_app.ui_state.pending
             pending, session, purged = self._next_live_pending_input(ui_key=ui_key)

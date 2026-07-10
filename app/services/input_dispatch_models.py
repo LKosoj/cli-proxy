@@ -7,6 +7,8 @@ from typing import Any, Optional
 PENDING_ACTION_CONFIRM = "confirm"
 PENDING_ACTION_QUEUE_CONFIRM = "queue_confirm"
 PENDING_ACTION_QUEUE_CHOICE = "queue_choice"
+PENDING_ACTION_TMUX_QUEUE_CONFIRM = "tmux_queue_confirm"
+PENDING_ACTION_TMUX_QUEUE_CHOICE = "tmux_queue_choice"
 PENDING_ACTION_ORCHESTRATOR_TRANSITION = "orchestrator_transition"
 
 
@@ -33,6 +35,8 @@ __all__ = [
     "PENDING_ACTION_ORCHESTRATOR_TRANSITION",
     "PENDING_ACTION_QUEUE_CHOICE",
     "PENDING_ACTION_QUEUE_CONFIRM",
+    "PENDING_ACTION_TMUX_QUEUE_CHOICE",
+    "PENDING_ACTION_TMUX_QUEUE_CONFIRM",
     "PendingInput",
     "PendingInputDecision",
 ]

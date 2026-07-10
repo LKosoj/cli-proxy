@@ -549,6 +549,7 @@
     "input": {
       "queue_new": "🆕 New queue",
       "queue_confirm": "🆕 Queue",
+      "tmux_current": "➡️ Send to current tmux session",
       "orch_apply": "✅ Apply",
       "queue_append": "➕ Append to current",
       "orch_cancel": "⛔ Cancel",
@@ -653,6 +654,7 @@
       "callback_handler": "Button handling error: {e}",
       "queue_failed": "Failed to queue input. Please try again.",
       "queue_append_failed": "Failed to update queued message. Please try again.",
+      "tmux_current_send_failed": "Failed to send the message to the current tmux session. The message was preserved.",
       "unknown_tool": "Unknown tool.",
       "session_closed_stale": "Session is already closed.",
       "config_service_unavailable": "ConfigService unavailable: prompt_regex not saved.",
@@ -673,6 +675,7 @@
       "taken": "Taken.",
       "queued": "Input queued.",
       "appended": "Input appended to the current queued message.",
+      "tmux_current_sent": "Message sent to the current tmux session.",
       "discarded": "Input discarded.",
       "busy_queued": "Session is busy. Queuing input.",
       "interrupted": "Current generation interrupted. Input discarded.",
@@ -687,6 +690,7 @@
       "take_in_work_prompt": "Message received. Take it into work?",
       "busy_prompt": "There is already a message in the queue. What should be done with the new input?",
       "queue_confirm_prompt": "Session is busy. Queue the message?",
+      "tmux_busy_prompt": "The CLI is running in tmux. What should be done with the new message?",
       "queued_immediately": "Input added to the queue.",
       "pending_limit_overflow": "Pending input queue is full (limit {limit}). Please wait for current requests to be processed.",
       "direct_cli_denied": "Direct CLI is not available for your user."

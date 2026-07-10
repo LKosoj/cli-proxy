@@ -357,6 +357,7 @@ tools:
 - `tools.<name>.tmux_user` optionally runs tmux commands through `su - <user>`; for Claude Code in the root-service setup this is usually `claude-bot`.
 - Backend selection is configured only through settings: `tools.<name>.default_execution_backend` has priority for a concrete CLI, and `defaults.default_execution_backend` is the shared fallback.
 - Changing `default_execution_backend` during runtime reload applies to existing sessions when their CLI supports the selected backend; session-level overrides are no longer used, and the UI shows the backend as read-only state.
+- While a tmux request is active, the busy-session menu can send a new text message directly to the current pane or keep it as a separate queue item; when the queue is non-empty, the message can also be merged into its last item.
 - `tmux` v1 does not support image requests: image input is rejected explicitly, with no silent fallback to headless.
 - Rollback: set `defaults.default_execution_backend: headless` or `tools.<name>.default_execution_backend: headless` and run runtime reload. Idle tmux sessions are closed when the backend changes; busy sessions must finish first or be closed/recreated.
 - CI covers the tmux path with a guard test: the backend must not use `headless_cmd` or headless CLI execution.

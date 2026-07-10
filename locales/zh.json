@@ -549,6 +549,7 @@
     "input": {
       "queue_new": "🆕 新队列",
       "queue_confirm": "🆕 放入队列",
+      "tmux_current": "➡️ 发送到当前 tmux 会话",
       "orch_apply": "✅ 执行",
       "queue_append": "➕ 追加到当前",
       "orch_cancel": "⛔ 取消",
@@ -653,6 +654,7 @@
       "callback_handler": "按钮处理错误：{e}",
       "queue_failed": "无法将输入加入队列。请重试。",
       "queue_append_failed": "无法更新队列中的消息。请重试。",
+      "tmux_current_send_failed": "无法将消息发送到当前 tmux 会话。消息已保留。",
       "unknown_tool": "未知工具。",
       "session_closed_stale": "会话已关闭。",
       "config_service_unavailable": "ConfigService 不可用：prompt_regex 未保存。",
@@ -673,6 +675,7 @@
       "taken": "已接受处理。",
       "queued": "输入已加入队列。",
       "appended": "输入已追加到队列中的当前消息。",
+      "tmux_current_sent": "消息已发送到当前 tmux 会话。",
       "discarded": "输入已丢弃。",
       "busy_queued": "会话忙碌。正在将输入加入队列。",
       "interrupted": "当前生成已中断。输入已丢弃。",
@@ -687,6 +690,7 @@
       "take_in_work_prompt": "消息已收到。开始处理？",
       "busy_prompt": "队列中已有消息。如何处理新的输入？",
       "queue_confirm_prompt": "会话正忙。将消息加入队列？",
+      "tmux_busy_prompt": "CLI 正在 tmux 中运行。如何处理新消息？",
       "queued_immediately": "输入已加入队列。",
       "pending_limit_overflow": "待处理输入队列已满（上限 {limit}）。请等待当前请求处理完毕。",
       "direct_cli_denied": "您的用户无法使用直接 CLI。"

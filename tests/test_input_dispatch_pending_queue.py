@@ -79,11 +79,22 @@ def test_telegram_pending_input_adapter_preserves_callback_data_contract() -> No
     queue_confirm_markup = build_pending_input_reply_markup(
         PendingInputDecision(action=InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM, text="", payload={})
     )
+    tmux_queue_markup = build_pending_input_reply_markup(
+        PendingInputDecision(action=InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CHOICE, text="", payload={})
+    )
+    tmux_queue_confirm_markup = build_pending_input_reply_markup(
+        PendingInputDecision(action=InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM, text="", payload={})
+    )
     assert confirm_markup.inline_keyboard[0][0].callback_data == "take_pending_input"
     assert confirm_markup.inline_keyboard[1][0].callback_data == "discard_input"
     assert queue_markup.inline_keyboard[0][0].callback_data == "queue_append_pending"
     assert queue_markup.inline_keyboard[0][1].callback_data == "queue_input"
     assert queue_confirm_markup.inline_keyboard[0][0].callback_data == "queue_input"
+    assert tmux_queue_markup.inline_keyboard[0][0].callback_data == "send_current_tmux"
+    assert tmux_queue_markup.inline_keyboard[1][0].callback_data == "queue_append_pending"
+    assert tmux_queue_markup.inline_keyboard[1][1].callback_data == "queue_input"
+    assert tmux_queue_confirm_markup.inline_keyboard[0][0].callback_data == "send_current_tmux"
+    assert tmux_queue_confirm_markup.inline_keyboard[1][0].callback_data == "queue_input"
 
 
 def test_append_queue_item_normalizes_payload_and_preserves_metadata() -> None:
@@ -258,6 +269,94 @@ async def test_handle_cli_input_busy_without_queue_still_requires_confirmation_w
     assert pending_queue[0].text == "m1"
     assert session.queue == []
     assert int(metrics.get("queued", 0)) == 1
+    assert sent == [InputDispatchService.queue_confirm_prompt_text()]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("queue", "expected_action"),
+    [
+        ([], InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM),
+        (
+            [{"text": "queued", "dest": {"kind": "telegram", "chat_id": 1}}],
+            InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CHOICE,
+        ),
+    ],
+)
+async def test_handle_cli_input_busy_active_tmux_offers_direct_send(
+    monkeypatch,
+    queue,
+    expected_action: str,
+) -> None:
+    sent: list[str] = []
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        ui_state=SimpleNamespace(pending={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+    session = SimpleNamespace(
+        id="s1",
+        busy=True,
+        queue=list(queue),
+        is_active_by_tick=lambda: False,
+        run_lock=asyncio.Lock(),
+    )
+
+    async def _active_tmux(_session, _pending) -> bool:
+        return True
+
+    monkeypatch.setattr(service, "can_send_pending_to_active_tmux", _active_tmux)
+
+    await service.handle_cli_input(session, "steer", chat_id=1, context=object())
+
+    pending = InputDispatchService.pending_head(
+        bot_app.ui_state.pending,
+        InputDispatchService._pending_ui_key(None, 1),
+    )
+    assert pending is not None
+    assert pending.action == expected_action
+    assert sent == [InputDispatchService.tmux_busy_prompt_text()]
+
+
+@pytest.mark.asyncio
+async def test_active_tmux_choice_is_not_offered_for_attachments(monkeypatch) -> None:
+    from app.services.cli_backends import TmuxExecutionBackend
+
+    sent: list[str] = []
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        ui_state=SimpleNamespace(pending={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+    session = SimpleNamespace(
+        id="s1",
+        busy=True,
+        queue=[],
+        is_active_by_tick=lambda: False,
+        run_lock=asyncio.Lock(),
+    )
+
+    async def _active_tmux(_backend, _session) -> bool:
+        raise AssertionError("tmux must not be probed when pending input has attachments")
+
+    monkeypatch.setattr(TmuxExecutionBackend, "is_active", _active_tmux)
+
+    await service.handle_cli_input(
+        session,
+        "caption",
+        chat_id=1,
+        context=object(),
+        image_paths=["/tmp/image.png"],
+    )
+
+    pending = InputDispatchService.pending_head(
+        bot_app.ui_state.pending,
+        InputDispatchService._pending_ui_key(None, 1),
+    )
+    assert pending is not None
+    assert pending.action == InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM
     assert sent == [InputDispatchService.queue_confirm_prompt_text()]
 
 

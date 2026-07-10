@@ -410,6 +410,68 @@ async def test_desktop_queue_input_enqueues_before_dispatch_when_session_is_idle
 
 
 @pytest.mark.asyncio
+async def test_desktop_sends_pending_input_to_active_tmux_session(tmp_path) -> None:
+    cfg = _build_config(tmp_path)
+    task_service = TaskService()
+    sessions = SessionService(SessionManager(cfg), task_service)
+    facade = ApplicationFacade(
+        config_service=ConfigService(_InMemoryConfigProvider(cfg)),
+        session_service=sessions,
+        task_service=task_service,
+        git_service=None,
+        mode_registry_service=ModeRegistryService(ModeRegistry()),
+    )
+    facade.config = cfg
+
+    session = sessions.create_desktop_session("dummy", str(tmp_path))
+    session_uid = session_runtime_uid(session)
+    session.busy = True
+    events: list[tuple[str, dict]] = []
+    facade.subscribe(lambda note: events.append((note.event, note.payload)))
+
+    bot_app = facade._desktop_bot_app()
+    dispatch = bot_app.input_dispatch_service
+
+    async def _active_tmux(_session, _pending) -> bool:
+        return True
+
+    sent_to_tmux = []
+
+    async def _send_to_tmux(target_session, target_pending) -> None:
+        sent_to_tmux.append((target_session, str(target_pending.text or "")))
+
+    dispatch.can_send_pending_to_active_tmux = _active_tmux
+    dispatch.send_pending_to_active_tmux = _send_to_tmux
+
+    await dispatch.handle_cli_input(
+        session,
+        "steer desktop run",
+        session_uid,
+        context=object(),
+        dest={"kind": "desktop", "session_uid": session_uid},
+    )
+
+    assert any(
+        event == "ui:mode_menu"
+        and payload.get("rows", [])[0] == [
+            {"text": "➡️ В текущую tmux-сессию", "data": "send_current_tmux"}
+        ]
+        for event, payload in events
+    )
+
+    ok = await facade.handle_mode_callback(session_uid, data="send_current_tmux")
+
+    assert ok is True
+    assert sent_to_tmux == [(session, "steer desktop run")]
+    assert InputDispatchService.pending_head(bot_app.ui_state.pending, session_uid) is None
+    assert any(
+        event == "ui:message"
+        and str(payload.get("text") or "") == "Сообщение отправлено в текущую tmux-сессию."
+        for event, payload in events
+    )
+
+
+@pytest.mark.asyncio
 async def test_desktop_busy_prompt_cancel_current_interrupts_and_drops_pending(tmp_path) -> None:
     cfg = _build_config(tmp_path)
 

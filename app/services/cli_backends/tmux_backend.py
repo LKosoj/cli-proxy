@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import shlex
@@ -43,6 +44,8 @@ _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
 }
 _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok"}
 _SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
+
+logger = logging.getLogger(__name__)
 
 
 def _session_uid(session: Any) -> str:
@@ -133,7 +136,7 @@ def _set_resume_token(session: Any, token: str) -> None:
     try:
         setattr(session, "resume_token", value)
     except Exception:
-        pass
+        logger.exception("failed to set tmux resume token session_id=%s", getattr(session, "id", "?"))
     tokens = getattr(getattr(session, "cli", None), "resume_tokens", None)
     if isinstance(tokens, dict):
         tokens[_active_cli(session)] = value
@@ -376,6 +379,70 @@ class TmuxExecutionBackend:
     def paths(self, session: Any) -> dict[str, str]:
         return tmux_runtime_paths(session)
 
+    @staticmethod
+    def _pane_lock(session: Any) -> asyncio.Lock:
+        lock = getattr(session, "_tmux_pane_lock", None)
+        if isinstance(lock, asyncio.Lock):
+            return lock
+        lock = asyncio.Lock()
+        setattr(session, "_tmux_pane_lock", lock)
+        return lock
+
+    @staticmethod
+    def _has_active_runtime_state(session: Any, state: dict[str, Any]) -> bool:
+        active_backend = str(getattr(session, "_active_execution_backend", "") or "").strip().lower()
+        return bool(
+            active_backend == "tmux"
+            and str(state.get("state") or "").strip().lower() == "active"
+            and str(state.get("active_request_id") or "").strip()
+        )
+
+    async def is_active(self, session: Any) -> bool:
+        paths = self.paths(session)
+        state = self._read_state(paths)
+        if not self._has_active_runtime_state(session, state):
+            return False
+        return bool(await self._driver(session).has_session(paths["session_name"]))
+
+    async def send_input(self, session: Any, text: str) -> None:
+        prompt = str(text or "")
+        if not prompt.strip():
+            raise TmuxDriverError("cannot send empty input to active tmux session")
+
+        paths = self.paths(session)
+        driver = self._driver(session)
+        async with self._pane_lock(session):
+            if not await self.is_active(session):
+                raise TmuxDriverError("active tmux session is unavailable")
+
+            buffer_name = f"cli-proxy-steer-{_new_request_id()}"
+            prompt_path = write_prompt_temp(paths["runtime_dir"], prompt, owner_user=getattr(driver, "user", None))
+            buffer_loaded = False
+            buffer_pasted = False
+            try:
+                await driver.load_buffer(prompt_path, buffer_name=buffer_name)
+                buffer_loaded = True
+                await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
+                buffer_pasted = True
+                if self._uses_ready_wait(session):
+                    await self._wait_for_pasted_text(session, paths, prompt, max_wait_sec=3.0)
+                await driver.send_enter(paths["pane_target"])
+            finally:
+                if buffer_loaded and not buffer_pasted:
+                    try:
+                        await driver.delete_buffer(buffer_name=buffer_name)
+                    except Exception:
+                        logger.exception("failed to delete tmux steer buffer buffer=%s", buffer_name)
+                try:
+                    os.remove(prompt_path)
+                except OSError:
+                    logger.exception("failed to remove tmux steer prompt path=%s", prompt_path)
+
+            state = self._read_state(paths)
+            if self._has_active_runtime_state(session, state):
+                state["last_activity_at"] = time.time()
+                self._write_state(paths, state)
+
     async def _ensure_started(self, session: Any, paths: dict[str, str], *, force_fresh: bool = False) -> bool:
         driver = self._driver(session)
         Path(paths["runtime_dir"]).mkdir(parents=True, exist_ok=True)
@@ -447,7 +514,18 @@ class TmuxExecutionBackend:
                 f"open {cli_name} once in this workdir and trust it"
             )
         if cli_name == "claude":
-            return "❯" in text
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            tool = getattr(session, "tool", None)
+            configured_commands = [
+                *list(getattr(tool, "interactive_cmd", None) or []),
+                *list(getattr(tool, "interactive_resume_cmd", None) or []),
+            ]
+            screen_reader_ready = bool(
+                lines
+                and lines[-1] == "$"
+                and "--ax-screen-reader" in configured_commands
+            )
+            return "❯" in text or screen_reader_ready
         if cli_name == "codex":
             if "starting mcp servers" in lower:
                 return False
@@ -473,15 +551,25 @@ class TmuxExecutionBackend:
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
         raise TmuxDriverError(f"{self._interactive_cli_name(session)} interactive prompt did not become ready")
 
-    async def _wait_for_pasted_prompt(self, session: Any, paths: dict[str, str], request_id: str) -> None:
+    async def _wait_for_pasted_text(
+        self,
+        session: Any,
+        paths: dict[str, str],
+        text: str,
+        *,
+        max_wait_sec: float = 10.0,
+    ) -> None:
         driver = self._driver(session)
-        deadline = time.time() + min(max(0.5, self.startup_timeout_sec), 10.0)
+        needle = "".join(normalize_terminal_text(text).split())[-160:]
+        if not needle:
+            return
+        deadline = time.time() + min(max(0.5, self.startup_timeout_sec), max_wait_sec)
         while time.time() < deadline:
             try:
                 pane = await driver.capture_pane(paths["pane_target"])
             except Exception:
                 pane = ""
-            if request_id in pane or f"DONE:{request_id}" in pane:
+            if needle in "".join(normalize_terminal_text(pane).split()):
                 await asyncio.sleep(min(max(self.poll_interval_sec, 0.1), 0.5))
                 return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
@@ -561,13 +649,14 @@ class TmuxExecutionBackend:
         buffer_loaded = False
         buffer_pasted = False
         try:
-            await driver.load_buffer(prompt_path, buffer_name=buffer_name)
-            buffer_loaded = True
-            await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
-            buffer_pasted = True
-            if self._uses_ready_wait(session):
-                await self._wait_for_pasted_prompt(session, paths, request_id)
-            await driver.send_enter(paths["pane_target"])
+            async with self._pane_lock(session):
+                await driver.load_buffer(prompt_path, buffer_name=buffer_name)
+                buffer_loaded = True
+                await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
+                buffer_pasted = True
+                if self._uses_ready_wait(session):
+                    await self._wait_for_pasted_text(session, paths, request_id)
+                await driver.send_enter(paths["pane_target"])
         except asyncio.CancelledError:
             sent = False
             try:
@@ -602,7 +691,7 @@ class TmuxExecutionBackend:
                 try:
                     await driver.delete_buffer(buffer_name=buffer_name)
                 except Exception:
-                    pass
+                    logger.exception("failed to delete tmux request buffer buffer=%s", buffer_name)
             try:
                 os.remove(prompt_path)
             except OSError:
@@ -642,7 +731,7 @@ class TmuxExecutionBackend:
                     try:
                         await driver.send_ctrl_c(paths["pane_target"])
                     except Exception:
-                        pass
+                        logger.exception("failed to interrupt tmux request after idle timeout")
                     break
         except asyncio.CancelledError:
             sent = False

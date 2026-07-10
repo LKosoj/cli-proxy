@@ -7,6 +7,8 @@ from app.services.input_dispatch_models import (
     PENDING_ACTION_ORCHESTRATOR_TRANSITION,
     PENDING_ACTION_QUEUE_CHOICE,
     PENDING_ACTION_QUEUE_CONFIRM,
+    PENDING_ACTION_TMUX_QUEUE_CHOICE,
+    PENDING_ACTION_TMUX_QUEUE_CONFIRM,
     PendingInputDecision,
 )
 
@@ -28,6 +30,21 @@ def desktop_rows_for_pending_input_decision(decision: PendingInputDecision) -> l
         ]
     if action == PENDING_ACTION_QUEUE_CONFIRM:
         return [
+            [{"text": "🆕 Поставить в очередь", "data": "queue_input"}],
+            [{"text": "❌ Отмена ввода", "data": "discard_input"}],
+        ]
+    if action == PENDING_ACTION_TMUX_QUEUE_CHOICE:
+        return [
+            [{"text": "➡️ В текущую tmux-сессию", "data": "send_current_tmux"}],
+            [
+                {"text": "➕ Добавить к текущему", "data": "queue_append_pending"},
+                {"text": "🆕 Новая очередь", "data": "queue_input"},
+            ],
+            [{"text": "❌ Отмена ввода", "data": "discard_input"}],
+        ]
+    if action == PENDING_ACTION_TMUX_QUEUE_CONFIRM:
+        return [
+            [{"text": "➡️ В текущую tmux-сессию", "data": "send_current_tmux"}],
             [{"text": "🆕 Поставить в очередь", "data": "queue_input"}],
             [{"text": "❌ Отмена ввода", "data": "discard_input"}],
         ]

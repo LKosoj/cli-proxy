@@ -4197,7 +4197,14 @@ class ApplicationFacade:
                 text = t("msg.cmd.denied_continue", self.ui_language) if waiter_active else t("msg.cmd.denied", self.ui_language)
                 self.notify("ui:message", session_id=session_uid, role="agent", text=text, md2=True)
             return True
-        if sdata in {"cancel_current", "queue_input", "discard_input", "take_pending_input", "queue_append_pending"}:
+        if sdata in {
+            "cancel_current",
+            "queue_input",
+            "discard_input",
+            "take_pending_input",
+            "queue_append_pending",
+            "send_current_tmux",
+        }:
             pending_map = self._desktop_pending_map()
             pending = InputDispatchService.pending_head(pending_map, session_uid)
             if not pending:
@@ -4287,6 +4294,43 @@ class ApplicationFacade:
                     str(getattr(pending, "text", "") or ""),
                     prepared_attachments=prepared,
                 )
+                return True
+            if sdata == "send_current_tmux":
+                sender = getattr(dispatch, "send_pending_to_active_tmux", None) if dispatch is not None else None
+                if not callable(sender):
+                    self.notify(
+                        "ui:message",
+                        session_id=session_uid,
+                        role="agent",
+                        text=t("msg.error.tmux_current_send_failed", self.ui_language),
+                        md2=True,
+                    )
+                    return True
+                try:
+                    await sender(session, pending)
+                except Exception:
+                    self.logger.exception("desktop send_current_tmux failed session_uid=%s", session.id)
+                    await dispatch.refresh_busy_pending_action(session, pending)
+                    self.notify(
+                        "ui:message",
+                        session_id=session_uid,
+                        role="agent",
+                        text=t("msg.error.tmux_current_send_failed", self.ui_language),
+                        md2=True,
+                    )
+                    await self._notify_next_pending_busy_input(session_uid=session_uid)
+                    return True
+                if hasattr(dispatch, "clear_pending_prompt_record"):
+                    dispatch.clear_pending_prompt_record(session_uid)
+                InputDispatchService.pop_pending(pending_map, session_uid)
+                self.notify(
+                    "ui:message",
+                    session_id=session_uid,
+                    role="agent",
+                    text=t("msg.input.tmux_current_sent", self.ui_language),
+                    md2=True,
+                )
+                await self._notify_next_pending_busy_input(session_uid=session_uid)
                 return True
             if sdata == "queue_append_pending":
                 if dispatch is not None and hasattr(dispatch, "clear_pending_prompt_record"):

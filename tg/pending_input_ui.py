@@ -10,6 +10,8 @@ from app.services.input_dispatch_models import (
     PENDING_ACTION_ORCHESTRATOR_TRANSITION,
     PENDING_ACTION_QUEUE_CHOICE,
     PENDING_ACTION_QUEUE_CONFIRM,
+    PENDING_ACTION_TMUX_QUEUE_CHOICE,
+    PENDING_ACTION_TMUX_QUEUE_CONFIRM,
     PendingInputDecision,
 )
 from i18n import t
@@ -59,6 +61,25 @@ def build_pending_input_reply_markup(
     if action == PENDING_ACTION_QUEUE_CONFIRM:
         return InlineKeyboardMarkup(
             [
+                [InlineKeyboardButton(t("btn.input.queue_confirm", lang), callback_data="queue_input")],
+                [InlineKeyboardButton(t("btn.input.discard", lang), callback_data="discard_input")],
+            ]
+        )
+    if action == PENDING_ACTION_TMUX_QUEUE_CHOICE:
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(t("btn.input.tmux_current", lang), callback_data="send_current_tmux")],
+                [
+                    InlineKeyboardButton(t("btn.input.queue_append", lang), callback_data="queue_append_pending"),
+                    InlineKeyboardButton(t("btn.input.queue_new", lang), callback_data="queue_input"),
+                ],
+                [InlineKeyboardButton(t("btn.input.discard", lang), callback_data="discard_input")],
+            ]
+        )
+    if action == PENDING_ACTION_TMUX_QUEUE_CONFIRM:
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(t("btn.input.tmux_current", lang), callback_data="send_current_tmux")],
                 [InlineKeyboardButton(t("btn.input.queue_confirm", lang), callback_data="queue_input")],
                 [InlineKeyboardButton(t("btn.input.discard", lang), callback_data="discard_input")],
             ]

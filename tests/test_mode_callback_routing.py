@@ -1494,6 +1494,99 @@ def test_orch_transition_cancel_with_disable_orchestrator_preserves_existing_sem
     assert dispatch_calls == []
 
 
+def test_send_current_tmux_callback_consumes_pending_only_after_success():
+    session = types.SimpleNamespace(
+        id="s1",
+        active_mode="agent",
+        busy=True,
+        queue=[],
+        conversation_scope=types.SimpleNamespace(session_uid="forum:-100777000111:101"),
+    )
+    app = _FakeBotApp(session)
+    pending = app.input_dispatch_service._build_pending_input(
+        session=session,
+        text="steer active run",
+        chat_id=1,
+        dest={"kind": "telegram", "chat_id": 1},
+        image_path=None,
+        image_paths=None,
+        action=InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM,
+    )
+    ui_key = TelegramUiKey.from_parts(1)
+    app.ui_state.pending[ui_key] = deque([pending])
+    sent_to_tmux = []
+
+    async def _send_to_tmux(target_session, target_pending):
+        sent_to_tmux.append((target_session, target_pending))
+
+    app.input_dispatch_service.send_pending_to_active_tmux = _send_to_tmux
+    handler = CallbackHandler(app)
+    edited = []
+
+    async def _fake_edit_msg(_context, _query, text, *, reply_markup=None, md2=True):
+        _ = reply_markup, md2
+        edited.append(str(text or ""))
+        return True
+
+    handler._edit_msg = _fake_edit_msg
+    update = types.SimpleNamespace(callback_query=_FakeQuery("send_current_tmux"))
+
+    asyncio.run(handler.handle_callback(update, context=object()))
+
+    assert sent_to_tmux == [(session, pending)]
+    assert InputDispatchService.pending_head(app.ui_state.pending, ui_key) is None
+    assert edited[-1] == "Сообщение отправлено в текущую tmux-сессию."
+
+
+def test_send_current_tmux_callback_keeps_pending_when_session_disappears():
+    session = types.SimpleNamespace(
+        id="s1",
+        active_mode="agent",
+        busy=True,
+        queue=[],
+        conversation_scope=types.SimpleNamespace(session_uid="forum:-100777000111:101"),
+    )
+    app = _FakeBotApp(session)
+    pending = app.input_dispatch_service._build_pending_input(
+        session=session,
+        text="keep me pending",
+        chat_id=1,
+        dest={"kind": "telegram", "chat_id": 1},
+        image_path=None,
+        image_paths=None,
+        action=InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM,
+    )
+    ui_key = TelegramUiKey.from_parts(1)
+    app.ui_state.pending[ui_key] = deque([pending])
+
+    async def _send_to_tmux(_session, _pending):
+        raise RuntimeError("tmux session disappeared")
+
+    async def _refresh_action(_session, target_pending):
+        target_pending.action = InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM
+        return target_pending.action
+
+    app.input_dispatch_service.send_pending_to_active_tmux = _send_to_tmux
+    app.input_dispatch_service.refresh_busy_pending_action = _refresh_action
+    handler = CallbackHandler(app)
+    edited = []
+
+    async def _fake_edit_msg(_context, _query, text, *, reply_markup=None, md2=True):
+        _ = reply_markup, md2
+        edited.append(str(text or ""))
+        return True
+
+    handler._edit_msg = _fake_edit_msg
+    update = types.SimpleNamespace(callback_query=_FakeQuery("send_current_tmux"))
+
+    asyncio.run(handler.handle_callback(update, context=object()))
+
+    assert InputDispatchService.pending_head(app.ui_state.pending, ui_key) is pending
+    assert pending.action == InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM
+    assert edited[-1] == "Не удалось отправить сообщение в текущую tmux-сессию. Сообщение сохранено."
+    assert app.sent[-1] == (1, InputDispatchService.queue_confirm_prompt_text())
+
+
 def test_queue_input_callback_consumes_pending_head_only():
     session = types.SimpleNamespace(
         id="s1",
