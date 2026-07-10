@@ -764,6 +764,41 @@ class Session:
             )
         raise RuntimeError("synchronous tmux close is not allowed from a running event loop")
 
+    async def close_active_tmux_async(self) -> bool:
+        closed = await self._close_tmux_for_cli_async(session_active_cli_name(self))
+        if self._active_execution_backend == EXECUTION_BACKEND_TMUX:
+            self._active_execution_backend = "none"
+        return closed
+
+    def close_active_tmux(self) -> bool:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return bool(asyncio.run(self.close_active_tmux_async()))
+
+        results: list[bool] = []
+        errors: list[BaseException] = []
+
+        def _close_tmux() -> None:
+            try:
+                results.append(bool(asyncio.run(self.close_active_tmux_async())))
+            except BaseException as exc:
+                logging.getLogger(__name__).exception(
+                    "active tmux close failed session_id=%s cli=%s",
+                    self.id,
+                    session_active_cli_name(self),
+                )
+                errors.append(exc)
+
+        thread = threading.Thread(target=_close_tmux, daemon=True)
+        thread.start()
+        thread.join(timeout=2.0)
+        if thread.is_alive():
+            raise RuntimeError(f"tmux close timed out for session {self.id}")
+        if errors:
+            raise errors[0]
+        return bool(results and results[0])
+
     async def set_active_cli_persistent(self, cli_name: str) -> None:
         name = str(cli_name or "").strip()
         if not name:

@@ -245,7 +245,7 @@ def test_format_session_label_matches_topic_title_format(tmp_path):
     assert text == f"{s.id} | {s.name}"
 
 
-def test_session_reset_clears_runtime_and_state_fields(tmp_path):
+def test_session_reset_clears_runtime_and_state_fields(tmp_path, monkeypatch):
     async def _run() -> None:
         app = _build_app(tmp_path)
         s = app.manager.create(1, "dummy", str(tmp_path))
@@ -278,6 +278,11 @@ def test_session_reset_clears_runtime_and_state_fields(tmp_path):
         original_tool = s.tool
         original_workdir = s.workdir
         original_name = s.name
+
+        async def _forbidden_tmux_close():
+            raise AssertionError("headless reset must not close tmux")
+
+        monkeypatch.setattr(s, "close_active_tmux_async", _forbidden_tmux_close, raising=False)
 
         class _Msg:
             chat_id = 1
@@ -315,6 +320,43 @@ def test_session_reset_clears_runtime_and_state_fields(tmp_path):
         assert updated_ctx.last_draft == ""
         assert updated_ctx.last_draft_updated_at == 0.0
         assert run_store.load_state(run)["status"] == "superseded"
+
+    asyncio.run(_run())
+
+
+def test_session_reset_closes_selected_tmux_before_clearing_runtime(tmp_path, monkeypatch):
+    async def _run() -> None:
+        app = _build_app(tmp_path)
+        app.config.defaults.default_execution_backend = "tmux"
+        session = app.manager.create(1, "dummy", str(tmp_path))
+        session.resume_token = "resume-token"
+        close_observations = []
+
+        async def _close_active_tmux():
+            close_observations.append(session.resume_token)
+            return True
+
+        monkeypatch.setattr(session, "close_active_tmux_async", _close_active_tmux, raising=False)
+
+        class _Msg:
+            chat_id = 1
+            message_id = 1
+
+        class _Query:
+            data = f"sess_reset:{session.id}"
+            message = _Msg()
+
+        async def _fake_edit_msg(_context, _query, text, *, reply_markup=None):
+            assert text == "Сессия сброшена."
+            return True
+
+        app.session_ui._edit_msg = _fake_edit_msg
+
+        handled = await app.session_ui.handle_callback(_Query(), 1, None)
+
+        assert handled is True
+        assert close_observations == ["resume-token"]
+        assert session.resume_token is None
 
     asyncio.run(_run())
 

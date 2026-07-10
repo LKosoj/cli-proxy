@@ -120,7 +120,7 @@ def test_session_service_mode_persists_and_facade_proxies(tmp_path) -> None:
     asyncio.run(_run())
 
 
-def test_facade_reset_session_restores_single_allowed_mode_default(tmp_path) -> None:
+def test_facade_reset_session_closes_tmux_and_restores_single_allowed_mode_default(tmp_path, monkeypatch) -> None:
     async def _run():
         cfg = AppConfig(
             telegram=TelegramConfig(
@@ -135,6 +135,9 @@ def test_facade_reset_session_restores_single_allowed_mode_default(tmp_path) -> 
                     name="dummy",
                     mode="headless",
                     cmd=["bash", "-lc", "cat"],
+                    interactive_cmd=["bash", "-lc", "cat"],
+                    execution_backends=["headless", "tmux"],
+                    default_execution_backend="tmux",
                 )
             },
             defaults=DefaultsConfig(
@@ -172,8 +175,16 @@ def test_facade_reset_session_restores_single_allowed_mode_default(tmp_path) -> 
         s.resume_token = "token"
         s.queue.append({"text": "queued", "dest": {"kind": "telegram", "chat_id": 1}})
         s.modes.active_mode = "webmaster"
+        close_observations = []
+
+        def _close_active_tmux():
+            close_observations.append(s.resume_token)
+            return True
+
+        monkeypatch.setattr(s, "close_active_tmux", _close_active_tmux, raising=False)
 
         assert facade.reset_session(session_uid) is True
+        assert close_observations == ["token"]
         assert s.resume_token is None
         assert list(s.queue) == []
         assert s.modes.active_mode == "agent"

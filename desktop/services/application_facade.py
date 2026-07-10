@@ -438,6 +438,8 @@ class ApplicationFacade:
     def reset_session(self, session_uid: str) -> bool:
         session = self.session_service.get_session_by_uid(session_uid)
         if session:
+            if get_session_execution_backend(session) == "tmux":
+                session.close_active_tmux()
             access_policy = getattr(self._desktop_bot_app(), "access_policy_service", None)
             default_mode_id = None
             if access_policy is not None and hasattr(access_policy, "default_mode_id_for_chat"):

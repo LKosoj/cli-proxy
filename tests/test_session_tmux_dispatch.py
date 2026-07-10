@@ -147,6 +147,65 @@ def test_close_does_not_touch_tmux_for_headless_only_session(tmp_path, monkeypat
     assert TrackingTmuxBackend.closed is False
 
 
+@pytest.mark.asyncio
+async def test_close_active_tmux_async_closes_active_cli_and_marks_runtime_inactive(tmp_path, monkeypatch):
+    session = SessionManager(_cfg(tmp_path)).create(1, "claude", str(tmp_path))
+    session._active_execution_backend = "tmux"
+    closed_clis = []
+
+    async def _close_tmux(cli_name, *, tool_override=None):
+        assert tool_override is None
+        closed_clis.append(cli_name)
+        return True
+
+    monkeypatch.setattr(session, "_close_tmux_for_cli_async", _close_tmux)
+
+    closed = await session.close_active_tmux_async()
+
+    assert closed is True
+    assert closed_clis == ["claude"]
+    assert session._active_execution_backend == "none"
+
+
+def test_close_active_tmux_closes_active_cli_and_marks_runtime_inactive(tmp_path, monkeypatch):
+    session = SessionManager(_cfg(tmp_path)).create(1, "claude", str(tmp_path))
+    session._active_execution_backend = "tmux"
+    closed_clis = []
+
+    async def _close_tmux(cli_name, *, tool_override=None):
+        assert tool_override is None
+        closed_clis.append(cli_name)
+        return True
+
+    monkeypatch.setattr(session, "_close_tmux_for_cli_async", _close_tmux)
+
+    closed = session.close_active_tmux()
+
+    assert closed is True
+    assert closed_clis == ["claude"]
+    assert session._active_execution_backend == "none"
+
+
+@pytest.mark.asyncio
+async def test_close_active_tmux_sync_works_with_running_event_loop(tmp_path, monkeypatch):
+    session = SessionManager(_cfg(tmp_path)).create(1, "claude", str(tmp_path))
+    session._active_execution_backend = "tmux"
+    closed_clis = []
+
+    async def _close_tmux(cli_name, *, tool_override=None):
+        assert tool_override is None
+        closed_clis.append(cli_name)
+        return True
+
+    monkeypatch.setattr(session, "_close_tmux_for_cli_async", _close_tmux)
+
+    closed = session.close_active_tmux()
+
+    assert closed is True
+    assert closed_clis == ["claude"]
+    assert session._active_execution_backend == "none"
+
+
 def test_cli_switch_closes_tmux_for_previous_cli_with_tmux_state(tmp_path, monkeypatch):
     import app.services.cli_backends as cli_backends
 
