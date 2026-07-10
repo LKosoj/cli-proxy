@@ -15,6 +15,12 @@ _DONE_INSTRUCTION_MARKER_COMPACT = "exactmarker"
 _DONE_INSTRUCTION_START_COMPACT = "whenyouarecompletelyfinished"
 _DONE_INSTRUCTION_PRINT_MARKER_COMPACT = "printthisexactmarker"
 _DONE_INSTRUCTION_CONTINUATION_COMPACTS = {"ownline:", "onitsownline:"}
+_CLAUDE_SCREEN_READER_EVENT_RE = re.compile(
+    r"(?i)\$+(?:\(B)?(?:"
+    r"(?P<role>claude|tool):[ \t]*"
+    r"|[A-Za-z]+(?:…|\.{3})"
+    r")"
+)
 
 
 @dataclass(frozen=True)
@@ -146,12 +152,35 @@ def normalize_terminal_text(text: str) -> str:
     return stripped
 
 
-def parse_tmux_delta(delta: str, request_id: str) -> TmuxParseResult:
+def _extract_claude_screen_reader_message(text: str) -> str:
+    events = list(_CLAUDE_SCREEN_READER_EVENT_RE.finditer(text))
+    for idx in range(len(events) - 1, -1, -1):
+        event = events[idx]
+        if str(event.group("role") or "").lower() != "claude":
+            continue
+        end = events[idx + 1].start() if idx + 1 < len(events) else len(text)
+        candidate = text[event.end():end].strip()
+        if candidate:
+            return candidate
+    return ""
+
+
+def parse_tmux_delta(
+    delta: str,
+    request_id: str,
+    *,
+    claude_screen_reader: bool = False,
+) -> TmuxParseResult:
     text = normalize_terminal_text(delta)
     done = done_marker(request_id)
     flat = _parse_flat_delta(text, request_id)
     if flat is not None:
-        return flat
+        if not claude_screen_reader:
+            return flat
+        return TmuxParseResult(
+            text=_extract_claude_screen_reader_message(flat.text),
+            complete=flat.complete,
+        )
 
     raw_lines = text.splitlines()
     request_indexes = [idx for idx, line in enumerate(raw_lines) if _is_request_line(line, request_id)]
@@ -206,4 +235,6 @@ def parse_tmux_delta(delta: str, request_id: str) -> TmuxParseResult:
         lines.append(raw)
 
     cleaned = "\n".join(lines).strip()
+    if claude_screen_reader:
+        cleaned = _extract_claude_screen_reader_message(cleaned)
     return TmuxParseResult(text=cleaned, complete=complete)

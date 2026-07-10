@@ -132,6 +132,70 @@ def test_parse_tmux_delta_drops_repainted_echo_blocks_before_answer() -> None:
     assert parsed.text == "✶ Working...\nanswer"
 
 
+def test_parse_tmux_delta_extracts_final_claude_screen_reader_message() -> None:
+    request_id = "req-screen-reader"
+    delta = (
+        build_prompt_with_markers("check follow-ups", request_id)
+        + " $Nesting… don't ask on (shift+tab to cycle)"
+        + " $claude: Проверю состояние follow-up."
+        + " $Scampering… (18s · thinking with xhigh effort)"
+        + " $tool: Bash (grep -n follow-up docs/sdd.md) Waiting…"
+        + " $Running…"
+        + " 198: PromptBudgetBuilder — follow-up."
+        + " $Scampering… (30s · 1.1k tokens)"
+        + " $claude: Нет, не доделаны — и это ожидаемо.\n"
+        + "1. PromptBudgetBuilder — не сделан.\n"
+        + "2. quote_id — не сделан.\n"
+        + "Skills в этом ответе не использовались.\n"
+        + "$claude: "
+        + done_marker(request_id)
+    )
+
+    parsed = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+    assert parsed.complete is True
+    assert parsed.text == (
+        "Нет, не доделаны — и это ожидаемо.\n"
+        "1. PromptBudgetBuilder — не сделан.\n"
+        "2. quote_id — не сделан.\n"
+        "Skills в этом ответе не использовались."
+    )
+
+
+def test_parse_tmux_delta_filters_intermediate_claude_screen_reader_events() -> None:
+    request_id = "req-screen-reader-progress"
+    delta = (
+        build_prompt_with_markers("check follow-ups", request_id)
+        + " $Nesting… don't ask on (shift+tab to cycle)"
+        + " $Scampering… (11s · thinking with xhigh effort)"
+    )
+
+    status_only = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+    assert status_only.complete is False
+    assert status_only.text == ""
+
+    delta += (
+        " $claude: Проверю текущее состояние follow-up."
+        " $Scampering… (18s · 424 tokens · thought for 6s)"
+    )
+    commentary = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+    assert commentary.complete is False
+    assert commentary.text == "Проверю текущее состояние follow-up."
+
+    delta += (
+        " $tool: Bash (grep -n follow-up docs/sdd.md) Waiting…"
+        " $Running…"
+        " 198: PromptBudgetBuilder — follow-up."
+        " $(BScampering… (20s · 538 tokens)"
+    )
+    tool_running = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+    assert tool_running.complete is False
+    assert tool_running.text == "Проверю текущее состояние follow-up."
+
+
 def test_parse_tmux_delta_drops_corrupted_repaint_before_second_answer() -> None:
     request_id = "req-repeat-real"
     delta = (

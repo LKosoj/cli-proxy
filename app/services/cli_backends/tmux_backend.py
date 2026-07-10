@@ -495,6 +495,17 @@ class TmuxExecutionBackend:
         return cls._interactive_cli_name(session) == "claude"
 
     @classmethod
+    def _uses_claude_screen_reader(cls, session: Any) -> bool:
+        if not cls._uses_claude_code(session):
+            return False
+        tool = getattr(session, "tool", None)
+        configured_commands = [
+            *list(getattr(tool, "interactive_cmd", None) or []),
+            *list(getattr(tool, "interactive_resume_cmd", None) or []),
+        ]
+        return "--ax-screen-reader" in configured_commands
+
+    @classmethod
     def _uses_ready_wait(cls, session: Any) -> bool:
         return cls._interactive_cli_name(session) in _READY_WAIT_CLI_NAMES
 
@@ -515,15 +526,10 @@ class TmuxExecutionBackend:
             )
         if cli_name == "claude":
             lines = [line.strip() for line in text.splitlines() if line.strip()]
-            tool = getattr(session, "tool", None)
-            configured_commands = [
-                *list(getattr(tool, "interactive_cmd", None) or []),
-                *list(getattr(tool, "interactive_resume_cmd", None) or []),
-            ]
             screen_reader_ready = bool(
                 lines
                 and lines[-1] == "$"
-                and "--ax-screen-reader" in configured_commands
+                and TmuxExecutionBackend._uses_claude_screen_reader(session)
             )
             return "❯" in text or screen_reader_ready
         if cli_name == "codex":
@@ -718,7 +724,11 @@ class TmuxExecutionBackend:
                         delta = handle.read().decode("utf-8", errors="replace")
                 if delta:
                     _capture_resume_token_from_output(session, delta)
-                parsed = parse_tmux_delta(delta, request_id)
+                parsed = parse_tmux_delta(
+                    delta,
+                    request_id,
+                    claude_screen_reader=self._uses_claude_screen_reader(session),
+                )
                 latest_text = parsed.text or latest_text
                 if parsed.text:
                     setattr(session, "last_output_ts", time.time())

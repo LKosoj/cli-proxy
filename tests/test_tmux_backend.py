@@ -579,6 +579,26 @@ async def test_tmux_backend_accepts_configured_claude_screen_reader_prompt(tmp_p
     assert driver.events.index("capture_pane") < driver.events.index("load_buffer")
 
 
+@pytest.mark.asyncio
+async def test_tmux_backend_returns_only_final_claude_screen_reader_message(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = ["$"]
+    driver.response_text = (
+        "$Scampering… (18s · thinking with xhigh effort)\n"
+        "$tool: Bash (grep follow-up docs/sdd.md) Waiting…\n"
+        "$Running…\n"
+        "198: PromptBudgetBuilder — follow-up.\n"
+        "$claude: Чистый финальный ответ."
+    )
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session.tool.interactive_cmd = ["claude", "--ax-screen-reader"]
+
+    result = await backend.run(session, "do work")
+
+    assert result.text == "Чистый финальный ответ."
+
+
 def test_tmux_backend_does_not_treat_plain_shell_prompt_as_ready_claude() -> None:
     session = SimpleNamespace(
         tool=ToolConfig(name="claude", mode="headless", cmd=["claude"], interactive_cmd=["claude"]),
