@@ -16,9 +16,20 @@ _DONE_INSTRUCTION_START_COMPACT = "whenyouarecompletelyfinished"
 _DONE_INSTRUCTION_PRINT_MARKER_COMPACT = "printthisexactmarker"
 _DONE_INSTRUCTION_CONTINUATION_COMPACTS = {"ownline:", "onitsownline:"}
 _CLAUDE_SCREEN_READER_EVENT_RE = re.compile(
-    r"(?i)\$+(?:\(B)?(?:"
-    r"(?P<role>claude|tool):[ \t]*"
-    r"|[A-Za-z]+(?:…|\.{3})"
+    r"(?im)(?:"
+    r"(?:^[ \t]*|\$+(?:\(B)?)(?P<role>claude|tool):[ \t]*"
+    r"|\$+(?:\(B)?[A-Za-z]+(?:…|\.{3})"
+    r")"
+)
+_CLAUDE_SCREEN_READER_UI_LINE_RE = re.compile(
+    r"(?i)^(?:"
+    r"[A-Za-z][A-Za-z-]*(?:…|\.{3})(?:\s|$)"
+    r"|(?:don't ask|[a-z][a-z -]*permissions) on(?:\s|$)"
+    r"|effort:\s*"
+    r"|Cooked for(?:\s|$)"
+    r"|\(ctrl\+b\s+ctrl\+b\b"
+    r"|<{2,3}DONE:"
+    r"|\$\s*$"
     r")"
 )
 
@@ -161,7 +172,14 @@ def _extract_claude_screen_reader_message(text: str) -> str:
         end = events[idx + 1].start() if idx + 1 < len(events) else len(text)
         candidate = text[event.end():end].strip()
         if candidate:
-            return candidate
+            lines = candidate.splitlines()
+            for line_idx, line in enumerate(lines):
+                if _CLAUDE_SCREEN_READER_UI_LINE_RE.match(line.strip()):
+                    lines = lines[:line_idx]
+                    break
+            candidate = "\n".join(lines).strip()
+            if candidate:
+                return candidate
     return ""
 
 

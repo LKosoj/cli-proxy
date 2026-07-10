@@ -278,6 +278,18 @@ def test_config_files_match_runtime_policy_contract() -> None:
     assert "default_execution_backend" in DefaultsConfigModel.model_fields
     assert example["defaults"]["default_language"] == "ru"
     assert example["defaults"]["default_execution_backend"] == "headless"
+    assert example["tools"]["claude"]["interactive_cmd"] == [
+        "claude",
+        "--ax-screen-reader",
+        "--dangerously-skip-permissions",
+    ]
+    assert example["tools"]["claude"]["interactive_resume_cmd"] == [
+        "claude",
+        "--ax-screen-reader",
+        "--dangerously-skip-permissions",
+        "--resume",
+        "{resume}",
+    ]
 
     assert "clarification_keywords_by_lang" in DefaultsConfigModel.model_fields
     assert "clarification_keywords_by_lang" in example["defaults"]
@@ -289,7 +301,11 @@ def test_config_files_match_runtime_policy_contract() -> None:
         assert config["defaults"]["default_execution_backend"] == "headless"
         assert config["tools"]["claude"]["execution_backends"] == ["headless", "tmux"]
         assert config["tools"]["claude"]["default_execution_backend"] == "headless"
-        assert config["tools"]["claude"]["interactive_resume_cmd"] == ["claude", "--resume", "{resume}"]
+        assert config["tools"]["claude"]["interactive_cmd"] == example["tools"]["claude"]["interactive_cmd"]
+        assert (
+            config["tools"]["claude"]["interactive_resume_cmd"]
+            == example["tools"]["claude"]["interactive_resume_cmd"]
+        )
         assert config["tools"]["qwen"]["interactive_cmd"][-2:] == ["--session-id", "{session_id}"]
         assert config["tools"]["qwen"]["interactive_resume_cmd"] == ["qwen", "--resume", "{resume}"]
         assert "lint_evolution" in config

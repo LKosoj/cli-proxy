@@ -196,6 +196,49 @@ def test_parse_tmux_delta_filters_intermediate_claude_screen_reader_events() -> 
     assert tool_running.text == "Проверю текущее состояние follow-up."
 
 
+def test_parse_tmux_delta_filters_real_claude_screen_reader_preview_status() -> None:
+    request_id = "req-screen-reader-real-preview"
+    for status in ("Musing…", "Unfurling…"):
+        delta = (
+            build_prompt_with_markers("run sleep", request_id)
+            + "\x1b[2K\x1b[Gclaude: Выполняю команду sleep 10 и жду её завершения.\r\n"
+            + f"{status}   ( 5s  ·  97 tokens )\r\n"
+            + "don't ask on (shift+tab to cycle)  ·  esc to interrupt\r\n"
+            + "effort: xhigh · /effort\r\n"
+            + "$\x1b[4G"
+        )
+
+        parsed = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+        assert parsed.complete is False
+        assert parsed.text == "Выполняю команду sleep 10 и жду её завершения."
+
+
+def test_parse_tmux_delta_filters_real_claude_bypass_footer_and_partial_done_marker() -> None:
+    request_id = "req-screen-reader-bypass"
+    delta = (
+        build_prompt_with_markers("reply exactly", request_id)
+        + "$claude: BYPASS-TMUX-OK\r\n"
+        + "<<<DONE:req-screen\r\n"
+        + "bypass permissions on (shift+tab to cycle)  ·  esc to interrupt\r\n"
+        + "$\x1b[4G"
+    )
+
+    preview = parse_tmux_delta(delta, request_id, claude_screen_reader=True)
+
+    assert preview.complete is False
+    assert preview.text == "BYPASS-TMUX-OK"
+
+    complete = parse_tmux_delta(
+        delta + f"\r\n$claude: BYPASS-TMUX-OK\r\n<<DONE:{request_id}>>\r\n",
+        request_id,
+        claude_screen_reader=True,
+    )
+
+    assert complete.complete is True
+    assert complete.text == "BYPASS-TMUX-OK"
+
+
 def test_parse_tmux_delta_drops_corrupted_repaint_before_second_answer() -> None:
     request_id = "req-repeat-real"
     delta = (

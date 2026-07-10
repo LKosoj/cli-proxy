@@ -59,8 +59,8 @@ tools:
     execution_backends: ["headless", "tmux"]
     default_execution_backend: "headless"
     tmux_user: "claude-bot"
-    interactive_cmd: ["claude"]
-    interactive_resume_cmd: ["claude", "--resume", "{resume}"]
+    interactive_cmd: ["claude", "--ax-screen-reader", "--dangerously-skip-permissions"]
+    interactive_resume_cmd: ["claude", "--ax-screen-reader", "--dangerously-skip-permissions", "--resume", "{resume}"]
     help_cmd: "/help"
     # Opt-in: добавлять `--no-session-persistence` для fresh-стартов claude.
     # Уменьшает шум в ~/.claude/projects, НО ломает session_transfer
