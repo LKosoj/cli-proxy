@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable, Optional
 from utils.text import is_time_only_text, strip_ansi
 
 
-ASSISTANT_PREVIEW_MAX_CHARS = 1500
+ASSISTANT_PREVIEW_MAX_CHARS = 3500
 ASSISTANT_PREVIEW_MARKER = "⏳"
 ASSISTANT_PREVIEW_POLL_INTERVAL_SEC = 0.35
 ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC = 20.0
@@ -36,7 +36,26 @@ def build_assistant_preview_text(text: Any, *, limit: int = ASSISTANT_PREVIEW_MA
         return prefix + raw
     if max_len <= 3:
         return prefix + raw[-max_len:] + truncated_suffix
-    return prefix + "..." + raw[-(max_len - 3):] + truncated_suffix
+
+    # Take raw suffix but skip a leading partial word (if any) so the preview
+    # does not start with garbage like "еременная" / "nv-переменная".
+    # We only ever drop the first word *fragment*; normal spaces later are kept.
+    oversize = max_len - 3
+    tail = raw[-oversize:]
+    if len(raw) > oversize and tail:
+        # Does the cut land in the middle of a word?
+        prev = raw[-(oversize + 1)] if len(raw) > oversize + 1 else ""
+        starts_mid_word = bool(tail[0]) and not tail[0].isspace() and (prev.isalnum() or prev in "_-")
+        if starts_mid_word:
+            # Find first break (space or punctuation) and drop the fragment
+            for i, ch in enumerate(tail[:50]):
+                if ch.isspace() or ch in ".,;:!?—–()[]{}«»'\"-":
+                    tail = tail[i + 1 :].lstrip()
+                    break
+    if not tail:
+        tail = raw[-oversize:]
+    shown = "..." + tail if len(raw) > len(tail) + 5 else tail
+    return prefix + shown + truncated_suffix
 
 
 def _build_elapsed_preview_text(text: str, elapsed_seconds: float) -> str:
