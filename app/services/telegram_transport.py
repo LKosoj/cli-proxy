@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+from enum import Enum
 import logging
 from types import SimpleNamespace
 from typing import Optional
@@ -17,6 +18,12 @@ from tg.rich import build_input_rich_message, is_rich_markdown_eligible
 
 
 _RAW_API_UNAVAILABLE = object()
+
+
+class TelegramEditOutcome(str, Enum):
+    UPDATED = "updated"
+    RETRY = "retry"
+    REPLACE = "replace"
 
 
 @dataclass(frozen=True)
@@ -892,7 +899,25 @@ class TelegramTransportService:
         except Exception:
             return False
 
-    async def edit_message(
+    @staticmethod
+    def _classify_edit_bad_request(exc: BadRequest) -> TelegramEditOutcome:
+        message = str(exc or "").strip().lower()
+        if "message is not modified" in message:
+            return TelegramEditOutcome.UPDATED
+        if any(
+            marker in message
+            for marker in (
+                "message to edit not found",
+                "message can't be edited",
+                "message cannot be edited",
+                "message_id_invalid",
+                "message id is invalid",
+            )
+        ):
+            return TelegramEditOutcome.REPLACE
+        return TelegramEditOutcome.RETRY
+
+    async def edit_message_outcome(
         self,
         context,
         chat_id: int,
@@ -902,7 +927,7 @@ class TelegramTransportService:
         md2: bool = True,
         prefer_rich: bool = True,
         reply_markup: Optional[InlineKeyboardMarkup] = None,
-    ) -> bool:
+    ) -> TelegramEditOutcome:
         raw_context, _transport_context = self._unwrap_context(context)
         try:
             raw = str(text or "")
@@ -913,7 +938,7 @@ class TelegramTransportService:
                     text=raw,
                     reply_markup=reply_markup,
                 )
-                return True
+                return TelegramEditOutcome.UPDATED
 
             if prefer_rich and len(raw) <= self._TELEGRAM_TEXT_LIMIT:
                 payload = self._filter_payload_kwargs(
@@ -933,10 +958,11 @@ class TelegramTransportService:
                         operation="edit_message_rich",
                     )
                     if result is not _RAW_API_UNAVAILABLE:
-                        return True
+                        return TelegramEditOutcome.UPDATED
                 except BadRequest as exc:
-                    if "Message text is empty" in str(exc):
-                        return False
+                    outcome = self._classify_edit_bad_request(exc)
+                    if outcome is not TelegramEditOutcome.RETRY:
+                        return outcome
                     logging.getLogger(__name__).warning(
                         "telegram edit_message variant=rich_raw rejected: %s",
                         exc,
@@ -947,8 +973,6 @@ class TelegramTransportService:
                 ("md2_safe", dict(text=escape_markdown_v2_all(raw), parse_mode="MarkdownV2")),
                 ("plain", dict(text=raw)),
             ]
-            last_exc = None
-            used_variant = ""
             for _variant_name, extra in variants:
                 try:
                     payload = dict(extra or {})
@@ -961,32 +985,67 @@ class TelegramTransportService:
                         reply_markup=reply_markup,
                         **payload,
                     )
-                    used_variant = _variant_name
-                    if used_variant != "entities_preserve":
+                    if _variant_name != "entities_preserve":
                         logging.getLogger(__name__).info(
                             "telegram edit_message used fallback variant=%s",
-                            used_variant,
+                            _variant_name,
                         )
-                    return True
+                    return TelegramEditOutcome.UPDATED
                 except BadRequest as exc:
-                    last_exc = exc
-                    if "Message text is empty" in str(exc):
-                        return False
+                    outcome = self._classify_edit_bad_request(exc)
+                    if outcome is not TelegramEditOutcome.RETRY:
+                        return outcome
                     logging.getLogger(__name__).warning(
                         "telegram edit_message variant=%s rejected: %s",
                         _variant_name,
                         exc,
                     )
                     continue
-            if last_exc is not None:
-                if used_variant and used_variant != "entities_preserve":
-                    logging.getLogger(__name__).info(
-                        "telegram edit_message used fallback variant=%s",
-                        used_variant,
-                    )
-                return False
-            return True
-        except BadRequest:
-            return False
+            return TelegramEditOutcome.RETRY
+        except BadRequest as exc:
+            outcome = self._classify_edit_bad_request(exc)
+            logging.getLogger(__name__).warning(
+                "telegram edit_message rejected chat_id=%s message_id=%s outcome=%s: %s",
+                chat_id,
+                message_id,
+                outcome.value,
+                exc,
+            )
+            return outcome
+        except (NetworkError, TimedOut) as exc:
+            logging.getLogger(__name__).warning(
+                "telegram edit_message transient failure chat_id=%s message_id=%s: %s",
+                chat_id,
+                message_id,
+                exc,
+            )
+            return TelegramEditOutcome.RETRY
         except Exception:
-            return False
+            logging.getLogger(__name__).exception(
+                "telegram edit_message unexpected failure chat_id=%s message_id=%s",
+                chat_id,
+                message_id,
+            )
+            return TelegramEditOutcome.RETRY
+
+    async def edit_message(
+        self,
+        context,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        md2: bool = True,
+        prefer_rich: bool = True,
+        reply_markup: Optional[InlineKeyboardMarkup] = None,
+    ) -> bool:
+        outcome = await self.edit_message_outcome(
+            context,
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            md2=md2,
+            prefer_rich=prefer_rich,
+            reply_markup=reply_markup,
+        )
+        return outcome is TelegramEditOutcome.UPDATED

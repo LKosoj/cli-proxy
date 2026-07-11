@@ -53,7 +53,11 @@ from app.services.sandbox_service import AgentSandboxService
 from app.services.lifecycle_service import build_error_handler, build_post_init, build_post_shutdown
 from app.services.i18n_service import maybe_persist_user_language
 from app.services.rich_draft_coordinator import RichDraftCoordinator
-from app.services.telegram_transport import TelegramTransportContext, TelegramTransportService
+from app.services.telegram_transport import (
+    TelegramEditOutcome,
+    TelegramTransportContext,
+    TelegramTransportService,
+)
 from app.services.message_buffer_service import MessageBufferService
 from app.services.input_dispatch_service import InputDispatchService
 from app.services.access_policy_service import AccessPolicyService
@@ -1555,6 +1559,21 @@ class BotApp:
         prefer_rich: bool = True,
     ) -> bool:
         return await self.transport_service.edit_message(
+            context,
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            md2=md2,
+            prefer_rich=prefer_rich,
+            reply_markup=reply_markup,
+        )
+
+    async def _edit_message_outcome(
+        self, context: ContextTypes.DEFAULT_TYPE, chat_id: int,
+        message_id: int, text: str, *, md2: bool = True, reply_markup: Optional[InlineKeyboardMarkup] = None,
+        prefer_rich: bool = True,
+    ) -> TelegramEditOutcome:
+        return await self.transport_service.edit_message_outcome(
             context,
             chat_id=chat_id,
             message_id=message_id,

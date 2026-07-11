@@ -34,6 +34,9 @@ def _build_session(tmp_path, *, busy: bool = True):
         workdir=str(tmp_path),
         last_tick_ts=time.time(),
         last_tick_value="tick",
+        assistant_preview_message_id=42,
+        assistant_preview_last_value="preview",
+        assistant_preview_creation_attempted=True,
         tick_seen=3,
         runtime_progress_last_event={"phase": "run"},
         runtime_progress_events=[{"phase": "run"}],
@@ -109,6 +112,9 @@ async def test_session_interrupt_service_clears_session_runtime_and_reports_comp
     assert session.busy is False
     assert session.last_tick_ts is None
     assert session.last_tick_value is None
+    assert session.assistant_preview_message_id is None
+    assert session.assistant_preview_last_value is None
+    assert session.assistant_preview_creation_attempted is False
     assert session.tick_seen == 0
     assert session.runtime_progress_last_event is None
     assert session.runtime_progress_events == []

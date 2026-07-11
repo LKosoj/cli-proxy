@@ -7,7 +7,7 @@ from telegram.error import BadRequest, TimedOut
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 from bot import BotApp
 from app.services.rich_draft_coordinator import RichDraftCoordinator
-from app.services.telegram_transport import TelegramTransportContext
+from app.services.telegram_transport import TelegramEditOutcome, TelegramTransportContext
 from tg.markdown import escape_markdown_v2_all, to_markdown_v2
 from tg.rich import RICH_MARKDOWN_CHAR_LIMIT
 
@@ -431,6 +431,42 @@ def test_edit_message_md2_raw_rich_bad_request_falls_back_to_current_pipeline(tm
     asyncio.run(_run())
 
 
+def test_edit_message_outcome_classifies_retry_replace_and_not_modified(tmp_path):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        errors = iter(
+            (
+                TimedOut("temporary"),
+                BadRequest("Message to edit not found"),
+                BadRequest("Message is not modified"),
+            )
+        )
+
+        async def _edit_message_text(**_kwargs):
+            raise next(errors)
+
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(edit_message_text=_edit_message_text))
+
+        outcomes = [
+            await app._edit_message_outcome(
+                ctx,
+                chat_id=1,
+                message_id=message_id,
+                text="status",
+                prefer_rich=False,
+            )
+            for message_id in (1, 2, 3)
+        ]
+
+        assert outcomes == [
+            TelegramEditOutcome.RETRY,
+            TelegramEditOutcome.REPLACE,
+            TelegramEditOutcome.UPDATED,
+        ]
+
+    asyncio.run(_run())
+
+
 def test_send_message_retry_keeps_md2_false(tmp_path):
     async def _run():
         cfg = AppConfig(
@@ -471,6 +507,34 @@ def test_send_message_retry_keeps_md2_false(tmp_path):
         assert len(calls) == 2
         assert "parse_mode" not in calls[0]
         assert "parse_mode" not in calls[1]
+
+    asyncio.run(_run())
+
+
+def test_send_message_retries_network_error_five_times(tmp_path, monkeypatch):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        calls = []
+
+        async def _send_message(**kwargs):
+            calls.append(dict(kwargs))
+            raise TimedOut("temporary")
+
+        async def _sleep(_seconds):
+            return None
+
+        monkeypatch.setattr("app.services.telegram_transport.asyncio.sleep", _sleep)
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=_send_message))
+
+        result = await app._send_message(
+            ctx,
+            chat_id=1,
+            text="preview",
+            prefer_rich=False,
+        )
+
+        assert result is None
+        assert len(calls) == 5
 
     asyncio.run(_run())
 

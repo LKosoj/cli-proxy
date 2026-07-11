@@ -506,6 +506,7 @@ class Session:
     last_assistant_text_value: Optional[str] = None
     assistant_preview_message_id: Optional[int] = None
     assistant_preview_last_value: Optional[str] = None
+    assistant_preview_creation_attempted: bool = False
     tick_seen: int = 0
     # Optional executor profile id used by Dispatcher.
     executor_profile: Optional[str] = None

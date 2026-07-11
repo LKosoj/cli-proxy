@@ -232,6 +232,7 @@ class SessionInterruptService:
             setattr(session, "last_assistant_text_value", None)
             setattr(session, "assistant_preview_message_id", None)
             setattr(session, "assistant_preview_last_value", None)
+            setattr(session, "assistant_preview_creation_attempted", False)
             setattr(session, "tick_seen", 0)
             if not bool(getattr(session, "run_lock", None) and session.run_lock.locked()):
                 setattr(session, "busy", False)

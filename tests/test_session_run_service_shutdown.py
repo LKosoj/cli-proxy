@@ -3,6 +3,7 @@ import logging
 from collections import deque
 from types import SimpleNamespace
 
+from app.services.telegram_transport import TelegramEditOutcome
 from sessions.session_run_service import SessionRunService
 
 
@@ -107,7 +108,7 @@ def test_session_run_service_logs_shutdown_close_cleanup_failure(caplog) -> None
     )
 
 
-def test_session_run_service_logs_assistant_preview_edit_fallback(caplog) -> None:
+def test_session_run_service_keeps_assistant_preview_after_unknown_edit_failure(caplog) -> None:
     async def _run() -> None:
         async def _edit_message(*_args, **_kwargs):
             raise RuntimeError("edit denied")
@@ -136,16 +137,129 @@ def test_session_run_service_logs_assistant_preview_edit_fallback(caplog) -> Non
             "preview text",
         )
 
-        assert sent_messages == ["preview text"]
-        assert session.assistant_preview_message_id == 43
-        assert session.assistant_preview_last_value == "preview text"
+        assert sent_messages == []
+        assert session.assistant_preview_message_id == 42
+        assert session.assistant_preview_last_value == "old"
 
     caplog.set_level(logging.DEBUG, logger="sessions.session_run_service")
     asyncio.run(_run())
 
-    assert "legacy_fallback: assistant preview edit failed session=s-preview" in caplog.text
+    assert "assistant preview edit failed; keeping current message session=s-preview" in caplog.text
     assert "chat_id=123" in caplog.text
     assert "message_id=42" in caplog.text
+
+
+def test_session_run_service_retries_transient_preview_edit_in_place() -> None:
+    async def _run() -> None:
+        outcomes = iter((TelegramEditOutcome.RETRY, TelegramEditOutcome.UPDATED))
+        edit_calls: list[dict[str, object]] = []
+        sent_messages: list[str] = []
+
+        async def _edit_message_outcome(_context, **kwargs):
+            edit_calls.append(dict(kwargs))
+            return next(outcomes)
+
+        async def _send_message(_context, *, text, **_kwargs):
+            sent_messages.append(text)
+            return SimpleNamespace(message_id=43)
+
+        bot_app = SimpleNamespace(
+            _edit_message_outcome=_edit_message_outcome,
+            _send_message=_send_message,
+        )
+        service = _build_service(bot_app)
+        session = SimpleNamespace(
+            id="s-preview",
+            send_lock=asyncio.Lock(),
+            assistant_preview_message_id=42,
+            assistant_preview_last_value="old",
+        )
+        dest = {"kind": "telegram", "chat_id": 123}
+
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "preview 1")
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "preview 2")
+
+        assert sent_messages == []
+        assert [call["message_id"] for call in edit_calls] == [42, 42]
+        assert session.assistant_preview_message_id == 42
+        assert session.assistant_preview_last_value == "preview 2"
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_replaces_only_permanently_missing_preview() -> None:
+    async def _run() -> None:
+        sent_messages: list[dict[str, object]] = []
+
+        async def _edit_message_outcome(*_args, **_kwargs):
+            return TelegramEditOutcome.REPLACE
+
+        async def _send_message(_context, *, text, **kwargs):
+            sent_messages.append({"text": text, **kwargs})
+            return SimpleNamespace(message_id=43)
+
+        bot_app = SimpleNamespace(
+            _edit_message_outcome=_edit_message_outcome,
+            _send_message=_send_message,
+        )
+        service = _build_service(bot_app)
+        session = SimpleNamespace(
+            id="s-preview",
+            send_lock=asyncio.Lock(),
+            assistant_preview_message_id=42,
+            assistant_preview_last_value="old",
+        )
+
+        await service._upsert_telegram_assistant_preview(
+            session,
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            "preview text",
+        )
+
+        assert sent_messages == [
+            {
+                "text": "preview text",
+                "chat_id": 123,
+                "prefer_rich": False,
+            }
+        ]
+        assert session.assistant_preview_message_id == 43
+        assert session.assistant_preview_last_value == "preview text"
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_does_not_repeat_uncertain_preview_send() -> None:
+    async def _run() -> None:
+        sent_messages: list[dict[str, object]] = []
+
+        async def _send_message(_context, *, text, **kwargs):
+            sent_messages.append({"text": text, **kwargs})
+            return None
+
+        service = _build_service(SimpleNamespace(_send_message=_send_message))
+        session = SimpleNamespace(
+            id="s-preview",
+            send_lock=asyncio.Lock(),
+            assistant_preview_message_id=None,
+            assistant_preview_last_value=None,
+        )
+        dest = {"kind": "telegram", "chat_id": 123}
+
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "preview 1")
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "preview 2")
+
+        assert sent_messages == [
+            {
+                "text": "preview 1",
+                "chat_id": 123,
+                "prefer_rich": False,
+            }
+        ]
+        assert session.assistant_preview_message_id is None
+
+    asyncio.run(_run())
 
 
 def test_session_run_service_keeps_direct_messages_topic_on_preview_fallback() -> None:
