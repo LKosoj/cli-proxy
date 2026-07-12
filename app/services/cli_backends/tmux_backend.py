@@ -988,7 +988,7 @@ class TmuxExecutionBackend:
                     last_reported_text = latest_text
                     setattr(session, "last_output_ts", time.time())
                     setattr(session, "last_assistant_text_ts", time.time())
-                    setattr(session, "last_assistant_text_value", latest_text[-1000:])
+                    setattr(session, "last_assistant_text_value", latest_text)
                 if complete:
                     break
                 if parsed.complete and not transcript_authoritative:
