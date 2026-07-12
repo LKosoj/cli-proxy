@@ -636,6 +636,7 @@ class MainWindow(QMainWindow):
         question_id = str(pending.get("question_id") or "")
         resolved = bool(self.facade.resolve_analyst_question(question_id, option_text))
         self._pending_ask_by_session.pop(sid, None)
+        self.chat_view.hide_ask_options()
         # Показываем выбранный вариант как сообщение пользователя
         self.chat_view.append_message("user", option_text)
         self._persist_chat_message(sid, "user", option_text)

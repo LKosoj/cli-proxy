@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 import os
 import secrets
 import shutil
@@ -49,6 +50,7 @@ from app.services.scheduler_presentation_service import SchedulerPresentationSer
 from app.services.session_interrupt_service import SessionInterruptService
 from app.services.session_mutation_service import SessionMutationService
 from app.services.session_run_service import ModeScopedPreRunResetService
+from sessions.session_run_service import SessionRunService
 from app.services.task_bearing_cli_hook_service import get_task_bearing_cli_hook_service
 from app.services.ui_state_models import ChatUiState
 from app.services.advanced_orchestrator_service import (
@@ -2743,12 +2745,40 @@ class ApplicationFacade:
 
     def resolve_analyst_question(self, question_id: str, answer: str) -> bool:
         """Резолвит вопрос от аналитика/агента, отвечая на него."""
+        qid = str(question_id or "").strip()
         bot_app = self._desktop_bot_app()
+
+        # Handle tmux CLI choice questions (relayed via ask) by feeding selection back to tmux pane.
+        # This mirrors the handling in tg/callback_actions/protocol.py so desktop gets the same UX.
+        pending_meta = bot_app.ui_state.pending_questions.get(qid) or {}
+        if pending_meta.get("tmux_feed"):
+            try:
+                tmux_sid = pending_meta.get("session_id") or pending_meta.get("session_uid")
+                if tmux_sid:
+                    sess = self.session_service.get_session_by_uid(str(tmux_sid))
+                    if sess:
+                        choice = "1"
+                        m = re.match(r"^(\d+)", str(answer or ""))
+                        if m:
+                            choice = m.group(1)
+                        from app.services.cli_backends import TmuxExecutionBackend
+
+                        asyncio.ensure_future(TmuxExecutionBackend().send_input(sess, choice))
+            except Exception:
+                self.logger.exception("failed to feed tmux choice from desktop ask")
+            # Clean the synthetic choice question entry
+            bot_app.ui_state.pending_questions.pop(qid, None)
+            active = getattr(bot_app.ui_state, "active_ask_question_by_chat", {})
+            for k, v in list(active.items()):
+                if v == qid:
+                    active.pop(k, None)
+            return True
+
         registry = getattr(bot_app, "_tool_registry", None)
         if registry and hasattr(registry, "resolve_question"):
-            resolved = bool(registry.resolve_question(str(question_id), str(answer)))
+            resolved = bool(registry.resolve_question(qid, str(answer)))
             if resolved:
-                self._clear_pending_question(str(question_id))
+                self._clear_pending_question(qid)
             return resolved
         return False
 
@@ -3129,6 +3159,33 @@ class ApplicationFacade:
                 async def _emit_preview(text: str) -> None:
                     if not text:
                         return
+                    # For tmux-backed CLIs, intercept choice questions (e.g. "Enter selection [1-5]")
+                    # and present them via the ask mechanism (buttons) instead of raw preview text.
+                    # Mirrors the logic used for Telegram. The answer will be fed back via send_input.
+                    if SessionRunService._is_cli_choice_question(text):
+                        question, options = SessionRunService._parse_cli_choice_question(text)
+                        qid = f"tmux_choice_{session_uid}_{int(time.time())}"
+                        meta = {
+                            "question": question,
+                            "options": options,
+                            "session_uid": session_uid,
+                            "session_id": session_uid,
+                            "tmux_feed": True,
+                        }
+                        bot_app = self._desktop_bot_app()
+                        bot_app.ui_state.pending_questions[qid] = meta
+                        bot_app.ui_state.active_ask_question_by_chat[session_uid] = qid
+                        self.notify(
+                            "ui:ask_question",
+                            session_uid=session_uid,
+                            session_id=session_uid,
+                            question_id=qid,
+                            question=question,
+                            options=options,
+                            allow_custom=False,
+                        )
+                        self.notify("ui:assistant_preview_clear", session_uid=session_uid)
+                        return  # do not emit as plain preview text
                     self.notify(
                         "ui:assistant_preview",
                         session_uid=session_uid,
@@ -3579,10 +3636,37 @@ class ApplicationFacade:
                 header_override: Optional[str] = None,
                 force_html: bool = False,
             ) -> None:
-                """Соответствует интерфейсу bot_app.send_output (session, dest, output, context)."""
+                """Соответствует интерфейфу bot_app.send_output (session, dest, output, context)."""
                 if not session:
                     return
-                facade.notify("ui:message", session_uid=session_runtime_uid(session), role="agent", text=str(output), md2=True)
+                text = str(output or "")
+                # If this output is a CLI choice question, turn it into ask (with tmux_feed)
+                # so desktop shows buttons instead of dumping raw "Enter selection..." text.
+                if SessionRunService._is_cli_choice_question(text):
+                    question, options = SessionRunService._parse_cli_choice_question(text)
+                    qid = f"tmux_choice_{session_runtime_uid(session)}_{int(time.time())}"
+                    sid = session_runtime_uid(session)
+                    meta = {
+                        "question": question,
+                        "options": options,
+                        "session_uid": sid,
+                        "session_id": sid,
+                        "tmux_feed": True,
+                    }
+                    self.ui_state.pending_questions[qid] = meta
+                    self.ui_state.active_ask_question_by_chat[sid] = qid
+                    facade.notify(
+                        "ui:ask_question",
+                        session_uid=sid,
+                        session_id=sid,
+                        question_id=qid,
+                        question=question,
+                        options=options,
+                        allow_custom=False,
+                    )
+                    facade.notify("ui:assistant_preview_clear", session_uid=sid)
+                    return
+                facade.notify("ui:message", session_uid=session_runtime_uid(session), role="agent", text=text, md2=True)
 
             async def _send_ask_question(
                 self,
@@ -3602,7 +3686,9 @@ class ApplicationFacade:
                 session_uid = str(chat_id or "").strip()
                 sid = str(session_id or "").strip() or session_uid
                 if qid:
-                    self.ui_state.pending_questions[qid] = {
+                    # Preserve extra metadata (e.g. tmux_feed + session for CLI choice relay) if pre-populated
+                    existing = self.ui_state.pending_questions.get(qid) or {}
+                    entry = {
                         "question_id": qid,
                         "question": str(question),
                         "options": normalized_options,
@@ -3612,6 +3698,11 @@ class ApplicationFacade:
                         "allow_custom": bool(allow_custom),
                         "created_at": time.time(),
                     }
+                    # keep tmux-specific or other extra keys
+                    for k in ("tmux_feed", "tmux_request_id"):
+                        if k in existing:
+                            entry[k] = existing[k]
+                    self.ui_state.pending_questions[qid] = entry
                     self.ui_state.active_ask_question_by_chat[session_uid] = qid
                 facade.notify(
                     "ui:ask_question",

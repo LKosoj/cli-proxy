@@ -996,6 +996,12 @@ class TmuxExecutionBackend:
                     completion_source = "pane"
                     break
 
+                # Do not complete the main request if the CLI just asked a choice question
+                # (e.g. "Enter selection [1-5]"). Keep monitoring so the question is relayed
+                # via ask mechanism and user input is fed back to tmux.
+                if "Enter selection [" in (latest_text or "") or "or Escape to cancel" in (latest_text or "") or "☐ " in (latest_text or ""):
+                    complete = False
+
                 # Cross-CLI guard for long-running tasks:
                 # Even if transcript or pane parser signals "complete" (e.g. turn end),
                 # continue monitoring if we haven't seen the DONE marker yet

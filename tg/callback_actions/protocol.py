@@ -1,5 +1,7 @@
 """Protocol callback actions (mode actions, approvals, ask-user)."""
 
+import re
+
 from i18n import t, lang_from_query
 from agent import (
     approve_pending_command,
@@ -152,6 +154,22 @@ class ProtocolActionsMixin:
             await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         answer = options[idx]
+        # Handle tmux CLI choice questions by feeding the selection back to the tmux pane
+        pending_meta = self.bot_app.ui_state.pending_questions.get(question_id) or {}
+        if pending_meta.get("tmux_feed"):
+            try:
+                tmux_sid = pending_meta.get("session_id")
+                if tmux_sid and self.bot_app.manager:
+                    tmux_sess = self.bot_app.manager.get(chat_id, tmux_sid)
+                    if tmux_sess:
+                        choice = "1"
+                        m = re.match(r'^(\d+)', answer or "")
+                        if m:
+                            choice = m.group(1)
+                        from app.services.cli_backends import TmuxExecutionBackend
+                        await TmuxExecutionBackend().send_input(tmux_sess, choice)
+            except Exception:
+                logging.getLogger("bot.ask").exception("failed to feed tmux choice from ask")
         runtime = None
         getter = getattr(self.bot_app, "get_runtime_by_capability", None)
         if callable(getter):
