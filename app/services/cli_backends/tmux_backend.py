@@ -20,7 +20,7 @@ from utils.text import strip_ansi
 from .models import ExecutionBackendStatus, ExecutionResult
 from .transcript_reader import CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
-from .tmux_parser import build_prompt_with_markers, normalize_terminal_text, parse_tmux_delta
+from .tmux_parser import build_prompt_with_markers, done_marker, normalize_terminal_text, parse_tmux_delta
 
 
 _SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -422,11 +422,13 @@ class TmuxExecutionBackend:
         poll_interval_sec: float = 0.25,
         idle_fallback_sec: Optional[float] = None,
         startup_timeout_sec: float = 30.0,
+        quiet_timeout_sec: float = 300.0,  # 5 min default: if pane.log stops growing, treat as finished (for long tasks without DONE marker)
     ):
         self.driver = driver
         self.poll_interval_sec = float(poll_interval_sec)
         self.idle_fallback_sec = idle_fallback_sec
         self.startup_timeout_sec = float(startup_timeout_sec)
+        self.quiet_timeout_sec = float(quiet_timeout_sec)
 
     def _driver(self, session: Any) -> TmuxDriver:
         return self.driver or _driver_for_session(session)
@@ -733,6 +735,34 @@ class TmuxExecutionBackend:
             locator=request.transcript_locator,
         )
 
+    @staticmethod
+    def _find_qwen_transcript_path(session: Any) -> Optional[str]:
+        """Discover qwen session jsonl for the workdir, similar to QwenJsonlMonitor."""
+        try:
+            from app.services.qwen_jsonl_monitor import QWEN_CHAT_BASE_DIR
+            workdir = str(getattr(session, "workdir", "") or "")
+            if not workdir:
+                return None
+            raw = os.path.realpath(workdir).rstrip(os.sep) or workdir
+            slash_key = raw.replace(os.sep, "-")
+            compact_key = re.sub(r"[^A-Za-z0-9]+", "-", raw)
+            if raw.startswith(os.sep) and not compact_key.startswith("-"):
+                compact_key = "-" + compact_key
+            compact_key = compact_key.rstrip("-")
+            for project_key in (slash_key, compact_key):
+                chat_dir = QWEN_CHAT_BASE_DIR / project_key / "chats"
+                if chat_dir.exists():
+                    jsonl_files = sorted(
+                        chat_dir.glob("*.jsonl"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True,
+                    )
+                    if jsonl_files:
+                        return str(jsonl_files[0])
+            return None
+        except Exception:
+            return None
+
     async def get_recovery_request(self, session: Any) -> Optional[TmuxRecoveryRequest]:
         paths = self.paths(session)
         state = self._read_state(paths)
@@ -831,6 +861,7 @@ class TmuxExecutionBackend:
         idle_probe_interval = self.idle_fallback_sec
         if idle_probe_interval is None:
             idle_probe_interval = max(1.0, float(getattr(session, "idle_timeout_sec", 100) or 100))
+        quiet_timeout = self.quiet_timeout_sec
         driver = self._driver(session)
         log_path = paths["pane_log"]
         last_size = request.offset
@@ -845,8 +876,22 @@ class TmuxExecutionBackend:
         transcript_authoritative = False
         transcript_reader = None
         persisted_locator = request.transcript_locator
+        last_transcript_size = 0
+        transcript_path = None
         try:
             transcript_reader = self._build_transcript_reader(session, request)
+            if transcript_reader is not None and getattr(transcript_reader, 'locator', None) and transcript_reader.locator:
+                transcript_path = transcript_reader.locator.path
+                if transcript_path and os.path.exists(transcript_path):
+                    last_transcript_size = os.path.getsize(transcript_path)
+            # For qwen (and any CLI without transcript_reader support), discover its jsonl
+            if not transcript_path:
+                cli_name = _active_cli(session)
+                if cli_name == "qwen":
+                    qwen_path = self._find_qwen_transcript_path(session)
+                    if qwen_path and os.path.exists(qwen_path):
+                        transcript_path = qwen_path
+                        last_transcript_size = os.path.getsize(qwen_path)
         except Exception:
             logger.exception(
                 "failed to initialize structured transcript reader session_id=%s request_id=%s",
@@ -860,6 +905,13 @@ class TmuxExecutionBackend:
                 if size != last_size:
                     last_size = size
                     last_change = time.time()
+                # Track transcript JSONL growth for liveness (translated from pane.log logic).
+                # JSONL often better reflects ongoing work (events, thoughts, tool results) even if pane is quiet.
+                if transcript_path and os.path.exists(transcript_path):
+                    tsize = os.path.getsize(transcript_path)
+                    if tsize != last_transcript_size:
+                        last_transcript_size = tsize
+                        last_change = time.time()
                 delta = self._read_request_delta(paths, request.offset)
                 if delta:
                     _capture_resume_token_from_output(session, delta)
@@ -911,9 +963,25 @@ class TmuxExecutionBackend:
                     if transcript_update.locator is not None and transcript_update.locator != persisted_locator:
                         if self._persist_transcript_locator(paths, request.request_id, transcript_update.locator):
                             persisted_locator = transcript_update.locator
+                    # (re)check transcript path after poll in case it was discovered
+                    if transcript_reader is not None and getattr(transcript_reader, 'locator', None) and transcript_reader.locator:
+                        new_tpath = transcript_reader.locator.path
+                        if new_tpath and new_tpath != transcript_path:
+                            transcript_path = new_tpath
+                            if os.path.exists(transcript_path):
+                                last_transcript_size = os.path.getsize(transcript_path)
                     if transcript_update.complete:
-                        complete = True
-                        completion_source = "transcript"
+                        # Honor transcript complete only if the explicit DONE marker for this request is present.
+                        # This prevents early termination on intermediate "turn end" / task_complete for long-running tasks.
+                        # The DONE marker is the common signal across all CLIs (injected by build_prompt_with_markers).
+                        dm = done_marker(request.request_id)
+                        marker_seen = dm in (transcript_latest_text or "") or dm in (pane_latest_text or "")
+                        if marker_seen:
+                            complete = True
+                            completion_source = "transcript"
+                        else:
+                            # Intermediate response complete in transcript, but no DONE yet -> keep monitoring
+                            complete = False
 
                 latest_text = transcript_latest_text or pane_latest_text
                 if latest_text and latest_text != last_reported_text:
@@ -927,6 +995,32 @@ class TmuxExecutionBackend:
                     complete = True
                     completion_source = "pane"
                     break
+
+                # Cross-CLI guard for long-running tasks:
+                # Even if transcript or pane parser signals "complete" (e.g. turn end),
+                # continue monitoring if we haven't seen the DONE marker yet
+                # AND the pane does not look ready (ongoing work).
+                if complete and not (done_marker(request.request_id) in (latest_text or "")):
+                    try:
+                        current_pane = await driver.capture_pane(paths["pane_target"])
+                    except Exception:
+                        current_pane = pane_latest_text or ""
+                    if not self._is_interactive_ready(session, current_pane):
+                        # still busy according to CLI's ready prompt detection
+                        complete = False
+                        # continue polling for more output / the real DONE
+                if complete:
+                    break
+
+                # Quiet timeout: if neither pane.log nor (preferably) the session JSONL has grown
+                # for quiet_timeout (default 5min), treat as finished. Growth of JSONL is the
+                # translated liveness signal (more reliable for structured long-running sessions).
+                if time.time() - last_change >= quiet_timeout:
+                    if not complete:
+                        complete = True
+                        completion_source = "json-quiet-timeout" if transcript_path else "pane-quiet-timeout"
+                    break
+
                 if time.time() - last_change >= idle_probe_interval:
                     if not await driver.has_session(paths["session_name"]):
                         logger.warning(

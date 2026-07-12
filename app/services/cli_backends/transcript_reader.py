@@ -262,7 +262,10 @@ class CliTranscriptReader:
             if isinstance(pending_count, int) and pending_count > 0:
                 self._claude_requires_done_marker = True
             elif not self._claude_requires_done_marker:
-                self.complete = True
+                # Condition on DONE marker for consistency with long-running wrapped requests across CLIs
+                if self._done_marker() in (self.latest_assistant_text or ""):
+                    self.complete = True
+                # otherwise treat as intermediate turn end; outer monitor will use activity/ready checks
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         if str(record.get("type") or "").strip() != "event_msg":
@@ -280,7 +283,11 @@ class CliTranscriptReader:
             text = str(payload.get("last_agent_message") or "").strip()
             if text:
                 self.latest_assistant_text = self._clean_assistant_text(text)
-            self.complete = True
+            # Only mark complete if DONE marker seen (for long-running tasks wrapped with explicit completion protocol).
+            # This keeps monitoring active across turns for all CLIs until the AI prints the marker.
+            if self._done_marker() in (text or ""):
+                self.complete = True
+            # else: intermediate task complete, keep complete=False so outer monitor can continue
 
     def _handle_grok(self, record: dict[str, Any]) -> None:
         params = record.get("params") if isinstance(record.get("params"), dict) else {}
@@ -305,7 +312,10 @@ class CliTranscriptReader:
                 self._grok_stream_chunks.append(text)
                 self.latest_assistant_text = self._clean_assistant_text("".join(self._grok_stream_chunks))
         elif event_type == "turn_completed":
-            self.complete = True
+            # Only mark complete if DONE marker seen (consistent with other CLIs and long-running protocol)
+            if self._done_marker() in (self.latest_assistant_text or ""):
+                self.complete = True
+            # else keep monitoring until explicit marker for this request
 
     def _handle_record(self, record: dict[str, Any]) -> None:
         if self.provider == "claude":
