@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Optional
 
 from telegram import InlineKeyboardMarkup, Message
-from telegram.error import BadRequest, NetworkError, TimedOut
+from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 
 from sessions.conversation_scope import ConversationScope
 from tg.markdown import (
@@ -1002,6 +1002,8 @@ class TelegramTransportService:
                     )
                     continue
             return TelegramEditOutcome.RETRY
+        except RetryAfter:
+            raise
         except BadRequest as exc:
             outcome = self._classify_edit_bad_request(exc)
             logging.getLogger(__name__).warning(

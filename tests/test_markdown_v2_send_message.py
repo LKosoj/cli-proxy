@@ -1,8 +1,10 @@
 import asyncio
+from datetime import timedelta
 import types
 from pathlib import Path
 
-from telegram.error import BadRequest, TimedOut
+import pytest
+from telegram.error import BadRequest, RetryAfter, TimedOut
 
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 from bot import BotApp
@@ -464,6 +466,33 @@ def test_edit_message_outcome_classifies_retry_replace_and_not_modified(tmp_path
             TelegramEditOutcome.UPDATED,
         ]
 
+    asyncio.run(_run())
+
+
+def test_edit_message_outcome_propagates_retry_after_without_fallback(tmp_path, monkeypatch):
+    async def _run():
+        app = _build_transport_test_app(tmp_path)
+        calls = 0
+
+        async def _edit_message_text(**_kwargs):
+            nonlocal calls
+            calls += 1
+            raise RetryAfter(timedelta(seconds=0.1))
+
+        ctx = types.SimpleNamespace(bot=types.SimpleNamespace(edit_message_text=_edit_message_text))
+
+        with pytest.raises(RetryAfter):
+            await app._edit_message_outcome(
+                ctx,
+                chat_id=1,
+                message_id=2,
+                text="status",
+                prefer_rich=False,
+            )
+
+        assert calls == 1
+
+    monkeypatch.setenv("PTB_TIMEDELTA", "1")
     asyncio.run(_run())
 
 

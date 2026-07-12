@@ -5,9 +5,11 @@ from collections.abc import Mapping
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import RetryAfter
 
 from app.services.assistant_preview_service import (
     ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC,
+    AssistantPreviewRateLimiter,
     assistant_preview_enabled,
     assistant_preview_supported_dest,
     watch_session_assistant_preview,
@@ -65,6 +67,7 @@ class SessionRunService:
         self._log_cli_dialog = log_cli_dialog
         self._reset_session_fields_like_sessions_reset = reset_session_fields_like_sessions_reset
         self._core_orchestration: Optional[CoreOrchestrationService] = None
+        self._assistant_preview_rate_limiter = AssistantPreviewRateLimiter()
 
     def _get_core_orchestration(self) -> CoreOrchestrationService:
         if self._core_orchestration is None:
@@ -347,7 +350,15 @@ class SessionRunService:
         reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
         return reply_kwargs.get("chat_id") is not None
 
-    async def _upsert_telegram_assistant_preview(self, session, dest: dict, context, text: Optional[str]) -> None:
+    async def _upsert_telegram_assistant_preview(
+        self,
+        session,
+        dest: dict,
+        context,
+        text: Optional[str],
+        *,
+        timer_only: bool = False,
+    ) -> None:
         if not text:
             return
         send_message = getattr(self.bot_app, "_send_message", None)
@@ -360,92 +371,143 @@ class SessionRunService:
         if chat_id is None:
             return
         async with session.send_lock:
-            current_text = text
-            if not current_text:
-                return
             if (
                 session.assistant_preview_message_id is not None
-                and session.assistant_preview_last_value == current_text
+                and session.assistant_preview_last_value == text
             ):
                 return
-            if session.assistant_preview_message_id is not None:
-                if not callable(edit_message_outcome) and not callable(edit_message):
-                    return
-                try:
-                    if callable(edit_message_outcome):
-                        outcome = await edit_message_outcome(
-                            context,
-                            chat_id=int(chat_id),
-                            message_id=int(session.assistant_preview_message_id),
-                            text=current_text,
-                            md2=True,
-                            prefer_rich=False,
-                        )
-                    else:
-                        edited = await edit_message(
-                            context,
-                            chat_id=int(chat_id),
-                            message_id=int(session.assistant_preview_message_id),
-                            text=current_text,
-                            md2=True,
-                            prefer_rich=False,
-                        )
-                        outcome = TelegramEditOutcome.UPDATED if edited else TelegramEditOutcome.RETRY
-                except Exception:
-                    _log.debug(
-                        "assistant preview edit failed; keeping current message session=%s chat_id=%s message_id=%s",
-                        getattr(session, "id", "?"),
-                        chat_id,
-                        getattr(session, "assistant_preview_message_id", None),
-                        exc_info=True,
-                    )
-                    return
-                if outcome is TelegramEditOutcome.UPDATED:
-                    session.assistant_preview_last_value = current_text
-                    return
-                if outcome is not TelegramEditOutcome.REPLACE:
-                    return
-                session.assistant_preview_message_id = None
-                session.assistant_preview_last_value = None
-                session.assistant_preview_creation_attempted = False
-            if getattr(session, "assistant_preview_creation_attempted", False):
-                return
-            session.assistant_preview_creation_attempted = True
-            try:
-                message = await send_message(
+            if session.assistant_preview_message_id is None:
+                await self._send_telegram_assistant_preview_locked(
+                    session,
                     context,
-                    text=current_text,
-                    prefer_rich=False,
-                    **reply_kwargs,
-                )
-            except Exception:
-                _log.exception(
-                    "assistant preview send failed session=%s chat_id=%s",
-                    getattr(session, "id", "?"),
-                    chat_id,
+                    text,
+                    reply_kwargs,
                 )
                 return
-            message_id = getattr(message, "message_id", None)
-            if message_id is None:
-                return
+        if not callable(edit_message_outcome) and not callable(edit_message):
+            return
+        await self._assistant_preview_rate_limiter.submit(
+            chat_id=int(chat_id),
+            owner=session_runtime_uid(session),
+            timer_only=timer_only,
+            apply_update=lambda: self._edit_telegram_assistant_preview(
+                session,
+                context,
+                text,
+                reply_kwargs,
+            ),
+        )
+
+    async def _send_telegram_assistant_preview_locked(
+        self,
+        session,
+        context,
+        text: str,
+        reply_kwargs: dict,
+    ) -> None:
+        if getattr(session, "assistant_preview_creation_attempted", False):
+            return
+        session.assistant_preview_creation_attempted = True
+        try:
+            message = await self.bot_app._send_message(
+                context,
+                text=text,
+                prefer_rich=False,
+                **reply_kwargs,
+            )
+        except Exception:
+            _log.exception(
+                "assistant preview send failed session=%s chat_id=%s",
+                getattr(session, "id", "?"),
+                reply_kwargs.get("chat_id"),
+            )
+            return
+        message_id = getattr(message, "message_id", None)
+        if message_id is not None:
             session.assistant_preview_message_id = int(message_id)
-            session.assistant_preview_last_value = current_text
+            session.assistant_preview_last_value = text
+
+    async def _edit_telegram_assistant_preview(
+        self,
+        session,
+        context,
+        text: str,
+        reply_kwargs: dict,
+    ) -> None:
+        edit_message = getattr(self.bot_app, "_edit_message", None)
+        edit_message_outcome = getattr(self.bot_app, "_edit_message_outcome", None)
+        async with session.send_lock:
+            message_id = getattr(session, "assistant_preview_message_id", None)
+            if message_id is None or session.assistant_preview_last_value == text:
+                return
+            try:
+                if callable(edit_message_outcome):
+                    outcome = await edit_message_outcome(
+                        context,
+                        chat_id=int(reply_kwargs["chat_id"]),
+                        message_id=int(message_id),
+                        text=text,
+                        md2=True,
+                        prefer_rich=False,
+                    )
+                elif callable(edit_message):
+                    edited = await edit_message(
+                        context,
+                        chat_id=int(reply_kwargs["chat_id"]),
+                        message_id=int(message_id),
+                        text=text,
+                        md2=True,
+                        prefer_rich=False,
+                    )
+                    outcome = TelegramEditOutcome.UPDATED if edited else TelegramEditOutcome.RETRY
+                else:
+                    return
+            except RetryAfter:
+                raise
+            except Exception:
+                _log.debug(
+                    "assistant preview edit failed; keeping current message session=%s chat_id=%s message_id=%s",
+                    getattr(session, "id", "?"),
+                    reply_kwargs.get("chat_id"),
+                    message_id,
+                    exc_info=True,
+                )
+                return
+            if outcome is TelegramEditOutcome.UPDATED:
+                session.assistant_preview_last_value = text
+                return
+            if outcome is not TelegramEditOutcome.REPLACE:
+                return
+            session.assistant_preview_message_id = None
+            session.assistant_preview_last_value = None
+            session.assistant_preview_creation_attempted = False
+            await self._send_telegram_assistant_preview_locked(
+                session,
+                context,
+                text,
+                reply_kwargs,
+            )
 
     async def _clear_telegram_assistant_preview(self, session, dest: Optional[dict], context) -> bool:
-        message_id = getattr(session, "assistant_preview_message_id", None)
-        if message_id is None:
-            self._reset_assistant_preview_state(session)
-            return True
-        delete_message = getattr(self.bot_app, "_delete_message", None)
-        if not callable(delete_message):
-            self._reset_assistant_preview_state(session)
-            return False
         reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
         chat_id = reply_kwargs.get("chat_id")
+        if chat_id is not None:
+            await self._assistant_preview_rate_limiter.cancel(
+                chat_id=int(chat_id),
+                owner=session_runtime_uid(session),
+            )
+        delete_message = getattr(self.bot_app, "_delete_message", None)
         if chat_id is None:
             self._reset_assistant_preview_state(session)
             return False
         async with session.send_lock:
+            message_id = getattr(session, "assistant_preview_message_id", None)
+            if message_id is None:
+                self._reset_assistant_preview_state(session)
+                return True
+            if not callable(delete_message):
+                self._reset_assistant_preview_state(session)
+                return False
             try:
                 deleted = bool(await delete_message(context, int(chat_id), int(message_id)))
             except Exception:
@@ -628,11 +690,12 @@ class SessionRunService:
                         preview_task = self._safe_create_task(
                             watch_session_assistant_preview(
                                 session,
-                                emit_update=lambda text: self._upsert_telegram_assistant_preview(
+                                emit_update=lambda text, timer_only: self._upsert_telegram_assistant_preview(
                                     session,
                                     dest,
                                     context,
                                     text,
+                                    timer_only=timer_only,
                                 ),
                                 stop_event=preview_stop_event,
                                 include_elapsed_time=True,

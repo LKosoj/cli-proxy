@@ -1,8 +1,10 @@
 import asyncio
 import contextlib
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
+from telegram.error import RetryAfter
 
 from app.services.assistant_preview_service import watch_session_assistant_preview
 from bot import BotApp
@@ -233,13 +235,15 @@ async def test_watch_session_assistant_preview_adds_and_refreshes_elapsed_timer(
     session = SimpleNamespace(last_assistant_text_value="Черновик ответа")
     stop_event = asyncio.Event()
     updates: list[str] = []
-    clock_values = iter((100.0, 120.0))
+    timer_only_values: list[bool] = []
+    clock_values = iter((100.0, 220.0))
 
     def _clock() -> float:
-        return next(clock_values, 120.0)
+        return next(clock_values, 220.0)
 
-    async def _emit_update(text: str) -> None:
+    async def _emit_update(text: str, timer_only: bool) -> None:
         updates.append(text)
+        timer_only_values.append(timer_only)
         if len(updates) == 2:
             stop_event.set()
 
@@ -249,7 +253,7 @@ async def test_watch_session_assistant_preview_adds_and_refreshes_elapsed_timer(
             emit_update=_emit_update,
             stop_event=stop_event,
             poll_interval_sec=0.01,
-            refresh_interval_sec=20.0,
+            refresh_interval_sec=120.0,
             include_elapsed_time=True,
             clock=_clock,
         ),
@@ -258,8 +262,38 @@ async def test_watch_session_assistant_preview_adds_and_refreshes_elapsed_timer(
 
     assert updates == [
         "⏳ 00:00\n\nЧерновик ответа",
-        "⏳ 00:20\n\nЧерновик ответа",
+        "⏳ 02:00\n\nЧерновик ответа",
     ]
+    assert timer_only_values == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_watch_session_assistant_preview_treats_new_text_as_text_update_after_timer_interval():
+    session = SimpleNamespace(last_assistant_text_value="Первый черновик")
+    stop_event = asyncio.Event()
+    timer_only_values: list[bool] = []
+    clock_values = iter((100.0, 220.0))
+
+    async def _emit_update(_text: str, timer_only: bool) -> None:
+        timer_only_values.append(timer_only)
+        if len(timer_only_values) == 1:
+            session.last_assistant_text_value = "Новый черновик"
+        else:
+            stop_event.set()
+
+    await asyncio.wait_for(
+        watch_session_assistant_preview(
+            session,
+            emit_update=_emit_update,
+            stop_event=stop_event,
+            poll_interval_sec=0.01,
+            refresh_interval_sec=120.0,
+            clock=lambda: next(clock_values, 220.0),
+        ),
+        timeout=1.0,
+    )
+
+    assert timer_only_values == [False, False]
 
 
 @pytest.mark.asyncio
@@ -282,7 +316,7 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     async def _watch_preview(_session, *, emit_update, stop_event, poll_interval_sec=0.35, **kwargs):
         _ = poll_interval_sec
         watch_kwargs.update(kwargs)
-        await emit_update("⏳ 00:00\n\nЧерновик ответа")
+        await emit_update("⏳ 00:00\n\nЧерновик ответа", False)
         await stop_event.wait()
 
     monkeypatch.setattr(run_service_mod, "watch_session_assistant_preview", _watch_preview)
@@ -335,7 +369,7 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     assert final_outputs == ["FINAL OUTPUT"]
     assert watch_kwargs == {
         "include_elapsed_time": True,
-        "refresh_interval_sec": 20.0,
+        "refresh_interval_sec": 120.0,
     }
     assert rich_drafts == []
     assert preview_messages == [
@@ -348,4 +382,71 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     assert preview_edits == []
     assert preview_deletes == [(1, 501)]
     assert events == ["send_preview", "delete_preview", "send_output"]
+    app.shutdown_html_process_pool()
+
+
+@pytest.mark.asyncio
+async def test_run_prompt_final_output_cancels_retry_after_preview(tmp_path, monkeypatch):
+    monkeypatch.setenv("PTB_TIMEDELTA", "1")
+    app = _build_app(tmp_path)
+    app.config.defaults.assistant_preview_enabled = True
+    session = app.manager.create(1, "dummy", str(tmp_path))
+
+    import sessions.session_run_service as run_service_mod
+
+    retry_seen = asyncio.Event()
+    output_sent = asyncio.Event()
+    edit_calls: list[str] = []
+    final_outputs: list[str] = []
+    events: list[str] = []
+
+    async def _watch_preview(_session, *, emit_update, stop_event, **_kwargs):
+        await emit_update("⏳ 00:00\n\nЧерновик ответа", False)
+        await emit_update("⏳ 00:01\n\nНовый черновик ответа", False)
+        await stop_event.wait()
+
+    monkeypatch.setattr(run_service_mod, "watch_session_assistant_preview", _watch_preview)
+
+    async def _send_message(_context, **_kwargs):
+        events.append("send_preview")
+        return SimpleNamespace(message_id=501)
+
+    async def _edit_message_outcome(_context, *, text: str, **_kwargs):
+        events.append("edit_preview")
+        edit_calls.append(text)
+        retry_seen.set()
+        raise RetryAfter(timedelta(seconds=0.08))
+
+    async def _delete_message(_context, chat_id: int, message_id: int):
+        events.append("delete_preview")
+        assert (chat_id, message_id) == (1, 501)
+        return True
+
+    async def _send_output(_session, _dest, output, _context, **_kwargs):
+        events.append("send_output")
+        final_outputs.append(str(output))
+        output_sent.set()
+
+    app._send_message = _send_message
+    app._edit_message_outcome = _edit_message_outcome
+    app._delete_message = _delete_message
+    app.send_output = _send_output
+
+    async def _fake_run_prompt(_prompt: str, **_kwargs):
+        await asyncio.wait_for(retry_seen.wait(), timeout=1.0)
+        return "FINAL OUTPUT"
+
+    session.run_prompt = _fake_run_prompt  # type: ignore[assignment]
+    await app.session_management.run_prompt(
+        session,
+        "hello",
+        {"kind": "telegram", "chat_id": 1},
+        object(),
+    )
+    await asyncio.wait_for(output_sent.wait(), timeout=1.0)
+    await asyncio.sleep(0.12)
+
+    assert edit_calls == ["⏳ 00:01\n\nНовый черновик ответа"]
+    assert final_outputs == ["FINAL OUTPUT"]
+    assert events == ["send_preview", "edit_preview", "delete_preview", "send_output"]
     app.shutdown_html_process_pool()

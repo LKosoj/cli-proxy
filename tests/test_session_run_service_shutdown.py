@@ -3,12 +3,13 @@ import logging
 from collections import deque
 from types import SimpleNamespace
 
+from app.services.assistant_preview_service import AssistantPreviewRateLimiter
 from app.services.telegram_transport import TelegramEditOutcome
 from sessions.session_run_service import SessionRunService
 
 
 def _build_service(bot_app):
-    return SessionRunService(
+    service = SessionRunService(
         bot_app=bot_app,
         persist_sessions=lambda: None,
         mode_tasks_list=lambda **_k: [],
@@ -16,6 +17,11 @@ def _build_service(bot_app):
         log_cli_dialog=lambda *_a, **_k: None,
         reset_session_fields_like_sessions_reset=lambda *_a, **_k: None,
     )
+    service._assistant_preview_rate_limiter = AssistantPreviewRateLimiter(
+        text_edit_interval_sec=0.0,
+        timer_edit_interval_sec=0.0,
+    )
+    return service
 
 
 def test_session_run_service_skips_background_tasks_during_shutdown() -> None:
@@ -43,6 +49,7 @@ def test_session_run_service_skips_background_tasks_during_shutdown() -> None:
             busy=False,
             queue=deque([{"text": "next", "dest": {"kind": "telegram", "chat_id": 1}}]),
             run_lock=asyncio.Lock(),
+            send_lock=asyncio.Lock(),
             started_at=None,
             last_output_ts=None,
             last_tick_ts=None,
@@ -136,6 +143,7 @@ def test_session_run_service_keeps_assistant_preview_after_unknown_edit_failure(
             object(),
             "preview text",
         )
+        await asyncio.sleep(0)
 
         assert sent_messages == []
         assert session.assistant_preview_message_id == 42
@@ -177,7 +185,9 @@ def test_session_run_service_retries_transient_preview_edit_in_place() -> None:
         dest = {"kind": "telegram", "chat_id": 123}
 
         await service._upsert_telegram_assistant_preview(session, dest, object(), "preview 1")
+        await asyncio.sleep(0)
         await service._upsert_telegram_assistant_preview(session, dest, object(), "preview 2")
+        await asyncio.sleep(0)
 
         assert sent_messages == []
         assert [call["message_id"] for call in edit_calls] == [42, 42]
@@ -216,6 +226,7 @@ def test_session_run_service_replaces_only_permanently_missing_preview() -> None
             object(),
             "preview text",
         )
+        await asyncio.sleep(0)
 
         assert sent_messages == [
             {
@@ -346,6 +357,7 @@ def test_session_run_service_uses_legacy_send_and_edit_for_preview() -> None:
 
         await service._upsert_telegram_assistant_preview(session, dest, object(), "⏳ draft text")
         await service._upsert_telegram_assistant_preview(session, dest, object(), "⏳ updated draft")
+        await asyncio.sleep(0)
 
         assert rich_drafts == []
         assert sent_messages == [
