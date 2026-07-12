@@ -665,6 +665,19 @@ class GitOps:
         if not await self._try_acquire_git_busy(session, chat_id, context, message_thread_id=message_thread_id, lang=lang):
             return
         try:
+            # перед коммитом: гарантируем, что .cli-proxy/runtime/ в .gitignore
+            gitignore_path = os.path.join(session.workdir, ".gitignore")
+            entry = ".cli-proxy/runtime/"
+            content = ""
+            if os.path.isfile(gitignore_path):
+                with open(gitignore_path, encoding="utf-8") as f:
+                    content = f.read()
+            if entry not in content:
+                with open(gitignore_path, "a", encoding="utf-8") as f:
+                    if content and not content.endswith("\n"):
+                        f.write("\n")
+                    f.write(entry + "\n")
+
             code, add_out = await self._run_git(session, ["add", "-A"])
             if code != 0:
                 await self._send_git_output(
