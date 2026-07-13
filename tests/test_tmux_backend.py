@@ -551,7 +551,7 @@ async def test_tmux_backend_assigns_qwen_session_id_and_resumes_after_reboot(tmp
 
 
 @pytest.mark.asyncio
-async def test_tmux_backend_restores_generic_resume_token_from_state(tmp_path):
+async def test_tmux_backend_restores_resume_token_from_idle_state_but_not_stopped(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
     session = _session(tmp_path)
@@ -582,6 +582,14 @@ async def test_tmux_backend_restores_generic_resume_token_from_state(tmp_path):
         "--resume",
         "grok-resume-token",
     ]
+
+    await backend.close(session)
+    session.resume_token = None
+    fresh_result = await backend.run(session, "after reset")
+
+    assert fresh_result.abnormal_stop is False
+    assert "--resume" not in driver.new_session_commands[1][2]
+    assert "grok-resume-token" not in driver.new_session_commands[1][2]
 
 
 @pytest.mark.asyncio

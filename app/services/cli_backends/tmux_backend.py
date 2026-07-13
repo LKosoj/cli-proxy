@@ -329,7 +329,8 @@ def _prepare_interactive_command(session: Any, state: dict[str, Any], *, force_f
     command = [str(part) for part in (getattr(tool, "interactive_cmd", None) or [])]
     if not command:
         raise TmuxDriverError("interactive_cmd is required for tmux backend")
-    if not force_fresh and not _get_resume_token(session):
+    state_stopped = str(state.get("state") or "").strip().lower() == "stopped"
+    if not force_fresh and not state_stopped and not _get_resume_token(session):
         state_token = _state_resume_token(state)
         if state_token:
             _set_resume_token(session, state_token)
@@ -421,7 +422,7 @@ class TmuxExecutionBackend:
         driver: Optional[TmuxDriver] = None,
         poll_interval_sec: float = 0.25,
         idle_fallback_sec: Optional[float] = None,
-        startup_timeout_sec: float = 30.0,
+        startup_timeout_sec: float = 60.0,
         quiet_timeout_sec: float = 300.0,  # 5 min default: if pane.log stops growing, treat as finished (for long tasks without DONE marker)
     ):
         self.driver = driver
@@ -605,15 +606,20 @@ class TmuxExecutionBackend:
     async def _wait_for_interactive_ready(self, session: Any, paths: dict[str, str]) -> None:
         driver = self._driver(session)
         deadline = time.time() + max(0.1, self.startup_timeout_sec)
+        last_pane = ""
         while time.time() < deadline:
             try:
                 pane = await driver.capture_pane(paths["pane_target"])
+                last_pane = pane
             except Exception:
                 pane = ""
             if self._is_interactive_ready(session, pane):
                 return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
-        raise TmuxDriverError(f"{self._interactive_cli_name(session)} interactive prompt did not become ready")
+        snippet = (last_pane or "").strip()[-300:]
+        raise TmuxDriverError(
+            f"{self._interactive_cli_name(session)} interactive prompt did not become ready; last pane: {snippet!r}"
+        )
 
     async def _wait_for_pasted_text(
         self,
