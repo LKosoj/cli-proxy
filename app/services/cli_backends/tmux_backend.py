@@ -984,6 +984,17 @@ class TmuxExecutionBackend:
                 )
                 pane_latest_text = parsed.text or pane_latest_text
 
+                # Claude-specific: the choice question TUI (Enter selection, ☐ lists, esc prompts) lives in the
+                # raw pane output. claude_screen_reader extraction + transcript preference can mask it.
+                # Compute raw pane text (no claude extraction) for reliable choice detection.
+                pane_raw_for_choice = pane_latest_text
+                if self._uses_claude_screen_reader(session):
+                    try:
+                        raw_p = parse_tmux_delta(delta, request.request_id, claude_screen_reader=False)
+                        pane_raw_for_choice = raw_p.text or pane_latest_text
+                    except Exception:
+                        pass
+
                 transcript_update = None
                 if transcript_reader is not None:
                     try:
@@ -1049,6 +1060,25 @@ class TmuxExecutionBackend:
                             complete = False
 
                 latest_text = transcript_latest_text or pane_latest_text
+                # Choice question detection (for Claude and other CLIs):
+                # - Raw pane (pre screen-reader extract) is checked because Claude TUI choice prompts
+                #   (selection menus, esc prompts) are not inside "claude:" transcript events.
+                # - If detected in pane, prefer that text for latest_text so preview + final send_output
+                #   route the prompt to _is_cli... -> _send_ask_question (Telegram buttons).
+                # - Force complete=False so monitoring continues until user feeds the choice via send_input.
+                try:
+                    # Local import avoids any potential circular at module load time.
+                    from sessions.session_run_service import SessionRunService as _SRS
+                    choice_in_pane = _SRS._is_cli_choice_question(pane_raw_for_choice)
+                    choice_in_transcript = _SRS._is_cli_choice_question(transcript_latest_text or "")
+                    if choice_in_pane:
+                        latest_text = pane_raw_for_choice or latest_text
+                    if choice_in_pane or choice_in_transcript:
+                        complete = False
+                except Exception:
+                    # Fallback to legacy string check if import/func unavailable
+                    if "Enter selection [" in (latest_text or "") or "or Escape to cancel" in (latest_text or "") or "☐ " in (latest_text or ""):
+                        complete = False
                 if latest_text and latest_text != last_reported_text:
                     last_reported_text = latest_text
                     setattr(session, "last_output_ts", time.time())
@@ -1060,12 +1090,6 @@ class TmuxExecutionBackend:
                     complete = True
                     completion_source = "pane"
                     break
-
-                # Do not complete the main request if the CLI just asked a choice question
-                # (e.g. "Enter selection [1-5]"). Keep monitoring so the question is relayed
-                # via ask mechanism and user input is fed back to tmux.
-                if "Enter selection [" in (latest_text or "") or "or Escape to cancel" in (latest_text or "") or "☐ " in (latest_text or ""):
-                    complete = False
 
                 # Cross-CLI guard for long-running tasks:
                 # Even if transcript or pane parser signals "complete" (e.g. turn end),

@@ -264,8 +264,20 @@ class SessionRunService:
         if not text:
             return False
         t = text.lower()
-        return ("enter selection [" in t or "or escape to cancel" in t or
-                ("☐ " in text and re.search(r'\n\d+\.', text)))
+        if "enter selection [" in t or "or escape to cancel" in t or "or esc to cancel" in t:
+            return True
+        if "esc to interrupt" in t or "shift+tab" in t:
+            return True
+        if ("☐ " in text or "☐" in text) and re.search(r'\n\s*\d+[\.\)]', text):
+            return True
+        # Heuristic for Claude (and similar) questions that end with ? and contain multiple numbered options.
+        # Catches cases where exact menu strings are absent but a choice prompt is present.
+        if "?" in text:
+            recent = "\n".join(text.splitlines()[-12:])
+            nums = re.findall(r'^\s*\d+[\.\)]', recent, re.M)
+            if len(nums) >= 2:
+                return True
+        return False
 
     @staticmethod
     def _parse_cli_choice_question(text: str) -> Tuple[str, List[str]]:
@@ -276,7 +288,8 @@ class SessionRunService:
         opts = []
         for line in lines:
             s = line.strip()
-            m = re.match(r'^(\d+)[\.\)]\s*(.+)', s)
+            # Support plain "1. foo", "1) foo", "☐ 1. foo", "☐ 1) foo"
+            m = re.match(r'^(?:☐\s*)?(\d+)[\.\)]\s*(.+)', s)
             if m:
                 opts.append(f"{m.group(1)}. {m.group(2).strip()}")
             else:
@@ -608,6 +621,7 @@ class SessionRunService:
                     chat_id,
                     message_id,
                 )
+                self._reset_assistant_preview_state(session)
                 return False
             if deleted:
                 self._reset_assistant_preview_state(session)
@@ -618,6 +632,7 @@ class SessionRunService:
                 chat_id,
                 message_id,
             )
+            self._reset_assistant_preview_state(session)
             return False
 
     @staticmethod
@@ -813,7 +828,45 @@ class SessionRunService:
                         preview_stop_event.set()
                     if preview_task is not None:
                         await asyncio.gather(preview_task, return_exceptions=True)
-                    await self._clear_telegram_assistant_preview(session, dest, context)
+
+                    # Promote preview to final message when we have the complete output (common for Grok
+                    # headless streaming-json: last "text" deltas + "end" fill last_assistant_text_value
+                    # with the итоговый answer). Editing the existing message to clean output (no ⏳)
+                    # makes the "preview" become the final visible message. Falls back to delete.
+                    # This fixes cases where delete fails (message "hangs" with final inside) and/or
+                    # the subsequent send_output doesn't produce an obvious additional "final message".
+                    chat_id = dest.get("chat_id")
+                    preview_id = getattr(session, "assistant_preview_message_id", None)
+                    promoted = False
+                    if chat_id and preview_id and str(output or "").strip():
+                        try:
+                            async with session.send_lock:
+                                reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
+                                edit_outcome_fn = getattr(self.bot_app, "_edit_message_outcome", None)
+                                if callable(edit_outcome_fn):
+                                    clean = str(output)[:4000].strip()
+                                    if clean:
+                                        outcome = await edit_outcome_fn(
+                                            context,
+                                            chat_id=int(chat_id),
+                                            message_id=int(preview_id),
+                                            text=clean,
+                                            md2=True,
+                                            prefer_rich=False,
+                                        )
+                                        if outcome is TelegramEditOutcome.UPDATED:
+                                            self._reset_assistant_preview_state(session)
+                                            promoted = True
+                                if not promoted:
+                                    # edit didn't confirm clean update → fall through to clear below
+                                    pass
+                        except Exception:
+                            logging.getLogger(__name__).exception(
+                                "promote preview to final failed session=%s, falling back to clear",
+                                getattr(session, "id", "?"),
+                            )
+                    if not promoted:
+                        await self._clear_telegram_assistant_preview(session, dest, context)
                     if hook is not None and prepared is not None:
                         hook.record_success(prepared, output=output)
                     self._log_cli_dialog(
