@@ -370,6 +370,48 @@ class CliTranscriptReader:
                 self._handle_record(record)
         self.cursor += consumed
 
+    def get_all_relevant_paths(self) -> list[str]:
+        """Return paths to all transcripts that should be considered for liveness.
+
+        For Claude this includes the main session JSONL plus any subagent
+        transcripts under <session_id>/subagents/*.jsonl. Used to prevent
+        quiet-timeout while background/sub-agents are still writing.
+        """
+        paths: list[str] = []
+        if self.locator and self.locator.path:
+            paths.append(self.locator.path)
+
+        if self.provider != "claude" or not self.session_id:
+            return paths
+
+        try:
+            if not self.root.is_dir():
+                return paths
+
+            session = self.session_id
+            # Try to locate the subagents directory relative to a known main transcript
+            sub_dirs: list[Path] = []
+            for main_p in self.root.rglob(f"{session}.jsonl"):
+                cand = main_p.parent / session / "subagents"
+                if cand.is_dir():
+                    sub_dirs.append(cand)
+
+            if not sub_dirs:
+                # Fallback: search for subagents dir directly (works even if main .jsonl not indexed yet)
+                for cand in self.root.glob(f"**/{session}/subagents"):
+                    if cand.is_dir():
+                        sub_dirs.append(cand)
+
+            for sub_dir in sub_dirs:
+                for sub_file in sorted(sub_dir.glob("*.jsonl")):
+                    sp = str(sub_file.resolve())
+                    if sp not in paths:
+                        paths.append(sp)
+        except Exception:
+            logger.debug("get_all_relevant_paths failed to collect subagent transcripts", exc_info=True)
+
+        return paths
+
     def poll(self) -> TranscriptPollResult:
         if self.provider not in _SUPPORTED_PROVIDERS or not self.request_id:
             return TranscriptPollResult()

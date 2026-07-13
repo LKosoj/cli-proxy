@@ -884,6 +884,45 @@ class TmuxExecutionBackend:
         persisted_locator = request.transcript_locator
         last_transcript_size = 0
         transcript_path = None
+
+        # Multi-transcript liveness tracking (main + Claude subagents).
+        # Subagent JSONLs are written to <session>/subagents/*.jsonl and must
+        # count for quiet_timeout to avoid dropping long-running planner tasks.
+        watched_transcript_paths: list[str] = []
+        last_transcript_sizes: dict[str, int] = {}
+
+        def _refresh_watched_transcripts() -> bool:
+            """Refresh list of watched transcripts. Returns True if any new file appeared."""
+            nonlocal watched_transcript_paths, last_transcript_sizes, last_transcript_size
+            current: list[str] = []
+            if transcript_reader is not None:
+                try:
+                    current = list(transcript_reader.get_all_relevant_paths())
+                except Exception:
+                    current = []
+            # Always include the primary transcript_path (qwen etc. may not go through reader locator)
+            if transcript_path and transcript_path not in current:
+                current.append(transcript_path)
+            # Preserve any paths we were already watching (new subagents may appear)
+            for old_p in list(last_transcript_sizes.keys()):
+                if old_p not in current:
+                    current.append(old_p)
+            watched_transcript_paths = current
+
+            new_activity = False
+            for p in watched_transcript_paths:
+                if p and os.path.exists(p):
+                    try:
+                        if p not in last_transcript_sizes:
+                            last_transcript_sizes[p] = os.path.getsize(p)
+                            new_activity = True  # new transcript file appeared = liveness signal
+                        # keep legacy var in sync for the primary one
+                        if p == transcript_path:
+                            last_transcript_size = last_transcript_sizes[p]
+                    except Exception:
+                        pass
+            return new_activity
+
         try:
             transcript_reader = self._build_transcript_reader(session, request)
             if transcript_reader is not None and getattr(transcript_reader, 'locator', None) and transcript_reader.locator:
@@ -898,6 +937,8 @@ class TmuxExecutionBackend:
                     if qwen_path and os.path.exists(qwen_path):
                         transcript_path = qwen_path
                         last_transcript_size = os.path.getsize(qwen_path)
+
+            _refresh_watched_transcripts()
         except Exception:
             logger.exception(
                 "failed to initialize structured transcript reader session_id=%s request_id=%s",
@@ -911,13 +952,28 @@ class TmuxExecutionBackend:
                 if size != last_size:
                     last_size = size
                     last_change = time.time()
-                # Track transcript JSONL growth for liveness (translated from pane.log logic).
-                # JSONL often better reflects ongoing work (events, thoughts, tool results) even if pane is quiet.
-                if transcript_path and os.path.exists(transcript_path):
-                    tsize = os.path.getsize(transcript_path)
-                    if tsize != last_transcript_size:
-                        last_transcript_size = tsize
-                        last_change = time.time()
+
+                # Track transcript JSONL growth for liveness (main + any Claude subagents).
+                # Subagent .jsonl files under <sessid>/subagents/ are now considered.
+                # This keeps the request alive while background planners / sub-agents write.
+                if _refresh_watched_transcripts():
+                    last_change = time.time()
+                grew = False
+                for tpath in watched_transcript_paths:
+                    if tpath and os.path.exists(tpath):
+                        try:
+                            tsize = os.path.getsize(tpath)
+                            prev = last_transcript_sizes.get(tpath, 0)
+                            if tsize != prev:
+                                last_transcript_sizes[tpath] = tsize
+                                grew = True
+                            # Also keep legacy single-value in sync for main path
+                            if tpath == transcript_path:
+                                last_transcript_size = tsize
+                        except Exception:
+                            pass
+                if grew:
+                    last_change = time.time()
                 delta = self._read_request_delta(paths, request.offset)
                 if delta:
                     _capture_resume_token_from_output(session, delta)
@@ -976,6 +1032,9 @@ class TmuxExecutionBackend:
                             transcript_path = new_tpath
                             if os.path.exists(transcript_path):
                                 last_transcript_size = os.path.getsize(transcript_path)
+                    # Refresh subagent paths too (new subagents can appear mid-run)
+                    if _refresh_watched_transcripts():
+                        last_change = time.time()
                     if transcript_update.complete:
                         # Honor transcript complete only if the explicit DONE marker for this request is present.
                         # This prevents early termination on intermediate "turn end" / task_complete for long-running tasks.
@@ -1024,13 +1083,13 @@ class TmuxExecutionBackend:
                 if complete:
                     break
 
-                # Quiet timeout: if neither pane.log nor (preferably) the session JSONL has grown
-                # for quiet_timeout (default 5min), treat as finished. Growth of JSONL is the
-                # translated liveness signal (more reliable for structured long-running sessions).
+                # Quiet timeout: if neither pane.log nor (preferably) the session JSONL (incl. subagents) has grown
+                # for quiet_timeout (default 5min), treat as finished. Growth of any related JSONL resets the timer.
                 if time.time() - last_change >= quiet_timeout:
                     if not complete:
                         complete = True
-                        completion_source = "json-quiet-timeout" if transcript_path else "pane-quiet-timeout"
+                        has_json = bool(watched_transcript_paths or transcript_path)
+                        completion_source = "json-quiet-timeout" if has_json else "pane-quiet-timeout"
                     break
 
                 if time.time() - last_change >= idle_probe_interval:
