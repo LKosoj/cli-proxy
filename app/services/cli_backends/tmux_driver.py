@@ -85,6 +85,27 @@ class TmuxDriver:
         result = await self.run("has-session", "-t", session_name, check=False)
         return result.returncode == 0
 
+    def has_session_sync(self, session_name: str) -> bool:
+        """Synchronous has-session check.
+
+        Intended only for status/display and diagnostic code (not the main execution path).
+        """
+        if not self.tmux_available():
+            return False
+        argv = self.command("has-session", "-t", session_name)
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                argv,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3.0,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
     async def new_session(self, session_name: str, *, workdir: str, command: Iterable[str]) -> None:
         await self.run(
             "new-session",

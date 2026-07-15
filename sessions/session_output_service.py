@@ -4,6 +4,7 @@ import os
 import time
 from typing import Optional
 
+from app.services.final_output_delivery import should_deliver_final_output
 from i18n import t
 from sessions.conversation_scope import ConversationScope
 from tg.rich import is_rich_markdown_eligible
@@ -142,6 +143,16 @@ class SessionOutputService:
                     exc_info=True,
                 )
             _so_log.warning("[send_output] refused to send: %s session=%s", reason, session.id)
+            return
+
+        # Central guard: identical final payload within a short window is not re-delivered.
+        # Covers double-scheduled send_output, mode+framework dual paths, and desktop races.
+        if not should_deliver_final_output(session, output):
+            _so_log.info(
+                "[send_output] skipped duplicate final payload session=%s output_len=%d",
+                getattr(session, "id", "?"),
+                len(output),
+            )
             return
 
         queue_service = getattr(self.bot_app, "notification_queue_service", None)

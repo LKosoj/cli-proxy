@@ -217,18 +217,32 @@ def build_session_status_text(
     queue_len = get_session_queue_len(session)
     resume_txt = str(getattr(session, "resume_token", None) or t("session_status.no", lang))
     try:
-        from session import available_execution_backends, get_session_execution_backend
+        from session import available_execution_backends, get_session_execution_backend, has_live_tmux
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 
         selected_backend = get_session_execution_backend(session)
         available_backends = ", ".join(available_execution_backends(session)) or "-"
+        live_tmux = has_live_tmux(session)
+        if live_tmux:
+            st = TmuxExecutionBackend._read_state(TmuxExecutionBackend().paths(session))
+            st_label = str(st.get("state") or "live").lower()
+            runtime_label = f"tmux ({st_label})" if st_label not in ("", "unknown") else "tmux (live)"
+        else:
+            runtime_label = None
     except Exception:
         selected_backend = "-"
         available_backends = "-"
+        live_tmux = False
+        runtime_label = None
     active_backend = str(getattr(session, "_active_execution_backend", "") or "none")
+
+    if runtime_label is None:
+        runtime_label = active_backend
+
     lines.append(
-        f"Execution backend: {selected_backend} | active runtime: {active_backend} | available: {available_backends}"
+        f"Execution backend: {selected_backend} | runtime: {runtime_label} | active flag: {active_backend} | available: {available_backends}"
     )
-    if selected_backend == "tmux":
+    if live_tmux:
         from app.services.cli_backends.tmux_backend import build_tmux_attach_command
 
         lines.append(f"Tmux attach: `{build_tmux_attach_command(session)}`")

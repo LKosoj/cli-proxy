@@ -12,7 +12,7 @@ from app.services.state_repository import get_state_repository
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.advanced_orchestrator_service import ORCHESTRATOR_MODE_ID
 from modes.sdk.services.callback_data import build_session_overview_callback_data
-from session import get_session_execution_backend, set_session_execution_backend
+from session import get_session_execution_backend, has_live_tmux, set_session_execution_backend
 from sessions.session_state_access import (
     is_orchestrator_enabled,
     reset_session_runtime_state,
@@ -433,7 +433,7 @@ class SessionUI:
             if not self._can_access_session(owner_chat_id, session):
                 await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
-            if get_session_execution_backend(session) == "tmux":
+            if get_session_execution_backend(session) == "tmux" or has_live_tmux(session):
                 await session.close_active_tmux_async()
             self._reset_session_fields(session, owner_chat_id=owner_chat_id)
             self._persist_session(owner_chat_id, session.id)

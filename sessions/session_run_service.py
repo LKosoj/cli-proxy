@@ -40,6 +40,7 @@ from sessions.session_state_access import (
     set_orchestrator_pending_input,
 )
 from app.services.core_orchestration_service import CoreOrchestrationService
+from app.services.final_output_delivery import clear_final_output_delivery_guard
 from i18n import t
 from utils.lang import resolve_user_lang
 from utils.text import build_preview, strip_ansi
@@ -750,6 +751,7 @@ class SessionRunService:
                 session.last_assistant_text_ts = None
                 session.last_assistant_text_value = None
                 self._reset_assistant_preview_state(session)
+                clear_final_output_delivery_guard(session)
                 session.tick_seen = 0
                 clear_session_ticks(session)
                 clear_runtime_progress(session)
@@ -829,44 +831,8 @@ class SessionRunService:
                     if preview_task is not None:
                         await asyncio.gather(preview_task, return_exceptions=True)
 
-                    # Promote preview to final message when we have the complete output (common for Grok
-                    # headless streaming-json: last "text" deltas + "end" fill last_assistant_text_value
-                    # with the итоговый answer). Editing the existing message to clean output (no ⏳)
-                    # makes the "preview" become the final visible message. Falls back to delete.
-                    # This fixes cases where delete fails (message "hangs" with final inside) and/or
-                    # the subsequent send_output doesn't produce an obvious additional "final message".
-                    chat_id = dest.get("chat_id")
-                    preview_id = getattr(session, "assistant_preview_message_id", None)
-                    promoted = False
-                    if chat_id and preview_id and str(output or "").strip():
-                        try:
-                            async with session.send_lock:
-                                reply_kwargs = self._telegram_reply_kwargs(dest, session=session)
-                                edit_outcome_fn = getattr(self.bot_app, "_edit_message_outcome", None)
-                                if callable(edit_outcome_fn):
-                                    clean = str(output)[:4000].strip()
-                                    if clean:
-                                        outcome = await edit_outcome_fn(
-                                            context,
-                                            chat_id=int(chat_id),
-                                            message_id=int(preview_id),
-                                            text=clean,
-                                            md2=True,
-                                            prefer_rich=False,
-                                        )
-                                        if outcome is TelegramEditOutcome.UPDATED:
-                                            self._reset_assistant_preview_state(session)
-                                            promoted = True
-                                if not promoted:
-                                    # edit didn't confirm clean update → fall through to clear below
-                                    pass
-                        except Exception:
-                            logging.getLogger(__name__).exception(
-                                "promote preview to final failed session=%s, falling back to clear",
-                                getattr(session, "id", "?"),
-                            )
-                    if not promoted:
-                        await self._clear_telegram_assistant_preview(session, dest, context)
+                    # Просто удалить превью перед отправкой финального сообщения.
+                    await self._clear_telegram_assistant_preview(session, dest, context)
                     if hook is not None and prepared is not None:
                         hook.record_success(prepared, output=output)
                     self._log_cli_dialog(
@@ -998,6 +964,7 @@ class SessionRunService:
                 session.last_assistant_text_ts = None
                 session.last_assistant_text_value = None
                 self._reset_assistant_preview_state(session)
+                clear_final_output_delivery_guard(session)
                 session.tick_seen = 0
                 clear_session_ticks(session)
                 clear_runtime_progress(session)
@@ -1049,7 +1016,9 @@ class SessionRunService:
                         },
                     )
                     if self._mode_framework_sends_output(mode, session=session, mode_id=mode_id):
-                        await self.bot_app.send_output(session, dest, str(output or ""), context, send_header=False)
+                        await self.bot_app.send_output(
+                            session, dest, str(output or ""), context, send_header=False
+                        )
                     try:
                         await self._maybe_offer_post_run_transition(
                             session=session,

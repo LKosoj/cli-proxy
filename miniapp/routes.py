@@ -1338,11 +1338,14 @@ class MiniAppRoutes:
                 if tmux_state
                 else None
             )
+            # Reality check independent of configured backend
+            has_live_tmux = bool(tmux_status) and TmuxExecutionBackend().is_tmux_live(session)
         except Exception:
             execution_backend = "headless"
             available_backends = ["headless"]
             active_execution_backend = str(getattr(session, "_active_execution_backend", "") or "none")
             tmux_status = None
+            has_live_tmux = False
         analyst_template_id = str(
             getattr(
                 modes_state,
@@ -1707,6 +1710,7 @@ class MiniAppRoutes:
             "executor_profile": str(getattr(session, "executor_profile", "") or ""),
             "cli_work_type": cli_work_type,
             "execution_backend": execution_backend,
+            "has_live_tmux": has_live_tmux,
             "available_execution_backends": self._safe_status_value(available_backends),
             "active_execution_backend": active_execution_backend,
             "backend_switch_allowed": False,
@@ -3723,6 +3727,7 @@ class MiniAppRoutes:
                 "active_cli": str(getattr(session, "active_cli", "") or ""),
                 "active_mode": str(get_active_mode(session, "") or ""),
                 "execution_backend": execution_backend,
+                "has_live_tmux": TmuxExecutionBackend().is_tmux_live(session),
                 "active_execution_backend": active_execution_backend,
                 "ssh_remote_enabled": bool(is_ssh_remote_enabled(session)),
                 "orchestrator_enabled": bool(is_orchestrator_enabled(session)),

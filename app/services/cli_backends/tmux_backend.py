@@ -462,6 +462,24 @@ class TmuxExecutionBackend:
             return False
         return bool(await self._driver(session).has_session(paths["session_name"]))
 
+    def is_tmux_live(self, session: Any) -> bool:
+        """Return True if a tmux pane/session actually exists right now for this conversation.
+
+        This is independent of the configured default_execution_backend.
+        Used to make status reporting reflect reality.
+        """
+        try:
+            paths = self.paths(session)
+            state = self._read_state(paths)
+            if not state:
+                return False
+            if str(state.get("backend", "")).strip().lower() != self.name:
+                return False
+            driver = self._driver(session)
+            return bool(driver.has_session_sync(paths["session_name"]))
+        except Exception:
+            return False
+
     async def send_input(self, session: Any, text: str) -> None:
         prompt = str(text or "")
         if not prompt.strip():

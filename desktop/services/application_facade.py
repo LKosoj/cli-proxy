@@ -587,8 +587,10 @@ class ApplicationFacade:
             if tmux_state
             else None
         )
+        tmux_be = TmuxExecutionBackend()
         return {
             "execution_backend": get_session_execution_backend(session),
+            "has_live_tmux": tmux_be.is_tmux_live(session),
             "active_execution_backend": str(getattr(session, "_active_execution_backend", "") or "none"),
             "available_execution_backends": available_execution_backends(session),
             "backend_switch_allowed": False,
@@ -3132,6 +3134,9 @@ class ApplicationFacade:
         preview_task: Optional[asyncio.Task] = None
         session_uid = session_runtime_uid(session)
         try:
+            from app.services.final_output_delivery import clear_final_output_delivery_guard
+
+            clear_final_output_delivery_guard(session)
             cli_switch = await switch_session_active_cli_if_needed(session)
             if cli_switch.switched:
                 self._persist_sessions_best_effort(reason="desktop_cli_switch")
@@ -3464,13 +3469,16 @@ class ApplicationFacade:
                     image_paths=image_paths,
                 )
                 if str(output or "").strip():
-                    facade.notify(
-                        "ui:message",
-                        session_id=str(chat_id or session_runtime_uid(session)),
-                        role="agent",
-                        text=str(output),
-                        md2=True,
-                    )
+                    from app.services.final_output_delivery import should_deliver_final_output
+
+                    if should_deliver_final_output(session, str(output)):
+                        facade.notify(
+                            "ui:message",
+                            session_id=str(chat_id or session_runtime_uid(session)),
+                            role="agent",
+                            text=str(output),
+                            md2=True,
+                        )
 
             def _mode_allows_plugin_ui(self, session: Any) -> bool:
                 svc = facade.mode_registry_service
@@ -3665,6 +3673,10 @@ class ApplicationFacade:
                         allow_custom=False,
                     )
                     facade.notify("ui:assistant_preview_clear", session_uid=sid)
+                    return
+                from app.services.final_output_delivery import should_deliver_final_output
+
+                if not should_deliver_final_output(session, text):
                     return
                 facade.notify("ui:message", session_uid=session_runtime_uid(session), role="agent", text=text, md2=True)
 
@@ -5507,7 +5519,12 @@ class ApplicationFacade:
             result_text = str(result or "")
             self.notify("task:completed", task_id=rec.task_id, session_id=session_uid, name=name)
             if result_text.strip():
-                self.notify("ui:message", session_id=session_uid, role="agent", text=result_text, md2=True)
+                from app.services.final_output_delivery import should_deliver_final_output
+
+                # Mode/orchestrator paths may already have delivered via bot_app.send_output.
+                # Dedup keeps one clean final message in the chat history.
+                if should_deliver_final_output(session, result_text):
+                    self.notify("ui:message", session_id=session_uid, role="agent", text=result_text, md2=True)
             result_mode_id = str(get_active_mode(session, "") or "").strip()
             await self._maybe_offer_post_run_transition_desktop(
                 session=session,

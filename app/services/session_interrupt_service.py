@@ -267,8 +267,9 @@ class SessionInterruptService:
             try:
                 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 
-                paths = TmuxExecutionBackend().paths(session)
-                state = TmuxExecutionBackend._read_state(paths)
+                be = TmuxExecutionBackend()
+                paths = be.paths(session)
+                state = be._read_state(paths)
                 tmux_state = str(state.get("state") or "").strip().lower() if isinstance(state, dict) else ""
                 if not tmux_state:
                     return "tmux_unknown" if backend == "tmux" else "stopped"
@@ -281,6 +282,22 @@ class SessionInterruptService:
                 return "tmux_unknown"
             except Exception:
                 return "tmux_unknown"
+        # Also detect live tmux reality even when config/default is headless
+        try:
+            from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+            if TmuxExecutionBackend().is_tmux_live(session):
+                # There is a real tmux session (e.g. stale after config change)
+                be = TmuxExecutionBackend()
+                state = be._read_state(be.paths(session))
+                tmux_state = str(state.get("state") or "").strip().lower() if isinstance(state, dict) else ""
+                if tmux_state == "active":
+                    return "tmux_active"
+                if tmux_state == "idle":
+                    return "tmux_idle"
+                return "tmux_unknown"
+        except Exception:
+            pass
         if backend == "interactive":
             return "interactive_active" if child_alive else "interactive_unknown"
         if child_alive:

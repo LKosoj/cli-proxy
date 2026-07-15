@@ -296,6 +296,22 @@ def get_session_execution_backend(session: Any, cli_name: Optional[str] = None) 
     return available[0] if available else EXECUTION_BACKEND_HEADLESS
 
 
+def has_live_tmux(session: Any, cli_name: Optional[str] = None) -> bool:
+    """Return whether there is actually a live tmux session (detached pane with the CLI)
+    for this session right now.
+
+    This reflects runtime reality (the tmux has-session + our state), not the
+    configured default_execution_backend or tool.mode. Useful for status display.
+    """
+    # cli_name is accepted for API symmetry but paths() already resolves active cli
+    try:
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        return TmuxExecutionBackend().is_tmux_live(session)
+    except Exception:
+        return False
+
+
 def session_execution_backend_switch_blockers(session: Any) -> list[str]:
     blockers: list[str] = []
     if bool(getattr(session, "busy", False)):
@@ -1212,19 +1228,41 @@ class Session:
                 if event.text is not None:
                     if is_time_only_text(event.text):
                         return
-                    semantic_output_text = event.text
-                    assistant_tick_text = event.text
                     payload = event.payload if isinstance(event.payload, dict) else None
-                    if payload and payload.get("delta") is True and stream_adapter is not None:
+                    is_delta = bool(payload and payload.get("delta") is True)
+                    incoming_text = str(event.text or "")
+                    # Stream often re-emits the same final JSON (full, then a fragment, then full
+                    # again). Prefer the longer non-delta text and replace the last tick so the
+                    # final content is not stored/streamed as multiple near-identical chunks.
+                    if (
+                        not is_delta
+                        and semantic_output_text
+                        and incoming_text
+                        and len(str(semantic_output_text)) > len(incoming_text)
+                        and str(semantic_output_text).startswith(incoming_text)
+                    ):
+                        return
+                    semantic_output_text = incoming_text
+                    assistant_tick_text = incoming_text
+                    replace_last = is_delta
+                    if is_delta and stream_adapter is not None:
                         accumulated = stream_adapter.final_output_text()
                         if accumulated and not is_time_only_text(accumulated):
                             assistant_tick_text = accumulated
+                    elif self.last_assistant_text_value:
+                        prev = str(self.last_assistant_text_value or "")
+                        curr = str(assistant_tick_text or "")
+                        if prev and curr and (curr.startswith(prev) or prev.startswith(curr) or curr == prev):
+                            replace_last = True
+                            if len(prev) > len(curr):
+                                assistant_tick_text = prev
+                                semantic_output_text = prev
                     before_value = self.last_tick_value
                     before_seen = int(self.tick_seen or 0)
                     self._update_activity(
                         assistant_tick_text,
                         tick_kind="assistant_text",
-                        replace_last=bool(payload and payload.get("delta") is True),
+                        replace_last=replace_last,
                     )
                     if self.last_tick_value != before_value or int(self.tick_seen or 0) != before_seen:
                         streamed_assistant_tick_seen = True
