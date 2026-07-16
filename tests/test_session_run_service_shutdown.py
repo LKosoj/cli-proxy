@@ -24,6 +24,140 @@ def _build_service(bot_app):
     return service
 
 
+def _choice_question_text() -> str:
+    return (
+        "Итог по задаче.\n\n"
+        "Два вопроса к вам\n"
+        "1. Мертвый груз в web_src/?\n"
+        "2. Убрать хвост от H1?"
+    )
+
+
+def _preview_session(*, backend: str) -> SimpleNamespace:
+    tool = SimpleNamespace(
+        name="dummy",
+        mode="headless",
+        execution_backends=["headless", "tmux"],
+        default_execution_backend=backend,
+    )
+    return SimpleNamespace(
+        id=f"s-{backend}",
+        tool=tool,
+        config=SimpleNamespace(
+            tools={"dummy": tool},
+            defaults=SimpleNamespace(default_execution_backend="headless"),
+        ),
+        cli=SimpleNamespace(active_cli="dummy"),
+        send_lock=asyncio.Lock(),
+        assistant_preview_message_id=None,
+        assistant_preview_last_value=None,
+        assistant_preview_creation_attempted=False,
+    )
+
+
+def test_session_run_service_sends_final_questions_as_plain_output() -> None:
+    async def _run() -> None:
+        outputs: list[str] = []
+        questions: list[str] = []
+
+        async def _send_output(_session, _dest, output, _context):
+            outputs.append(output)
+
+        async def _send_ask_question(*_args, **_kwargs):
+            questions.append("asked")
+
+        bot_app = SimpleNamespace(
+            send_output=_send_output,
+            _send_ask_question=_send_ask_question,
+            ui_state=SimpleNamespace(pending_questions={}),
+        )
+        service = _build_service(bot_app)
+        session = _preview_session(backend="tmux")
+        text = _choice_question_text()
+
+        delivered = await service._send_output_task(
+            session,
+            {"kind": "telegram", "chat_id": 123},
+            text,
+            object(),
+        )
+
+        assert delivered is True
+        assert outputs == [text]
+        assert questions == []
+        assert bot_app.ui_state.pending_questions == {}
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_keeps_headless_preview_questions_as_text() -> None:
+    async def _run() -> None:
+        previews: list[str] = []
+        questions: list[str] = []
+
+        async def _send_message(_context, *, text, **_kwargs):
+            previews.append(text)
+            return SimpleNamespace(message_id=43)
+
+        async def _send_ask_question(*_args, **_kwargs):
+            questions.append("asked")
+
+        bot_app = SimpleNamespace(
+            _send_message=_send_message,
+            _send_ask_question=_send_ask_question,
+            ui_state=SimpleNamespace(pending_questions={}),
+        )
+        service = _build_service(bot_app)
+        text = _choice_question_text()
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="headless"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+
+        assert previews == [text]
+        assert questions == []
+        assert bot_app.ui_state.pending_questions == {}
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_turns_tmux_preview_question_into_buttons() -> None:
+    async def _run() -> None:
+        previews: list[str] = []
+        questions: list[dict[str, object]] = []
+
+        async def _send_message(_context, *, text, **_kwargs):
+            previews.append(text)
+            return SimpleNamespace(message_id=43)
+
+        async def _send_ask_question(*_args, **kwargs):
+            questions.append(dict(kwargs))
+
+        bot_app = SimpleNamespace(
+            _send_message=_send_message,
+            _send_ask_question=_send_ask_question,
+            ui_state=SimpleNamespace(pending_questions={}),
+        )
+        service = _build_service(bot_app)
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            _choice_question_text(),
+        )
+
+        assert previews == []
+        assert len(questions) == 1
+        assert questions[0]["allow_custom"] is False
+        assert len(bot_app.ui_state.pending_questions) == 1
+
+    asyncio.run(_run())
+
+
 def test_session_run_service_skips_background_tasks_during_shutdown() -> None:
     async def _run() -> None:
         calls = {"send_output": 0, "handle_user_input": 0}

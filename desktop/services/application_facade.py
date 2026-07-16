@@ -3164,10 +3164,7 @@ class ApplicationFacade:
                 async def _emit_preview(text: str) -> None:
                     if not text:
                         return
-                    # For tmux-backed CLIs, intercept choice questions (e.g. "Enter selection [1-5]")
-                    # and present them via the ask mechanism (buttons) instead of raw preview text.
-                    # Mirrors the logic used for Telegram. The answer will be fed back via send_input.
-                    if SessionRunService._is_cli_choice_question(text):
+                    if SessionRunService._is_tmux_choice_preview(session, text):
                         question, options = SessionRunService._parse_cli_choice_question(text)
                         qid = f"tmux_choice_{session_uid}_{int(time.time())}"
                         meta = {
@@ -3648,32 +3645,6 @@ class ApplicationFacade:
                 if not session:
                     return
                 text = str(output or "")
-                # If this output is a CLI choice question, turn it into ask (with tmux_feed)
-                # so desktop shows buttons instead of dumping raw "Enter selection..." text.
-                if SessionRunService._is_cli_choice_question(text):
-                    question, options = SessionRunService._parse_cli_choice_question(text)
-                    qid = f"tmux_choice_{session_runtime_uid(session)}_{int(time.time())}"
-                    sid = session_runtime_uid(session)
-                    meta = {
-                        "question": question,
-                        "options": options,
-                        "session_uid": sid,
-                        "session_id": sid,
-                        "tmux_feed": True,
-                    }
-                    self.ui_state.pending_questions[qid] = meta
-                    self.ui_state.active_ask_question_by_chat[sid] = qid
-                    facade.notify(
-                        "ui:ask_question",
-                        session_uid=sid,
-                        session_id=sid,
-                        question_id=qid,
-                        question=question,
-                        options=options,
-                        allow_custom=False,
-                    )
-                    facade.notify("ui:assistant_preview_clear", session_uid=sid)
-                    return
                 from app.services.final_output_delivery import should_deliver_final_output
 
                 if not should_deliver_final_output(session, text):

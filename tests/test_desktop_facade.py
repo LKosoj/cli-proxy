@@ -138,6 +138,31 @@ def _build_desktop_facade_runtime(tmp_path: Path, *, intent: str, mode_id: str =
 
 
 @pytest.mark.asyncio
+async def test_desktop_final_questions_are_rendered_as_plain_message(tmp_path: Path) -> None:
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="final_questions")
+    facade: ApplicationFacade = runtime["facade"]
+    facade.config = runtime["config"]
+    session = runtime["session"]
+    notifications = []
+    unsubscribe = facade.subscribe(notifications.append)
+    text = "Итог.\n\nДва вопроса:\n1. Оставить первый блок?\n2. Удалить второй блок?"
+
+    try:
+        await facade._desktop_bot_app().send_output(
+            session,
+            {"kind": "desktop", "session_uid": session_runtime_uid(session)},
+            text,
+            context=None,
+        )
+    finally:
+        unsubscribe()
+
+    assert [notification.event for notification in notifications] == ["ui:message"]
+    assert notifications[0].payload["text"] == text
+    assert facade._desktop_bot_app().ui_state.pending_questions == {}
+
+
+@pytest.mark.asyncio
 async def test_desktop_facade_rejects_session_execution_backend_update(tmp_path: Path) -> None:
     runtime = _build_desktop_facade_runtime(tmp_path, intent="execution_backend")
     cfg: AppConfig = runtime["config"]

@@ -1,8 +1,9 @@
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Mapping
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter
@@ -17,8 +18,6 @@ from app.services.assistant_preview_service import (
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
 from app.services.logging_service import bind_session_log_context
 
-import re
-from typing import List, Tuple, Optional
 from app.services.runtime_progress_service import clear_runtime_progress, emit_runtime_progress
 from app.services.task_bearing_cli_hook_service import get_task_bearing_cli_hook_service
 from app.services.session_tick_history_store import clear_session_ticks
@@ -298,42 +297,16 @@ class SessionRunService:
                     q_lines.append(line)
         q = "\n".join(q_lines).strip() or "Please choose:"
         if not opts:
-            opts = [f"{i}. Option {i}" for i in range(1,6)]
+            opts = [f"{i}. Option {i}" for i in range(1, 6)]
         return q, opts[:5]
+
+    @classmethod
+    def _is_tmux_choice_preview(cls, session, text: str) -> bool:
+        return get_session_execution_backend(session) == "tmux" and cls._is_cli_choice_question(text)
 
     async def _send_output_task(self, session, dest: dict, output: str, context) -> bool:
         sent = False
         try:
-            if self._is_cli_choice_question(output):
-                question, options = self._parse_cli_choice_question(output)
-                qid = f"tmux_choice_{getattr(session, 'id', 'x')}_{int(time.time())}"
-                meta = {
-                    "question": question,
-                    "options": options,
-                    "chat_id": dest.get("chat_id"),
-                    "message_thread_id": dest.get("message_thread_id"),
-                    "session_id": str(getattr(session, "id", "")),
-                    "tmux_feed": True,
-                    "tmux_request_id": getattr(session, "last_tmux_request_id", None),
-                }
-                self.bot_app.ui_state.pending_questions[qid] = meta
-                try:
-                    cid = int(dest.get("chat_id") or 0)
-                    await self.bot_app._send_ask_question(
-                        context,
-                        cid,
-                        str(getattr(session, "id", "")),
-                        qid,
-                        question,
-                        options,
-                        allow_custom=False,
-                        system_options=False,
-                        message_thread_id=dest.get("message_thread_id"),
-                    )
-                except Exception:
-                    logging.getLogger("bot.send_output").exception("failed to send tmux choice as ask")
-                sent = True
-                return sent
             await self.bot_app.send_output(session, dest, output, context)
             sent = True
         except asyncio.CancelledError:
@@ -436,9 +409,7 @@ class SessionRunService:
     ) -> None:
         if not text:
             return
-        if self._is_cli_choice_question(text):
-            # Intercept CLI choice questions and transmit using the ask mechanism with buttons
-            # instead of plain preview text. The answer will be fed back to tmux via the callback.
+        if self._is_tmux_choice_preview(session, text):
             question, options = self._parse_cli_choice_question(text)
             qid = f"tmux_choice_{getattr(session, 'id', 'x')}_{int(time.time())}"
             meta = {
