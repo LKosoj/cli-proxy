@@ -274,6 +274,45 @@ def test_claude_task_notification_becomes_short_progress_event() -> None:
     assert "No completion record" not in event.text
 
 
+def test_claude_task_notification_result_does_not_complete_user_turn() -> None:
+    adapter = ClaudeJsonStreamAdapter()
+    session_id = "993f3c1a-9c37-45c7-9d1e-1797d9ec4177"
+
+    notification_result_events = adapter.feed_line(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "num_turns": 0,
+                "result": "",
+                "origin": {"kind": "task-notification"},
+                "session_id": session_id,
+            }
+        )
+    )
+
+    assert notification_result_events == []
+    assert adapter.completed is False
+
+    user_turn_events = adapter.feed_line(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Настоящий статус",
+                "session_id": session_id,
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    assert [event.kind for event in user_turn_events] == ["completed"]
+    assert adapter.completed is True
+    assert adapter.final_output_text() == "Настоящий статус"
+
+
 def test_claude_json_stream_adapter_normalizes_semantic_events() -> None:
     adapter = ClaudeJsonStreamAdapter()
     events = []

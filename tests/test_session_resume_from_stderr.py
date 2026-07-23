@@ -217,6 +217,27 @@ class _BlockingUntilReturncodeStream:
         raise AssertionError("unreachable")
 
 
+class _DelayedChunksUntilReturncodeStream:
+    def __init__(self, proc, immediate_chunks, delayed_chunks):
+        self._proc = proc
+        self._immediate_chunks = list(immediate_chunks)
+        self._delayed_chunks = list(delayed_chunks)
+
+    async def read(self, _n: int) -> bytes:
+        await asyncio.sleep(0)
+        if self._immediate_chunks:
+            return self._immediate_chunks.pop(0)
+        if self._delayed_chunks:
+            await asyncio.sleep(0.05)
+            if self._proc.returncode is not None:
+                return b""
+            return self._delayed_chunks.pop(0)
+        if self._proc.returncode is not None:
+            return b""
+        await asyncio.Future()
+        raise AssertionError("unreachable")
+
+
 class _FakeSemanticCodexProc:
     def __init__(self, stdout_chunks, stderr_chunks):
         self.pid = 626262
@@ -1157,8 +1178,23 @@ def test_headless_claude_json_stream_uses_semantic_completion(monkeypatch, tmp_p
             config=cfg,
         )
 
-        proc = _FakeSemanticClaudeProc(
-            stdout_chunks=[
+        proc = _FakeSemanticClaudeProc(stdout_chunks=[], stderr_chunks=[])
+        proc.stdout = _DelayedChunksUntilReturncodeStream(
+            proc,
+            immediate_chunks=[
+                (
+                    b'{"type":"system","subtype":"task_notification","task_id":"review-1",'
+                    b'"status":"stopped","summary":"No completion record for background agent \\"Final review\\"",'
+                    b'"session_id":"33333333-3333-4333-8333-333333333333"}\n'
+                ),
+                b'{"type":"system","subtype":"init","session_id":"33333333-3333-4333-8333-333333333333"}\n',
+                (
+                    b'{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":"",'
+                    b'"origin":{"kind":"task-notification"},'
+                    b'"session_id":"33333333-3333-4333-8333-333333333333"}\n'
+                ),
+            ],
+            delayed_chunks=[
                 b'{"type":"system","subtype":"init","session_id":"33333333-3333-4333-8333-333333333333"}\n',
                 (
                     b'{"type":"assistant","message":{"content":['
@@ -1183,7 +1219,6 @@ def test_headless_claude_json_stream_uses_semantic_completion(monkeypatch, tmp_p
                     b'"session_id":"33333333-3333-4333-8333-333333333333"}\n'
                 ),
             ],
-            stderr_chunks=[],
         )
         killpg_calls = []
 

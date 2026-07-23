@@ -843,6 +843,9 @@ class ClaudeJsonStreamAdapter(BaseCliJsonStreamAdapter):
             return [self._build_rate_limit_event(payload)]
 
         if event_type == "result":
+            origin = payload.get("origin")
+            if isinstance(origin, dict) and str(origin.get("kind") or "").strip().lower() == "task-notification":
+                return []
             result_text = str(payload.get("result") or "")
             if result_text:
                 self._final_output_text = result_text
