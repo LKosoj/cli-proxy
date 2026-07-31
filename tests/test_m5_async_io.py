@@ -208,32 +208,3 @@ def test_stream_log_updates_calls_read_available_lines_via_to_thread(tmp_path):
     asyncio.run(_run())
 
     assert "_read_available_lines" in calls
-
-
-# ---------------------------------------------------------------------------
-# QwenJsonlMonitor._poll_loop — uses to_thread
-# ---------------------------------------------------------------------------
-
-def test_qwen_poll_loop_uses_to_thread():
-    """QwenJsonlMonitor._poll_loop must call asyncio.to_thread(_poll_sync)."""
-    from app.services.qwen_jsonl_monitor import QwenJsonlMonitor
-
-    calls: list[str] = []
-    original_to_thread = asyncio.to_thread
-
-    async def _spy_to_thread(fn, *args, **kwargs):
-        if callable(fn) and getattr(fn, "__name__", "") == "_poll_sync":
-            calls.append("_poll_sync")
-        return await original_to_thread(fn, *args, **kwargs)
-
-    async def _run():
-        monitor = QwenJsonlMonitor(workdir="/tmp", poll_interval=0.01)
-        with patch("app.services.qwen_jsonl_monitor.asyncio.to_thread", side_effect=_spy_to_thread):
-            monitor.start()
-            await asyncio.sleep(0.05)
-            monitor.stop()
-            await asyncio.sleep(0.02)
-
-    asyncio.run(_run())
-
-    assert "_poll_sync" in calls

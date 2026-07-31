@@ -50,7 +50,9 @@ _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok"}
 _SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
-_TUI_CHROME_CLI_NAMES = {"codex"}
+_TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok"}
+# Qwen Code пишет журнал чата в <base>/<project_key>/chats/<session_id>.jsonl.
+QWEN_CHAT_BASE_DIR = Path("/root/.qwen/projects")
 _RECOVERY_DEST_KEYS = (
     "kind",
     "chat_id",
@@ -768,9 +770,8 @@ class TmuxExecutionBackend:
 
     @staticmethod
     def _find_qwen_transcript_path(session: Any) -> Optional[str]:
-        """Discover qwen session jsonl for the workdir, similar to QwenJsonlMonitor."""
+        """Discover qwen session jsonl for the workdir."""
         try:
-            from app.services.qwen_jsonl_monitor import QWEN_CHAT_BASE_DIR
             workdir = str(getattr(session, "workdir", "") or "")
             if not workdir:
                 return None
@@ -954,7 +955,8 @@ class TmuxExecutionBackend:
                 transcript_path = transcript_reader.locator.path
                 if transcript_path and os.path.exists(transcript_path):
                     last_transcript_size = os.path.getsize(transcript_path)
-            # For qwen (and any CLI without transcript_reader support), discover its jsonl
+            # Запасной путь: пока маркер запроса не попал в журнал, читатель его не
+            # находит, но рост файла уже годится как признак живого хода.
             if not transcript_path:
                 cli_name = _active_cli(session)
                 if cli_name == "qwen":

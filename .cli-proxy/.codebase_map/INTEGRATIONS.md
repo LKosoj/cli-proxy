@@ -38,7 +38,7 @@
 ## CLI Providers
 - **Configured tools** — `codex`, `claude`, `gemini`, `qwen` in `config_example.yaml`.
 - **Execution contracts** — session execution, active CLI switching and routed calls: `session.py`, `agent/cli_routing.py`.
-- **JSON/progress streams** — CLI stream adapters and transcript monitors: `app/services/cli_json_stream.py`, `app/services/claude_jsonl_monitor.py`, `app/services/gemini_session_monitor.py`, `app/services/qwen_jsonl_monitor.py`.
+- **JSON/progress streams** — CLI stream adapters and transcript readers: `app/services/cli_json_stream.py`, `app/services/cli_backends/transcript_reader.py`, `app/services/cli_backends/codex_rollout_tail.py`.
 - **CLI limits** — usage/status summaries for supported CLIs: `app/services/cli_limits_service.py`.
 
 ## Tool Plugins

@@ -2362,49 +2362,7 @@ def test_headless_qwen_json_stream_uses_semantic_completion(monkeypatch, tmp_pat
     asyncio.run(_run())
 
 
-def test_headless_qwen_does_not_start_monitor_when_spawn_fails(monkeypatch, tmp_path):
-    async def _run() -> None:
-        tool = ToolConfig(
-            name="qwen",
-            mode="headless",
-            cmd=["qwen", "--prompt", "{prompt}"],
-            headless_cmd=["qwen", "--prompt", "{prompt}"],
-        )
-        cfg = AppConfig(
-            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
-            tools={"qwen": tool},
-            defaults=DefaultsConfig(workdir=str(tmp_path)),
-            mcp=MCPConfig(enabled=False),
-            mcp_clients=[],
-            presets=[],
-            path=str(tmp_path / "config.yaml"),
-        )
-        session = Session(
-            id="s1",
-            tool=tool,
-            workdir=str(tmp_path),
-            idle_timeout_sec=10,
-            config=cfg,
-        )
-        marks: list[str] = []
-
-        async def _fake_create_subprocess_exec(*_args, **_kwargs):
-            raise RuntimeError("spawn failed")
-
-        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
-        monkeypatch.setattr(session, "_start_qwen_monitor", lambda: marks.append("start"))
-        monkeypatch.setattr(session, "_stop_qwen_monitor", lambda: marks.append("stop"))
-
-        with pytest.raises(RuntimeError, match="spawn failed"):
-            await session._run_headless("hello")
-
-        assert marks == []
-        assert session.current_proc is None
-
-    asyncio.run(_run())
-
-
-def test_headless_claude_does_not_start_monitor_when_spawn_fails(monkeypatch, tmp_path):
+def test_headless_leaves_no_current_proc_when_spawn_fails(monkeypatch, tmp_path):
     async def _run() -> None:
         tool = ToolConfig(
             name="claude",
@@ -2428,19 +2386,15 @@ def test_headless_claude_does_not_start_monitor_when_spawn_fails(monkeypatch, tm
             idle_timeout_sec=10,
             config=cfg,
         )
-        marks: list[str] = []
 
         async def _fake_create_subprocess_exec(*_args, **_kwargs):
             raise RuntimeError("spawn failed")
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
-        monkeypatch.setattr(session, "_start_claude_monitor", lambda *_args, **_kwargs: marks.append("start"))
-        monkeypatch.setattr(session, "_stop_claude_monitor", lambda: marks.append("stop"))
 
         with pytest.raises(RuntimeError, match="spawn failed"):
             await session._run_headless("hello")
 
-        assert marks == []
         assert session.current_proc is None
 
     asyncio.run(_run())

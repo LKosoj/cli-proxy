@@ -17,20 +17,17 @@ import subprocess
 import shlex
 import threading
 
-from app.services.claude_jsonl_monitor import ClaudeJsonlMonitor
 from app.services.cli_json_stream import (
     CliJsonStreamRecorder,
     build_cli_json_stream_adapter,
     cli_json_stream_archive_enabled,
     recover_cli_text_from_raw_stream,
 )
-from app.services.gemini_session_monitor import GeminiJsonMonitor
 from app.services.tool_availability import available_tools, is_tool_available
 from app.services.project_prompts_service import ensure_project_prompts
 from app.services.ssh_skill_generator import generate_ssh_skill_text
 from app.services.state_repository import get_state_repository
 from app.services.session_tick_history_store import append_session_tick
-from app.services.qwen_jsonl_monitor import QwenJsonlMonitor, extract_progress_text
 from config import AppConfig, ToolConfig, save_config
 from modes.sdk.runtime.cli_contracts import parse_bundle_for_response_format
 from sessions.conversation_scope import ConversationScope, DesktopScope
@@ -537,12 +534,6 @@ class Session:
     chat_id: Optional[int] = None
     conversation_scope: Optional[ConversationScope] = None
     scoped_key: Optional[str] = None
-    # Qwen Code JSONL monitor for real-time progress tracking
-    _qwen_monitor: Optional[QwenJsonlMonitor] = field(default=None, repr=False, init=False)
-    # Claude Code JSONL monitor for local transcript progress tracking
-    _claude_monitor: Optional[ClaudeJsonlMonitor] = field(default=None, repr=False, init=False)
-    # Gemini CLI session JSON monitor for real-time progress tracking
-    _gemini_monitor: Optional[GeminiJsonMonitor] = field(default=None, repr=False, init=False)
     # Shared SSH service reference (set by SessionManager, not per-session).
     _ssh_service: Optional[Any] = field(default=None, repr=False, init=False)
 
@@ -2130,113 +2121,6 @@ class Session:
         if normalized_tick_kind == "assistant_text":
             self.last_assistant_text_ts = now
             self.last_assistant_text_value = last
-
-    def _on_qwen_event(self, event) -> None:
-        """Handle Qwen JSONL monitor event."""
-        try:
-            progress_text = extract_progress_text(event)
-            if progress_text:
-                # Update activity with progress text
-                self._update_activity(progress_text)
-        except Exception:
-            logging.getLogger(__name__).exception("Qwen event handler failed")
-
-    def _start_qwen_monitor(self) -> None:
-        """Start Qwen Code JSONL monitor for real-time progress."""
-        if self._qwen_monitor:
-            return  # Already started
-
-        self._qwen_monitor = QwenJsonlMonitor(
-            workdir=self.workdir,
-            callback=self._on_qwen_event,
-            poll_interval=0.3,  # Poll every 300ms for responsive progress
-        )
-        self._qwen_monitor.start()
-        logging.getLogger(__name__).info("Qwen JSONL monitor started for session %s", self.id)
-
-    def _stop_qwen_monitor(self) -> None:
-        """Stop Qwen Code JSONL monitor."""
-        if self._qwen_monitor:
-            self._qwen_monitor.stop()
-            self._qwen_monitor = None
-            logging.getLogger(__name__).info("Qwen JSONL monitor stopped for session %s", self.id)
-
-    def _on_gemini_session_detected(self, session_id: str) -> None:
-        """Persist Gemini session id for future resume."""
-        sid = str(session_id or "").strip()
-        if sid:
-            self.resume_token = sid
-
-    def _on_gemini_event(self, event) -> None:
-        """Handle Gemini session monitor events."""
-        try:
-            for item in list(getattr(event, "progress_items", []) or []):
-                text = str(item or "").strip()
-                if text:
-                    self._update_activity(text)
-        except Exception:
-            logging.getLogger(__name__).exception("Gemini event handler failed")
-
-    def _start_gemini_monitor(self, session_id: Optional[str], *, persist_resume: bool = True) -> None:
-        """Start Gemini CLI session monitor for progress and session id."""
-        if self._gemini_monitor:
-            return
-
-        self._gemini_monitor = GeminiJsonMonitor(
-            workdir=self.workdir,
-            callback=self._on_gemini_event,
-            session_callback=self._on_gemini_session_detected if persist_resume else None,
-            poll_interval=0.2,
-            session_id=session_id,
-        )
-        self._gemini_monitor.start()
-        logging.getLogger(__name__).info("Gemini JSON monitor started for session %s", self.id)
-
-    def _stop_gemini_monitor(self) -> None:
-        """Stop Gemini CLI session monitor."""
-        if self._gemini_monitor:
-            self._gemini_monitor.stop()
-            self._gemini_monitor = None
-            logging.getLogger(__name__).info("Gemini JSON monitor stopped for session %s", self.id)
-
-    def _on_claude_session_detected(self, session_id: str) -> None:
-        """Persist Claude transcript session id for future resume."""
-        sid = str(session_id or "").strip()
-        if sid:
-            self.resume_token = sid
-
-    def _on_claude_event(self, event) -> None:
-        """Handle Claude transcript events."""
-        try:
-            for item in list(getattr(event, "progress_items", []) or []):
-                text = str(item or "").strip()
-                if text:
-                    self._update_activity(text)
-        except Exception:
-            logging.getLogger(__name__).exception("Claude event handler failed")
-
-    def _start_claude_monitor(self, session_id: Optional[str], *, persist_resume: bool = True) -> None:
-        """Start Claude Code transcript monitor for progress and session id."""
-        if self._claude_monitor:
-            return
-
-        self._claude_monitor = ClaudeJsonlMonitor(
-            workdir=self.workdir,
-            callback=self._on_claude_event,
-            session_callback=self._on_claude_session_detected if persist_resume else None,
-            poll_interval=0.3,
-            username="claude-bot",
-            session_id=session_id,
-        )
-        self._claude_monitor.start()
-        logging.getLogger(__name__).info("Claude JSONL monitor started for session %s", self.id)
-
-    def _stop_claude_monitor(self) -> None:
-        """Stop Claude Code transcript monitor."""
-        if self._claude_monitor:
-            self._claude_monitor.stop()
-            self._claude_monitor = None
-            logging.getLogger(__name__).info("Claude JSONL monitor stopped for session %s", self.id)
 
     def _build_gemini_resume_template(self, cmd_template: List[str]) -> List[str]:
         """

@@ -336,8 +336,6 @@ async def test_run_headless_stops_process_when_eof_does_not_lead_to_exit(
     monkeypatch.setattr(session_module, "_HEADLESS_WAIT_POLL_SEC", 0.01)
     monkeypatch.setattr(session_module, "_HEADLESS_EOF_EXIT_TIMEOUT_SEC", 0.01)
     monkeypatch.setattr(session_module, "_HEADLESS_EOF_STOP_GRACE_SEC", 0.01)
-    monkeypatch.setattr(session, "_start_claude_monitor", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(session, "_stop_claude_monitor", lambda: None)
     caplog.set_level(logging.WARNING, logger="session.headless")
 
     out = await session._run_headless("hello")
@@ -367,8 +365,6 @@ async def test_run_headless_uses_native_poll_when_wait_task_stays_pending(
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
     monkeypatch.setattr(session_module.os, "kill", lambda _pid, _sig: None)
     monkeypatch.setattr(session_module, "_HEADLESS_WAIT_POLL_SEC", 0.01)
-    monkeypatch.setattr(session, "_start_claude_monitor", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(session, "_stop_claude_monitor", lambda: None)
     caplog.set_level(logging.WARNING, logger="session.headless")
 
     out = await session._run_headless("hello")

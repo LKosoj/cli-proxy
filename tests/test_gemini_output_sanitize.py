@@ -1,8 +1,5 @@
 import asyncio
-import hashlib
-import json
 
-from app.services.gemini_session_monitor import GeminiJsonMonitor
 from app.services.session_tick_history_store import load_session_ticks
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 from session import Session
@@ -163,40 +160,6 @@ def test_gemini_resume_is_recovered_via_list_sessions_not_stderr(monkeypatch, tm
         assert session.resume_token == "token-from-list-sessions"
 
     asyncio.run(_run())
-
-
-def test_gemini_session_monitor_finds_lowercase_tmp_dir_for_mixed_case_workdir(monkeypatch, tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-
-    workdir = tmp_path / "LLMApiGateway"
-    workdir.mkdir()
-    project_hash = hashlib.sha256(str(workdir).encode("utf-8")).hexdigest()
-    chats_dir = home / ".gemini" / "tmp" / "llmapigateway" / "chats"
-    chats_dir.mkdir(parents=True, exist_ok=True)
-
-    monitor = GeminiJsonMonitor(str(workdir))
-    session_path = chats_dir / "session-2026-03-17T01-33-mixedcase.json"
-    session_path.write_text(
-        json.dumps(
-            {
-                "sessionId": "mixed-case-session",
-                "projectHash": project_hash,
-                "messages": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    discovered = monitor._discover_tracked_file()
-
-    assert chats_dir.parent in monitor._candidate_project_dirs()
-    assert discovered is not None
-    path, payload, prime_existing = discovered
-    assert path == session_path
-    assert payload["sessionId"] == "mixed-case-session"
-    assert prime_existing is False
 
 
 def test_gemini_stdout_stream_restores_ticks_for_status_and_miniapp(monkeypatch, tmp_path):

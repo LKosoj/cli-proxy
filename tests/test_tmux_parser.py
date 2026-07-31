@@ -473,3 +473,49 @@ def test_parse_tmux_delta_detects_done_marker_split_by_cursor_move() -> None:
 
     assert parsed.complete is True
     assert "ответ" in parsed.text
+
+
+def test_tui_chrome_covers_cli_without_linear_output_mode() -> None:
+    """Фильтр интерфейса нужен всем TUI без режима линейного вывода.
+
+    У claude такой режим есть (--ax-screen-reader), поэтому его экран разбирает
+    отдельная ветка и вычищать интерфейс не требуется.
+    """
+    from types import SimpleNamespace
+
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+    def _session(name: str) -> SimpleNamespace:
+        return SimpleNamespace(tool=SimpleNamespace(name=name, interactive_cmd=[name]))
+
+    for name in ("codex", "qwen", "gemini", "grok"):
+        assert TmuxExecutionBackend._uses_tui_chrome(_session(name)) is True, name
+    assert TmuxExecutionBackend._uses_tui_chrome(_session("claude")) is False
+
+
+def test_find_qwen_transcript_path_tries_both_project_key_forms(tmp_path, monkeypatch) -> None:
+    """Имя каталога с журналом qwen выводится из пути двумя разными способами.
+
+    Первый вариант заменяет на дефис только разделители каталогов, второй — любой
+    не-буквенно-цифровой символ. Из-за подчёркивания в `git_projects` они дают
+    разные имена, поэтому проверять надо оба.
+    """
+    from types import SimpleNamespace
+
+    from app.services.cli_backends import tmux_backend
+
+    monkeypatch.setattr(tmux_backend, "QWEN_CHAT_BASE_DIR", tmp_path)
+    workdir = "/nonexistent-root/git_projects/LLMApiGateway"
+
+    # Каталога с "сырым" ключом (-nonexistent-root-git_projects-LLMApiGateway) нет,
+    # журнал лежит только под вторым вариантом ключа.
+    chat_dir = tmp_path / "-nonexistent-root-git-projects-LLMApiGateway" / "chats"
+    chat_dir.mkdir(parents=True)
+    transcript = chat_dir / "session.jsonl"
+    transcript.write_text('{"uuid":"e1","sessionId":"s1","type":"user"}\n', encoding="utf-8")
+
+    session = SimpleNamespace(workdir=workdir)
+
+    found = tmux_backend.TmuxExecutionBackend._find_qwen_transcript_path(session)
+
+    assert found == str(transcript)

@@ -16,7 +16,7 @@ from modes.sdk.runtime.json_normalizer import loads_safe
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_PROVIDERS = {"claude", "codex", "grok"}
+_SUPPORTED_PROVIDERS = {"claude", "codex", "grok", "qwen", "gemini"}
 _DISCOVERY_TAIL_BYTES = 4 * 1024 * 1024
 _DISCOVERY_CANDIDATE_LIMIT = 30
 _CODEX_SESSION_ID_RE = re.compile(r"-([0-9a-fA-F-]{36})\.jsonl$")
@@ -125,6 +125,10 @@ class CliTranscriptReader:
             return self.home_dir / ".codex" / "sessions"
         if self.provider == "grok":
             return self.home_dir / ".grok" / "sessions"
+        if self.provider == "qwen":
+            return self.home_dir / ".qwen" / "projects"
+        if self.provider == "gemini":
+            return self.home_dir / ".gemini" / "tmp"
         return self.home_dir / ".cli-proxy-unsupported-transcript"
 
     def _path_is_allowed(self, path: Path) -> bool:
@@ -157,10 +161,12 @@ class CliTranscriptReader:
 
         exact: list[Path] = []
         if self.session_id:
-            if self.provider == "claude":
+            if self.provider in {"claude", "qwen"}:
                 exact = list(self.root.rglob(f"{self.session_id}.jsonl"))
             elif self.provider == "codex":
                 exact = list(self.root.rglob(f"*-{self.session_id}.jsonl"))
+            elif self.provider == "gemini":
+                exact = list(self.root.rglob(f"session-{self.session_id}.json"))
             elif self.provider == "grok":
                 workspace_key = urllib.parse.quote(self.workdir, safe="")
                 direct = self.root / workspace_key / self.session_id / "updates.jsonl"
@@ -169,7 +175,12 @@ class CliTranscriptReader:
         if exact:
             return exact
 
-        pattern = "updates.jsonl" if self.provider == "grok" else "*.jsonl"
+        if self.provider == "grok":
+            pattern = "updates.jsonl"
+        elif self.provider == "gemini":
+            pattern = "session-*.json"
+        else:
+            pattern = "*.jsonl"
         candidates: list[tuple[float, Path]] = []
         try:
             for path in self.root.rglob(pattern):
@@ -205,10 +216,12 @@ class CliTranscriptReader:
         return start + line_start
 
     def _session_id_from_path(self, path: Path) -> str:
-        if self.provider == "claude":
+        if self.provider in {"claude", "qwen"}:
             return path.stem
         if self.provider == "grok":
             return path.parent.name
+        if self.provider == "gemini":
+            return path.stem[len("session-"):] if path.stem.startswith("session-") else path.stem
         match = _CODEX_SESSION_ID_RE.search(path.name)
         return match.group(1) if match else ""
 
@@ -312,13 +325,100 @@ class CliTranscriptReader:
                 self.complete = True
             # else keep monitoring until explicit marker for this request
 
+    def _handle_qwen(self, record: dict[str, Any]) -> None:
+        event_type = str(record.get("type") or "").strip()
+        if event_type in {"user", "assistant", "system", "tool_result"}:
+            self.recognized = True
+        self.activity_at = _event_timestamp(record.get("timestamp"))
+        if event_type != "assistant":
+            return
+        message = record.get("message") if isinstance(record.get("message"), dict) else {}
+        parts = message.get("parts")
+        if not isinstance(parts, list):
+            return
+        texts: list[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            call = part.get("functionCall")
+            if isinstance(call, dict):
+                tool_name = str(call.get("name") or "").strip()
+                if tool_name:
+                    self.latest_progress_text = tool_name
+                continue
+            # thought=true — внутренние рассуждения модели, в ответ пользователю они не идут.
+            if part.get("thought"):
+                continue
+            text = str(part.get("text") or "").strip()
+            if text:
+                texts.append(text)
+        text = "\n".join(texts)
+        if not text:
+            return
+        if self._done_marker() in text:
+            self.complete = True
+        cleaned = self._clean_assistant_text(text)
+        if cleaned:
+            self.latest_assistant_text = cleaned
+
     def _handle_record(self, record: dict[str, Any]) -> None:
         if self.provider == "claude":
             self._handle_claude(record)
         elif self.provider == "codex":
             self._handle_codex(record)
+        elif self.provider == "qwen":
+            self._handle_qwen(record)
         elif self.provider == "grok":
             self._handle_grok(record)
+
+    def _read_gemini_snapshot(self) -> None:
+        """Перечитывает файл сессии gemini целиком.
+
+        В отличие от остальных CLI, gemini не дописывает журнал, а каждый раз
+        переписывает его заново, поэтому байтовый курсор неприменим: сообщения
+        текущего запроса ищутся заново по маркеру.
+        """
+        if self.locator is None:
+            return
+        path = Path(self.locator.path)
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            logger.debug("structured transcript read failed path=%s", path, exc_info=True)
+            return
+        if not raw:
+            return
+        try:
+            payload = loads_safe(raw, strict_first=True)
+        except Exception:
+            # Файл переписывается целиком, поэтому в момент записи бывает неполным.
+            logger.debug("gemini session snapshot is not readable path=%s", path, exc_info=True)
+            return
+        messages = payload.get("messages") if isinstance(payload, dict) else None
+        if not isinstance(messages, list):
+            return
+        marker = f"<<<CLI_PROXY_REQUEST:{self.request_id}>>>"
+        start = -1
+        for index, item in enumerate(messages):
+            if isinstance(item, dict) and marker in str(item.get("content") or ""):
+                start = index
+        if start < 0:
+            return
+        self.recognized = True
+        for item in messages[start + 1:]:
+            if not isinstance(item, dict):
+                continue
+            self.activity_at = _event_timestamp(item.get("timestamp"))
+            if str(item.get("type") or "").strip() != "gemini":
+                continue
+            text = str(item.get("content") or "").strip()
+            if not text:
+                continue
+            if self._done_marker() in text:
+                self.complete = True
+            cleaned = self._clean_assistant_text(text)
+            if cleaned:
+                self.latest_assistant_text = cleaned
 
     def _read_new_records(self) -> None:
         if self.locator is None:
@@ -412,7 +512,10 @@ class CliTranscriptReader:
             return TranscriptPollResult()
         if self.locator is None:
             self._discover()
-        self._read_new_records()
+        if self.provider == "gemini":
+            self._read_gemini_snapshot()
+        else:
+            self._read_new_records()
         return TranscriptPollResult(
             assistant_text=self.latest_assistant_text,
             progress_text=self.latest_progress_text,

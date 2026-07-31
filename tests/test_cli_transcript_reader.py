@@ -624,3 +624,273 @@ def test_codex_resume_keeps_appending_to_same_rollout(tmp_path):
     assert result.complete is True
     assert result.assistant_text == "ok"
     assert result.locator is not None and result.locator.path.endswith(f"{session_id}.jsonl")
+
+
+def _qwen_path(home: Path, session_id: str) -> Path:
+    return home / ".qwen" / "projects" / "-srv-project" / "chats" / f"{session_id}.jsonl"
+
+
+def test_qwen_transcript_reader_reads_parts_and_skips_thoughts(tmp_path):
+    request_id = "qwen-request"
+    session_id = "22222222-2222-4222-8222-222222222222"
+    _append_jsonl(
+        _qwen_path(tmp_path, session_id),
+        {
+            "type": "user",
+            "sessionId": session_id,
+            "timestamp": "2026-07-31T10:00:00Z",
+            "message": {"role": "user", "parts": [{"text": f"<<<CLI_PROXY_REQUEST:{request_id}>>> сделай"}]},
+        },
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": "2026-07-31T10:00:01Z",
+            "message": {
+                "role": "model",
+                "parts": [
+                    {"text": "надо сначала поискать", "thought": True},
+                    {"functionCall": {"id": "call_1", "name": "glob", "args": {"pattern": "*.py"}}},
+                ],
+            },
+        },
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": "2026-07-31T10:00:03Z",
+            "message": {"role": "model", "parts": [{"text": "Готово"}]},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="qwen",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    first = reader.poll()
+
+    assert first.available is True
+    assert first.recognized is True
+    # Размышления модели в ответ не попадают, имя инструмента идёт в прогресс.
+    assert first.assistant_text == "Готово"
+    assert first.progress_text == "glob"
+    assert first.complete is False
+
+    _append_jsonl(
+        _qwen_path(tmp_path, session_id),
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": "2026-07-31T10:00:05Z",
+            "message": {"role": "model", "parts": [{"text": f"Итог работы\n<<<DONE:{request_id}>>>"}]},
+        },
+    )
+    second = reader.poll()
+
+    assert second.complete is True
+    assert second.assistant_text == "Итог работы"
+    assert second.session_id == session_id
+
+
+def test_qwen_transcript_reader_ignores_foreign_session(tmp_path):
+    """Маркер запроса обязателен: чужой чат не должен подхватываться."""
+    _append_jsonl(
+        _qwen_path(tmp_path, "33333333-3333-4333-8333-333333333333"),
+        {
+            "type": "assistant",
+            "timestamp": "2026-07-31T10:00:00Z",
+            "message": {"role": "model", "parts": [{"text": "чужой ответ"}]},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="qwen",
+        request_id="qwen-missing",
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.available is False
+    assert result.assistant_text == ""
+
+
+def _write_gemini_session(home: Path, session_id: str, messages: list) -> Path:
+    path = home / ".gemini" / "tmp" / "project-hash" / "chats" / f"session-{session_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "sessionId": session_id,
+        "projectHash": "project-hash",
+        "cwd": "/srv/project",
+        "startTime": "2026-07-31T10:00:00.000Z",
+        "lastUpdated": "2026-07-31T10:00:10.000Z",
+        "messages": messages,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_gemini_transcript_reader_survives_file_rewrite(tmp_path):
+    """gemini переписывает файл целиком, а не дописывает: читатель обязан
+    переоткрывать его, иначе после перезаписи ответ будет потерян."""
+    request_id = "gemini-request"
+    session_id = "44444444-4444-4444-8444-444444444444"
+    _write_gemini_session(
+        tmp_path,
+        session_id,
+        [
+            {"id": "m1", "type": "user", "content": "прошлый вопрос", "timestamp": "2026-07-31T09:00:00.000Z"},
+            {"id": "m2", "type": "gemini", "content": "прошлый ответ", "timestamp": "2026-07-31T09:00:01.000Z"},
+            {
+                "id": "m3",
+                "type": "user",
+                "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> посчитай",
+                "timestamp": "2026-07-31T10:00:00.000Z",
+            },
+        ],
+    )
+    reader = CliTranscriptReader(
+        cli_name="gemini",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    first = reader.poll()
+
+    assert first.available is True
+    # Ответ прошлого хода лежит выше маркера и не должен попасть в результат.
+    assert first.assistant_text == ""
+    assert first.complete is False
+
+    _write_gemini_session(
+        tmp_path,
+        session_id,
+        [
+            {"id": "m1", "type": "user", "content": "прошлый вопрос", "timestamp": "2026-07-31T09:00:00.000Z"},
+            {"id": "m2", "type": "gemini", "content": "прошлый ответ", "timestamp": "2026-07-31T09:00:01.000Z"},
+            {
+                "id": "m3",
+                "type": "user",
+                "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> посчитай",
+                "timestamp": "2026-07-31T10:00:00.000Z",
+            },
+            {"id": "m4", "type": "gemini", "content": "промежуточно", "timestamp": "2026-07-31T10:00:02.000Z"},
+        ],
+    )
+    second = reader.poll()
+
+    assert second.assistant_text == "промежуточно"
+    assert second.complete is False
+
+    _write_gemini_session(
+        tmp_path,
+        session_id,
+        [
+            {
+                "id": "m3",
+                "type": "user",
+                "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> посчитай",
+                "timestamp": "2026-07-31T10:00:00.000Z",
+            },
+            {"id": "m4", "type": "gemini", "content": "промежуточно", "timestamp": "2026-07-31T10:00:02.000Z"},
+            {
+                "id": "m5",
+                "type": "gemini",
+                "content": f"Ответ: 4\n<<<DONE:{request_id}>>>",
+                "timestamp": "2026-07-31T10:00:04.000Z",
+            },
+        ],
+    )
+    third = reader.poll()
+
+    assert third.complete is True
+    assert third.assistant_text == "Ответ: 4"
+    assert third.session_id == session_id
+
+
+def test_gemini_transcript_reader_tolerates_partially_written_file(tmp_path):
+    """Файл переписывается целиком, поэтому опрос может попасть на момент записи."""
+    request_id = "gemini-partial"
+    session_id = "55555555-5555-4555-8555-555555555555"
+    path = _write_gemini_session(
+        tmp_path,
+        session_id,
+        [
+            {
+                "id": "m1",
+                "type": "user",
+                "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> посчитай",
+                "timestamp": "2026-07-31T10:00:00.000Z",
+            },
+            {"id": "m2", "type": "gemini", "content": "первый ответ", "timestamp": "2026-07-31T10:00:02.000Z"},
+        ],
+    )
+    reader = CliTranscriptReader(
+        cli_name="gemini",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+    assert reader.poll().assistant_text == "первый ответ"
+
+    path.write_text('{"sessionId": "55555555", "messages": [{"id": "m1"', encoding="utf-8")
+
+    result = reader.poll()
+
+    # Обрывок не должен ни падать, ни стирать уже прочитанный ответ.
+    assert result.assistant_text == "первый ответ"
+    assert result.complete is False
+
+
+def test_gemini_transcript_reader_finds_lowercase_project_dir(tmp_path):
+    """gemini заводит папку проекта в нижнем регистре, хотя рабочая директория
+    может быть в смешанном — поиск не должен зависеть от её имени."""
+    request_id = "gemini-case"
+    session_id = "66666666-6666-4666-8666-666666666666"
+    path = tmp_path / ".gemini" / "tmp" / "llmapigateway" / "chats" / f"session-{session_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "sessionId": session_id,
+                "messages": [
+                    {
+                        "id": "m1",
+                        "type": "user",
+                        "content": f"<<<CLI_PROXY_REQUEST:{request_id}>>> посчитай",
+                        "timestamp": "2026-07-31T10:00:00.000Z",
+                    },
+                    {
+                        "id": "m2",
+                        "type": "gemini",
+                        "content": f"Готово\n<<<DONE:{request_id}>>>",
+                        "timestamp": "2026-07-31T10:00:02.000Z",
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    reader = CliTranscriptReader(
+        cli_name="gemini",
+        request_id=request_id,
+        workdir="/srv/git_projects/LLMApiGateway",
+        started_at=time.time() - 5,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.complete is True
+    assert result.assistant_text == "Готово"
+    assert result.session_id == session_id

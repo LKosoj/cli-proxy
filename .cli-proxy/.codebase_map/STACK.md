@@ -33,7 +33,7 @@
 ## CLI And LLM Runtime
 - **Configured CLIs** — Codex, Claude, Gemini, Qwen are defined under `tools.*` in `config_example.yaml`.
 - **CLI execution** — sessions use subprocess/pexpect, resume tokens and CLI availability switching: `session.py`, `utils/cli.py`, `agent/cli_routing.py`.
-- **CLI JSON streams** — adapters for Codex/Gemini/Qwen/Claude: `app/services/cli_json_stream.py`; additional transcript monitors: `app/services/claude_jsonl_monitor.py`, `app/services/gemini_session_monitor.py`, `app/services/qwen_jsonl_monitor.py`.
+- **CLI JSON streams** — adapters for Codex/Gemini/Qwen/Claude: `app/services/cli_json_stream.py`; tmux transcript reader: `app/services/cli_backends/transcript_reader.py`; codex rollout tail: `app/services/cli_backends/codex_rollout_tail.py`.
 - **OpenAI SDK** — async chat completions and summaries: `modes/sdk/runtime/openai_client.py`, `summary.py`.
 - **Token counting** — `tiktoken` with fallback: `modes/sdk/runtime/token_counter.py`.
 
