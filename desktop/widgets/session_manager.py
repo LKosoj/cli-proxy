@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import asyncio
 import os
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import Qt, Signal
@@ -25,8 +26,9 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
 )
 
+from app.services.cli_session_history import list_recent_cli_sessions
 from i18n import t
-from session import session_runtime_uid
+from session import session_active_cli_name, session_runtime_uid
 from utils.ui import ensure_async, format_session_title
 
 if TYPE_CHECKING:
@@ -556,19 +558,58 @@ class SessionManagerWidget(QWidget):
         if not session:
             return
 
-        current_resume = getattr(session, "resume_token", "") or ""
         lang = self.facade.ui_language
+        title = t("desktop.session.resume_token_title", lang)
+        candidates = list_recent_cli_sessions(
+            session_active_cli_name(session),
+            str(getattr(session, "workdir", "") or ""),
+        )
+        if not candidates:
+            self._ask_resume_token_manually(session, title=title, lang=lang)
+            return
+
+        manual_label = t("desktop.session.resume_manual", lang)
+        current_resume = str(getattr(session, "resume_token", "") or "")
+        labels = [self._resume_candidate_label(candidate, current_resume) for candidate in candidates]
+        labels.append(manual_label)
+        choice, ok = QInputDialog.getItem(
+            self, title, t("desktop.session.resume_select", lang), labels, 0, False
+        )
+        if not ok or not choice:
+            return
+        if choice == manual_label:
+            self._ask_resume_token_manually(session, title=title, lang=lang)
+            return
+        self._apply_resume_token(session, candidates[labels.index(choice)].session_id)
+
+    @staticmethod
+    def _resume_candidate_label(candidate, current_resume: str) -> str:
+        mark = "✅" if candidate.session_id == current_resume else "▫️"
+        stamp = (
+            datetime.fromtimestamp(candidate.mtime).strftime("%d.%m %H:%M")
+            if candidate.mtime
+            else "—"
+        )
+        preview = candidate.preview or candidate.session_id
+        return f"{mark} {stamp} · {preview}  [{candidate.session_id[:8]}]"
+
+    def _ask_resume_token_manually(self, session, *, title: str, lang: str) -> None:
+        current_resume = str(getattr(session, "resume_token", "") or "")
         new_resume, ok = QInputDialog.getText(
-            self, t("desktop.session.resume_token_title", lang),
-            t("desktop.session.rename_prompt", lang), text=str(current_resume)
+            self, title, t("desktop.session.rename_prompt", lang), text=current_resume
         )
         if ok:
-            session.resume_token = str(new_resume).strip() or None
-            try:
-                self.session_service._manager._persist_sessions()
-            except Exception:
-                pass
-            self.refresh_sessions()
+            self._apply_resume_token(session, str(new_resume).strip() or None)
+
+    def _apply_resume_token(self, session, token: Optional[str]) -> None:
+        session.resume_token = token
+        try:
+            self.session_service._manager._persist_sessions()
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "desktop resume token persist failed session_id=%s", getattr(session, "id", "")
+            )
+        self.refresh_sessions()
 
     def retranslate_ui(self, lang: str) -> None:
         self.search_input.setPlaceholderText(t("desktop.session.search_placeholder", lang))

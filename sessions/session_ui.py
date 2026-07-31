@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Callable, Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -7,12 +8,18 @@ from telegram.ext import ContextTypes
 from i18n import t
 from utils.lang import resolve_user_lang
 
+from app.services.cli_session_history import CliSessionCandidate, list_recent_cli_sessions
 from app.services.session_run_service import ModeScopedPreRunResetService
 from app.services.state_repository import get_state_repository
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.advanced_orchestrator_service import ORCHESTRATOR_MODE_ID
 from modes.sdk.services.callback_data import build_session_overview_callback_data
-from session import get_session_execution_backend, has_live_tmux, set_session_execution_backend
+from session import (
+    get_session_execution_backend,
+    has_live_tmux,
+    session_active_cli_name,
+    set_session_execution_backend,
+)
 from sessions.session_state_access import (
     is_orchestrator_enabled,
     reset_session_runtime_state,
@@ -23,6 +30,10 @@ from sessions.session_status import build_session_status_text, visible_modes
 
 
 logger = logging.getLogger(__name__)
+
+# Telegram hard-limits callback_data to 64 bytes, so long CLI session ids are
+# passed as a prefix and matched back against the on-disk list on click.
+CALLBACK_DATA_MAX_LEN = 64
 
 
 class SessionUI:
@@ -135,6 +146,68 @@ class SessionUI:
             md2=True,
             reply_markup=reply_markup,
         )
+
+    def _resume_candidates(self, session) -> list[CliSessionCandidate]:
+        return list_recent_cli_sessions(
+            session_active_cli_name(session),
+            str(getattr(session, "workdir", "") or ""),
+        )
+
+    @staticmethod
+    def _resume_pick_callback(session_id: str, cli_session_id: str) -> str:
+        prefix = f"sess_rpick:{session_id}:"
+        return prefix + str(cli_session_id or "")[: CALLBACK_DATA_MAX_LEN - len(prefix)]
+
+    def _match_resume_candidate(self, session, cli_session_prefix: str) -> Optional[str]:
+        prefix = str(cli_session_prefix or "").strip()
+        if not prefix:
+            return None
+        for candidate in self._resume_candidates(session):
+            if candidate.session_id.startswith(prefix):
+                return candidate.session_id
+        return None
+
+    def _build_resume_picker(self, session, *, lang: str) -> tuple[str, InlineKeyboardMarkup]:
+        """Menu with the newest CLI conversations of this workdir plus manual input."""
+        cli_name = session_active_cli_name(session)
+        current_token = str(getattr(session, "resume_token", "") or "")
+        candidates = self._resume_candidates(session)
+        rows: list[list[InlineKeyboardButton]] = []
+        for candidate in candidates:
+            mark = "✅" if candidate.session_id == current_token else "▫️"
+            stamp = (
+                datetime.fromtimestamp(candidate.mtime).strftime("%d.%m %H:%M")
+                if candidate.mtime
+                else "—"
+            )
+            label = candidate.preview or candidate.session_id[:8]
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"{mark} {stamp} · {self._short_label(label, max_len=40)}",
+                        callback_data=self._resume_pick_callback(session.id, candidate.session_id),
+                    )
+                ]
+            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    t("btn.session.resume_manual", lang),
+                    callback_data=f"sess_rmanual:{session.id}",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    t("btn.session.back", lang),
+                    callback_data=build_session_overview_callback_data(session),
+                )
+            ]
+        )
+        key = "msg.session.resume_picker" if candidates else "msg.session.resume_picker_empty"
+        text = t(key, lang, cli=cli_name, current=current_token or t("session_status.no", lang))
+        return text, InlineKeyboardMarkup(rows)
 
     def build_sessions_menu(
         self,
@@ -279,6 +352,43 @@ class SessionUI:
             await self._edit_msg(context, query, t("msg.session.rename_prompt", lang, session_id=session.id))
             return True
         if data.startswith("sess_resume:"):
+            session_id = data.split(":", 1)[1]
+            session = self.manager.get(owner_chat_id, session_id)
+            if not session:
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+                return True
+            if not self._can_access_session(owner_chat_id, session):
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+                return True
+            text, keyboard = self._build_resume_picker(session, lang=lang)
+            await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+            return True
+        if data.startswith("sess_rpick:"):
+            parts = data.split(":", 2)
+            session_id = parts[1] if len(parts) > 1 else ""
+            cli_session_prefix = parts[2] if len(parts) > 2 else ""
+            session = self.manager.get(owner_chat_id, session_id)
+            if not session:
+                await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+                return True
+            if not self._can_access_session(owner_chat_id, session):
+                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+                return True
+            token = self._match_resume_candidate(session, cli_session_prefix)
+            if not token:
+                await self._edit_msg(context, query, t("msg.session.resume_not_found", lang))
+                return True
+            session.resume_token = token
+            self._persist_session(owner_chat_id, session.id)
+            text, keyboard = self._build_resume_picker(session, lang=lang)
+            await self._edit_msg(
+                context,
+                query,
+                text=f"{t('msg.session.resume_token_updated', lang)}\n\n{text}",
+                reply_markup=keyboard,
+            )
+            return True
+        if data.startswith("sess_rmanual:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
             if not session:

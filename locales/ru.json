@@ -521,6 +521,7 @@
       "status": "📋 Status",
       "rename": "✏️ Rename",
       "resume": "🔄 Resume",
+      "resume_manual": "✍️ Ввести id вручную",
       "queue": "📥 Queue",
       "clearqueue": "🗑 Clear queue",
       "state": "💾 State",
@@ -621,6 +622,9 @@
       "reset_done": "Сессия сброшена.",
       "resume_current": "Текущий resume: {token}",
       "resume_prompt": "Текущий resume: {current}\nВведите новый resume (или '-' для отмены).",
+      "resume_picker": "Последние сессии {cli} в этом проекте.\nТекущий resume: {current}\nВыберите, к какой подключиться:",
+      "resume_picker_empty": "Сохранённых сессий {cli} для этого проекта не найдено.\nТекущий resume: {current}",
+      "resume_not_found": "Сессия не найдена — список устарел. Откройте Resume заново.",
       "resume_saved": "Resume сохранен.",
       "resume_token_cancelled": "Изменение resume отменено.",
       "resume_token_updated": "Resume обновлен.",
@@ -1262,7 +1266,9 @@
       "reset_confirm": "Вы уверены, что хотите сбросить сессию {uid}?\nКонтекст и resume-токен будут очищены.",
       "resume_confirm": "Клонировать/возобновить сессию?",
       "switch_cli_title": "Сменить CLI",
-      "resume_token_title": "Изменить resume-токен"
+      "resume_token_title": "Изменить resume-токен",
+      "resume_select": "Выберите сессию для продолжения:",
+      "resume_manual": "✍️ Ввести id вручную"
     },
     "files": {
       "no_file": "Файл не выбран",

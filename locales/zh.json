@@ -521,6 +521,7 @@
       "status": "📋 Status",
       "rename": "✏️ Rename",
       "resume": "🔄 Resume",
+      "resume_manual": "✍️ 手动输入 id",
       "queue": "📥 Queue",
       "clearqueue": "🗑 清空队列",
       "state": "💾 State",
@@ -621,6 +622,9 @@
       "reset_done": "会话已重置。",
       "resume_current": "当前 resume 令牌: {token}",
       "resume_prompt": "当前 resume: {current}\n请输入新的 resume（或输入 '-' 取消）。",
+      "resume_picker": "本项目最近的 {cli} 会话。\n当前 resume：{current}\n请选择要继续的会话：",
+      "resume_picker_empty": "未找到本项目的 {cli} 会话记录。\n当前 resume：{current}",
+      "resume_not_found": "未找到该会话 — 列表已过期。请重新打开 Resume。",
       "resume_saved": "resume 令牌已保存。",
       "resume_token_cancelled": "resume 更改已取消。",
       "resume_token_updated": "Resume 已更新。",
@@ -1262,7 +1266,9 @@
       "reset_confirm": "确定要重置会话 {uid} 吗?\n上下文和恢复令牌将被清除。",
       "resume_confirm": "克隆/恢复会话?",
       "switch_cli_title": "切换 CLI",
-      "resume_token_title": "编辑恢复令牌"
+      "resume_token_title": "编辑恢复令牌",
+      "resume_select": "选择要继续的会话：",
+      "resume_manual": "✍️ 手动输入 id"
     },
     "files": {
       "no_file": "未选择文件",

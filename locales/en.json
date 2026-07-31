@@ -521,6 +521,7 @@
       "status": "📋 Status",
       "rename": "✏️ Rename",
       "resume": "🔄 Resume",
+      "resume_manual": "✍️ Enter id manually",
       "queue": "📥 Queue",
       "clearqueue": "🗑 Clear queue",
       "state": "💾 State",
@@ -621,6 +622,9 @@
       "reset_done": "Session reset.",
       "resume_current": "Current resume token: {token}",
       "resume_prompt": "Current resume: {current}\nEnter a new resume (or '-' to cancel).",
+      "resume_picker": "Recent {cli} sessions in this project.\nCurrent resume: {current}\nPick the one to continue:",
+      "resume_picker_empty": "No stored {cli} sessions found for this project.\nCurrent resume: {current}",
+      "resume_not_found": "Session not found — the list is stale. Open Resume again.",
       "resume_saved": "Resume token saved.",
       "resume_token_cancelled": "Resume change cancelled.",
       "resume_token_updated": "Resume updated.",
@@ -1262,7 +1266,9 @@
       "reset_confirm": "Are you sure you want to reset session {uid}?\nThis will clear context and resume token.",
       "resume_confirm": "Clone/resume session?",
       "switch_cli_title": "Switch CLI",
-      "resume_token_title": "Edit Resume Token"
+      "resume_token_title": "Edit Resume Token",
+      "resume_select": "Pick a session to continue:",
+      "resume_manual": "✍️ Enter id manually"
     },
     "files": {
       "no_file": "No file selected",

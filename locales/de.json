@@ -521,6 +521,7 @@
       "status": "📋 Status",
       "rename": "✏️ Rename",
       "resume": "🔄 Resume",
+      "resume_manual": "✍️ ID manuell eingeben",
       "queue": "📥 Queue",
       "clearqueue": "🗑 Warteschl.",
       "state": "💾 State",
@@ -621,6 +622,9 @@
       "reset_done": "Sitzung zurückgesetzt.",
       "resume_current": "Aktuelles Resume-Token: {token}",
       "resume_prompt": "Aktuelles Resume: {current}\nGeben Sie ein neues Resume ein (oder '-' zum Abbrechen).",
+      "resume_picker": "Letzte {cli}-Sitzungen in diesem Projekt.\nAktueller Resume: {current}\nWählen Sie die Sitzung zum Fortsetzen:",
+      "resume_picker_empty": "Keine gespeicherten {cli}-Sitzungen für dieses Projekt gefunden.\nAktueller Resume: {current}",
+      "resume_not_found": "Sitzung nicht gefunden – die Liste ist veraltet. Öffnen Sie Resume erneut.",
       "resume_saved": "Resume-Token gespeichert.",
       "resume_token_cancelled": "Resume-Änderung abgebrochen.",
       "resume_token_updated": "Resume aktualisiert.",
@@ -1262,7 +1266,9 @@
       "reset_confirm": "Sitzung {uid} wirklich zurücksetzen?\nKontext und Resume-Token werden gelöscht.",
       "resume_confirm": "Sitzung klonen/fortsetzen?",
       "switch_cli_title": "CLI wechseln",
-      "resume_token_title": "Resume-Token bearbeiten"
+      "resume_token_title": "Resume-Token bearbeiten",
+      "resume_select": "Sitzung zum Fortsetzen wählen:",
+      "resume_manual": "✍️ ID manuell eingeben"
     },
     "files": {
       "no_file": "Keine Datei ausgewählt",
