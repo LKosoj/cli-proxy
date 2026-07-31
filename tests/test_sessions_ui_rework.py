@@ -157,11 +157,12 @@ def test_sessions_overview_with_active_session_has_expected_buttons(tmp_path):
     assert "sess_close_menu" in callbacks
 
 
-def test_sessions_overview_shows_exact_tmux_attach_command(tmp_path):
+def test_sessions_overview_shows_exact_tmux_attach_command(tmp_path, monkeypatch):
     app = _build_app(tmp_path)
     app.config.defaults.default_execution_backend = "tmux"
     session = app.manager.create(1, "dummy", str(tmp_path))
     session_name = tmux_runtime_paths(session)["session_name"]
+    monkeypatch.setattr("session.has_live_tmux", lambda *_args, **_kwargs: True)
 
     text, _keyboard = app.handlers.build_sessions_active_overview(1)
 

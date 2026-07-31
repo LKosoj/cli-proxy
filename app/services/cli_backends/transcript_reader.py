@@ -101,9 +101,9 @@ class CliTranscriptReader:
         self.complete = False
         self.recognized = False
         self.activity_at: Optional[float] = None
-        self._claude_requires_done_marker = False
         self._grok_stream_key = ""
         self._grok_stream_chunks: list[str] = []
+        self._grok_stream_raw = ""
         if locator is not None:
             self._restore_locator(locator)
 
@@ -257,15 +257,8 @@ class CliTranscriptReader:
                     tool_name = str(item.get("name") or "").strip()
                     if tool_name:
                         self.latest_progress_text = tool_name
-        elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
-            pending_count = record.get("pendingBackgroundAgentCount")
-            if isinstance(pending_count, int) and pending_count > 0:
-                self._claude_requires_done_marker = True
-            elif not self._claude_requires_done_marker:
-                # Condition on DONE marker for consistency with long-running wrapped requests across CLIs
-                if self._done_marker() in (self.latest_assistant_text or ""):
-                    self.complete = True
-                # otherwise treat as intermediate turn end; outer monitor will use activity/ready checks
+        # system/turn_duration only marks a turn end: monitoring continues until the DONE marker,
+        # because background agents may keep working after it.
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         if str(record.get("type") or "").strip() != "event_msg":
@@ -310,10 +303,12 @@ class CliTranscriptReader:
                     self._grok_stream_key = stream_key
                     self._grok_stream_chunks = []
                 self._grok_stream_chunks.append(text)
-                self.latest_assistant_text = self._clean_assistant_text("".join(self._grok_stream_chunks))
+                self._grok_stream_raw = "".join(self._grok_stream_chunks)
+                self.latest_assistant_text = self._clean_assistant_text(self._grok_stream_raw)
         elif event_type == "turn_completed":
-            # Only mark complete if DONE marker seen (consistent with other CLIs and long-running protocol)
-            if self._done_marker() in (self.latest_assistant_text or ""):
+            # Only mark complete if DONE marker seen (consistent with other CLIs and long-running protocol).
+            # The raw stream is checked because latest_assistant_text has the marker stripped already.
+            if self._done_marker() in (self._grok_stream_raw or ""):
                 self.complete = True
             # else keep monitoring until explicit marker for this request
 

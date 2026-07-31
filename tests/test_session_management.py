@@ -104,6 +104,7 @@ def _make_prompt_session(tmp_path, queue) -> _SessionStub:
         tool=types.SimpleNamespace(name="dummy"),
         config=None,
         run_lock=asyncio.Lock(),
+        send_lock=asyncio.Lock(),
         queue=deque(queue),
         busy=False,
         started_at=0.0,

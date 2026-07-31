@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.parse
 import uuid
@@ -12,6 +13,8 @@ from typing import Any, Dict, Iterable, Optional
 
 from ._user_paths import chown_path, home_for_user, mkdir_chain_with_chown
 from .canonical import CanonicalMessage, CanonicalSession
+
+logger = logging.getLogger(__name__)
 
 GROK_SESSIONS_BASE = Path.home() / ".grok" / "sessions"
 DEFAULT_GROK_MODEL = "grok-build"
@@ -219,5 +222,5 @@ def write_session(canonical: CanonicalSession, workspace: str, username: Optiona
         chown_path(target / "terminal", username)
         chown_path(target / "videos", username)
     except Exception:
-        pass
+        logger.debug("grok optional session dirs setup failed target=%s", target, exc_info=True)
     return new_sid

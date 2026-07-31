@@ -297,7 +297,11 @@ class SessionInterruptService:
                     return "tmux_idle"
                 return "tmux_unknown"
         except Exception:
-            pass
+            logging.getLogger(__name__).debug(
+                "session interrupt: live tmux probe failed session=%s",
+                getattr(session, "id", None),
+                exc_info=True,
+            )
         if backend == "interactive":
             return "interactive_active" if child_alive else "interactive_unknown"
         if child_alive:

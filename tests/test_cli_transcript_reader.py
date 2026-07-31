@@ -77,6 +77,24 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
         },
     )
 
+    turn_end = reader.poll()
+
+    assert turn_end.assistant_text == "Финальный ответ"
+    assert turn_end.complete is False
+
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": "2026-07-10T09:00:04Z",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": f"<<<DONE:{request_id}>>>"}],
+            },
+        },
+    )
+
     final = reader.poll()
 
     assert final.assistant_text == "Финальный ответ"
@@ -229,7 +247,7 @@ def test_codex_transcript_reader_uses_task_complete(tmp_path):
             "type": "event_msg",
             "payload": {
                 "type": "task_complete",
-                "last_agent_message": "Codex готов",
+                "last_agent_message": "Промежуточный итог",
             },
         },
     )
@@ -241,12 +259,29 @@ def test_codex_transcript_reader_uses_task_complete(tmp_path):
         home_dir=tmp_path,
     )
 
+    intermediate = reader.poll()
+
+    assert intermediate.available is True
+    assert intermediate.assistant_text == "Промежуточный итог"
+    assert intermediate.complete is False
+    assert intermediate.session_id == session_id
+
+    _append_jsonl(
+        path,
+        {
+            "timestamp": "2026-07-10T09:00:04Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "task_complete",
+                "last_agent_message": f"Codex готов\n<<<DONE:{request_id}>>>",
+            },
+        },
+    )
+
     result = reader.poll()
 
-    assert result.available is True
     assert result.assistant_text == "Codex готов"
     assert result.complete is True
-    assert result.session_id == session_id
 
 
 def test_grok_transcript_reader_uses_online_updates(tmp_path):
@@ -305,10 +340,39 @@ def test_grok_transcript_reader_uses_online_updates(tmp_path):
         home_dir=tmp_path,
     )
 
+    intermediate = reader.poll()
+
+    assert intermediate.available is True
+    assert intermediate.progress_text == "Run tests"
+    assert intermediate.assistant_text == "Grok готов"
+    assert intermediate.complete is False
+
+    _append_jsonl(
+        path,
+        {
+            "timestamp": 5,
+            "method": "session/update",
+            "params": {
+                "sessionId": session_id,
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": f"\n<<<DONE:{request_id}>>>"},
+                    "_meta": {"streamStartMs": 100},
+                },
+            },
+        },
+        {
+            "timestamp": 6,
+            "method": "_x.ai/session/update",
+            "params": {
+                "sessionId": session_id,
+                "update": {"sessionUpdate": "turn_completed", "stop_reason": "end_turn"},
+            },
+        },
+    )
+
     result = reader.poll()
 
-    assert result.available is True
-    assert result.progress_text == "Run tests"
     assert result.assistant_text == "Grok готов"
     assert result.complete is True
 
@@ -327,7 +391,10 @@ def test_transcript_reader_recovers_from_persisted_locator(tmp_path):
         {
             "type": "assistant",
             "sessionId": session_id,
-            "message": {"role": "assistant", "content": [{"type": "text", "text": "Восстановленный ответ"}]},
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": f"Восстановленный ответ\n<<<DONE:{request_id}>>>"}],
+            },
         },
         {"type": "system", "subtype": "turn_duration", "sessionId": session_id},
     )

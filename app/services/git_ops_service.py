@@ -1241,7 +1241,9 @@ class GitOps:
                 try:
                     await self._edit_msg(context, query, t("msg.git.preparing_commit", lang))
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).debug(
+                        "git commit: preparing notice edit failed session=%s", session.id, exc_info=True
+                    )
                 conflicts = await self._git_conflict_files(session)
                 if conflicts:
                     await self._handle_git_conflict(session, chat_id, context, lang=lang)

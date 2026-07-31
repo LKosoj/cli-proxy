@@ -350,9 +350,9 @@ class CliLimitsService:
                         try:
                             candidates.append((jsonl_path.stat().st_mtime, jsonl_path))
                         except Exception:
-                            pass
+                            logger.debug("claude transcript stat failed path=%s", jsonl_path, exc_info=True)
             except Exception:
-                pass
+                logger.debug("claude projects scan failed root=%s", projects_root, exc_info=True)
         if not candidates:
             return self._read_claude_model_from_stats()
         candidates.sort(key=lambda item: item[0], reverse=True)
@@ -396,7 +396,7 @@ class CliLimitsService:
                     if model and not model.startswith("<"):
                         return model
         except Exception:
-            pass
+            logger.debug("claude model extraction failed path=%s", jsonl_path, exc_info=True)
         return None
 
     def _collect_gemini_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:

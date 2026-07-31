@@ -20,7 +20,7 @@ from utils.text import strip_ansi
 from .models import ExecutionBackendStatus, ExecutionResult
 from .transcript_reader import CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
-from .tmux_parser import build_prompt_with_markers, done_marker, normalize_terminal_text, parse_tmux_delta
+from .tmux_parser import build_prompt_with_markers, normalize_terminal_text, parse_tmux_delta
 
 
 _SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -938,7 +938,7 @@ class TmuxExecutionBackend:
                         if p == transcript_path:
                             last_transcript_size = last_transcript_sizes[p]
                     except Exception:
-                        pass
+                        logger.debug("watched transcript size probe failed path=%s", p, exc_info=True)
             return new_activity
 
         try:
@@ -989,7 +989,7 @@ class TmuxExecutionBackend:
                             if tpath == transcript_path:
                                 last_transcript_size = tsize
                         except Exception:
-                            pass
+                            logger.debug("transcript growth probe failed path=%s", tpath, exc_info=True)
                 if grew:
                     last_change = time.time()
                 delta = self._read_request_delta(paths, request.offset)
@@ -1011,7 +1011,9 @@ class TmuxExecutionBackend:
                         raw_p = parse_tmux_delta(delta, request.request_id, claude_screen_reader=False)
                         pane_raw_for_choice = raw_p.text or pane_latest_text
                     except Exception:
-                        pass
+                        logger.debug(
+                            "raw pane parse for choice detection failed request_id=%s", request.request_id, exc_info=True
+                        )
 
                 transcript_update = None
                 if transcript_reader is not None:
@@ -1065,17 +1067,10 @@ class TmuxExecutionBackend:
                     if _refresh_watched_transcripts():
                         last_change = time.time()
                     if transcript_update.complete:
-                        # Honor transcript complete only if the explicit DONE marker for this request is present.
-                        # This prevents early termination on intermediate "turn end" / task_complete for long-running tasks.
-                        # The DONE marker is the common signal across all CLIs (injected by build_prompt_with_markers).
-                        dm = done_marker(request.request_id)
-                        marker_seen = dm in (transcript_latest_text or "") or dm in (pane_latest_text or "")
-                        if marker_seen:
-                            complete = True
-                            completion_source = "transcript"
-                        else:
-                            # Intermediate response complete in transcript, but no DONE yet -> keep monitoring
-                            complete = False
+                        # The reader already gates this on the DONE marker and strips it from assistant_text,
+                        # so re-checking the marker here would never match on a garbled pane.
+                        complete = True
+                        completion_source = "transcript"
 
                 latest_text = transcript_latest_text or pane_latest_text
                 # Choice question detection (for Claude and other CLIs):
@@ -1107,22 +1102,6 @@ class TmuxExecutionBackend:
                 if parsed.complete and not transcript_authoritative:
                     complete = True
                     completion_source = "pane"
-                    break
-
-                # Cross-CLI guard for long-running tasks:
-                # Even if transcript or pane parser signals "complete" (e.g. turn end),
-                # continue monitoring if we haven't seen the DONE marker yet
-                # AND the pane does not look ready (ongoing work).
-                if complete and not (done_marker(request.request_id) in (latest_text or "")):
-                    try:
-                        current_pane = await driver.capture_pane(paths["pane_target"])
-                    except Exception:
-                        current_pane = pane_latest_text or ""
-                    if not self._is_interactive_ready(session, current_pane):
-                        # still busy according to CLI's ready prompt detection
-                        complete = False
-                        # continue polling for more output / the real DONE
-                if complete:
                     break
 
                 # Quiet timeout: if neither pane.log nor (preferably) the session JSONL (incl. subagents) has grown
