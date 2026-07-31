@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -266,8 +267,8 @@ class SessionRunService:
         t = text.lower()
         if "enter selection [" in t or "or escape to cancel" in t or "or esc to cancel" in t:
             return True
-        if "esc to interrupt" in t or "shift+tab" in t:
-            return True
+        # "esc to interrupt" / "shift+tab" — это индикатор работы и подсказка в
+        # футере TUI, а не вопрос: по ним нельзя распознавать выбор.
         if ("☐ " in text or "☐" in text) and re.search(r'\n\s*\d+[\.\)]', text):
             return True
         # Heuristic for Claude (and similar) questions that end with ? and contain multiple numbered options.
@@ -280,9 +281,18 @@ class SessionRunService:
         return False
 
     @staticmethod
+    def _tmux_choice_question_id(session_key: str, question: str, options: List[str]) -> str:
+        """Идентификатор вопроса по его содержимому: повтор того же кадра TUI
+        даёт тот же id, поэтому одинаковые вопросы не отправляются дважды."""
+
+        payload = "\x00".join([str(question), *[str(option) for option in options]])
+        digest = hashlib.sha1(payload.encode("utf-8", errors="replace")).hexdigest()[:12]
+        return f"tmux_choice_{session_key}_{digest}"
+
+    @staticmethod
     def _parse_cli_choice_question(text: str) -> Tuple[str, List[str]]:
         if not text:
-            return "Please choose an option:", ["1", "2", "3", "4", "5"]
+            return "Please choose an option:", []
         lines = text.splitlines()
         q_lines = []
         opts = []
@@ -296,8 +306,8 @@ class SessionRunService:
                 if not opts:
                     q_lines.append(line)
         q = "\n".join(q_lines).strip() or "Please choose:"
-        if not opts:
-            opts = [f"{i}. Option {i}" for i in range(1, 6)]
+        # Заглушки "Option 1..5" не подставляются: без распознанных вариантов
+        # кнопки бессмысленны, вызывающий код покажет обычное превью.
         return q, opts[:5]
 
     @classmethod
@@ -411,32 +421,35 @@ class SessionRunService:
             return
         if self._is_tmux_choice_preview(session, text):
             question, options = self._parse_cli_choice_question(text)
-            qid = f"tmux_choice_{getattr(session, 'id', 'x')}_{int(time.time())}"
-            meta = {
-                "question": question,
-                "options": options,
-                "chat_id": dest.get("chat_id"),
-                "message_thread_id": dest.get("message_thread_id"),
-                "session_id": str(getattr(session, "id", "")),
-                "tmux_feed": True,
-            }
-            self.bot_app.ui_state.pending_questions[qid] = meta
-            try:
-                cid = int(dest.get("chat_id") or 0)
-                await self.bot_app._send_ask_question(
-                    context,
-                    cid,
-                    str(getattr(session, "id", "")),
-                    qid,
-                    question,
-                    options,
-                    allow_custom=False,
-                    system_options=False,
-                    message_thread_id=dest.get("message_thread_id"),
-                )
-            except Exception:
-                logging.getLogger("bot.preview").exception("failed to send tmux choice as ask from preview")
-            return  # do not show plain preview for the choice question
+            if options:
+                qid = self._tmux_choice_question_id(str(getattr(session, "id", "x")), question, options)
+                if qid in self.bot_app.ui_state.pending_questions:
+                    return  # этот вопрос уже отправлен, повтор кадра игнорируем
+                meta = {
+                    "question": question,
+                    "options": options,
+                    "chat_id": dest.get("chat_id"),
+                    "message_thread_id": dest.get("message_thread_id"),
+                    "session_id": str(getattr(session, "id", "")),
+                    "tmux_feed": True,
+                }
+                self.bot_app.ui_state.pending_questions[qid] = meta
+                try:
+                    cid = int(dest.get("chat_id") or 0)
+                    await self.bot_app._send_ask_question(
+                        context,
+                        cid,
+                        str(getattr(session, "id", "")),
+                        qid,
+                        question,
+                        options,
+                        allow_custom=False,
+                        system_options=False,
+                        message_thread_id=dest.get("message_thread_id"),
+                    )
+                except Exception:
+                    logging.getLogger("bot.preview").exception("failed to send tmux choice as ask from preview")
+                return  # do not show plain preview for the choice question
         send_message = getattr(self.bot_app, "_send_message", None)
         edit_message = getattr(self.bot_app, "_edit_message", None)
         edit_message_outcome = getattr(self.bot_app, "_edit_message_outcome", None)

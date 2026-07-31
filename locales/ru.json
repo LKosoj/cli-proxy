@@ -1953,6 +1953,7 @@
       "msg_restart_required": "Требуется перезапуск",
       "host": "Хост",
       "idle_timeout": "Таймаут простоя (с)",
+      "codex_jsonl_fallback": "Запасной путь codex через JSONL (с, 0 — выкл)",
       "api_keys": "API-ключи и провайдеры",
       "mcp_server_settings": "Настройки MCP-сервера",
       "mcp_clients_active": "MCP-клиенты (активные)",

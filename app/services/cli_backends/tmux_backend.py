@@ -48,6 +48,9 @@ _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
 }
 _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok"}
 _SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
+# CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
+# поэтому элементы TUI приходится вычищать на стороне моста.
+_TUI_CHROME_CLI_NAMES = {"codex"}
 _RECOVERY_DEST_KEYS = (
     "kind",
     "chat_id",
@@ -583,6 +586,10 @@ class TmuxExecutionBackend:
         return "--ax-screen-reader" in configured_commands
 
     @classmethod
+    def _uses_tui_chrome(cls, session: Any) -> bool:
+        return cls._interactive_cli_name(session) in _TUI_CHROME_CLI_NAMES
+
+    @classmethod
     def _uses_ready_wait(cls, session: Any) -> bool:
         return cls._interactive_cli_name(session) in _READY_WAIT_CLI_NAMES
 
@@ -999,6 +1006,7 @@ class TmuxExecutionBackend:
                     delta,
                     request.request_id,
                     claude_screen_reader=self._uses_claude_screen_reader(session),
+                    tui_chrome=self._uses_tui_chrome(session),
                 )
                 pane_latest_text = parsed.text or pane_latest_text
 

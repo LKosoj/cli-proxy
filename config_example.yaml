@@ -119,6 +119,9 @@ defaults:
   # Supported values: "ru", "en", "zh", "de".
   default_language: "ru"
   idle_timeout_sec: 100
+  # Сколько секунд молчания headless-codex терпеть,
+  # прежде чем взять ответ из rollout-файла JSONL (0 — выключено).
+  codex_jsonl_fallback_sec: 180
   summary_max_chars: 4000
   html_filename_prefix: "cli-output"
   state_path: "state.json"

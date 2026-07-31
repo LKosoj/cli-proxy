@@ -135,6 +135,9 @@ class ToolConfigModel(ConfigModel):
 class DefaultsConfigModel(ConfigModel):
     workdir: NonEmptyStr
     idle_timeout_sec: PositiveInt = 100
+    # Молчание headless-codex, после которого ответ берётся из rollout-файла
+    # JSONL. 0 — запасной путь выключен.
+    codex_jsonl_fallback_sec: NonNegativeInt = 180
     summary_max_chars: PositiveInt = 4000
     html_filename_prefix: NonEmptyStr = "cli-output"
     state_path: NonEmptyStr = "state.json"

@@ -59,6 +59,7 @@ DESKTOP_EDITABLE_CONFIG_FIELDS = frozenset({
     # Defaults – general
     "defaults.workdir",
     "defaults.idle_timeout_sec",
+    "defaults.codex_jsonl_fallback_sec",
     "defaults.summary_max_chars",
     "defaults.html_filename_prefix",
     "defaults.state_path",
@@ -654,6 +655,13 @@ class ConfigEditorWidget(QWidget):
             layout, t("desktop.cfgedit.default_workdir", lang), cfg.workdir)
         self._widgets["defaults.idle_timeout_sec"] = self._add_spin(
             layout, t("desktop.cfgedit.idle_timeout", lang), cfg.idle_timeout_sec, 0, 3600)
+        self._widgets["defaults.codex_jsonl_fallback_sec"] = self._add_spin(
+            layout,
+            t("desktop.cfgedit.codex_jsonl_fallback", lang),
+            getattr(cfg, "codex_jsonl_fallback_sec", 180),
+            0,
+            3600,
+        )
         self._widgets["defaults.pending_input_confirmation_enabled"] = self._add_check(
             layout,
             t("desktop.cfgedit.pending_input_confirmation", lang),
@@ -1422,6 +1430,9 @@ class ConfigEditorWidget(QWidget):
             # Defaults – general
             new_cfg.defaults.workdir = self._widgets["defaults.workdir"].text()
             new_cfg.defaults.idle_timeout_sec = self._widgets["defaults.idle_timeout_sec"].value()
+            new_cfg.defaults.codex_jsonl_fallback_sec = self._widgets[
+                "defaults.codex_jsonl_fallback_sec"
+            ].value()
             new_cfg.defaults.summary_max_chars = self._widgets["defaults.summary_max_chars"].value()
             new_cfg.defaults.html_filename_prefix = self._widgets["defaults.html_filename_prefix"].text()
             new_cfg.defaults.state_path = self._widgets["defaults.state_path"].text()

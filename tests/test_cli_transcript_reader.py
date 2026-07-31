@@ -491,3 +491,136 @@ def test_transcript_reader_does_not_consume_partial_jsonl_record(tmp_path):
         handle.write(record[split_at:] + "\n")
 
     assert reader.poll().assistant_text == "После дописи"
+
+
+def test_codex_tui_rollout_is_read_like_claude(tmp_path):
+    """codex в tmux (source=cli) пишет тот же rollout, что и headless.
+
+    Структура повторяет реальный файл интерактивной сессии: текст ответа в
+    JSONL приходит чистым, без элементов TUI, которые засоряют экран.
+    """
+    request_id = "req-dbg1"
+    session_id = "019fb77a-db03-7680-a5c3-cc98f766da48"
+    path = (
+        tmp_path
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "07"
+        / "31"
+        / f"rollout-2026-07-31T12-21-49-{session_id}.jsonl"
+    )
+    _append_jsonl(
+        path,
+        {
+            "timestamp": "2026-07-31T12:21:49Z",
+            "type": "session_meta",
+            "payload": {"id": session_id, "cwd": "/tmp/tmuxdbg", "source": "cli"},
+        },
+        {
+            "timestamp": "2026-07-31T12:21:50Z",
+            "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": "turn-1"},
+        },
+        {
+            "timestamp": "2026-07-31T12:21:51Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": f"<<<CLI_PROXY_REQUEST:{request_id}>>> что такое git",
+            },
+        },
+        {
+            "timestamp": "2026-07-31T12:21:55Z",
+            "type": "event_msg",
+            "payload": {"type": "agent_message", "message": "Смотрю историю репозитория", "phase": "commentary"},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="codex",
+        request_id=request_id,
+        workdir="/tmp/tmuxdbg",
+        started_at=time.time() - 5,
+        home_dir=tmp_path,
+    )
+
+    progress = reader.poll()
+
+    assert progress.available is True
+    assert progress.recognized is True
+    assert progress.session_id == session_id
+    assert progress.assistant_text == "Смотрю историю репозитория"
+    assert progress.complete is False
+
+    _append_jsonl(
+        path,
+        {
+            "timestamp": "2026-07-31T12:22:05Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "agent_message",
+                "message": f"Git — это система контроля версий.\n\n<<<DONE:{request_id}>>>",
+            },
+        },
+        {
+            "timestamp": "2026-07-31T12:22:06Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "task_complete",
+                "last_agent_message": f"Git — это система контроля версий.\n\n<<<DONE:{request_id}>>>",
+            },
+        },
+    )
+
+    final = reader.poll()
+
+    assert final.complete is True
+    assert final.assistant_text == "Git — это система контроля версий."
+    assert "esc to interrupt" not in final.assistant_text
+
+
+def test_codex_resume_keeps_appending_to_same_rollout(tmp_path):
+    """codex exec resume дописывает тот же файл, поэтому поиск по session_id
+    остаётся валидным между ходами."""
+    session_id = "019fb756-d431-76d2-a4a6-0898b70a2882"
+    path = (
+        tmp_path
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "07"
+        / "31"
+        / f"rollout-2026-07-31T11-42-28-{session_id}.jsonl"
+    )
+    _append_jsonl(
+        path,
+        {
+            "timestamp": "2026-07-31T11:42:28Z",
+            "type": "session_meta",
+            "payload": {"id": session_id, "cwd": "/tmp/tmuxdbg"},
+        },
+        {
+            "timestamp": "2026-07-31T12:30:00Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "<<<CLI_PROXY_REQUEST:resume-req>>> ответь ok"},
+        },
+        {
+            "timestamp": "2026-07-31T12:30:02Z",
+            "type": "event_msg",
+            "payload": {"type": "task_complete", "last_agent_message": "ok\n\n<<<DONE:resume-req>>>"},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="codex",
+        request_id="resume-req",
+        workdir="/tmp/tmuxdbg",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.complete is True
+    assert result.assistant_text == "ok"
+    assert result.locator is not None and result.locator.path.endswith(f"{session_id}.jsonl")

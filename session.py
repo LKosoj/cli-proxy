@@ -1204,6 +1204,7 @@ class Session:
         semantic_output_text: Optional[str] = None
         semantic_structured_candidate: Optional[str] = None
         streamed_assistant_tick_seen = False
+        last_stdout_at = time.monotonic()
 
         def _record_stream_event(event: Any) -> None:
             nonlocal semantic_output_text, streamed_assistant_tick_seen
@@ -1322,7 +1323,7 @@ class Session:
                 _record_stream_event(event)
 
         async def _drain_stdout() -> None:
-            nonlocal drain_eof
+            nonlocal drain_eof, last_stdout_at
             if not proc.stdout:
                 _log.warning("no stdout pipe")
                 return
@@ -1330,6 +1331,7 @@ class Session:
             try:
                 while True:
                     chunk = await proc.stdout.read(4096)
+                    last_stdout_at = time.monotonic()
                     if not chunk:
                         if stream_adapter and text_buf.strip():
                             _consume_stream_line(text_buf)
@@ -1382,6 +1384,78 @@ class Session:
             except Exception:
                 _log.exception("stderr drain: exception")
 
+        async def _watch_codex_rollout(threshold_sec: float) -> None:
+            """Запасной источник результата, когда headless-codex молчит в stdout.
+
+            codex продолжает писать rollout-файл, поэтому при затянувшейся тишине
+            ответ можно забрать оттуда вместо бесконечного ожидания.
+            """
+            nonlocal semantic_output_text
+            if semantic_completion is None:
+                return
+            from app.services.cli_backends.codex_rollout_tail import CodexRolloutTail
+
+            tail = CodexRolloutTail(
+                workdir=str(self.workdir or ""),
+                started_at=time.time(),
+                session_id=str(getattr(self, "resume_token", "") or ""),
+                username=str(getattr(self.tool, "tmux_user", "") or ""),
+            )
+            poll_interval = max(5.0, min(30.0, threshold_sec / 4))
+            shown_text = ""
+
+            def _show_progress(text: str) -> None:
+                nonlocal shown_text
+                if not text or text == shown_text:
+                    return
+                shown_text = text
+                try:
+                    self._update_activity(text, tick_kind="assistant_text")
+                except Exception:
+                    _log.exception("codex rollout fallback activity update failed")
+
+            while not semantic_completion.is_set():
+                await asyncio.sleep(poll_interval)
+                if semantic_completion.is_set() or drain_eof:
+                    return
+                if time.monotonic() - last_stdout_at < threshold_sec:
+                    continue
+                try:
+                    state = await asyncio.to_thread(tail.poll)
+                except Exception:
+                    _log.exception("codex rollout fallback poll failed")
+                    return
+                if state is None:
+                    continue
+                if state.session_id and not str(getattr(self, "resume_token", "") or "").strip():
+                    # stdout мог оборваться до события session_started, а без токена
+                    # следующий ход потерял бы контекст диалога.
+                    self.resume_token = state.session_id
+                if not state.assistant_text:
+                    continue
+                rollout_quiet_for = (
+                    time.time() - state.last_event_at if state.last_event_at is not None else 0.0
+                )
+                # Ход завершён по данным самого codex — забираем результат сразу.
+                # Иначе ждём, пока замолчит и файл: растущий rollout означает живой ход.
+                if not state.turn_complete and rollout_quiet_for < threshold_sec:
+                    # Пока ждём, показываем прогресс из rollout: stdout молчит, и без
+                    # этого пользователь до самого конца видел бы тишину.
+                    _show_progress(state.assistant_text)
+                    continue
+                _log.warning(
+                    "codex headless silent for %.0fs; taking result from rollout path=%s "
+                    "turn_complete=%s chars=%d",
+                    time.monotonic() - last_stdout_at,
+                    state.path,
+                    state.turn_complete,
+                    len(state.assistant_text),
+                )
+                semantic_output_text = state.assistant_text
+                _show_progress(state.assistant_text)
+                semantic_completion.set()
+                return
+
         def _pid_exists(pid: int) -> bool:
             try:
                 os.kill(pid, 0)
@@ -1395,6 +1469,20 @@ class Session:
         semantic_done_task = (
             asyncio.create_task(semantic_completion.wait())
             if semantic_completion is not None
+            else None
+        )
+        rollout_fallback_sec = 0.0
+        if is_codex and semantic_completion is not None:
+            try:
+                rollout_fallback_sec = float(
+                    getattr(self.config.defaults, "codex_jsonl_fallback_sec", 0) or 0
+                )
+            except (TypeError, ValueError):
+                _log.exception("invalid codex_jsonl_fallback_sec value")
+                rollout_fallback_sec = 0.0
+        rollout_watch_task = (
+            asyncio.create_task(_watch_codex_rollout(rollout_fallback_sec))
+            if rollout_fallback_sec > 0
             else None
         )
 
@@ -1618,6 +1706,7 @@ class Session:
             await _cancel_bg_task(wait_task)
             await _cancel_bg_task(stderr_drain_task)
             await _cancel_bg_task(semantic_done_task)
+            await _cancel_bg_task(rollout_watch_task)
             normalized_stream_path = stream_recorder.normalized_path
             stream_recorder.close()
             if normalized_stream_path:

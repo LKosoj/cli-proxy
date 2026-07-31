@@ -3166,28 +3166,31 @@ class ApplicationFacade:
                         return
                     if SessionRunService._is_tmux_choice_preview(session, text):
                         question, options = SessionRunService._parse_cli_choice_question(text)
-                        qid = f"tmux_choice_{session_uid}_{int(time.time())}"
-                        meta = {
-                            "question": question,
-                            "options": options,
-                            "session_uid": session_uid,
-                            "session_id": session_uid,
-                            "tmux_feed": True,
-                        }
-                        bot_app = self._desktop_bot_app()
-                        bot_app.ui_state.pending_questions[qid] = meta
-                        bot_app.ui_state.active_ask_question_by_chat[session_uid] = qid
-                        self.notify(
-                            "ui:ask_question",
-                            session_uid=session_uid,
-                            session_id=session_uid,
-                            question_id=qid,
-                            question=question,
-                            options=options,
-                            allow_custom=False,
-                        )
-                        self.notify("ui:assistant_preview_clear", session_uid=session_uid)
-                        return  # do not emit as plain preview text
+                        if options:
+                            qid = SessionRunService._tmux_choice_question_id(session_uid, question, options)
+                            bot_app = self._desktop_bot_app()
+                            if qid in bot_app.ui_state.pending_questions:
+                                return  # этот вопрос уже отправлен, повтор кадра игнорируем
+                            meta = {
+                                "question": question,
+                                "options": options,
+                                "session_uid": session_uid,
+                                "session_id": session_uid,
+                                "tmux_feed": True,
+                            }
+                            bot_app.ui_state.pending_questions[qid] = meta
+                            bot_app.ui_state.active_ask_question_by_chat[session_uid] = qid
+                            self.notify(
+                                "ui:ask_question",
+                                session_uid=session_uid,
+                                session_id=session_uid,
+                                question_id=qid,
+                                question=question,
+                                options=options,
+                                allow_custom=False,
+                            )
+                            self.notify("ui:assistant_preview_clear", session_uid=session_uid)
+                            return  # do not emit as plain preview text
                     self.notify(
                         "ui:assistant_preview",
                         session_uid=session_uid,

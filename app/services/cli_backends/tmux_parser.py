@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 from utils.text import strip_ansi
 
+from .terminal_screen import render_terminal_output
+
 
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-Z\\-_])")
@@ -36,6 +38,9 @@ _CLAUDE_SCREEN_READER_UI_LINE_RE = re.compile(
     r"|\$(?:\(B)*\s*$"
     r")"
 )
+_CODEX_COMPOSER_RE = re.compile(r"^[›❯]\s")
+_CODEX_STATUS_RE = re.compile(r"(?i)esc to interrupt")
+_BOX_DRAWING_ONLY_RE = re.compile(r"^[─-╿\s]+$")
 
 
 @dataclass(frozen=True)
@@ -161,11 +166,50 @@ def build_prompt_with_markers(prompt: str, request_id: str, *, multiline: bool =
 
 
 def normalize_terminal_text(text: str) -> str:
+    # TUI рисуют экран через абсолютное позиционирование курсора, поэтому поток
+    # проигрывается на модели экрана: без этого символы склеиваются в кашу
+    # вида "WWoorrkkiinngg".
+    rendered = render_terminal_output(str(text or ""))
+    stripped = _ANSI_ESCAPE_RE.sub("", rendered)
+    stripped = strip_ansi(stripped)
+    stripped = _CONTROL_RE.sub("", stripped)
+    return stripped
+
+
+def _strip_terminal_control(text: str) -> str:
+    """Вырезает управляющие последовательности, не проигрывая их.
+
+    Нужно как запасной путь детекции маркера завершения: если CLI разорвал
+    маркер перемещением курсора, на экране он выглядит искажённым, но в
+    потоке остаётся целым.
+    """
+
     stripped = _ANSI_ESCAPE_RE.sub("", str(text or ""))
     stripped = strip_ansi(stripped)
     stripped = stripped.replace("\r\n", "\n").replace("\r", "\n")
-    stripped = _CONTROL_RE.sub("", stripped)
-    return stripped
+    return _CONTROL_RE.sub("", stripped)
+
+
+def _is_tui_chrome_line(line: str) -> bool:
+    stripped = str(line).strip()
+    if not stripped:
+        return False
+    if _CODEX_STATUS_RE.search(stripped):
+        return True
+    return bool(_BOX_DRAWING_ONLY_RE.match(stripped))
+
+
+def strip_tui_chrome(text: str) -> str:
+    """Убирает элементы интерфейса codex: поле ввода, футер, статус, рамки."""
+
+    lines = str(text or "").splitlines()
+    for idx in range(len(lines) - 1, -1, -1):
+        if _CODEX_COMPOSER_RE.match(lines[idx].strip()):
+            # Поле ввода всегда внизу экрана, под ним — только футер.
+            lines = lines[:idx]
+            break
+    kept = [line for line in lines if not _is_tui_chrome_line(line)]
+    return "\n".join(kept).strip()
 
 
 def _extract_claude_screen_reader_message(text: str) -> str:
@@ -193,17 +237,49 @@ def parse_tmux_delta(
     request_id: str,
     *,
     claude_screen_reader: bool = False,
+    tui_chrome: bool = False,
 ) -> TmuxParseResult:
-    text = normalize_terminal_text(delta)
+    rendered = normalize_terminal_text(delta)
+    result = _parse_normalized_delta(
+        rendered,
+        request_id,
+        claude_screen_reader=claude_screen_reader,
+        tui_chrome=tui_chrome,
+    )
+    if result.complete:
+        return result
+    # Маркер мог быть разорван перемещением курсора — на экране он искажён,
+    # но в сыром потоке цел.
+    fallback_text = _strip_terminal_control(delta)
+    if fallback_text == rendered:
+        return result
+    fallback = _parse_normalized_delta(
+        fallback_text,
+        request_id,
+        claude_screen_reader=claude_screen_reader,
+        tui_chrome=tui_chrome,
+    )
+    return fallback if fallback.complete else result
+
+
+def _parse_normalized_delta(
+    text: str,
+    request_id: str,
+    *,
+    claude_screen_reader: bool = False,
+    tui_chrome: bool = False,
+) -> TmuxParseResult:
     done = done_marker(request_id)
     flat = _parse_flat_delta(text, request_id)
     if flat is not None:
-        if not claude_screen_reader:
-            return flat
-        return TmuxParseResult(
-            text=_extract_claude_screen_reader_message(flat.text),
-            complete=flat.complete,
-        )
+        if claude_screen_reader:
+            return TmuxParseResult(
+                text=_extract_claude_screen_reader_message(flat.text),
+                complete=flat.complete,
+            )
+        if tui_chrome:
+            return TmuxParseResult(text=strip_tui_chrome(flat.text), complete=flat.complete)
+        return flat
 
     raw_lines = text.splitlines()
     request_indexes = [idx for idx, line in enumerate(raw_lines) if _is_request_line(line, request_id)]
@@ -260,4 +336,6 @@ def parse_tmux_delta(
     cleaned = "\n".join(lines).strip()
     if claude_screen_reader:
         cleaned = _extract_claude_screen_reader_message(cleaned)
+    elif tui_chrome:
+        cleaned = strip_tui_chrome(cleaned)
     return TmuxParseResult(text=cleaned, complete=complete)

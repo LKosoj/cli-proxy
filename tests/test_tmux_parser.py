@@ -414,3 +414,62 @@ def test_build_prompt_with_markers_keeps_boundaries_when_tui_flattens_newlines()
     flattened = prompt.replace("\n", "")
     assert "продолжи --- CLI-PROXY COMPLETION PROTOCOL --- When" in flattened
     assert f"own line: {done_marker(request_id)}" in flattened
+
+
+def _codex_tui_frame(body: str) -> str:
+    """Кадр TUI codex: ответ, статус, поле ввода и футер с моделью."""
+    return (
+        f"{body}\n"
+        "\n"
+        "• Working (12s • esc to interrupt)\n"
+        "\n"
+        "› Write tests for @filename\n"
+        "\n"
+        "  gpt-5.6-sol xhigh · /tmp/work"
+    )
+
+
+def test_parse_tmux_delta_strips_codex_tui_chrome() -> None:
+    request_id = "req-codex-ui"
+    delta = f"{request_marker(request_id)}\n" + _codex_tui_frame("• Полезный ответ модели.")
+
+    parsed = parse_tmux_delta(delta, request_id, tui_chrome=True)
+
+    assert parsed.text == "• Полезный ответ модели."
+    assert "esc to interrupt" not in parsed.text
+    assert "gpt-5.6-sol" not in parsed.text
+    assert "Write tests for" not in parsed.text
+
+
+def test_parse_tmux_delta_keeps_codex_chrome_when_flag_disabled() -> None:
+    request_id = "req-codex-raw"
+    delta = f"{request_marker(request_id)}\n" + _codex_tui_frame("• Ответ.")
+
+    parsed = parse_tmux_delta(delta, request_id)
+
+    assert "esc to interrupt" in parsed.text
+
+
+def test_parse_tmux_delta_renders_cursor_addressed_codex_status() -> None:
+    # Реальный поток codex перерисовывает статус через абсолютное
+    # позиционирование: раньше это давало "WWoorrkkiinngg".
+    request_id = "req-codex-render"
+    delta = (
+        f"{request_marker(request_id)}\r\n"
+        "\x1b[3;1HWorking\x1b[3;1HWorking\r\n"
+    )
+
+    parsed = parse_tmux_delta(delta, request_id)
+
+    assert "WWoorrkkiinngg" not in parsed.text
+    assert "Working" in parsed.text
+
+
+def test_parse_tmux_delta_detects_done_marker_split_by_cursor_move() -> None:
+    request_id = "req-split-done"
+    delta = f"{request_marker(request_id)}\nответ\n<<<DO\x1b[4GNE:{request_id}>>>\n"
+
+    parsed = parse_tmux_delta(delta, request_id)
+
+    assert parsed.complete is True
+    assert "ответ" in parsed.text

@@ -1953,6 +1953,7 @@
       "msg_restart_required": "需要重启",
       "host": "主机",
       "idle_timeout": "空闲超时（秒）",
+      "codex_jsonl_fallback": "Codex JSONL 回退（秒，0 = 关闭）",
       "api_keys": "API 密钥和提供商",
       "mcp_server_settings": "MCP 服务器设置",
       "mcp_clients_active": "MCP 客户端（活跃）",

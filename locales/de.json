@@ -1953,6 +1953,7 @@
       "msg_restart_required": "Neustart erforderlich",
       "host": "Host",
       "idle_timeout": "Leerlauf-Timeout (s)",
+      "codex_jsonl_fallback": "Codex-JSONL-Fallback (s, 0 = aus)",
       "api_keys": "API-Schlüssel und Anbieter",
       "mcp_server_settings": "MCP-Server-Einstellungen",
       "mcp_clients_active": "MCP-Clients (Aktiv)",

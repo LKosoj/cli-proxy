@@ -70,6 +70,9 @@ class ToolConfig:
 class DefaultsConfig:
     workdir: str
     idle_timeout_sec: int = 100
+    # Сколько секунд молчания headless-codex терпеть, прежде чем взять результат
+    # из rollout-файла JSONL. 0 — запасной путь выключен.
+    codex_jsonl_fallback_sec: int = 180
     summary_max_chars: int = 4000
     html_filename_prefix: str = "cli-output"
     state_path: str = "state.json"
