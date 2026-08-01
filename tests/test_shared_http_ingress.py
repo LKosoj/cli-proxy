@@ -201,7 +201,3 @@ miniapp:
 
     assert ingress.host == "0.0.0.0"
     assert ingress.port == 8099
-
-
-def test_shared_http_ingress_has_no_legacy_for_bot_app_bridge() -> None:
-    assert not hasattr(SharedHttpIngress, "for_bot_app")

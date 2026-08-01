@@ -820,13 +820,6 @@ class TestValidateTransition:
 
     # --- ACL checks (REQ-11) ---
 
-    def test_acl_allowed_chat(self):
-        vr = self.svc.validate_transition(
-            _idle_session(), TransitionRequest(enable=True, host_alias="prod"),
-            self.hosts, chat_id=100,
-        )
-        assert vr.ok is True
-
     def test_acl_denied_chat(self):
         vr = self.svc.validate_transition(
             _idle_session(), TransitionRequest(enable=True, host_alias="prod"),

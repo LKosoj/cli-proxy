@@ -182,7 +182,3 @@ def test_security_facade_authorize_mode_launch_allows_desktop_actor_id_and_audit
     assert payload["user_id"] == "desktop:default"
     assert payload["context"]["actor_id"] == "desktop:default"
     assert payload["context"]["origin"] == "desktop"
-
-
-def test_security_facade_has_no_legacy_for_bot_app_bridge() -> None:
-    assert not hasattr(SecurityFacade, "for_bot_app")

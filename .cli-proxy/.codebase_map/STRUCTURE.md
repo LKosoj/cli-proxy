@@ -5,7 +5,7 @@ Generated: 2026-06-17T10:39:27Z
 - total indexed files: 1209
 
 ## Top-level areas
-- `tests`: 564
+- `tests`: 557
 - `modes`: 220
 - `app`: 165
 - `agent`: 61
@@ -20,7 +20,7 @@ Generated: 2026-06-17T10:39:27Z
 
 | Area | Files |
 | --- | ---: |
-| `tests/` | 566 |
+| `tests/` | 559 |
 | `modes/` | 220 |
 | `app/` | 164 |
 | `agent/` | 61 |

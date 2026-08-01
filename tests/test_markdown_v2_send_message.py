@@ -19,7 +19,6 @@ _MD2_FALSE_TEST_ALLOWLIST = {
     "tests/test_notification_queue_service.py": "TelegramTransportService queue tests need raw md2=False as boundary input.",
     "tests/test_telegram_thread_routing.py": "Thread-bound Telegram transport test exercises missing-thread rejection.",
     "tests/test_mode_sdk_base.py": "MessagingService boundary tests assert send_plain_text delegates to md2=False.",
-    "tests/test_architecture_debt_evidence_protocol.py": "Architecture debt evidence protocol documents md2=False grep acceptance.",
 }
 
 

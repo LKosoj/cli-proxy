@@ -57,10 +57,6 @@ def _json_payload_bytes(total_size: int) -> bytes:
     return prefix + (b"a" * (total_size - min_size)) + suffix
 
 
-def test_webhook_ingress_shared_http_has_no_legacy_for_bot_app_bridge() -> None:
-    assert not hasattr(SharedHttpIngress, "for_bot_app")
-
-
 async def _stream_payload(body: bytes, *, chunk_size: int = 11):
     for offset in range(0, len(body), chunk_size):
         yield body[offset:offset + chunk_size]

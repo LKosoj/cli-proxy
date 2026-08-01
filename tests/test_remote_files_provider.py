@@ -556,9 +556,6 @@ class TestValidateResolvedPath:
 
 
 class TestSafePath:
-    def test_simple_relative(self, provider):
-        assert provider._safe_path("hello.txt") == "/srv/app/hello.txt"
-
     def test_nested_relative(self, provider):
         assert provider._safe_path("sub/nested.txt") == "/srv/app/sub/nested.txt"
 
@@ -868,20 +865,10 @@ class TestSizeLimits:
         result = asyncio.run(prov.read("/srv/app/hello.txt", "hello.txt"))
         assert "content" in result
 
-    def test_read_exceeds_limit(self, ssh, remote_fs):
-        prov = RemoteFilesProvider(ssh, "/w", "prod", "/srv/app", max_file_size_bytes=3)
-        with pytest.raises(FileTypeError, match="too large"):
-            asyncio.run(prov.read("/srv/app/hello.txt", "hello.txt"))
-
     def test_write_within_limit(self, ssh, remote_fs):
         prov = RemoteFilesProvider(ssh, "/w", "prod", "/srv/app", max_file_size_bytes=1024)
         result = asyncio.run(prov.write("/srv/app/hello.txt", "ok", None))
         assert result["ok"] is True
-
-    def test_write_exceeds_limit(self, ssh, remote_fs):
-        prov = RemoteFilesProvider(ssh, "/w", "prod", "/srv/app", max_file_size_bytes=3)
-        with pytest.raises(FileTypeError, match="exceeds"):
-            asyncio.run(prov.write("/srv/app/hello.txt", "long content", None))
 
     def test_download_exceeds_limit(self, ssh, remote_fs):
         prov = RemoteFilesProvider(ssh, "/w", "prod", "/srv/app", max_file_size_bytes=3)

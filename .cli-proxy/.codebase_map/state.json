@@ -3397,7 +3397,6 @@
           "regex_ref:tests/test_analyst_prompts_template_sections.py",
           "regex_ref:tests/test_callback_session_uid_roundtrip.py",
           "regex_ref:tests/test_cli_dialog_logging.py",
-          "regex_ref:tests/test_error_handling.py",
           "regex_ref:tests/test_i18n_language_switch_fixes.py",
           "regex_ref:tests/test_integration_cleanup.py"
         ]
@@ -3455,7 +3454,6 @@
         "evidence": [
           "observed:git_cochange:5/22",
           "regex_ref:tests/smoke/test_source_artifact_smoke.py",
-          "regex_ref:tests/test_analyst_audit_pipeline_integration.py",
           "regex_ref:tests/test_analyst_callback_and_custom_ask.py",
           "regex_ref:tests/test_analyst_draft_llm.py",
           "regex_ref:tests/test_analyst_mode_plugin.py",
