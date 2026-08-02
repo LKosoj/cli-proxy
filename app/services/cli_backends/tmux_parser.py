@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Optional
 
 from utils.text import strip_ansi
 
-from .terminal_screen import render_terminal_output
+from .terminal_screen import TerminalScreen, render_terminal_output
 
 
+# Оборванная последовательность длиннее этого предела считается обычным
+# текстом: реальные CSI/OSC от TUI укладываются в сотню байт.
+_INCOMPLETE_ESCAPE_MAX = 256
+_FALLBACK_TAIL_LIMIT = 2_000_000
+_COMPLETE_ESCAPE_RE = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()*+].|[^\[\]()*+])"
+)
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-Z\\-_])")
 _DONE_INSTRUCTION = "When you are completely finished, print this exact marker on its own line:"
@@ -165,15 +173,17 @@ def build_prompt_with_markers(prompt: str, request_id: str, *, multiline: bool =
     )
 
 
+def _clean_rendered_text(rendered: str) -> str:
+    stripped = _ANSI_ESCAPE_RE.sub("", rendered)
+    stripped = strip_ansi(stripped)
+    return _CONTROL_RE.sub("", stripped)
+
+
 def normalize_terminal_text(text: str) -> str:
     # TUI рисуют экран через абсолютное позиционирование курсора, поэтому поток
     # проигрывается на модели экрана: без этого символы склеиваются в кашу
     # вида "WWoorrkkiinngg".
-    rendered = render_terminal_output(str(text or ""))
-    stripped = _ANSI_ESCAPE_RE.sub("", rendered)
-    stripped = strip_ansi(stripped)
-    stripped = _CONTROL_RE.sub("", stripped)
-    return stripped
+    return _clean_rendered_text(render_terminal_output(str(text or "")))
 
 
 def _strip_terminal_control(text: str) -> str:
@@ -232,6 +242,102 @@ def _extract_claude_screen_reader_message(text: str) -> str:
     return ""
 
 
+class TmuxDeltaReader:
+    """Инкрементально проигрывает поток pane.log.
+
+    Экран терминала — накопительное состояние, поэтому переигрывать всю историю
+    запроса на каждом опросе не нужно: при выводе в сотни мегабайт один такой
+    разбор занимал десятки секунд и блокировал event loop. Ридер хранит экран
+    между вызовами и получает только новые байты.
+    """
+
+    def __init__(self, request_id: str) -> None:
+        self._request_id = request_id
+        self._screen = TerminalScreen()
+        self._pending = ""
+        self._fallback_chunks: list[str] = []
+        self._fallback_len = 0
+        self._cache: dict[tuple[bool, bool], TmuxParseResult] = {}
+        self._rendered: Optional[str] = None
+        self._fallback_text: Optional[str] = None
+
+    def feed(self, chunk: str) -> None:
+        text = self._pending + str(chunk or "")
+        text, self._pending = _split_incomplete_escape(text)
+        if not text:
+            return
+        self._cache.clear()
+        self._rendered = None
+        self._fallback_text = None
+        self._screen.feed(text)
+        self._append_fallback(_strip_terminal_control(text))
+
+    def parse(self, *, claude_screen_reader: bool = False, tui_chrome: bool = False) -> TmuxParseResult:
+        key = (bool(claude_screen_reader), bool(tui_chrome))
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        if self._rendered is None:
+            self._rendered = _clean_rendered_text(self._screen.to_text())
+        rendered = self._rendered
+        result = _parse_normalized_delta(
+            rendered,
+            self._request_id,
+            claude_screen_reader=claude_screen_reader,
+            tui_chrome=tui_chrome,
+        )
+        if not result.complete:
+            # Маркер мог быть разорван перемещением курсора — на экране он
+            # искажён, но в сыром потоке цел.
+            if self._fallback_text is None:
+                self._fallback_text = "".join(self._fallback_chunks)
+            fallback_text = self._fallback_text
+            if fallback_text != rendered:
+                fallback = _parse_normalized_delta(
+                    fallback_text,
+                    self._request_id,
+                    claude_screen_reader=claude_screen_reader,
+                    tui_chrome=tui_chrome,
+                )
+                if fallback.complete:
+                    result = fallback
+        self._cache[key] = result
+        return result
+
+    def _append_fallback(self, text: str) -> None:
+        if not text:
+            return
+        self._fallback_chunks.append(text)
+        self._fallback_len += len(text)
+        # Сырой поток без проигрывания растёт неограниченно, поэтому для
+        # запасного пути хранится только хвост.
+        while self._fallback_len > _FALLBACK_TAIL_LIMIT and len(self._fallback_chunks) > 1:
+            self._fallback_len -= len(self._fallback_chunks.pop(0))
+        if self._fallback_len > _FALLBACK_TAIL_LIMIT:
+            # Первым куском может прийти вся история запроса — она не должна
+            # оседать в памяти целиком.
+            tail = self._fallback_chunks[0][-_FALLBACK_TAIL_LIMIT:]
+            self._fallback_chunks = [tail]
+            self._fallback_len = len(tail)
+
+
+def _split_incomplete_escape(text: str) -> tuple[str, str]:
+    """Отделяет хвост с оборванной escape-последовательностью.
+
+    Чанк pane.log может закончиться посреди CSI/OSC. Если отдать такой хвост
+    эмулятору, он либо потеряет последовательность, либо съест начало
+    следующего чанка.
+    """
+
+    idx = text.rfind("\x1b")
+    if idx == -1:
+        return text, ""
+    tail = text[idx:]
+    if len(tail) > _INCOMPLETE_ESCAPE_MAX or _COMPLETE_ESCAPE_RE.match(tail):
+        return text, ""
+    return text[:idx], tail
+
+
 def parse_tmux_delta(
     delta: str,
     request_id: str,
@@ -239,27 +345,9 @@ def parse_tmux_delta(
     claude_screen_reader: bool = False,
     tui_chrome: bool = False,
 ) -> TmuxParseResult:
-    rendered = normalize_terminal_text(delta)
-    result = _parse_normalized_delta(
-        rendered,
-        request_id,
-        claude_screen_reader=claude_screen_reader,
-        tui_chrome=tui_chrome,
-    )
-    if result.complete:
-        return result
-    # Маркер мог быть разорван перемещением курсора — на экране он искажён,
-    # но в сыром потоке цел.
-    fallback_text = _strip_terminal_control(delta)
-    if fallback_text == rendered:
-        return result
-    fallback = _parse_normalized_delta(
-        fallback_text,
-        request_id,
-        claude_screen_reader=claude_screen_reader,
-        tui_chrome=tui_chrome,
-    )
-    return fallback if fallback.complete else result
+    reader = TmuxDeltaReader(request_id)
+    reader.feed(delta)
+    return reader.parse(claude_screen_reader=claude_screen_reader, tui_chrome=tui_chrome)
 
 
 def _parse_normalized_delta(

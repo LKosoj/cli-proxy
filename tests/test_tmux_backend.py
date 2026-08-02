@@ -2,7 +2,9 @@ import asyncio
 import os
 import re
 import stat
+import time
 import uuid
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -1374,3 +1376,231 @@ async def test_tmux_backend_interrupt_marks_failed_when_ctrl_c_is_not_sent(tmp_p
     status = await backend.status(session)
 
     assert status.state == "failed"
+
+
+def test_read_pane_chunk_returns_only_new_bytes(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    open(log_path, "w", encoding="utf-8").write("first\n")
+
+    data, cursor, truncated = tmux_backend_module._read_pane_chunk(log_path, 0)
+    assert data == b"first\n"
+    assert cursor == 6
+    assert truncated is False
+
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write("second\n")
+
+    data, cursor, truncated = tmux_backend_module._read_pane_chunk(log_path, cursor)
+    assert data == b"second\n"
+    assert cursor == 13
+    assert truncated is False
+
+    data, cursor, truncated = tmux_backend_module._read_pane_chunk(log_path, cursor)
+    assert data == b""
+    assert truncated is False
+
+
+def test_read_pane_chunk_reports_truncation(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    open(log_path, "w", encoding="utf-8").write("short\n")
+
+    data, cursor, truncated = tmux_backend_module._read_pane_chunk(log_path, 500)
+
+    assert truncated is True
+    assert data == b"short\n"
+    assert cursor == 6
+
+
+def test_pane_stream_restarts_screen_after_truncation(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    request_id = "req-trunc"
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write(f"{request_marker(request_id)}\nстарый вывод\n")
+    stream = tmux_backend_module._PaneStream(log_path, request_id)
+
+    assert "старый вывод" in stream.advance().parsed.text
+
+    # pipe-pane пересоздал журнал уже после маркера запроса: экран от прошлого
+    # потока не должен протечь в разбор.
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write("новый вывод\n")
+
+    text = stream.advance().parsed.text
+    assert "новый вывод" in text
+    assert "старый вывод" not in text
+
+
+def test_pane_stream_returns_resume_token_without_touching_session(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    request_id = "req-token"
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write(f"{request_marker(request_id)}\nsession_id: abcd-1234\n")
+    stream = tmux_backend_module._PaneStream(log_path, request_id)
+
+    advance = stream.advance(resume_regex=r"session_id:\s*([0-9a-z-]{8,})")
+
+    assert advance.resume_token == "abcd-1234"
+    assert stream.advance(resume_regex=r"session_id:\s*([0-9a-z-]{8,})").resume_token is None
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_feeds_pane_log_without_rereading_history(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    driver.write_done_marker = False
+    driver.response_text = "streaming start"
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=5)
+    session = _session(tmp_path)
+
+    fed: list[str] = []
+    original_feed = tmux_backend_module.TmuxDeltaReader.feed
+
+    def _tracking_feed(self, chunk):
+        fed.append(chunk)
+        return original_feed(self, chunk)
+
+    monkeypatch.setattr(tmux_backend_module.TmuxDeltaReader, "feed", _tracking_feed)
+
+    async def _stream_output():
+        # CLI дописывает вывод порциями, поэтому цикл мониторинга успевает
+        # сделать несколько опросов до завершения запроса.
+        while driver.log_path is None or not driver.sent_prompts:
+            await asyncio.sleep(0.01)
+        request_id = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", driver.sent_prompts[0]).group(1)
+        for index in range(5):
+            with open(driver.log_path, "a", encoding="utf-8") as handle:
+                handle.write(f"chunk {index}: " + "x" * 500 + "\n")
+            await asyncio.sleep(0.05)
+        with open(driver.log_path, "a", encoding="utf-8") as handle:
+            handle.write(f"{done_marker(request_id)}\n")
+
+    streamer = asyncio.create_task(_stream_output())
+    try:
+        await backend.run(session, "do work")
+    finally:
+        streamer.cancel()
+        await asyncio.gather(streamer, return_exceptions=True)
+
+    pane_size = os.path.getsize(backend.paths(session)["pane_log"])
+    total_fed = sum(len(chunk.encode("utf-8")) for chunk in fed)
+
+    # Каждый байт pane.log попадает в эмулятор ровно один раз: раньше цикл
+    # мониторинга переигрывал всю историю запроса на каждом опросе.
+    assert len(fed) > 1, "цикл должен был сделать несколько опросов"
+    assert total_fed <= pane_size
+
+
+def _slow_pane_read(monkeypatch, delay: float) -> None:
+    """Имитирует чтение многомегабайтного pane.log: блокирующая задержка на syscall."""
+
+    original = tmux_backend_module._read_pane_chunk
+
+    def _slow(log_path, cursor):
+        time.sleep(delay)
+        return original(log_path, cursor)
+
+    monkeypatch.setattr(tmux_backend_module, "_read_pane_chunk", _slow)
+
+
+@asynccontextmanager
+async def _loop_lag_probe():
+    """Копит задержки между тиками: они растут, если цикл событий кто-то держит."""
+
+    lags: list[float] = []
+
+    async def _tick():
+        while True:
+            before = time.monotonic()
+            await asyncio.sleep(0.01)
+            lags.append(time.monotonic() - before)
+
+    task = asyncio.create_task(_tick())
+    await asyncio.sleep(0)
+    try:
+        yield lags
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_tmux_monitor_keeps_event_loop_responsive(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=5)
+    session = _session(tmp_path)
+    _slow_pane_read(monkeypatch, 0.8)
+
+    async with _loop_lag_probe() as lags:
+        await backend.run(session, "do work")
+
+    assert lags, "проба должна была сделать хотя бы один тик"
+    # Чтение pane.log и разбор экрана уходят в поток, поэтому цикл событий
+    # продолжает крутиться всё время, пока они длятся.
+    assert max(lags) < 0.3
+
+
+@pytest.mark.asyncio
+async def test_tmux_recovery_check_keeps_event_loop_responsive(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    request_id = "recovery-lag"
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write(f"{request_marker(request_id)}\nответ\n{done_marker(request_id)}\n")
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "failed",
+            "active_request_id": None,
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+        },
+    )
+    TmuxExecutionBackend._write_last_request(
+        paths,
+        {"request_id": request_id, "started_at": 10.0, "offset": 0, "delivery_state": "pending"},
+    )
+    _slow_pane_read(monkeypatch, 0.8)
+
+    async with _loop_lag_probe() as lags:
+        recovery = await backend.get_recovery_request(session)
+
+    assert recovery is not None
+    assert lags, "проба должна была сделать хотя бы один тик"
+    assert max(lags) < 0.3
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_captures_resume_token_split_across_reads(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.write_done_marker = False
+    driver.response_text = "working"
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=5)
+    session = _session(tmp_path)
+    session.tool.resume_regex = r"session_id:\s*([0-9a-f-]{8,})"
+
+    async def _stream_output():
+        while driver.log_path is None or not driver.sent_prompts:
+            await asyncio.sleep(0.01)
+        request_id = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", driver.sent_prompts[0]).group(1)
+        # Токен разрывается между двумя опросами: первый кусок обрывается
+        # посреди строки с идентификатором сессии.
+        with open(driver.log_path, "a", encoding="utf-8") as handle:
+            handle.write("session_id: 1234abcd-")
+        await asyncio.sleep(0.08)
+        with open(driver.log_path, "a", encoding="utf-8") as handle:
+            handle.write("5678-9abc\n")
+        await asyncio.sleep(0.08)
+        with open(driver.log_path, "a", encoding="utf-8") as handle:
+            handle.write(f"{done_marker(request_id)}\n")
+
+    streamer = asyncio.create_task(_stream_output())
+    try:
+        await backend.run(session, "do work")
+    finally:
+        streamer.cancel()
+        await asyncio.gather(streamer, return_exceptions=True)
+
+    assert session.resume_token == "1234abcd-5678-9abc"

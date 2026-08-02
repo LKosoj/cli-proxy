@@ -20,7 +20,7 @@ Generated: 2026-06-17T10:39:27Z
 
 | Area | Files |
 | --- | ---: |
-| `tests/` | 564 |
+| `tests/` | 565 |
 | `modes/` | 220 |
 | `app/` | 166 |
 | `agent/` | 62 |

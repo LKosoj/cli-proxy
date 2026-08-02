@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
 import hashlib
 import json
 import logging
@@ -20,10 +21,17 @@ from utils.text import strip_ansi
 from .models import ExecutionBackendStatus, ExecutionResult
 from .transcript_reader import CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
-from .tmux_parser import build_prompt_with_markers, normalize_terminal_text, parse_tmux_delta
+from .tmux_parser import (
+    TmuxDeltaReader,
+    TmuxParseResult,
+    build_prompt_with_markers,
+    normalize_terminal_text,
+)
 
 
 _SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+# Перекрытие между соседними кусками pane.log при поиске resume-токена.
+_RESUME_SCAN_TAIL_CHARS = 512
 _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--resume", "-r", "--continue", "-c"},
     "gemini": {"--resume", "-r"},
@@ -63,6 +71,80 @@ _RECOVERY_DEST_KEYS = (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _read_pane_chunk(log_path: str, cursor: int) -> tuple[bytes, int, bool]:
+    """Читает байты pane.log, дописанные после cursor.
+
+    Третий элемент — признак того, что файл усечён или пересоздан.
+    """
+
+    if not os.path.exists(log_path):
+        return b"", cursor, False
+    size = os.path.getsize(log_path)
+    truncated = size < cursor
+    start = 0 if truncated else max(0, int(cursor))
+    if size <= start:
+        return b"", start, truncated
+    with open(log_path, "rb") as handle:
+        handle.seek(start)
+        data = handle.read()
+    return data, start + len(data), truncated
+
+
+@dataclass(frozen=True)
+class _PaneAdvance:
+    parsed: TmuxParseResult
+    raw_parsed: Optional[TmuxParseResult]
+    resume_token: Optional[str]
+
+
+class _PaneStream:
+    """Шаг чтения pane.log: новые байты, экран, resume-токен.
+
+    Метод advance() целиком синхронный и рассчитан на asyncio.to_thread: чтение
+    с диска и декодирование стоят не меньше самого разбора, а при восстановлении
+    первым куском приходит вся история запроса.
+    """
+
+    def __init__(self, log_path: str, request_id: str, *, offset: int = 0) -> None:
+        self._log_path = log_path
+        self._request_id = request_id
+        self._cursor = max(0, int(offset))
+        self._restart()
+
+    def _restart(self) -> None:
+        self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self._reader = TmuxDeltaReader(self._request_id)
+        self._resume_tail = ""
+
+    def advance(
+        self,
+        *,
+        resume_regex: str = "",
+        claude_screen_reader: bool = False,
+        tui_chrome: bool = False,
+    ) -> _PaneAdvance:
+        chunk_bytes, self._cursor, truncated = _read_pane_chunk(self._log_path, self._cursor)
+        if truncated:
+            # pane.log пересоздан — накопленный экран относится к другому потоку.
+            self._restart()
+        resume_token = None
+        chunk = self._decoder.decode(chunk_bytes)
+        if chunk:
+            # Хвост предыдущего куска нужен, чтобы токен, разрезанный границей
+            # чтения, всё равно попал под регулярку.
+            resume_token = _find_resume_token(self._resume_tail + chunk, resume_regex)
+            self._resume_tail = (self._resume_tail + chunk)[-_RESUME_SCAN_TAIL_CHARS:]
+            self._reader.feed(chunk)
+        parsed = self._reader.parse(claude_screen_reader=claude_screen_reader, tui_chrome=tui_chrome)
+        raw_parsed = None
+        if claude_screen_reader:
+            try:
+                raw_parsed = self._reader.parse(claude_screen_reader=False)
+            except Exception:
+                logger.debug("raw pane parse for choice detection failed", exc_info=True)
+        return _PaneAdvance(parsed=parsed, raw_parsed=raw_parsed, resume_token=resume_token)
 
 
 @dataclass(frozen=True)
@@ -279,17 +361,18 @@ def _state_resume_token(state: dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _capture_resume_token_from_output(session: Any, output: str) -> bool:
-    previous = _get_resume_token(session)
-    regex = str(getattr(getattr(session, "tool", None), "resume_regex", "") or "").strip()
-    if not regex:
-        return False
-    match = re.search(regex, strip_ansi(output))
-    if not match:
-        return False
-    token = match.group(1)
-    _set_resume_token(session, token)
-    return token != previous
+def _find_resume_token(output: str, regex: str) -> Optional[str]:
+    """Ищет resume-токен в выводе CLI. Без побочных эффектов — зовётся из потока."""
+
+    pattern = str(regex or "").strip()
+    if not pattern:
+        return None
+    match = re.search(pattern, strip_ansi(output))
+    return match.group(1) if match else None
+
+
+def _session_resume_regex(session: Any) -> str:
+    return str(getattr(getattr(session, "tool", None), "resume_regex", "") or "").strip()
 
 
 def _new_request_id() -> str:
@@ -708,19 +791,6 @@ class TmuxExecutionBackend:
             logger.exception("failed to read tmux last request path=%s", paths["last_request_path"])
             return {}
 
-    @staticmethod
-    def _read_request_delta(paths: dict[str, str], offset: int) -> str:
-        log_path = paths["pane_log"]
-        if not os.path.exists(log_path):
-            return ""
-        size = os.path.getsize(log_path)
-        safe_offset = max(0, int(offset))
-        if safe_offset > size:
-            safe_offset = 0
-        with open(log_path, "rb") as handle:
-            handle.seek(safe_offset)
-            return handle.read().decode("utf-8", errors="replace")
-
     @classmethod
     def mark_request_delivered(cls, session: Any, request_id: str) -> bool:
         paths = tmux_runtime_paths(session)
@@ -842,12 +912,14 @@ class TmuxExecutionBackend:
             return recovery
         if delivery_state != "pending":
             return None
-        parsed = parse_tmux_delta(
-            self._read_request_delta(paths, recovery.offset),
-            recovery.request_id,
+        # История запроса к этому моменту может весить сотни мегабайт, поэтому
+        # чтение и разбор идут вне event loop.
+        stream = _PaneStream(paths["pane_log"], recovery.request_id, offset=recovery.offset)
+        advance = await asyncio.to_thread(
+            stream.advance,
             claude_screen_reader=self._uses_claude_screen_reader(session),
         )
-        if parsed.complete:
+        if advance.parsed.complete:
             return recovery
         try:
             transcript_reader = self._build_transcript_reader(session, recovery)
@@ -898,6 +970,7 @@ class TmuxExecutionBackend:
         log_path = paths["pane_log"]
         last_size = request.offset
         last_change = time.time()
+        pane_stream = _PaneStream(log_path, request.request_id, offset=request.offset)
         pane_latest_text = ""
         transcript_latest_text = ""
         latest_text = ""
@@ -1001,29 +1074,25 @@ class TmuxExecutionBackend:
                             logger.debug("transcript growth probe failed path=%s", tpath, exc_info=True)
                 if grew:
                     last_change = time.time()
-                delta = self._read_request_delta(paths, request.offset)
-                if delta:
-                    _capture_resume_token_from_output(session, delta)
-                parsed = parse_tmux_delta(
-                    delta,
-                    request.request_id,
+                # Чтение pane.log и разбор экрана держатся вне event loop: оба
+                # шага линейны по объёму вывода, а он доходит до сотен мегабайт.
+                advance = await asyncio.to_thread(
+                    pane_stream.advance,
+                    resume_regex=_session_resume_regex(session),
                     claude_screen_reader=self._uses_claude_screen_reader(session),
                     tui_chrome=self._uses_tui_chrome(session),
                 )
+                if advance.resume_token:
+                    _set_resume_token(session, advance.resume_token)
+                parsed = advance.parsed
                 pane_latest_text = parsed.text or pane_latest_text
 
                 # Claude-specific: the choice question TUI (Enter selection, ☐ lists, esc prompts) lives in the
                 # raw pane output. claude_screen_reader extraction + transcript preference can mask it.
                 # Compute raw pane text (no claude extraction) for reliable choice detection.
                 pane_raw_for_choice = pane_latest_text
-                if self._uses_claude_screen_reader(session):
-                    try:
-                        raw_p = parse_tmux_delta(delta, request.request_id, claude_screen_reader=False)
-                        pane_raw_for_choice = raw_p.text or pane_latest_text
-                    except Exception:
-                        logger.debug(
-                            "raw pane parse for choice detection failed request_id=%s", request.request_id, exc_info=True
-                        )
+                if advance.raw_parsed is not None:
+                    pane_raw_for_choice = advance.raw_parsed.text or pane_latest_text
 
                 transcript_update = None
                 if transcript_reader is not None:

@@ -38,7 +38,7 @@ These files are mandatory context and must be considered before major edits.
 - `CONCERNS.md`: Риски, технический долг и зоны повышенного внимания.
 
 ## Nodes
-- [tests](nodes/tests.md) - files: 564, source_glob: `tests/**`
+- [tests](nodes/tests.md) - files: 565, source_glob: `tests/**`
 - [modes](nodes/modes.md) - files: 220, source_glob: `modes/**`
 - [app](nodes/app.md) - files: 166, source_glob: `app/**`
 - [agent](nodes/agent.md) - files: 62, source_glob: `agent/**`
