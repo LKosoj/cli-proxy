@@ -449,6 +449,108 @@ async def test_session_snapshot_callback_sends_html_document(tmp_path: Path) -> 
     assert edits[-1] == "HTML-отчёт по сессии создан: session_snapshot_19700101_001640.html"
 
 
+def _tmux_reread_bot_app(session, session_uid: str, *, is_admin: bool, outcome: str, edits):
+    class _Manager:
+        def get_by_uid(self, token):
+            return session if str(token) == session_uid else None
+
+    async def _reread(target_session, _context):
+        assert target_session is session
+        return outcome
+
+    async def _edit_message(_ctx, *, text: str, **_kwargs):
+        edits.append(str(text))
+        return True
+
+    return types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            telegram=types.SimpleNamespace(user_languages={}),
+            defaults=types.SimpleNamespace(default_language="ru"),
+        ),
+        manager=_Manager(),
+        handlers=types.SimpleNamespace(
+            _is_admin=lambda _chat_id: is_admin,
+            build_sessions_active_overview=lambda _chat_id, session=None: ("overview", None),
+        ),
+        session_management=types.SimpleNamespace(reread_tmux_output=_reread),
+        _edit_message=_edit_message,
+        resolve_telegram_callback_scope=lambda _query: (101, None, 101, session),
+    )
+
+
+def _tmux_reread_query(session_uid: str, answers: list[tuple[str, bool]]):
+    async def _answer(text=None, show_alert=False, **_kwargs):
+        answers.append((str(text or ""), bool(show_alert)))
+
+    return types.SimpleNamespace(
+        data=f"sess_tmux_reread:{session_uid}",
+        message=types.SimpleNamespace(chat_id=101, message_id=7),
+        answer=_answer,
+    )
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_callback_reports_outcome() -> None:
+    session_uid = "chat:101:s1"
+    session = types.SimpleNamespace(id="s1", chat_id=101, queue=[])
+    answers: list[tuple[str, bool]] = []
+    edits: list[str] = []
+    bot_app = _tmux_reread_bot_app(
+        session,
+        session_uid,
+        is_admin=True,
+        outcome="no_request",
+        edits=edits,
+    )
+    handler = CallbackHandler(bot_app)
+
+    ok = await handler._cb_sess_tmux_reread(
+        data=f"sess_tmux_reread:{session_uid}",
+        chat_id=101,
+        query=_tmux_reread_query(session_uid, answers),
+        context=object(),
+    )
+
+    assert ok is True
+    assert answers == [("Нет активного запроса tmux для перечитывания", True)]
+    assert edits[-1] == "overview"
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_callback_rejects_non_admin() -> None:
+    session_uid = "chat:101:s1"
+    session = types.SimpleNamespace(id="s1", chat_id=101, queue=[])
+    answers: list[tuple[str, bool]] = []
+    edits: list[str] = []
+    called: list[str] = []
+
+    bot_app = _tmux_reread_bot_app(
+        session,
+        session_uid,
+        is_admin=False,
+        outcome="started",
+        edits=edits,
+    )
+
+    async def _forbidden(_session, _context):
+        called.append("reread")
+        return "started"
+
+    bot_app.session_management.reread_tmux_output = _forbidden
+    handler = CallbackHandler(bot_app)
+
+    ok = await handler._cb_sess_tmux_reread(
+        data=f"sess_tmux_reread:{session_uid}",
+        chat_id=101,
+        query=_tmux_reread_query(session_uid, answers),
+        context=object(),
+    )
+
+    assert ok is True
+    assert called == []
+    assert edits[-1] == "Сессия недоступна."
+
+
 @pytest.mark.asyncio
 async def test_cmd_git_branch_sends_usage_when_no_args() -> None:
     sent: list[str] = []

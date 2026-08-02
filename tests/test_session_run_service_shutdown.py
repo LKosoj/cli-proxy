@@ -33,6 +33,15 @@ def _choice_question_text() -> str:
     )
 
 
+def _tui_menu_text() -> str:
+    # Настоящее меню CLI: курсор выбора на строке варианта.
+    return (
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No, tell Claude what to do differently"
+    )
+
+
 def _preview_session(*, backend: str) -> SimpleNamespace:
     tool = SimpleNamespace(
         name="dummy",
@@ -147,13 +156,49 @@ def test_session_run_service_turns_tmux_preview_question_into_buttons() -> None:
             _preview_session(backend="tmux"),
             {"kind": "telegram", "chat_id": 123},
             object(),
-            _choice_question_text(),
+            _tui_menu_text(),
         )
 
         assert previews == []
         assert len(questions) == 1
         assert questions[0]["allow_custom"] is False
         assert len(bot_app.ui_state.pending_questions) == 1
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_keeps_tmux_numbered_answer_as_text() -> None:
+    async def _run() -> None:
+        # Нумерованный список в ответе агента — не меню TUI: кнопки из него
+        # делать нельзя, иначе в чат уходит выбор из случайного вывода команд.
+        previews: list[str] = []
+        questions: list[dict[str, object]] = []
+
+        async def _send_message(_context, *, text, **_kwargs):
+            previews.append(text)
+            return SimpleNamespace(message_id=43)
+
+        async def _send_ask_question(*_args, **kwargs):
+            questions.append(dict(kwargs))
+
+        bot_app = SimpleNamespace(
+            _send_message=_send_message,
+            _send_ask_question=_send_ask_question,
+            ui_state=SimpleNamespace(pending_questions={}),
+        )
+        service = _build_service(bot_app)
+        text = _choice_question_text()
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+
+        assert previews == [text]
+        assert questions == []
+        assert bot_app.ui_state.pending_questions == {}
 
     asyncio.run(_run())
 

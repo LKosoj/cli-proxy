@@ -127,6 +127,8 @@ Generated: 2026-06-17T10:46:18Z
 - `def resolve_analyst_question(question_id, answer)` (line 2707)
   - *Резолвит вопрос от аналитика/агента, отвечая на него.*
 - `async def start()` (line 2831)
+- `async def reread_tmux_output(session_uid)` (line 3028)
+  - *Переподключает чтение вывода tmux для активного запроса сессии.*
 - `async def handle_mode_callback(session_uid)` (line 4094)
   - *Desktop entrypoint for mode callbacks (Telegram-style callback_data).*
 - `async def handle_dirs_flow_event(session_uid)` (line 4481)

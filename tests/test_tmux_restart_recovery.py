@@ -222,6 +222,88 @@ async def test_startup_reconciliation_schedules_all_supported_tmux_clis(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_tmux_reread_detaches_monitor_without_interrupting_cli(monkeypatch):
+    events: list[tuple] = []
+    service = _run_service(events)
+    session = _recovery_session()
+    session._preserve_tmux_on_shutdown = False
+    cancelled: list[bool] = []
+
+    async def _cancel_session(*, session_id, timeout_s):
+        cancelled.append(bool(getattr(session, "_preserve_tmux_on_shutdown", False)))
+        return 1
+
+    cleared: list[str] = []
+    service.bot_app.mode_session_control = SimpleNamespace(cancel_session=_cancel_session)
+    service.bot_app._clear_pending_questions = lambda **kwargs: cleared.append(kwargs.get("session_id")) or 1
+    service.bot_app.build_telegram_reply_dest = lambda _session, chat_id, **_kwargs: {
+        "kind": "telegram",
+        "chat_id": int(chat_id),
+    }
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+
+    async def _get_recovery(_backend, _session):
+        return TmuxRecoveryRequest(
+            request_id="recover-codex",
+            started_at=10.0,
+            offset=0,
+            prompt="original request",
+            dest={"kind": "telegram", "chat_id": 42},
+        )
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _get_recovery)
+    scheduled: list[str] = []
+
+    def _start_session_task(_session, *, coro, name):
+        scheduled.append(str(name))
+        coro.close()
+        return True
+
+    service.start_session_task = _start_session_task
+
+    outcome = await service.reread_tmux_output(session, context=object())
+
+    assert outcome == "started"
+    # Монитор снимается с взведённым флагом сохранения tmux: Ctrl+C в pane не уходит.
+    assert cancelled == [True]
+    assert session._preserve_tmux_on_shutdown is False
+    assert cleared == ["s1"]
+    assert scheduled == ["tmux_recovery:recover-codex"]
+    assert session.busy is True
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_without_active_request_does_not_cancel_tasks(monkeypatch):
+    events: list[tuple] = []
+    service = _run_service(events)
+    session = _recovery_session()
+    cancelled: list[str] = []
+
+    async def _cancel_session(*, session_id, timeout_s):
+        cancelled.append(str(session_id))
+        return 1
+
+    service.bot_app.mode_session_control = SimpleNamespace(cancel_session=_cancel_session)
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+
+    async def _no_recovery(_backend, _session):
+        return None
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _no_recovery)
+
+    assert await service.reread_tmux_output(session, context=object()) == "no_request"
+    assert cancelled == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_rejects_non_tmux_session(monkeypatch):
+    service = _run_service([])
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "headless")
+
+    assert await service.reread_tmux_output(_recovery_session(), context=object()) == "not_tmux"
+
+
+@pytest.mark.asyncio
 async def test_bot_shutdown_marks_sessions_for_tmux_preservation(monkeypatch):
     events: list[tuple] = []
 

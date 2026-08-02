@@ -283,6 +283,9 @@ class SessionManagement:
     async def recover_tmux_sessions(self, context: ContextTypes.DEFAULT_TYPE) -> int:
         return await self._run_service.recover_tmux_sessions(context)
 
+    async def reread_tmux_output(self, session: Session, context: ContextTypes.DEFAULT_TYPE) -> str:
+        return await self._run_service.reread_tmux_output(session, context)
+
     async def run_mode_pipeline(
         self,
         session: Session,

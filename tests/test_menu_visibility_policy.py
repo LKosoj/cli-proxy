@@ -72,6 +72,25 @@ def test_session_overview_visibility_for_admin_keeps_operational_actions() -> No
     assert visibility.allows("list_sessions") is True
 
 
+def test_session_overview_tmux_reread_is_admin_only_and_tmux_only() -> None:
+    session = types.SimpleNamespace(chat_id=1, queue=[], modes=types.SimpleNamespace(active_mode="agent"))
+
+    def _visibility(*, is_admin: bool, tmux: bool):
+        return build_session_overview_visibility(
+            session=session,
+            chat_id=1,
+            access_policy=_access_policy(is_admin=is_admin, direct_cli=True),
+            available_tool_count=1,
+            registered_mode_count=1,
+            visible_session_count=1,
+            tmux_backend_active=tmux,
+        )
+
+    assert _visibility(is_admin=True, tmux=True).allows("tmux_reread") is True
+    assert _visibility(is_admin=True, tmux=False).allows("tmux_reread") is False
+    assert _visibility(is_admin=False, tmux=True).allows("tmux_reread") is False
+
+
 def test_mode_menu_visibility_for_simple_user_hides_advanced_actions() -> None:
     session = types.SimpleNamespace(chat_id=1, modes=types.SimpleNamespace(active_mode="agent"))
 

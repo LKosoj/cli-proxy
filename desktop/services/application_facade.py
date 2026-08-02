@@ -2974,51 +2974,94 @@ class ApplicationFacade:
                 continue
             if request is None:
                 continue
-            session_uid = session_runtime_uid(session)
-            session._tmux_recovery_request_id = request.request_id
-            session._active_execution_backend = "tmux"
-            session.busy = True
-
-            async def _runner(_token, *, target=session, recovery=request, target_uid=session_uid):
-                delivered = False
-                try:
-                    output = await target.recover_tmux_request(recovery)
-                    if str(output or "").strip():
-                        self.notify(
-                            "ui:message",
-                            session_id=target_uid,
-                            role="agent",
-                            text=str(output),
-                            md2=True,
-                        )
-                    delivered = TmuxExecutionBackend.mark_request_delivered(target, recovery.request_id)
-                    if not delivered:
-                        self.logger.error(
-                            "desktop tmux delivery marker was not persisted session_uid=%s request_id=%s",
-                            target_uid,
-                            recovery.request_id,
-                        )
-                    return output
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    self.logger.exception("desktop tmux recovery failed session_uid=%s", target_uid)
-                    return ""
-                finally:
-                    target.busy = False
-                    target._tmux_recovery_request_id = None
-                    if str(getattr(target, "_active_execution_backend", "") or "") == "tmux":
-                        target._active_execution_backend = "none"
-                    if delivered:
-                        self._schedule_queue_kick(session_uid=target_uid)
-
-            self.task_service.create(
-                name=f"tmux_recovery:{request.request_id}",
-                session_id=session_uid,
-                runner=_runner,
-            )
+            self._start_desktop_tmux_recovery(session, request)
             recovered += 1
         return recovered
+
+    def _start_desktop_tmux_recovery(self, session: Any, request: Any) -> None:
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        session_uid = session_runtime_uid(session)
+        session._tmux_recovery_request_id = request.request_id
+        session._active_execution_backend = "tmux"
+        session.busy = True
+
+        async def _runner(_token, *, target=session, recovery=request, target_uid=session_uid):
+            delivered = False
+            try:
+                output = await target.recover_tmux_request(recovery)
+                if str(output or "").strip():
+                    self.notify(
+                        "ui:message",
+                        session_id=target_uid,
+                        role="agent",
+                        text=str(output),
+                        md2=True,
+                    )
+                delivered = TmuxExecutionBackend.mark_request_delivered(target, recovery.request_id)
+                if not delivered:
+                    self.logger.error(
+                        "desktop tmux delivery marker was not persisted session_uid=%s request_id=%s",
+                        target_uid,
+                        recovery.request_id,
+                    )
+                return output
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.logger.exception("desktop tmux recovery failed session_uid=%s", target_uid)
+                return ""
+            finally:
+                target.busy = False
+                target._tmux_recovery_request_id = None
+                if str(getattr(target, "_active_execution_backend", "") or "") == "tmux":
+                    target._active_execution_backend = "none"
+                if delivered:
+                    self._schedule_queue_kick(session_uid=target_uid)
+
+        self.task_service.create(
+            name=f"tmux_recovery:{request.request_id}",
+            session_id=session_uid,
+            runner=_runner,
+        )
+
+    async def reread_tmux_output(self, session_uid: str) -> str:
+        """Переподключить чтение вывода tmux для активного запроса сессии.
+
+        Возвращает код результата: started / no_session / not_tmux / no_request / failed.
+        """
+
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        uid = str(session_uid or "").strip()
+        session = self.session_service.get_session_by_uid(uid) if uid else None
+        if session is None:
+            return "no_session"
+        if get_session_execution_backend(session) != "tmux":
+            return "not_tmux"
+        try:
+            request = await TmuxExecutionBackend().get_recovery_request(session)
+        except Exception:
+            self.logger.exception("desktop tmux reread: recovery request failed session_uid=%s", uid)
+            return "failed"
+        if request is None:
+            return "no_request"
+        # Обычная отмена монитора шлёт Ctrl+C в pane, то есть прерывает работающий
+        # CLI. Здесь прерывается только чтение вывода, поэтому взводим тот же флаг,
+        # что и на выключении приложения.
+        session._preserve_tmux_on_shutdown = True
+        try:
+            await self.task_service.cancel_session(uid, timeout_s=5.0)
+        except Exception:
+            self.logger.exception("desktop tmux reread: task cancellation failed session_uid=%s", uid)
+        finally:
+            session._preserve_tmux_on_shutdown = False
+        # Вопрос с кнопками отправляется один раз на кадр TUI: без сброса тот же
+        # кадр после перечитывания будет молча подавлен как дубль.
+        self._clear_pending_questions(session_uid=uid)
+        session._tmux_recovery_request_id = None
+        self._start_desktop_tmux_recovery(session, request)
+        return "started"
 
     def _ensure_modes_ready(self) -> None:
         if self._modes_initialized:
@@ -3779,6 +3822,7 @@ class ApplicationFacade:
             available_tool_count=0,
             registered_mode_count=len(modes),
             visible_session_count=1,
+            tmux_backend_active=get_session_execution_backend(session) == "tmux",
         )
         if visibility.allows("mode_selector"):
             row: list[dict[str, str]] = []
@@ -3794,6 +3838,13 @@ class ApplicationFacade:
             orch_enabled = is_orchestrator_enabled(session, False)
             orch_text = t("desktop.msg.orch_toggle_disable" if orch_enabled else "desktop.msg.orch_toggle_enable", self.ui_language)
             rows.append([{"text": orch_text, "data": f"sess_orch_toggle:{session_runtime_uid(session)}"}])
+        if visibility.allows("tmux_reread"):
+            rows.append(
+                [{
+                    "text": t("btn.session.tmux_reread", self.ui_language),
+                    "data": f"sess_tmux_reread:{session_runtime_uid(session)}",
+                }]
+            )
         rows.append([{"text": t("btn.session.cancel", self.ui_language), "data": "sess_close_menu"}])
         text = t("desktop.msg.session_title", self.ui_language, uid=session_runtime_uid(session))
         if getattr(session, "name", None):
@@ -4634,6 +4685,27 @@ class ApplicationFacade:
                 self.logger.exception("desktop persist orchestrator toggle failed")
             text, rows = self._build_desktop_session_overview(session_uid)
             self.notify("ui:mode_menu", session_id=session_uid, text=text, rows=rows)
+            return True
+        if sdata.startswith("sess_tmux_reread:"):
+            target_uid = sdata.split(":", 1)[1].strip()
+            outcome = await self.reread_tmux_output(target_uid)
+            messages = {
+                "started": "msg.session.tmux_reread_started",
+                "not_tmux": "msg.session.tmux_reread_not_tmux",
+                "no_request": "msg.session.tmux_reread_no_request",
+                "no_session": "errors.session_not_found",
+            }
+            self.notify(
+                "ui:message",
+                session_uid=target_uid,
+                session_id=target_uid,
+                role="agent",
+                text=t(messages.get(outcome, "msg.session.tmux_reread_failed"), self.ui_language),
+                md2=True,
+            )
+            if outcome != "no_session":
+                text, rows = self._build_desktop_session_overview(target_uid)
+                self.notify("ui:mode_menu", session_id=target_uid, text=text, rows=rows)
             return True
         if sdata.startswith("orch_transition:"):
             parts = sdata.split(":")

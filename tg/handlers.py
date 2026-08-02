@@ -37,6 +37,7 @@ from app.services.path_normalization import normalize_optional_state_path
 from app.services.state_repository import get_state_repository
 from session import (
     Session,
+    get_session_execution_backend,
     session_runtime_uid,
     session_scoped_key,
 )
@@ -772,6 +773,7 @@ class BotHandlers:
             available_tool_count=len(available),
             registered_mode_count=len(modes),
             visible_session_count=len(sessions),
+            tmux_backend_active=get_session_execution_backend(s) == "tmux",
         )
         if visibility.allows("cli_selector") and available:
             row: list[InlineKeyboardButton] = []
@@ -808,6 +810,13 @@ class BotHandlers:
                 InlineKeyboardButton(
                     t("btn.session.snapshot_report", lang),
                     callback_data=f"sess_snapshot:{explicit_session_uid or s.id}",
+                )
+            )
+        if visibility.allows("tmux_reread"):
+            overview_buttons.append(
+                InlineKeyboardButton(
+                    t("btn.session.tmux_reread", lang),
+                    callback_data=f"sess_tmux_reread:{explicit_session_uid or s.id}",
                 )
             )
         if visibility.allows("close"):

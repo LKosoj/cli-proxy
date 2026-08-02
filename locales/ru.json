@@ -530,7 +530,8 @@
       "close": "🚫 Close",
       "reset": "♻️ Reset",
       "lang": "🌐 Язык",
-      "close_menu": "❌ Закрыть меню"
+      "close_menu": "❌ Закрыть меню",
+      "tmux_reread": "🔄 Перечитать tmux"
     },
     "cli": {
       "unavailable": "CLI недоступны"
@@ -630,7 +631,11 @@
       "resume_token_updated": "Resume обновлен.",
       "state_header": "Session: {session_id}\nИнструмент: {tool}\nКаталог: {workdir}\nResume: {resume}\nSummary: ",
       "state_not_found_hint": "Состояние не найдено (используйте /state <session_id> или /state <tool> <workdir>)",
-      "use_existing_topics": "Используйте топики существующих сессий."
+      "use_existing_topics": "Используйте топики существующих сессий.",
+      "tmux_reread_started": "Перечитываю вывод tmux…",
+      "tmux_reread_not_tmux": "Сессия работает не через tmux",
+      "tmux_reread_no_request": "Нет активного запроса tmux для перечитывания",
+      "tmux_reread_failed": "Не удалось перечитать вывод tmux"
     },
     "error": {
       "session_not_found": "Сессия не найдена.",

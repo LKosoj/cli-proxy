@@ -23,6 +23,7 @@ _ADMIN_SESSION_ACTIONS = frozenset(
         "mode_selector",
         "new_session",
         "list_sessions",
+        "tmux_reread",
     }
 )
 
@@ -206,6 +207,7 @@ def build_session_overview_visibility(
     available_tool_count: int,
     registered_mode_count: int,
     visible_session_count: int,
+    tmux_backend_active: bool = False,
 ) -> SessionOverviewVisibility:
     resolved_chat_id = int(chat_id)
     is_admin = _safe_is_admin(access_policy=access_policy, chat_id=resolved_chat_id)
@@ -226,6 +228,8 @@ def build_session_overview_visibility(
 
     if queue_len <= 0:
         actions.discard("queue")
+    if not bool(tmux_backend_active):
+        actions.discard("tmux_reread")
     if int(available_tool_count) <= 0:
         actions.discard("cli_selector")
     if int(registered_mode_count) <= 0:

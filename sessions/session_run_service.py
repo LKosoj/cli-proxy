@@ -46,6 +46,11 @@ from utils.lang import resolve_user_lang
 from utils.text import build_preview, strip_ansi
 
 _SESSION_TASK_MODE_ID = "__session__"
+# Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева.
+_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»>]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(\S.*)$')
+# Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
+_CHOICE_CURSOR_RE = re.compile(r'^\s*[❯▶►▌»>]\s*(?:☐\s*)?[1-9][\.\)]\s', re.M)
+_CHOICE_QUESTION_MAX_LINES = 12
 _log = logging.getLogger(__name__)
 
 
@@ -229,39 +234,87 @@ class SessionRunService:
                     continue
                 if request is None:
                     continue
-                dest = self._recovery_dest(session, request)
-                if str(dest.get("kind") or "telegram").strip().lower() == "telegram" and dest.get("chat_id") is None:
-                    _log.error(
-                        "tmux recovery skipped: Telegram destination is missing session=%s request_id=%s",
-                        getattr(session, "id", "?"),
-                        request.request_id,
-                    )
-                    continue
-                session._tmux_recovery_request_id = request.request_id
-                session._active_execution_backend = "tmux"
-                session.busy = True
-                prompt = request.prompt or f"Recovered tmux request {request.request_id}"
-                started = self.start_session_task(
-                    session,
-                    coro=self.run_prompt(
-                        session,
-                        prompt,
-                        dest,
-                        context,
-                        recovery_request=request,
-                    ),
-                    name=f"tmux_recovery:{request.request_id}",
-                )
-                if not started:
-                    session._tmux_recovery_request_id = None
-                    session._active_execution_backend = "none"
-                    session.busy = False
-                    continue
-                recovered += 1
+                if self._start_tmux_recovery(session, request, context):
+                    recovered += 1
         return recovered
 
-    @staticmethod
-    def _is_cli_choice_question(text: str) -> bool:
+    def _start_tmux_recovery(self, session, request: TmuxRecoveryRequest, context) -> bool:
+        dest = self._recovery_dest(session, request)
+        if str(dest.get("kind") or "telegram").strip().lower() == "telegram" and dest.get("chat_id") is None:
+            _log.error(
+                "tmux recovery skipped: Telegram destination is missing session=%s request_id=%s",
+                getattr(session, "id", "?"),
+                request.request_id,
+            )
+            return False
+        session._tmux_recovery_request_id = request.request_id
+        session._active_execution_backend = "tmux"
+        session.busy = True
+        prompt = request.prompt or f"Recovered tmux request {request.request_id}"
+        started = self.start_session_task(
+            session,
+            coro=self.run_prompt(
+                session,
+                prompt,
+                dest,
+                context,
+                recovery_request=request,
+            ),
+            name=f"tmux_recovery:{request.request_id}",
+        )
+        if not started:
+            session._tmux_recovery_request_id = None
+            session._active_execution_backend = "none"
+            session.busy = False
+        return started
+
+    async def _detach_tmux_monitor(self, session) -> None:
+        """Снять текущие задачи сессии, не трогая сам CLI в pane."""
+
+        control = getattr(self.bot_app, "mode_session_control", None)
+        cancel = getattr(control, "cancel_session", None)
+        if not callable(cancel):
+            return
+        # Обычная отмена монитора шлёт Ctrl+C в pane, то есть прерывает работающий
+        # CLI. Здесь прерывается только чтение вывода, поэтому взводим тот же флаг,
+        # что и на выключении бота.
+        setattr(session, "_preserve_tmux_on_shutdown", True)
+        try:
+            await cancel(session_id=session_runtime_uid(session), timeout_s=5.0)
+        except Exception:
+            _log.exception("tmux reread: task cancellation failed session=%s", getattr(session, "id", "?"))
+        finally:
+            setattr(session, "_preserve_tmux_on_shutdown", False)
+
+    async def reread_tmux_output(self, session, context) -> str:
+        """Переподключить чтение вывода tmux для активного запроса сессии.
+
+        Возвращает код результата: started / not_tmux / no_request / failed.
+        """
+
+        if get_session_execution_backend(session) != "tmux":
+            return "not_tmux"
+        try:
+            request = await TmuxExecutionBackend().get_recovery_request(session)
+        except Exception:
+            _log.exception("tmux reread: recovery request failed session=%s", getattr(session, "id", "?"))
+            return "failed"
+        if request is None:
+            return "no_request"
+        await self._detach_tmux_monitor(session)
+        # Вопрос с кнопками отправляется один раз на кадр TUI: без сброса тот же
+        # кадр после перечитывания будет молча подавлен как дубль.
+        clear_pending = getattr(self.bot_app, "_clear_pending_questions", None)
+        if callable(clear_pending):
+            try:
+                clear_pending(session_id=str(getattr(session, "id", "") or ""))
+            except Exception:
+                _log.exception("tmux reread: pending questions cleanup failed session=%s", getattr(session, "id", "?"))
+        setattr(session, "_tmux_recovery_request_id", None)
+        return "started" if self._start_tmux_recovery(session, request, context) else "failed"
+
+    @classmethod
+    def _is_cli_choice_question(cls, text: str) -> bool:
         if not text:
             return False
         t = text.lower()
@@ -269,16 +322,13 @@ class SessionRunService:
             return True
         # "esc to interrupt" / "shift+tab" — это индикатор работы и подсказка в
         # футере TUI, а не вопрос: по ним нельзя распознавать выбор.
-        if ("☐ " in text or "☐" in text) and re.search(r'\n\s*\d+[\.\)]', text):
-            return True
-        # Heuristic for Claude (and similar) questions that end with ? and contain multiple numbered options.
-        # Catches cases where exact menu strings are absent but a choice prompt is present.
-        if "?" in text:
-            recent = "\n".join(text.splitlines()[-12:])
-            nums = re.findall(r'^\s*\d+[\.\)]', recent, re.M)
-            if len(nums) >= 2:
-                return True
-        return False
+        _, options = cls._parse_cli_choice_question(text)
+        if len(options) < 2:
+            return False
+        # Нумерованный список сам по себе ничего не значит: его печатают и команды
+        # (`find -printf '%T@ %p'`, `ls -l`), и сам агент в ответе. Меню TUI
+        # отличают курсор выбора или чекбоксы.
+        return bool(_CHOICE_CURSOR_RE.search(text)) or "☐" in text
 
     @staticmethod
     def _tmux_choice_question_id(session_key: str, question: str, options: List[str]) -> str:
@@ -298,13 +348,24 @@ class SessionRunService:
         opts = []
         for line in lines:
             s = line.strip()
-            # Support plain "1. foo", "1) foo", "☐ 1. foo", "☐ 1) foo"
-            m = re.match(r'^(?:☐\s*)?(\d+)[\.\)]\s*(.+)', s)
-            if m:
+            # Support plain "1. foo", "1) foo", "☐ 1. foo", "❯ 1. foo"
+            m = _CHOICE_OPTION_RE.match(s)
+            # Нумерация меню идёт подряд с единицы, поэтому "1754161234.567 /tmp/x"
+            # из вывода команд вариантом не становится.
+            if m and int(m.group(1)) == len(opts) + 1:
                 opts.append(f"{m.group(1)}. {m.group(2).strip()}")
             else:
                 if not opts:
                     q_lines.append(line)
+        # Вопрос стоит прямо над вариантами и отделён от остального вывода пустой
+        # строкой: без этого в него попадал весь экран TUI, включая логи команд.
+        if opts:
+            tail: List[str] = []
+            for line in reversed(q_lines):
+                if not line.strip() or len(tail) >= _CHOICE_QUESTION_MAX_LINES:
+                    break
+                tail.append(line)
+            q_lines = list(reversed(tail))
         q = "\n".join(q_lines).strip() or "Please choose:"
         # Заглушки "Option 1..5" не подставляются: без распознанных вариантов
         # кнопки бессмысленны, вызывающий код покажет обычное превью.

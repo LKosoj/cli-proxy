@@ -1,5 +1,6 @@
 """Protocol callback actions (mode actions, approvals, ask-user)."""
 
+import logging
 import re
 
 from i18n import t, lang_from_query

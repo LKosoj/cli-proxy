@@ -57,6 +57,7 @@ class CallbackHandler(CallbackActionsMixin):
             (("prefix", "sess_mode:"), self._cb_sess_mode),
             (("prefix", "sess_ssh_toggle:"), self._cb_sess_ssh_toggle),
             (("prefix", "sess_snapshot:"), self._cb_sess_snapshot),
+            (("prefix", "sess_tmux_reread:"), self._cb_sess_tmux_reread),
             (("eq", "agent_cancel"), self._cb_agent_cancel),
             (("prefix", "state_pick:"), self._cb_state_pick),
             (("prefix", "state_page:"), self._cb_state_page),

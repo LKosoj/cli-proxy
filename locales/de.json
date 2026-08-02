@@ -530,7 +530,8 @@
       "close": "🚫 Schließen",
       "reset": "♻️ Reset",
       "lang": "🌐 Sprache",
-      "close_menu": "❌ Menü schließen"
+      "close_menu": "❌ Menü schließen",
+      "tmux_reread": "🔄 tmux neu lesen"
     },
     "cli": {
       "unavailable": "CLI nicht verfügbar"
@@ -630,7 +631,11 @@
       "resume_token_updated": "Resume aktualisiert.",
       "state_header": "Sitzung: {session_id}\nWerkzeug: {tool}\nVerzeichnis: {workdir}\nResume: {resume}\nZusammenfassung: ",
       "state_not_found_hint": "Zustand nicht gefunden (verwenden Sie /state <session_id> oder /state <tool> <workdir>)",
-      "use_existing_topics": "Verwenden Sie die Themen vorhandener Sitzungen."
+      "use_existing_topics": "Verwenden Sie die Themen vorhandener Sitzungen.",
+      "tmux_reread_started": "tmux-Ausgabe wird neu gelesen…",
+      "tmux_reread_not_tmux": "Diese Sitzung läuft nicht über tmux",
+      "tmux_reread_no_request": "Keine aktive tmux-Anfrage zum erneuten Lesen",
+      "tmux_reread_failed": "tmux-Ausgabe konnte nicht neu gelesen werden"
     },
     "error": {
       "session_not_found": "Sitzung nicht gefunden.",

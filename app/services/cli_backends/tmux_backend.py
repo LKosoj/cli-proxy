@@ -1193,7 +1193,16 @@ class TmuxExecutionBackend:
                     choice_in_pane = _SRS._is_cli_choice_question(pane_raw_for_choice)
                     choice_in_transcript = _SRS._is_cli_choice_question(transcript_latest_text or "")
                     if choice_in_pane:
-                        latest_text = pane_raw_for_choice or latest_text
+                        pane_question, pane_options = _SRS._parse_cli_choice_question(pane_raw_for_choice)
+                        # Подставляется только блок меню, и только когда варианты
+                        # распознаны: иначе распознанный по ошибке экран выбрасывал
+                        # текст транскрипта, а при потерянном маркере запроса в чат
+                        # уходил буфер TUI целиком.
+                        choice_text = "\n".join([pane_question, *pane_options]).strip()
+                        if pane_options and choice_text:
+                            latest_text = choice_text
+                        elif not transcript_authoritative:
+                            latest_text = pane_raw_for_choice or latest_text
                     if choice_in_pane or choice_in_transcript:
                         complete = False
                 except Exception:

@@ -7,6 +7,8 @@ Generated: 2026-06-17T10:46:18Z
 - `def __init__()` (line 43)
 - `def start_session_task(session)` (line 150)
 - `def start_prompt_task(session, prompt, dest, context)` (line 166)
+- `async def recover_tmux_sessions(context)` (line 211)
+- `async def reread_tmux_output(session, context)` (line 289)
 - `async def run_prompt(session, prompt, dest, context)` (line 443)
 - `async def run_mode_pipeline(session, prompt, dest, context)` (line 611)
 - `async def dispatch_queued_input(session, next_prompt, next_dest, context)` (line 773)

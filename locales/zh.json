@@ -530,7 +530,8 @@
       "close": "🚫 关闭",
       "reset": "♻️ Reset",
       "lang": "🌐 语言",
-      "close_menu": "❌ 关闭菜单"
+      "close_menu": "❌ 关闭菜单",
+      "tmux_reread": "🔄 重新读取 tmux"
     },
     "cli": {
       "unavailable": "CLI 不可用"
@@ -630,7 +631,11 @@
       "resume_token_updated": "Resume 已更新。",
       "state_header": "会话: {session_id}\n工具: {tool}\n目录: {workdir}\nResume: {resume}\n摘要: ",
       "state_not_found_hint": "未找到状态（使用 /state <session_id> 或 /state <tool> <workdir>）",
-      "use_existing_topics": "请使用现有会话的话题。"
+      "use_existing_topics": "请使用现有会话的话题。",
+      "tmux_reread_started": "正在重新读取 tmux 输出…",
+      "tmux_reread_not_tmux": "该会话未通过 tmux 运行",
+      "tmux_reread_no_request": "没有可重新读取的活动 tmux 请求",
+      "tmux_reread_failed": "重新读取 tmux 输出失败"
     },
     "error": {
       "session_not_found": "未找到会话。",

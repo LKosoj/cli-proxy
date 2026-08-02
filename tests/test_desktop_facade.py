@@ -163,6 +163,60 @@ async def test_desktop_final_questions_are_rendered_as_plain_message(tmp_path: P
 
 
 @pytest.mark.asyncio
+async def test_desktop_tmux_reread_detaches_monitor_without_interrupting_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
+
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_reread")
+    facade: ApplicationFacade = runtime["facade"]
+    facade.config = runtime["config"]
+    session = runtime["session"]
+    session_uid = session_runtime_uid(session)
+
+    monkeypatch.setattr(
+        "desktop.services.application_facade.get_session_execution_backend",
+        lambda _session: "tmux",
+    )
+
+    async def _get_recovery(_backend, _session):
+        return TmuxRecoveryRequest(
+            request_id="recover-desktop",
+            started_at=10.0,
+            offset=0,
+            prompt="original request",
+            dest={},
+        )
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _get_recovery)
+
+    cancelled: list[bool] = []
+
+    async def _cancel_session(uid, *, timeout_s=1.0):
+        cancelled.append(bool(getattr(session, "_preserve_tmux_on_shutdown", False)))
+        return 1
+
+    facade.task_service.cancel_session = _cancel_session
+    started: list[str] = []
+    facade._start_desktop_tmux_recovery = lambda _session, request: started.append(request.request_id)
+    facade._desktop_bot_app().ui_state.pending_questions["q1"] = {
+        "session_uid": session_uid,
+        "question": "stale",
+        "options": ["1. Да"],
+    }
+
+    outcome = await facade.reread_tmux_output(session_uid)
+
+    assert outcome == "started"
+    # Монитор снимается с взведённым флагом сохранения tmux: Ctrl+C в pane не уходит.
+    assert cancelled == [True]
+    assert session._preserve_tmux_on_shutdown is False
+    assert facade._desktop_bot_app().ui_state.pending_questions == {}
+    assert started == ["recover-desktop"]
+
+
+@pytest.mark.asyncio
 async def test_desktop_facade_rejects_session_execution_backend_update(tmp_path: Path) -> None:
     runtime = _build_desktop_facade_runtime(tmp_path, intent="execution_backend")
     cfg: AppConfig = runtime["config"]

@@ -700,6 +700,47 @@ class SessionActionsMixin:
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         return True
 
+    async def _cb_sess_tmux_reread(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
+        payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
+        _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
+        if session is None:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+
+        # Кнопка показывается только админу, но callback_data приходит от клиента:
+        # право проверяется здесь, а не только при отрисовке меню.
+        admin_checker = getattr(getattr(self.bot_app, "handlers", None), "_is_admin", None)
+        if callable(admin_checker) and not bool(admin_checker(int(chat_id))):
+            await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+            return True
+
+        reread = getattr(getattr(self.bot_app, "session_management", None), "reread_tmux_output", None)
+        if not callable(reread):
+            await query.answer(t("msg.session.tmux_reread_failed", lang), show_alert=True)
+            return True
+        try:
+            outcome = str(await reread(session, context) or "failed")
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "tmux reread failed session_id=%s",
+                getattr(session, "id", None),
+            )
+            outcome = "failed"
+
+        answers = {
+            "started": "msg.session.tmux_reread_started",
+            "not_tmux": "msg.session.tmux_reread_not_tmux",
+            "no_request": "msg.session.tmux_reread_no_request",
+            "failed": "msg.session.tmux_reread_failed",
+        }
+        await query.answer(t(answers.get(outcome, answers["failed"]), lang), show_alert=outcome != "started")
+
+        text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
+        await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        return True
+
     async def _cb_sess_snapshot(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""

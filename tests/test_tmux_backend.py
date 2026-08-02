@@ -362,6 +362,78 @@ async def test_tmux_backend_falls_back_to_pane_for_unrecognized_transcript(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_keeps_transcript_when_pane_choice_has_no_options(tmp_path, monkeypatch):
+    # Экран TUI перерисован так, что варианты не читаются, а транскрипт распознан:
+    # раньше сырой буфер экрана вытеснял текст из JSONL и уходил в чат целиком.
+    driver = FakeTmuxDriver()
+    driver.write_done_marker = False
+    driver.response_text = (
+        "• Ran find /tmp -name 'host_bwrap' -printf '%T@ %p\\n' | sort -nr\n"
+        "  1754161234.5678900 /tmp/pytest-of-root/pytest-242/host_bwrap\n"
+        "  1754161200.1234500 /tmp/pytest-of-root/pytest-241/host_bwrap\n"
+        "Enter selection [1-2]:"
+    )
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Чистый ответ из JSONL",
+                available=True,
+                recognized=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.3,
+    )
+
+    result = await asyncio.wait_for(backend.run(_session(tmp_path), "do work"), timeout=5)
+
+    assert result.text == "Чистый ответ из JSONL"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_reports_only_menu_block_for_real_choice(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    driver.write_done_marker = False
+    driver.response_text = (
+        "• Ran pytest -q\n"
+        "  120 passed\n"
+        "\n"
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No, tell Claude what to do differently"
+    )
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=False)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.3,
+    )
+
+    result = await asyncio.wait_for(backend.run(_session(tmp_path), "do work"), timeout=5)
+
+    assert result.text == (
+        "Do you want to proceed?\n1. Yes\n2. No, tell Claude what to do differently"
+    )
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
