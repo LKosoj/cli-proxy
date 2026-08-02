@@ -47,6 +47,11 @@ logger = logging.getLogger(__name__)
 _HEADLESS_WAIT_POLL_SEC = 2.0
 _HEADLESS_EOF_EXIT_TIMEOUT_SEC = 10.0
 _HEADLESS_EOF_STOP_GRACE_SEC = 1.0
+# asyncio резолвит Process.wait() не в момент смерти процесса, а только после
+# отключения всех pipe-транспортов, поэтому returncode появляется на проход
+# event loop раньше. Grace закрывает это окно, чтобы штатный выход не считался
+# аварийным.
+_HEADLESS_EXIT_GRACE_SEC = 1.0
 _CLI_RESPONSE_FORMAT_RE = re.compile(r"CLI_RESPONSE_FORMAT:\s*([a-z0-9_]+)", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
@@ -1554,6 +1559,12 @@ class Session:
                     poll_iter, wait_task.done(), pid_alive, effective_returncode, drain_eof, len(out_buf),
                 )
                 if effective_returncode is not None:
+                    if await _wait_headless_exit_gracefully(_HEADLESS_EXIT_GRACE_SEC):
+                        _log.info(
+                            "wait() завершился в grace после returncode=%s",
+                            effective_returncode,
+                        )
+                        break
                     forced_reason = f"returncode={effective_returncode} есть, но wait() не завершился (stdout pipe удерживается)"
                     _log.warning("%s", forced_reason)
                     break

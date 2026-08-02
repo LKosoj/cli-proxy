@@ -123,6 +123,44 @@ class _FakePendingWaitProc:
         self.returncode = -9
 
 
+class _FakeLateWaitPopen:
+    def __init__(self, proc, *, returncode: int = 0) -> None:
+        self._proc = proc
+        self._returncode = int(returncode)
+        self.poll_calls = 0
+
+    def poll(self) -> int:
+        self.poll_calls += 1
+        self._proc.returncode = self._returncode
+        self._proc.exit_ready.set()
+        return self._returncode
+
+
+class _FakeLateWaitProc:
+    """returncode виден раньше, чем asyncio резолвит wait() — штатный порядок событий."""
+
+    def __init__(self) -> None:
+        self.pid = 464646
+        self.returncode = None
+        self.stdin = None
+        self.stdout = _FakeHeadlessStream([b"partial output\n"])
+        self.stderr = _FakeHeadlessStream([])
+        self.exit_ready = asyncio.Event()
+        self._transport = SimpleNamespace(_proc=_FakeLateWaitPopen(self))
+
+    async def wait(self) -> int:
+        await self.exit_ready.wait()
+        return int(self.returncode)
+
+    def terminate(self) -> None:
+        self.returncode = -15
+        self.exit_ready.set()
+
+    def kill(self) -> None:
+        self.returncode = -9
+        self.exit_ready.set()
+
+
 def _build_session(tmp_path) -> Session:
     tool = ToolConfig(
         name="claude",
@@ -365,6 +403,7 @@ async def test_run_headless_uses_native_poll_when_wait_task_stays_pending(
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
     monkeypatch.setattr(session_module.os, "kill", lambda _pid, _sig: None)
     monkeypatch.setattr(session_module, "_HEADLESS_WAIT_POLL_SEC", 0.01)
+    monkeypatch.setattr(session_module, "_HEADLESS_EXIT_GRACE_SEC", 0.01)
     caplog.set_level(logging.WARNING, logger="session.headless")
 
     out = await session._run_headless("hello")
@@ -376,3 +415,30 @@ async def test_run_headless_uses_native_poll_when_wait_task_stays_pending(
     assert proc.stdout.close_calls == 1
     assert session.headless_forced_stop == "returncode=0 есть, но wait() не завершился (stdout pipe удерживается)"
     assert any("native poll detected exited process" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_run_headless_keeps_exit_normal_when_wait_resolves_within_grace(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    session = _build_session(tmp_path)
+    proc = _FakeLateWaitProc()
+
+    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+    monkeypatch.setattr(session_module.os, "kill", lambda _pid, _sig: None)
+    monkeypatch.setattr(session_module, "_HEADLESS_WAIT_POLL_SEC", 0.01)
+    caplog.set_level(logging.INFO, logger="session.headless")
+
+    out = await session._run_headless("hello")
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert out == "partial output\n"
+    assert proc.returncode == 0
+    assert proc._transport._proc.poll_calls >= 1
+    assert session.headless_forced_stop is None
+    assert any("wait() завершился в grace" in message for message in messages)
