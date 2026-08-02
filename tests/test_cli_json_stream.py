@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.services.cli_json_stream import (
     build_cli_json_stream_adapter,
     ClaudeJsonStreamAdapter,
@@ -69,6 +71,45 @@ def test_cli_json_stream_recorder_writes_raw_and_normalized_files(tmp_path) -> N
     assert normalized_lines[0]["kind"] == "session_started"
     assert normalized_lines[0]["session_id"] == "tid"
     assert normalized_lines[0]["payload"] == {"type": "thread.started", "thread_id": "tid"}
+
+
+@pytest.mark.asyncio
+async def test_cli_json_stream_recorder_flush_pending_writes_before_close(tmp_path) -> None:
+    recorder = CliJsonStreamRecorder(
+        enabled=True,
+        workdir=str(tmp_path),
+        cli_name="claude",
+        session_uid="thread:1:s1",
+    )
+
+    recorder.record_raw_line('{"type":"system"}')
+    await recorder.flush_pending()
+
+    assert recorder.raw_path is not None
+    assert recorder.raw_path.read_text(encoding="utf-8") == '{"type":"system"}\n'
+
+    recorder.record_raw_line('{"type":"result"}')
+    recorder.close()
+
+    assert recorder.raw_path.read_text(encoding="utf-8").splitlines() == [
+        '{"type":"system"}',
+        '{"type":"result"}',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cli_json_stream_recorder_flush_pending_is_noop_when_disabled(tmp_path) -> None:
+    recorder = CliJsonStreamRecorder(
+        enabled=False,
+        workdir=str(tmp_path),
+        cli_name="claude",
+        session_uid="thread:1:s1",
+    )
+    recorder.record_raw_line('{"type":"system"}')
+    await recorder.flush_pending()
+    recorder.close()
+
+    assert not (tmp_path / ".cli-proxy" / "cli-json-stream").exists()
 
 
 def test_cli_json_stream_recorder_is_noop_when_disabled(tmp_path) -> None:

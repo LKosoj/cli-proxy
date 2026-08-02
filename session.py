@@ -1331,6 +1331,10 @@ class Session:
                     if not chunk:
                         if stream_adapter and text_buf.strip():
                             _consume_stream_line(text_buf)
+                        try:
+                            await stream_recorder.flush_pending()
+                        except Exception:
+                            _log.exception("CLI JSON stream archive flush failed")
                         drain_eof = True
                         _log.info("drain: EOF received, total %d bytes", len(out_buf))
                         break
@@ -1350,6 +1354,14 @@ class Session:
                             self._update_activity(decoded)
                     except Exception:
                         _log.exception("stdout drain activity update failed")
+                    try:
+                        await stream_recorder.flush_pending()
+                    except Exception:
+                        _log.exception("CLI JSON stream archive flush failed")
+                    # StreamReader.read() возвращается без реального ожидания, пока в
+                    # буфере есть данные, поэтому длинный поток иначе держит event loop
+                    # занятым и таймеры срабатывают с задержкой в десятки секунд.
+                    await asyncio.sleep(0)
             except asyncio.CancelledError:
                 _log.warning("drain: cancelled, had %d bytes", len(out_buf))
                 raise
@@ -1366,6 +1378,7 @@ class Session:
                     if not chunk:
                         break
                     err_buf.extend(chunk)
+                    await asyncio.sleep(0)
                     # When stdout carries normalized JSON-stream events, stderr
                     # is service/debug output only and must not affect ticks.
                     if stream_adapter:

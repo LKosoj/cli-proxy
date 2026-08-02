@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1058,6 +1060,9 @@ class CliJsonStreamRecorder:
         self._normalized_path: Optional[Path] = None
         self._raw_handle = None
         self._normalized_handle = None
+        self._pending_raw: list[str] = []
+        self._pending_normalized: list[str] = []
+        self._write_lock = threading.Lock()
 
     @property
     def raw_path(self) -> Optional[Path]:
@@ -1070,30 +1075,63 @@ class CliJsonStreamRecorder:
     def record_raw_line(self, line: str) -> None:
         if not self._enabled:
             return
-        self._ensure_open()
-        assert self._raw_handle is not None
-        self._raw_handle.write(str(line).rstrip("\n") + "\n")
-        self._raw_handle.flush()
+        self._pending_raw.append(str(line).rstrip("\n") + "\n")
 
     def record_event(self, event: CliJsonStreamEvent) -> None:
         if not self._enabled:
             return
+        self._pending_normalized.append(json.dumps(event.to_record(), ensure_ascii=False) + "\n")
+
+    async def flush_pending(self) -> None:
+        """Сбросить накопленные строки на диск вне event loop."""
+        if not self._enabled:
+            return
+        raw, normalized = self._take_pending()
+        if not raw and not normalized:
+            return
+        await asyncio.to_thread(self._write_pending, raw, normalized)
+
+    def _take_pending(self) -> tuple[list[str], list[str]]:
+        raw, self._pending_raw = self._pending_raw, []
+        normalized, self._pending_normalized = self._pending_normalized, []
+        return raw, normalized
+
+    def _write_pending(self, raw: list[str], normalized: list[str]) -> None:
+        # Запись идёт из рабочего потока to_thread, а close() — из event loop,
+        # поэтому доступ к дескрипторам сериализуется.
+        with self._write_lock:
+            self._write_pending_locked(raw, normalized)
+
+    def _write_pending_locked(self, raw: list[str], normalized: list[str]) -> None:
         self._ensure_open()
-        assert self._normalized_handle is not None
-        self._normalized_handle.write(json.dumps(event.to_record(), ensure_ascii=False) + "\n")
-        self._normalized_handle.flush()
+        if raw:
+            assert self._raw_handle is not None
+            self._raw_handle.write("".join(raw))
+            self._raw_handle.flush()
+        if normalized:
+            assert self._normalized_handle is not None
+            self._normalized_handle.write("".join(normalized))
+            self._normalized_handle.flush()
 
     def close(self) -> None:
-        for handle_name in ("_raw_handle", "_normalized_handle"):
-            handle = getattr(self, handle_name)
-            if handle is None:
-                continue
-            try:
-                handle.close()
-            except Exception:
-                logger.exception("CLI JSON stream recorder close failed handle=%s", handle_name)
-            finally:
-                setattr(self, handle_name, None)
+        with self._write_lock:
+            if self._enabled:
+                raw, normalized = self._take_pending()
+                if raw or normalized:
+                    try:
+                        self._write_pending_locked(raw, normalized)
+                    except Exception:
+                        logger.exception("CLI JSON stream recorder final flush failed")
+            for handle_name in ("_raw_handle", "_normalized_handle"):
+                handle = getattr(self, handle_name)
+                if handle is None:
+                    continue
+                try:
+                    handle.close()
+                except Exception:
+                    logger.exception("CLI JSON stream recorder close failed handle=%s", handle_name)
+                finally:
+                    setattr(self, handle_name, None)
 
     def _ensure_open(self) -> None:
         if self._raw_handle is not None and self._normalized_handle is not None:

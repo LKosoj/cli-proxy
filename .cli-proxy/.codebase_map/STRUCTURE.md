@@ -20,9 +20,9 @@ Generated: 2026-06-17T10:39:27Z
 
 | Area | Files |
 | --- | ---: |
-| `tests/` | 562 |
+| `tests/` | 564 |
 | `modes/` | 220 |
-| `app/` | 165 |
+| `app/` | 166 |
 | `agent/` | 62 |
 | `desktop/` | 32 |
 | `miniapp/` | 120 |

@@ -7,11 +7,15 @@ from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import Application, ContextTypes
 
 from agent.plugins.task_management import run_task_deadline_checker
+from app.services.loop_lag_monitor import LoopLagMonitor
 from app.services.thread_mode_capability_checker import ThreadModeCapabilityChecker
 
 
 def build_post_init(bot_app) -> Callable[[Application], asyncio.Future]:
     async def _post_init(application: Application) -> None:
+        if getattr(bot_app, "loop_lag_monitor", None) is None:
+            bot_app.loop_lag_monitor = LoopLagMonitor()
+            bot_app.loop_lag_monitor.start()
         await ThreadModeCapabilityChecker(bot_app.config).ensure_supported(application.bot)
         await bot_app.set_bot_commands(application)
         await bot_app.mcp.start()
@@ -118,6 +122,13 @@ def build_post_shutdown(bot_app) -> Callable[[Application], asyncio.Future]:
             bot_app.shutdown_html_process_pool()
         except Exception as e:
             logging.getLogger(__name__).exception("html process pool shutdown failed: %s", e)
+        try:
+            loop_lag_monitor = getattr(bot_app, "loop_lag_monitor", None)
+            if loop_lag_monitor is not None:
+                await loop_lag_monitor.stop()
+                bot_app.loop_lag_monitor = None
+        except Exception as e:
+            logging.getLogger(__name__).exception("loop lag monitor stop failed: %s", e)
 
     return _post_shutdown
 
