@@ -32,6 +32,12 @@ from .tmux_parser import (
 _SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 # Перекрытие между соседними кусками pane.log при поиске resume-токена.
 _RESUME_SCAN_TAIL_CHARS = 512
+# Восстановление начинает читать pane.log со смещения запроса, а журнал к этому
+# моменту вырастает на десятки мегабайт: разбор такого куска идёт секундами и
+# держит GIL, то есть тормозит цикл событий даже из отдельного потока. Экран
+# определяется последними строками, а текст ответа берётся из JSONL-транскрипта,
+# поэтому догоняющее чтение ограничено хвостом.
+_PANE_CATCHUP_TAIL_BYTES = 2_000_000
 _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--resume", "-r", "--continue", "-c"},
     "gemini": {"--resume", "-r"},
@@ -73,10 +79,15 @@ _RECOVERY_DEST_KEYS = (
 logger = logging.getLogger(__name__)
 
 
-def _read_pane_chunk(log_path: str, cursor: int) -> tuple[bytes, int, bool]:
+def _read_pane_chunk(log_path: str, cursor: int, *, max_bytes: int = 0) -> tuple[bytes, int, bool]:
     """Читает байты pane.log, дописанные после cursor.
 
-    Третий элемент — признак того, что файл усечён или пересоздан.
+    max_bytes ограничивает размер одного чтения: отставание больше лимита
+    догоняется хвостом файла, середина пропускается.
+
+    Третий элемент — признак разрыва потока: файл усечён/пересоздан либо часть
+    отставания пропущена. В обоих случаях накопленный экран относится к другому
+    месту журнала.
     """
 
     if not os.path.exists(log_path):
@@ -86,10 +97,14 @@ def _read_pane_chunk(log_path: str, cursor: int) -> tuple[bytes, int, bool]:
     start = 0 if truncated else max(0, int(cursor))
     if size <= start:
         return b"", start, truncated
+    limit = max(0, int(max_bytes))
+    skipped = bool(limit) and size - start > limit
+    if skipped:
+        start = size - limit
     with open(log_path, "rb") as handle:
         handle.seek(start)
         data = handle.read()
-    return data, start + len(data), truncated
+    return data, start + len(data), truncated or skipped
 
 
 @dataclass(frozen=True)
@@ -125,10 +140,24 @@ class _PaneStream:
         claude_screen_reader: bool = False,
         tui_chrome: bool = False,
     ) -> _PaneAdvance:
-        chunk_bytes, self._cursor, truncated = _read_pane_chunk(self._log_path, self._cursor)
-        if truncated:
-            # pane.log пересоздан — накопленный экран относится к другому потоку.
+        previous_cursor = self._cursor
+        chunk_bytes, self._cursor, discontinuous = _read_pane_chunk(
+            self._log_path,
+            self._cursor,
+            max_bytes=_PANE_CATCHUP_TAIL_BYTES,
+        )
+        if discontinuous:
+            # pane.log пересоздан или прочитан с пропуском — накопленный экран
+            # относится к другому месту потока.
             self._restart()
+            skipped = self._cursor - len(chunk_bytes) - previous_cursor
+            if skipped > 0:
+                logger.info(
+                    "tmux pane catch-up skipped %s bytes request_id=%s path=%s",
+                    skipped,
+                    self._request_id,
+                    self._log_path,
+                )
         resume_token = None
         chunk = self._decoder.decode(chunk_bytes)
         if chunk:

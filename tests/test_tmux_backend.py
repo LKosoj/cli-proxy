@@ -1430,6 +1430,64 @@ def test_pane_stream_restarts_screen_after_truncation(tmp_path):
     assert "старый вывод" not in text
 
 
+def test_read_pane_chunk_limits_catchup_to_tail(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    with open(log_path, "wb") as handle:
+        handle.write(b"a" * 500 + b"b" * 100)
+
+    data, cursor, discontinuous = tmux_backend_module._read_pane_chunk(log_path, 0, max_bytes=100)
+
+    assert data == b"b" * 100
+    assert cursor == 600
+    assert discontinuous is True
+
+    # Отставание в пределах лимита читается целиком и разрывом не считается.
+    with open(log_path, "ab") as handle:
+        handle.write(b"c" * 50)
+    data, cursor, discontinuous = tmux_backend_module._read_pane_chunk(log_path, cursor, max_bytes=100)
+
+    assert data == b"c" * 50
+    assert cursor == 650
+    assert discontinuous is False
+
+
+def test_pane_stream_catches_up_by_tail_after_recovery_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr(tmux_backend_module, "_PANE_CATCHUP_TAIL_BYTES", 4096)
+    request_id = "req-catchup"
+    log_path = str(tmp_path / "pane.log")
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write(f"{request_marker(request_id)}\n")
+        handle.write("история запроса\n" * 5000)
+        handle.write(f"итоговый ответ\n{done_marker(request_id)}\n")
+
+    fed: list[str] = []
+    original_feed = tmux_backend_module.TmuxDeltaReader.feed
+
+    def _tracking_feed(self, chunk):
+        fed.append(chunk)
+        return original_feed(self, chunk)
+
+    monkeypatch.setattr(tmux_backend_module.TmuxDeltaReader, "feed", _tracking_feed)
+
+    # Восстановление стартует с начала запроса, а журнал успел вырасти: разбор
+    # должен ограничиться хвостом, где и лежит маркер завершения.
+    stream = tmux_backend_module._PaneStream(log_path, request_id, offset=0)
+    parsed = stream.advance().parsed
+
+    assert parsed.complete is True
+    assert "итоговый ответ" in parsed.text
+    # Символов не больше, чем прочитанных байт: в эмулятор ушёл только хвост.
+    assert sum(len(chunk) for chunk in fed) <= 4096
+
+    # Курсор после прыжка стоит на конце файла: дальше читается только дописанное.
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write("продолжение\n")
+    fed.clear()
+    stream.advance()
+
+    assert fed == ["продолжение\n"]
+
+
 def test_pane_stream_returns_resume_token_without_touching_session(tmp_path):
     log_path = str(tmp_path / "pane.log")
     request_id = "req-token"
@@ -1494,9 +1552,9 @@ def _slow_pane_read(monkeypatch, delay: float) -> None:
 
     original = tmux_backend_module._read_pane_chunk
 
-    def _slow(log_path, cursor):
+    def _slow(log_path, cursor, **kwargs):
         time.sleep(delay)
-        return original(log_path, cursor)
+        return original(log_path, cursor, **kwargs)
 
     monkeypatch.setattr(tmux_backend_module, "_read_pane_chunk", _slow)
 
