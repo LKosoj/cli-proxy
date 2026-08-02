@@ -703,7 +703,7 @@ class SessionActionsMixin:
     async def _cb_sess_tmux_reread(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
-        _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        _reply_chat_id, _owner_chat_id, scope_session = self._callback_scope(chat_id, query)
         session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
         if session is None:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
@@ -720,6 +720,10 @@ class SessionActionsMixin:
         if not callable(reread):
             await query.answer(t("msg.session.tmux_reread_failed", lang), show_alert=True)
             return True
+
+        # Меню закрывается до перечитывания: оно занимает секунды, и всё это время
+        # сообщение висело бы с уже неактуальными кнопками.
+        await self._close_session_menu(context, query, lang)
         try:
             outcome = str(await reread(session, context) or "failed")
         except Exception:
@@ -729,17 +733,34 @@ class SessionActionsMixin:
             )
             outcome = "failed"
 
+        if outcome == "started":
+            await query.answer()
+            return True
         answers = {
-            "started": "msg.session.tmux_reread_started",
             "not_tmux": "msg.session.tmux_reread_not_tmux",
             "no_request": "msg.session.tmux_reread_no_request",
             "failed": "msg.session.tmux_reread_failed",
         }
-        await query.answer(t(answers.get(outcome, answers["failed"]), lang), show_alert=outcome != "started")
-
-        text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
-        await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        await query.answer(t(answers.get(outcome, answers["failed"]), lang), show_alert=True)
         return True
+
+    async def _close_session_menu(self, context, query, lang: str) -> None:
+        """Убрать сообщение с меню сессии; если удалить нельзя — погасить его текстом."""
+        message = getattr(query, "message", None)
+        chat_id = getattr(message, "chat_id", None)
+        message_id = getattr(message, "message_id", None)
+        deleted = False
+        if chat_id is not None and message_id is not None:
+            delete_message = getattr(self.bot_app, "_delete_message", None)
+            if callable(delete_message):
+                try:
+                    deleted = bool(await delete_message(context, int(chat_id), int(message_id)))
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "session menu delete failed chat_id=%s message_id=%s", chat_id, message_id
+                    )
+        if not deleted:
+            await self._edit_msg(context, query, t("msg.session.menu_closed", lang))
 
     async def _cb_sess_snapshot(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)

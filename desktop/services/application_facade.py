@@ -4688,9 +4688,13 @@ class ApplicationFacade:
             return True
         if sdata.startswith("sess_tmux_reread:"):
             target_uid = sdata.split(":", 1)[1].strip()
+            # Меню закрывается до перечитывания: оно занимает секунды, и всё это
+            # время меню показывало бы уже неактуальные кнопки.
+            self.notify("ui:mode_menu", session_id=target_uid, text="", rows=[])
             outcome = await self.reread_tmux_output(target_uid)
+            if outcome == "started":
+                return True
             messages = {
-                "started": "msg.session.tmux_reread_started",
                 "not_tmux": "msg.session.tmux_reread_not_tmux",
                 "no_request": "msg.session.tmux_reread_no_request",
                 "no_session": "errors.session_not_found",
@@ -4703,9 +4707,6 @@ class ApplicationFacade:
                 text=t(messages.get(outcome, "msg.session.tmux_reread_failed"), self.ui_language),
                 md2=True,
             )
-            if outcome != "no_session":
-                text, rows = self._build_desktop_session_overview(target_uid)
-                self.notify("ui:mode_menu", session_id=target_uid, text=text, rows=rows)
             return True
         if sdata.startswith("orch_transition:"):
             parts = sdata.split(":")

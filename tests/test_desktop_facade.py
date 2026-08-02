@@ -217,6 +217,57 @@ async def test_desktop_tmux_reread_detaches_monitor_without_interrupting_cli(
 
 
 @pytest.mark.asyncio
+async def test_desktop_tmux_reread_callback_closes_menu_without_messages(tmp_path: Path) -> None:
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_reread_menu")
+    facade: ApplicationFacade = runtime["facade"]
+    facade.config = runtime["config"]
+    session = runtime["session"]
+    session_uid = session_runtime_uid(session)
+
+    async def _reread(uid: str) -> str:
+        assert uid == session_uid
+        return "started"
+
+    facade.reread_tmux_output = _reread
+    notifications = []
+    unsubscribe = facade.subscribe(notifications.append)
+    try:
+        ok = await facade.handle_mode_callback(session_uid, data=f"sess_tmux_reread:{session_uid}")
+    finally:
+        unsubscribe()
+
+    assert ok is True
+    # Меню закрывается пустым ui:mode_menu, других сообщений нет.
+    assert [notification.event for notification in notifications] == ["ui:mode_menu"]
+    assert notifications[0].payload["text"] == ""
+    assert notifications[0].payload["rows"] == []
+
+
+@pytest.mark.asyncio
+async def test_desktop_tmux_reread_callback_reports_failure(tmp_path: Path) -> None:
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_reread_menu_fail")
+    facade: ApplicationFacade = runtime["facade"]
+    facade.config = runtime["config"]
+    session = runtime["session"]
+    session_uid = session_runtime_uid(session)
+
+    async def _reread(_uid: str) -> str:
+        return "no_request"
+
+    facade.reread_tmux_output = _reread
+    notifications = []
+    unsubscribe = facade.subscribe(notifications.append)
+    try:
+        ok = await facade.handle_mode_callback(session_uid, data=f"sess_tmux_reread:{session_uid}")
+    finally:
+        unsubscribe()
+
+    assert ok is True
+    assert [notification.event for notification in notifications] == ["ui:mode_menu", "ui:message"]
+    assert notifications[1].payload["text"] == "Нет активного запроса tmux для перечитывания"
+
+
+@pytest.mark.asyncio
 async def test_desktop_facade_rejects_session_execution_backend_update(tmp_path: Path) -> None:
     runtime = _build_desktop_facade_runtime(tmp_path, intent="execution_backend")
     cfg: AppConfig = runtime["config"]
