@@ -21,6 +21,7 @@ class SearchWebTool(ToolPlugin):
                 "required": ["query"],
             },
             risk_level="medium",
+            returns_external_content=True,
         )
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:

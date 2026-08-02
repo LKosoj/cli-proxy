@@ -59,6 +59,11 @@ class AppRuntimeService:
         "webhooks.public_base_url",
         "webhooks.request_timeout_sec",
         "webhooks.max_payload_bytes",
+        "security.content_screening.enabled",
+        "security.content_screening.mode",
+        "security.content_screening.max_chars",
+        "security.content_screening.model",
+        "security.content_screening.timeout_ms",
     )
     RELOADABLE_DEFAULTS_FIELDS = (
         "cli_json_stream_archive_enabled",

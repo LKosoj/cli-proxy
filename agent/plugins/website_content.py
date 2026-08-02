@@ -31,6 +31,7 @@ class WebsiteContentTool(ToolPlugin):
             },
             parallelizable=True,
             timeout_ms=60_000,
+            returns_external_content=True,
         )
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:

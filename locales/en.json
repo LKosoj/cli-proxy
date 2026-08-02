@@ -2109,7 +2109,11 @@
       "lint_canary_max_fields": "Max Schema Fields per 180d",
       "err_json_invalid": "Invalid JSON: {error}",
       "err_json_field_invalid": "Field '{field}': invalid JSON — {error}",
-      "err_mcp_clients_must_be_list": "MCP clients must be a JSON array."
+      "err_mcp_clients_must_be_list": "MCP clients must be a JSON array.",
+      "cs_enabled": "External Content Screening",
+      "cs_mode": "Screening Mode (warn/block)",
+      "cs_max_chars": "Classifier Character Limit",
+      "cs_timeout_ms": "Classifier Timeout (ms)"
     },
     "sessmgr": {
       "transfer_msg": "CLI switched: {source} → {target}.\nTransfer context from previous session ({source})?",

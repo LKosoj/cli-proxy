@@ -20,10 +20,10 @@ Generated: 2026-06-17T10:39:27Z
 
 | Area | Files |
 | --- | ---: |
-| `tests/` | 559 |
+| `tests/` | 562 |
 | `modes/` | 220 |
-| `app/` | 164 |
-| `agent/` | 61 |
+| `app/` | 165 |
+| `agent/` | 62 |
 | `desktop/` | 32 |
 | `miniapp/` | 120 |
 | `tg/` | 18 |

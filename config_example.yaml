@@ -326,6 +326,15 @@ security:
     sqlite_path: null  # null -> reuse defaults.state_path SQLite DB
     default: null
     policies: {}
+  # Screens external tool output (fetch_page, search_web, web_research, ...) for prompt
+  # injection via a separate LLM classifier call before the text reaches the agent's context.
+  content_screening:
+    enabled: false  # Master switch; opt-in.
+    mode: "warn"  # warn -> prefix warning + original text; block -> original text withheld
+    # (in block mode an unavailable classifier also withholds the text, warn lets it through).
+    max_chars: 16000  # Truncation limit (head+tail) for the text sent to the classifier.
+    model: ""  # "" -> defaults.openai_model
+    timeout_ms: 8000  # Classifier call timeout in milliseconds.
 
 # Self-evolving lint rules (classify→decide→feedback fractal). Triggers in the
 # background on session activity; never blocks the user reply. Defaults are

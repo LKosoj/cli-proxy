@@ -2109,7 +2109,11 @@
       "lint_canary_max_fields": "Макс. полей за 180 дней",
       "err_json_invalid": "Неверный JSON: {error}",
       "err_json_field_invalid": "Поле '{field}': неверный JSON — {error}",
-      "err_mcp_clients_must_be_list": "MCP-клиенты должны быть списком (JSON array)."
+      "err_mcp_clients_must_be_list": "MCP-клиенты должны быть списком (JSON array).",
+      "cs_enabled": "Скрининг внешнего контента",
+      "cs_mode": "Режим скрининга (warn/block)",
+      "cs_max_chars": "Лимит символов для классификатора",
+      "cs_timeout_ms": "Таймаут классификатора (мс)"
     },
     "sessmgr": {
       "transfer_msg": "CLI переключён: {source} → {target}.\nПеренести контекст предыдущей сессии ({source})?",

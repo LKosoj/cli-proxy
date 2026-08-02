@@ -74,6 +74,9 @@ class MCPRemoteToolPlugin(ToolPlugin):
             parameters=_normalize_schema(self._tool.input_schema),
             parallelizable=False,
             timeout_ms=30_000,
+            # MCP tools run in a separate process we don't control; treat their output as
+            # external content and screen it unconditionally (conservative default).
+            returns_external_content=True,
         )
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:

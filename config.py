@@ -272,8 +272,18 @@ class SecurityRateLimitsConfig:
 
 
 @dataclasses.dataclass
+class ContentScreeningConfig:
+    enabled: bool = False
+    mode: str = "warn"
+    max_chars: int = 16_000
+    model: str = ""
+    timeout_ms: int = 8_000
+
+
+@dataclasses.dataclass
 class SecurityConfig:
     rate_limits: SecurityRateLimitsConfig = dataclasses.field(default_factory=SecurityRateLimitsConfig)
+    content_screening: ContentScreeningConfig = dataclasses.field(default_factory=ContentScreeningConfig)
 
 
 @dataclasses.dataclass

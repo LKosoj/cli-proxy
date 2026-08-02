@@ -78,4 +78,4 @@ Instruction node for `desktop` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-07-31T08:30:00Z
+- 2026-08-02T00:00:00Z

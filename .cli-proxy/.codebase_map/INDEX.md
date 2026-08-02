@@ -38,10 +38,10 @@ These files are mandatory context and must be considered before major edits.
 - `CONCERNS.md`: Риски, технический долг и зоны повышенного внимания.
 
 ## Nodes
-- [tests](nodes/tests.md) - files: 559, source_glob: `tests/**`
+- [tests](nodes/tests.md) - files: 562, source_glob: `tests/**`
 - [modes](nodes/modes.md) - files: 220, source_glob: `modes/**`
-- [app](nodes/app.md) - files: 164, source_glob: `app/**`
-- [agent](nodes/agent.md) - files: 61, source_glob: `agent/**`
+- [app](nodes/app.md) - files: 165, source_glob: `app/**`
+- [agent](nodes/agent.md) - files: 62, source_glob: `agent/**`
 - [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`
 - [miniapp](nodes/miniapp.md) - files: 120, source_glob: `miniapp/**`
 - [tg](nodes/tg.md) - files: 18, source_glob: `tg/**`

@@ -4978,6 +4978,7 @@
     cfg.scheduler = cfg.scheduler || {};
     cfg.security = cfg.security || {};
     cfg.security.rate_limits = cfg.security.rate_limits || {};
+    cfg.security.content_screening = cfg.security.content_screening || {};
     cfg.lint_evolution = cfg.lint_evolution || {};
     cfg.defaults.pending_input_confirmation_enabled =
       cfg.defaults.pending_input_confirmation_enabled !== undefined ? !!cfg.defaults.pending_input_confirmation_enabled : true;
@@ -5019,6 +5020,16 @@
     }
     cfg.security.rate_limits.enabled = cfg.security.rate_limits.enabled !== undefined ? !!cfg.security.rate_limits.enabled : false;
     cfg.security.rate_limits.backend = cfg.security.rate_limits.backend || "sqlite";
+    cfg.security.content_screening.enabled = cfg.security.content_screening.enabled !== undefined ? !!cfg.security.content_screening.enabled : false;
+    cfg.security.content_screening.mode = ["warn", "block"].includes(String(cfg.security.content_screening.mode || ""))
+      ? String(cfg.security.content_screening.mode)
+      : "warn";
+    if (!Number.isFinite(Number(cfg.security.content_screening.max_chars)) || Number(cfg.security.content_screening.max_chars) <= 0) {
+      cfg.security.content_screening.max_chars = 16000;
+    }
+    if (!Number.isFinite(Number(cfg.security.content_screening.timeout_ms)) || Number(cfg.security.content_screening.timeout_ms) <= 0) {
+      cfg.security.content_screening.timeout_ms = 8000;
+    }
     cfg.lint_evolution.enabled = cfg.lint_evolution.enabled !== undefined ? !!cfg.lint_evolution.enabled : false;
     if (!Number.isFinite(Number(cfg.lint_evolution.level1_cooldown_hours)) || Number(cfg.lint_evolution.level1_cooldown_hours) < 0) {
       cfg.lint_evolution.level1_cooldown_hours = 24;
@@ -5339,6 +5350,10 @@
           fieldHtml({ id: "sec-rate-sqlite-path", label: "rate_limits.sqlite_path" }),
           fieldHtml({ id: "sec-rate-default", label: "rate_limits.default", kind: "textarea", hint: 'JSON-объект: {"limit":10,"window_sec":60}' }),
           fieldHtml({ id: "sec-rate-policies", label: "rate_limits.policies", kind: "textarea", hint: "JSON-объект карты политик" }),
+          fieldHtml({ id: "sec-screen-enabled", label: "content_screening.enabled", kind: "checkbox", hint: "restart required" }),
+          fieldHtml({ id: "sec-screen-mode", label: "content_screening.mode", kind: "select", options: ["warn", "block"], hint: "restart required" }),
+          fieldHtml({ id: "sec-screen-max-chars", label: "content_screening.max_chars", kind: "number", hint: "restart required" }),
+          fieldHtml({ id: "sec-screen-timeout", label: "content_screening.timeout_ms", kind: "number", hint: "restart required" }),
         ].join(""),
       },
       {
@@ -5612,6 +5627,11 @@
     bindInput("sec-rate-sqlite-path", () => cfg.security.rate_limits.sqlite_path || "", (v) => (cfg.security.rate_limits.sqlite_path = optionalText(v)));
     bindJsonArea("sec-rate-default", () => cfg.security.rate_limits.default, (v) => (cfg.security.rate_limits.default = v), "security.rate_limits.default");
     bindJsonArea("sec-rate-policies", () => cfg.security.rate_limits.policies, (v) => (cfg.security.rate_limits.policies = v || {}), "security.rate_limits.policies");
+
+    bindInput("sec-screen-enabled", () => cfg.security.content_screening.enabled, (v) => (cfg.security.content_screening.enabled = !!v));
+    bindInput("sec-screen-mode", () => cfg.security.content_screening.mode || "warn", (v) => (cfg.security.content_screening.mode = v || "warn"));
+    bindInput("sec-screen-max-chars", () => cfg.security.content_screening.max_chars, (v) => (cfg.security.content_screening.max_chars = Number(v || 0)));
+    bindInput("sec-screen-timeout", () => cfg.security.content_screening.timeout_ms, (v) => (cfg.security.content_screening.timeout_ms = Number(v || 0)));
 
     bindInput("lint-evo-enabled", () => cfg.lint_evolution.enabled, (v) => (cfg.lint_evolution.enabled = !!v));
     bindInput("lint-evo-level1-cooldown", () => cfg.lint_evolution.level1_cooldown_hours, (v) => (cfg.lint_evolution.level1_cooldown_hours = Number(v || 0)));

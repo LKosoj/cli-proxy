@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import weakref
@@ -80,6 +81,43 @@ def _shutdown_tracked_bot_apps() -> None:
                 svc._loop = None
             if hasattr(svc, "_started"):
                 svc._started = False
+
+
+class _RecordCollector(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def logger_records():
+    """Собрать записи конкретного логгера напрямую, минуя root.
+
+    setup_logging() (вызывается из BotApp.__init__) выставляет propagate=False логгеру
+    "agent" на весь процесс, поэтому caplog — его handler висит на root — перестаёт видеть
+    записи из agent.* сразу после того, как любой тест в прогоне создал BotApp. Хендлер
+    вешается прямо на нужный логгер, так что результат не зависит от порядка тестов.
+    """
+    attached: list[tuple[logging.Logger, logging.Handler, int]] = []
+
+    def _capture(name: str, level: int = logging.WARNING) -> list[logging.LogRecord]:
+        logger = logging.getLogger(name)
+        handler = _RecordCollector()
+        handler.setLevel(level)
+        old_level = logger.level
+        logger.setLevel(level)
+        logger.addHandler(handler)
+        attached.append((logger, handler, old_level))
+        return handler.records
+
+    yield _capture
+
+    for logger, handler, old_level in attached:
+        logger.removeHandler(handler)
+        logger.setLevel(old_level)
 
 
 @pytest.fixture(autouse=True)

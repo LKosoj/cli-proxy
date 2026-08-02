@@ -2109,7 +2109,11 @@
       "lint_canary_max_fields": "Max. Schema-Felder pro 180 Tage",
       "err_json_invalid": "Ungültiges JSON: {error}",
       "err_json_field_invalid": "Feld '{field}': ungültiges JSON — {error}",
-      "err_mcp_clients_must_be_list": "MCP-Clients müssen ein JSON-Array sein."
+      "err_mcp_clients_must_be_list": "MCP-Clients müssen ein JSON-Array sein.",
+      "cs_enabled": "Screening externer Inhalte",
+      "cs_mode": "Screening-Modus (warn/block)",
+      "cs_max_chars": "Zeichenlimit für Klassifikator",
+      "cs_timeout_ms": "Klassifikator-Timeout (ms)"
     },
     "sessmgr": {
       "transfer_msg": "CLI gewechselt: {source} → {target}.\nKontext der vorherigen Sitzung ({source}) übertragen?",

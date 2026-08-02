@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .models import (
     ConfigModel,
+    ContentScreeningConfigModel,
     DefaultsConfigModel,
     LintEvolutionConfigModel,
     MCPClientConfigModel,
@@ -38,6 +39,7 @@ RUNTIME_CONFIG_FIELD_PATHS = frozenset(
         ("security.rate_limits", SecurityRateLimitsConfigModel),
         ("security.rate_limits.default", SecurityRateLimitPolicyConfigModel),
         ("security.rate_limits.policies.*", SecurityRateLimitPolicyConfigModel),
+        ("security.content_screening", ContentScreeningConfigModel),
         ("lint_evolution", LintEvolutionConfigModel),
     )
     for path in _model_field_paths(prefix, model_cls)

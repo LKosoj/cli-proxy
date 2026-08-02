@@ -14,6 +14,7 @@ class FetchPageTool(ToolPlugin):
             description="Fetch and parse content from a URL. Returns clean markdown text.",
             parameters={"type": "object", "properties": {"url": {"type": "string", "description": "URL to fetch"}}, "required": ["url"]},
             risk_level="medium",
+            returns_external_content=True,
         )
 
     async def execute(self, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:

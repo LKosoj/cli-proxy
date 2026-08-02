@@ -755,6 +755,26 @@ def config_schema() -> Dict[str, Any]:
                         "required": False,
                         "description": "Named rate limit policies as JSON object map.",
                     },
+                    "content_screening.enabled": {
+                        "type": "bool",
+                        "required": True,
+                        "description": "Screen external tool output (fetch_page, search_web, ...) for prompt injection.",
+                    },
+                    "content_screening.mode": {
+                        "type": "enum[warn,block]",
+                        "required": True,
+                        "description": "warn -> prefix warning + original text; block -> original text withheld.",
+                    },
+                    "content_screening.max_chars": {
+                        "type": "int",
+                        "required": True,
+                        "description": "Truncation limit (head+tail) for the text sent to the classifier.",
+                    },
+                    "content_screening.timeout_ms": {
+                        "type": "int",
+                        "required": True,
+                        "description": "Content screening classifier call timeout in milliseconds.",
+                    },
                 },
             },
             "lint_evolution": {

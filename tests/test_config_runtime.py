@@ -253,3 +253,103 @@ def test_policy_derived_change_fields_include_not_applied_and_secret_changed() -
     ]
     assert not_applied == ["operator_file.local_only"]
     assert secret_changed == ["telegram.token"]
+
+
+# --- content_screening config ---------------------------------------------------------------
+
+
+def test_content_screening_config_model_defaults() -> None:
+    from app.config_runtime.models import ContentScreeningConfigModel
+
+    model = ContentScreeningConfigModel()
+    assert model.enabled is False
+    assert model.mode == "warn"
+    assert model.max_chars == 16_000
+    assert model.model == ""
+    assert model.timeout_ms == 8_000
+
+
+def test_content_screening_config_model_rejects_invalid_mode() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from app.config_runtime.models import ContentScreeningConfigModel
+
+    with pytest.raises(ValidationError):
+        ContentScreeningConfigModel(mode="strict")
+
+
+def test_content_screening_config_model_rejects_out_of_range_max_chars() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from app.config_runtime.models import ContentScreeningConfigModel
+
+    with pytest.raises(ValidationError):
+        ContentScreeningConfigModel(max_chars=0)
+    with pytest.raises(ValidationError):
+        ContentScreeningConfigModel(max_chars=60_001)
+
+
+def test_security_config_model_embeds_content_screening() -> None:
+    from app.config_runtime.models import SecurityConfigModel
+
+    model = SecurityConfigModel.model_validate({"content_screening": {"enabled": True, "mode": "block"}})
+    assert model.content_screening.enabled is True
+    assert model.content_screening.mode == "block"
+
+
+def test_content_screening_config_dataclass_defaults() -> None:
+    from config import ContentScreeningConfig
+
+    cfg = ContentScreeningConfig()
+    assert cfg.enabled is False
+    assert cfg.mode == "warn"
+    assert cfg.max_chars == 16_000
+    assert cfg.model == ""
+    assert cfg.timeout_ms == 8_000
+
+
+def test_adapter_maps_content_screening_settings_into_app_config(tmp_path: Path) -> None:
+    from config import load_config
+
+    payload = _payload(tmp_path)
+    payload["security"] = {
+        "content_screening": {
+            "enabled": True,
+            "mode": "block",
+            "max_chars": 2_000,
+            "model": "gpt-4o-mini",
+            "timeout_ms": 3_000,
+        }
+    }
+    path = _write_config(tmp_path, payload)
+    cfg = load_config(str(path))
+
+    assert cfg.security.content_screening.enabled is True
+    assert cfg.security.content_screening.mode == "block"
+    assert cfg.security.content_screening.max_chars == 2_000
+    assert cfg.security.content_screening.model == "gpt-4o-mini"
+    assert cfg.security.content_screening.timeout_ms == 3_000
+
+
+def test_content_screening_fields_are_restart_required() -> None:
+    from app.services.config_apply_policy import classify_config_path
+
+    for suffix in ("enabled", "mode", "max_chars", "model", "timeout_ms"):
+        policy = classify_config_path(f"security.content_screening.{suffix}")
+        assert policy.apply_mode == "restart_required"
+
+
+def test_content_screening_yaml_examples_load_disabled_by_default() -> None:
+    # config.yaml is a local, gitignored template that may not exist in every checkout
+    # (see test_config_templates_no_keyring.py for the same pattern); config_example.yaml
+    # is always tracked.
+    from config import load_config
+
+    for name in ("config.yaml", "config_example.yaml"):
+        path = Path(__file__).resolve().parents[1] / name
+        if not path.exists():
+            continue
+        cfg = load_config(str(path))
+        assert cfg.security.content_screening.enabled is False

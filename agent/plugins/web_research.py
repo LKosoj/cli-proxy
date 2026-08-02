@@ -88,6 +88,7 @@ class WebResearchTool(ToolPlugin):
             },
             parallelizable=False,
             timeout_ms=180_000,
+            returns_external_content=True,
         )
 
     def _get_jina_api_key(self) -> Optional[str]:

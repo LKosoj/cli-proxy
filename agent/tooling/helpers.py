@@ -16,6 +16,7 @@ import httpx
 import requests
 
 from utils.text import strip_ansi
+from agent.tooling.command_scan import scannable_command
 from modes.sdk.runtime.tooling.constants import (
     OUTPUT_HEAD_LEN,
     OUTPUT_TAIL_LEN,
@@ -23,6 +24,8 @@ from modes.sdk.runtime.tooling.constants import (
     TOOL_TIMEOUT_MS,
     WEB_FETCH_TIMEOUT_MS,
 )
+
+logger = logging.getLogger(__name__)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 BLOCKED_PATTERNS_PATH = os.path.join(REPO_ROOT, "approvals", "blocked-patterns.json")
@@ -276,21 +279,95 @@ def _load_blocked_patterns() -> List[Dict[str, Any]]:
         return []
 
 
-def check_command(command: str, chat_type: Optional[str]) -> Tuple[bool, bool, Optional[str]]:
-    patterns = _load_blocked_patterns()
-    command_lower = command.strip().lower()
-    for p in patterns:
-        try:
-            if p.get("category") == "group_only" and chat_type != "group":
-                continue
-            regex = p.get("pattern")
-            if regex and re.search(regex, command_lower, re.I):
-                if p.get("blocked"):
-                    return False, True, p.get("reason")
-                return True, False, p.get("reason")
-        except Exception as e:
-            logging.exception(f"tool failed {str(e)}")
+_MAX_PATTERN_LEN = 256
+
+
+@dataclass
+class _CompiledPattern:
+    id: str
+    category: str
+    regex: "re.Pattern[str]"
+    reason: Optional[str]
+    blocked: bool
+
+
+_COMPILED_PATTERNS_CACHE: Optional[List[_CompiledPattern]] = None
+
+
+def _compile_blocked_patterns() -> List[_CompiledPattern]:
+    """Скомпилировать blocked-patterns.json один раз и закэшировать (чистое ускорение:
+    раньше `re.search(str, ...)` компилировал паттерн заново на каждый вызов check_command).
+
+    Кэш живёт до конца процесса: правка blocked-patterns.json на диске подхватывается
+    только рестартом. Редактора паттернов в рантайме в проекте нет, поэтому сброс не нужен.
+    """
+    global _COMPILED_PATTERNS_CACHE
+    if _COMPILED_PATTERNS_CACHE is not None:
+        return _COMPILED_PATTERNS_CACHE
+    compiled: List[_CompiledPattern] = []
+    for p in _load_blocked_patterns():
+        pattern_id = str(p.get("id") or "")
+        raw_pattern = p.get("pattern")
+        if not raw_pattern:
             continue
+        if len(raw_pattern) > _MAX_PATTERN_LEN:
+            logger.warning("blocked pattern %s skipped: longer than %d chars", pattern_id, _MAX_PATTERN_LEN)
+            continue
+        try:
+            regex = re.compile(raw_pattern, re.I)
+        except re.error:
+            logger.exception("blocked pattern %s is not a valid regex, skipping", pattern_id)
+            continue
+        compiled.append(
+            _CompiledPattern(
+                id=pattern_id,
+                category=str(p.get("category") or ""),
+                regex=regex,
+                reason=p.get("reason"),
+                blocked=bool(p.get("blocked")),
+            )
+        )
+    _COMPILED_PATTERNS_CACHE = compiled
+    return compiled
+
+
+def check_command(command: str, chat_type: Optional[str]) -> Tuple[bool, bool, Optional[str]]:
+    """Проверить команду на соответствие политике безопасности (blocked-patterns.json).
+
+    Прогоняет паттерны и по сырой строке, и (если нормализация дала другой текст) по
+    развёрнутой через `agent.tooling.command_scan.scannable_command` версии — это закрывает
+    обфускацию через кавычки, ANSI-C escape-последовательности, `bash -c`, `$(...)`, heredoc
+    и т.п. Известные ограничения:
+    * питоновский `re` не умеет таймаутить долгий матчинг сам по себе — от этого частично
+      защищают лимиты длины входа (`MAX_SCAN_INPUT_CHARS`) и длины паттерна;
+    * запись команды в файл с последующим запуском (`echo '...' > f; bash f`) не ловится:
+      скрытый кавычками текст раскрывается только когда bash исполняет уже записанный файл,
+      а сами запись и запуск легко разнести по двум вызовам инструмента. Это предел любого
+      сканера одной командной строки, а не свойство нормализации.
+    """
+    patterns = _compile_blocked_patterns()
+    raw = command.strip().lower()
+    try:
+        normalized = scannable_command(command.strip()).lower()
+    except Exception:
+        logger.exception("scannable_command failed for command, falling back to raw string")
+        normalized = raw
+    candidates: Tuple[str, ...] = (raw,) if normalized == raw else (raw, normalized)
+    for p in patterns:
+        if p.category == "group_only" and chat_type != "group":
+            continue
+        for candidate in candidates:
+            try:
+                matched = p.regex.search(candidate)
+            except Exception:
+                # Единственный барьер безопасности на каждую команду: сбой одного паттерна
+                # не должен снимать проверку остальными.
+                logger.exception("blocked pattern %s failed while matching, skipping", p.id)
+                break
+            if matched:
+                if p.blocked:
+                    return False, True, p.reason
+                return True, False, p.reason
     return False, False, None
 
 

@@ -24,6 +24,11 @@ class ToolRegistry:
         self.specs: Dict[str, ToolSpec] = {}
 
         self._mcp_manager = MCPManager(config)
+        # Импорт отложен: content_screening_service тянет modes.sdk.runtime.*, а этот модуль
+        # сам находится внутри modes.sdk.runtime — импорт на уровне модуля замыкает цикл.
+        from app.services.content_screening_service import build_content_screening_service
+
+        self._content_screening = build_content_screening_service(config)
         self._mcp_loaded = False
         self._mcp_lock = asyncio.Lock()
         self._mcp_tool_keys: set[str] = set()
@@ -425,12 +430,38 @@ class ToolRegistry:
         timeout_ms = int(override_timeout_ms or spec.timeout_ms or TOOL_TIMEOUT_MS)
         timeout = timeout_ms / 1000
         try:
-            return await asyncio.wait_for(plugin.execute(normalized_args, ctx), timeout=timeout)
+            result = await asyncio.wait_for(plugin.execute(normalized_args, ctx), timeout=timeout)
         except asyncio.TimeoutError:
             return {"success": False, "error": f"⏱️ Tool {name} timed out after {int(timeout)}s"}
         except Exception as e:
             logging.exception(f"tool failed {str(e)}")
             return {"success": False, "error": str(e)}
+        if self._content_screening is not None and spec.returns_external_content:
+            result = await self._apply_content_screening(name, result)
+        return result
+
+    async def _apply_content_screening(self, name: str, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Прогнать результат внешнего инструмента через классификатор prompt injection.
+
+        Баг в этой логике не должен ронять сам инструмент: любая ошибка здесь
+        логируется и возвращается исходный (нескринённый) результат.
+        """
+        try:
+            if not isinstance(result, dict) or not result.get("success"):
+                return result
+            output = result.get("output")
+            if not isinstance(output, str) or not output.strip():
+                return result
+            verdict = await self._content_screening.screen(name, output)
+            if verdict.decision == "auto":
+                return result
+            new_result = dict(result)
+            new_result["output"] = self._content_screening.apply(verdict, output)
+            await self._content_screening.audit(name, verdict)
+            return new_result
+        except Exception:
+            logging.exception(f"content screening failed for tool {name}")
+            return result
 
     async def execute_many(self, calls: List[Dict[str, Any]], ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
         # determine parallelizable

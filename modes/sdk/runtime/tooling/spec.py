@@ -16,6 +16,7 @@ class ToolSpec:
     parallelizable: bool = True
     category: str = "general"
     one_liner: str = ""
+    returns_external_content: bool = False
 
     def to_openai_tool(self) -> Dict[str, Any]:
         return {

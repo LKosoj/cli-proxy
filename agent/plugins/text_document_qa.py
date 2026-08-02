@@ -36,6 +36,7 @@ class TextDocumentQATool(DialogMixin, ToolPlugin):
             },
             parallelizable=False,
             timeout_ms=120_000,
+            returns_external_content=True,
         )
 
     # -- menu & commands ----------------------------------------------------

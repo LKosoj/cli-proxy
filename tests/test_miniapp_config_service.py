@@ -570,3 +570,20 @@ def test_miniapp_routes_reject_legacy_chat_session_uid_entrypoint_input(tmp_path
     assert str(exc.value.reason or "") == (
         "session_uid chat_id:session_id format is not supported; use canonical session_uid"
     )
+
+
+def test_config_schema_content_screening_fields_are_restart_required() -> None:
+    schema = config_schema()
+    for path in (
+        "security.content_screening.enabled",
+        "security.content_screening.mode",
+        "security.content_screening.max_chars",
+        "security.content_screening.timeout_ms",
+    ):
+        _assert_schema_field_matches_policy(schema, path)
+        restart_required, reloadable = _expected_flags(path)
+        assert restart_required is True
+        assert reloadable is False
+
+    security_fields = schema["sections"]["security"]["fields"]
+    assert "content_screening.model" not in security_fields

@@ -347,8 +347,17 @@ class SecurityRateLimitsConfigModel(ConfigModel):
         return self
 
 
+class ContentScreeningConfigModel(ConfigModel):
+    enabled: bool = False
+    mode: Literal["warn", "block"] = "warn"
+    max_chars: Annotated[int, Field(gt=0, le=60_000)] = 16_000
+    model: str = ""
+    timeout_ms: Annotated[int, Field(gt=0, le=60_000)] = 8_000
+
+
 class SecurityConfigModel(ConfigModel):
     rate_limits: SecurityRateLimitsConfigModel = Field(default_factory=SecurityRateLimitsConfigModel)
+    content_screening: ContentScreeningConfigModel = Field(default_factory=ContentScreeningConfigModel)
 
 
 class LintEvolutionConfigModel(ConfigModel):

@@ -17,6 +17,7 @@ def _copy_mapping(value: dict[Any, Any] | None) -> dict[Any, Any] | None:
 def adapt_validated_settings(settings: ValidatedSettings, *, path: str) -> "AppConfig":
     from config import (
         AppConfig,
+        ContentScreeningConfig,
         DefaultsConfig,
         LintEvolutionConfig,
         MCPClientServerConfig,
@@ -232,7 +233,14 @@ def adapt_validated_settings(settings: ValidatedSettings, *, path: str) -> "AppC
                 )
                 for scope, policy in settings.security.rate_limits.policies.items()
             },
-        )
+        ),
+        content_screening=ContentScreeningConfig(
+            enabled=settings.security.content_screening.enabled,
+            mode=settings.security.content_screening.mode,
+            max_chars=settings.security.content_screening.max_chars,
+            model=settings.security.content_screening.model,
+            timeout_ms=settings.security.content_screening.timeout_ms,
+        ),
     )
 
     lint_evolution = LintEvolutionConfig(

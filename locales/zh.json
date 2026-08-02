@@ -2109,7 +2109,11 @@
       "lint_canary_max_fields": "每 180 天最大 Schema 字段数",
       "err_json_invalid": "JSON 无效：{error}",
       "err_json_field_invalid": "字段 '{field}'：JSON 无效 — {error}",
-      "err_mcp_clients_must_be_list": "MCP 客户端必须是 JSON 数组。"
+      "err_mcp_clients_must_be_list": "MCP 客户端必须是 JSON 数组。",
+      "cs_enabled": "外部内容筛查",
+      "cs_mode": "筛查模式 (warn/block)",
+      "cs_max_chars": "分类器字符上限",
+      "cs_timeout_ms": "分类器超时 (毫秒)"
     },
     "sessmgr": {
       "transfer_msg": "CLI 已切换: {source} → {target}。\n是否迁移上一个会话 ({source}) 的上下文?",

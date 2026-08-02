@@ -199,6 +199,10 @@ DESKTOP_EDITABLE_CONFIG_FIELDS = frozenset({
     "security.rate_limits.sqlite_path",
     "security.rate_limits.default",
     "security.rate_limits.policies",
+    "security.content_screening.enabled",
+    "security.content_screening.mode",
+    "security.content_screening.max_chars",
+    "security.content_screening.timeout_ms",
     # Lint Evolution
     "lint_evolution.enabled",
     "lint_evolution.level1_cooldown_hours",
@@ -224,6 +228,9 @@ DESKTOP_UNSUPPORTED_CONFIG_FIELDS = frozenset({
     "security.rate_limits.policies.*.window_sec",
     "security.rate_limits.policies.*.burst_limit",
     "security.rate_limits.policies.*.burst_window_sec",
+    # Content screening classifier model override is an advanced/rarely used field;
+    # not exposed in Desktop or MiniApp UI, edit config.yaml directly.
+    "security.content_screening.model",
     # i18n fields are managed via the dedicated language selector / language API
     # and auto-detection, not the generic config editor.
     "defaults.default_language",
@@ -1289,6 +1296,21 @@ class ConfigEditorWidget(QWidget):
             layout, t("desktop.cfgedit.rl_policies", lang),
             {k: _policy_to_dict(v) for k, v in (getattr(rl, "policies", None) or {}).items()})
 
+        cs = self._current_config.security.content_screening
+        self._widgets["security.content_screening.enabled"] = self._add_check(
+            layout, t("desktop.cfgedit.cs_enabled", lang),
+            getattr(cs, "enabled", False))
+        self._widgets["security.content_screening.mode"] = self._add_combo(
+            layout, t("desktop.cfgedit.cs_mode", lang),
+            ["warn", "block"],
+            getattr(cs, "mode", "warn"))
+        self._widgets["security.content_screening.max_chars"] = self._add_spin(
+            layout, t("desktop.cfgedit.cs_max_chars", lang),
+            getattr(cs, "max_chars", 16000), min_v=1, max_v=60000)
+        self._widgets["security.content_screening.timeout_ms"] = self._add_spin(
+            layout, t("desktop.cfgedit.cs_timeout_ms", lang),
+            getattr(cs, "timeout_ms", 8000), min_v=1, max_v=60000)
+
         return self._create_scroll_area(container)
 
     def _create_lint_evolution_tab(self, lang: str) -> QWidget:
@@ -1695,6 +1717,18 @@ class ConfigEditorWidget(QWidget):
                 new_cfg.security.rate_limits.policies = rebuilt_policies
             else:
                 new_cfg.security.rate_limits.policies = {}
+            new_cfg.security.content_screening.enabled = self._widgets[
+                "security.content_screening.enabled"
+            ].isChecked()
+            new_cfg.security.content_screening.mode = self._widgets[
+                "security.content_screening.mode"
+            ].currentText()
+            new_cfg.security.content_screening.max_chars = self._widgets[
+                "security.content_screening.max_chars"
+            ].value()
+            new_cfg.security.content_screening.timeout_ms = self._widgets[
+                "security.content_screening.timeout_ms"
+            ].value()
 
             # Lint evolution
             new_cfg.lint_evolution.enabled = self._widgets["lint_evolution.enabled"].isChecked()
