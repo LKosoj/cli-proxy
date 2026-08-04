@@ -227,8 +227,13 @@ class SessionRunService:
                 request_id = str(getattr(session, "_tmux_recovery_request_id", "") or "").strip()
                 if request_id:
                     continue
+                backend = TmuxExecutionBackend()
                 try:
-                    request = await TmuxExecutionBackend().get_recovery_request(session)
+                    request = await backend.get_recovery_request(session)
+                    if request is None:
+                        # Свой запрос бот закрыл до перезапуска, но CLI в pane
+                        # продолжает печатать — его вывод иначе потеряется.
+                        request = await backend.build_observe_request(session, require_recent_activity=True)
                 except Exception:
                     _log.exception("tmux startup reconciliation failed session=%s", getattr(session, "id", "?"))
                     continue

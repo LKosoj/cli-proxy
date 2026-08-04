@@ -268,6 +268,62 @@ async def test_startup_reconciliation_schedules_all_supported_tmux_clis(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_startup_reconciliation_observes_only_live_panes(monkeypatch):
+    events: list[tuple] = []
+    service = _run_service(events)
+    sessions = {}
+    for session_id in ("s-live", "s-idle"):
+        session = _recovery_session()
+        session.id = session_id
+        session.busy = False
+        sessions[session_id] = session
+    service.bot_app.manager = SimpleNamespace(sessions_by_chat={42: sessions})
+    service.bot_app.build_telegram_reply_dest = lambda _session, chat_id, **_kwargs: {
+        "kind": "telegram",
+        "chat_id": int(chat_id),
+    }
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+
+    async def _no_recovery(_backend, _session):
+        return None
+
+    checked: list[tuple[str, bool]] = []
+
+    async def _observe(_backend, session, *, require_recent_activity=False):
+        checked.append((session.id, require_recent_activity))
+        if session.id != "s-live":
+            return None
+        return TmuxRecoveryRequest(
+            request_id="observe-live",
+            started_at=10.0,
+            offset=4096,
+            prompt="",
+            dest={"kind": "telegram", "chat_id": 42},
+            observe=True,
+        )
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _no_recovery)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", _observe)
+    scheduled: list[str] = []
+
+    def _start_session_task(_session, *, coro, name):
+        scheduled.append(str(name))
+        coro.close()
+        return True
+
+    service.start_session_task = _start_session_task
+
+    recovered = await service.recover_tmux_sessions(context=object())
+
+    assert recovered == 1
+    assert scheduled == ["tmux_recovery:observe-live"]
+    # На старте наблюдение цепляется только к панелям, печатающим прямо сейчас.
+    assert checked == [("s-live", True), ("s-idle", True)]
+    assert sessions["s-live"].busy is True
+    assert sessions["s-idle"].busy is False
+
+
+@pytest.mark.asyncio
 async def test_tmux_reread_detaches_monitor_without_interrupting_cli(monkeypatch):
     events: list[tuple] = []
     service = _run_service(events)

@@ -263,6 +263,51 @@ async def test_desktop_tmux_reread_observes_live_pane_after_delivery(
 
 
 @pytest.mark.asyncio
+async def test_desktop_startup_observes_live_pane(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
+
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_startup_observe")
+    facade: ApplicationFacade = runtime["facade"]
+    facade.config = runtime["config"]
+
+    monkeypatch.setattr(
+        "desktop.services.application_facade.get_session_execution_backend",
+        lambda _session: "tmux",
+    )
+
+    async def _no_recovery(_backend, _session):
+        return None
+
+    checked: list[bool] = []
+
+    async def _observe(_backend, _session, *, require_recent_activity=False):
+        checked.append(require_recent_activity)
+        return TmuxRecoveryRequest(
+            request_id="observe-startup",
+            started_at=10.0,
+            offset=4096,
+            prompt="",
+            dest={},
+            observe=True,
+        )
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _no_recovery)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", _observe)
+    started: list[str] = []
+    facade._start_desktop_tmux_recovery = lambda _session, request: started.append(request.request_id)
+
+    recovered = await facade._recover_tmux_sessions()
+
+    assert recovered == 1
+    assert started == ["observe-startup"]
+    # На старте наблюдение цепляется только к панелям, печатающим прямо сейчас.
+    assert checked == [True]
+
+
+@pytest.mark.asyncio
 async def test_desktop_tmux_reread_callback_closes_menu_without_messages(tmp_path: Path) -> None:
     runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_reread_menu")
     facade: ApplicationFacade = runtime["facade"]

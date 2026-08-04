@@ -420,6 +420,51 @@ async def test_tmux_backend_observe_request_starts_from_current_tail(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_observe_request_skips_idle_pane_on_startup(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("давно доставленный вывод\n")
+    stale = time.time() - 600
+    os.utime(paths["pane_log"], (stale, stale))
+    backend._write_last_request(
+        paths,
+        {"request_id": "req-1", "delivery_state": "delivered", "dest": {"kind": "telegram", "chat_id": 42}},
+    )
+
+    # Автоподхват на старте: pane молчит, занимать сессию наблюдением не за чем.
+    assert await backend.build_observe_request(session, require_recent_activity=True) is None
+    # По прямой команде пользователя наблюдение начинается без этой проверки.
+    assert await backend.build_observe_request(session) is not None
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_observe_request_picks_up_live_pane_on_startup(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("CLI печатает прямо сейчас\n")
+    backend._write_last_request(
+        paths,
+        {"request_id": "req-1", "delivery_state": "delivered", "dest": {"kind": "telegram", "chat_id": 42}},
+    )
+
+    request = await backend.build_observe_request(session, require_recent_activity=True)
+
+    assert request is not None
+    assert request.observe is True
+    assert request.offset == os.path.getsize(paths["pane_log"])
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_observe_request_requires_live_session(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)

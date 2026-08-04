@@ -38,6 +38,11 @@ _RESUME_SCAN_TAIL_CHARS = 512
 # определяется последними строками, а текст ответа берётся из JSONL-транскрипта,
 # поэтому догоняющее чтение ограничено хвостом.
 _PANE_CATCHUP_TAIL_BYTES = 2_000_000
+# Автоматическое наблюдение за живым pane цепляется только к панелям, которые
+# печатают прямо сейчас: работающий CLI обновляет экран непрерывно, а простой
+# pane не растёт вовсе. Без этого окна перезапуск занимал бы все tmux-сессии
+# наблюдением, включая те, где CLI просто ждёт ввода.
+_OBSERVE_ACTIVITY_WINDOW_SEC = 30.0
 _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--resume", "-r", "--continue", "-c"},
     "gemini": {"--resume", "-r"},
@@ -965,13 +970,22 @@ class TmuxExecutionBackend:
             return None
         return recovery if transcript is not None and transcript.complete else None
 
-    async def build_observe_request(self, session: Any) -> Optional[TmuxRecoveryRequest]:
+    async def build_observe_request(
+        self,
+        session: Any,
+        *,
+        require_recent_activity: bool = False,
+    ) -> Optional[TmuxRecoveryRequest]:
         """Запрос на чтение живого pane, когда своего запроса у бота уже нет.
 
         После доставки ответа запрос помечается delivered, и get_recovery_request
         перестаёт его отдавать — а CLI в pane продолжает работать. Чтение
         начинается с текущего конца pane.log и журнала, поэтому уже отданный
         текст не дублируется, а старый DONE-маркер остаётся позади курсора.
+
+        require_recent_activity включает проверку, что pane печатал только что:
+        она нужна автоподхвату на старте, где кандидатами идут все сессии сразу.
+        По прямой команде пользователя проверка не нужна.
         """
 
         paths = self.paths(session)
@@ -983,7 +997,19 @@ class TmuxExecutionBackend:
             # Через бота в этом pane запросов не было: ни адресата, ни журнала.
             return None
         log_path = paths["pane_log"]
-        offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+        try:
+            log_stat = os.stat(log_path)
+        except OSError:
+            log_stat = None
+        if require_recent_activity:
+            if log_stat is None or time.time() - log_stat.st_mtime > _OBSERVE_ACTIVITY_WINDOW_SEC:
+                return None
+            logger.info(
+                "tmux observe: live pane picked up session_id=%s request_id=%s",
+                getattr(session, "id", "?"),
+                request_id,
+            )
+        offset = log_stat.st_size if log_stat is not None else 0
         locator = _transcript_locator_from_payload(payload)
         if locator is not None and os.path.exists(locator.path):
             locator = replace(locator, start_offset=os.path.getsize(locator.path))

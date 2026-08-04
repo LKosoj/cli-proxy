@@ -2967,8 +2967,13 @@ class ApplicationFacade:
                 continue
             if str(getattr(session, "_tmux_recovery_request_id", "") or "").strip():
                 continue
+            backend = TmuxExecutionBackend()
             try:
-                request = await TmuxExecutionBackend().get_recovery_request(session)
+                request = await backend.get_recovery_request(session)
+                if request is None:
+                    # Свой запрос закрыт до перезапуска, но CLI в pane продолжает
+                    # печатать — его вывод иначе потеряется.
+                    request = await backend.build_observe_request(session, require_recent_activity=True)
             except Exception:
                 self.logger.exception("desktop tmux startup reconciliation failed session_uid=%s", session_runtime_uid(session))
                 continue
