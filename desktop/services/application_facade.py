@@ -3026,7 +3026,7 @@ class ApplicationFacade:
         )
 
     async def reread_tmux_output(self, session_uid: str) -> str:
-        """Переподключить чтение вывода tmux для активного запроса сессии.
+        """Переподключить чтение вывода tmux для сессии.
 
         Возвращает код результата: started / no_session / not_tmux / no_request / failed.
         """
@@ -3039,8 +3039,13 @@ class ApplicationFacade:
             return "no_session"
         if get_session_execution_backend(session) != "tmux":
             return "not_tmux"
+        backend = TmuxExecutionBackend()
         try:
-            request = await TmuxExecutionBackend().get_recovery_request(session)
+            request = await backend.get_recovery_request(session)
+            if request is None:
+                # Свой запрос бот уже закрыл и доставил, но CLI в pane продолжает
+                # работать — тогда читается живой вывод с текущего момента.
+                request = await backend.build_observe_request(session)
         except Exception:
             self.logger.exception("desktop tmux reread: recovery request failed session_uid=%s", uid)
             return "failed"

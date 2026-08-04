@@ -11,7 +11,7 @@ import shlex
 import stat
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -184,6 +184,9 @@ class TmuxRecoveryRequest:
     prompt: str
     dest: dict[str, Any]
     transcript_locator: Optional[TranscriptLocator] = None
+    # Чтение живого pane без своего запроса: маркеры завершения относятся к уже
+    # доставленному ответу, и TUI выдаёт их снова при перерисовке экрана.
+    observe: bool = False
 
 
 def _session_uid(session: Any) -> str:
@@ -962,6 +965,39 @@ class TmuxExecutionBackend:
             return None
         return recovery if transcript is not None and transcript.complete else None
 
+    async def build_observe_request(self, session: Any) -> Optional[TmuxRecoveryRequest]:
+        """Запрос на чтение живого pane, когда своего запроса у бота уже нет.
+
+        После доставки ответа запрос помечается delivered, и get_recovery_request
+        перестаёт его отдавать — а CLI в pane продолжает работать. Чтение
+        начинается с текущего конца pane.log и журнала, поэтому уже отданный
+        текст не дублируется, а старый DONE-маркер остаётся позади курсора.
+        """
+
+        paths = self.paths(session)
+        if not await self._driver(session).has_session(paths["session_name"]):
+            return None
+        payload = self._read_last_request(paths)
+        request_id = str(payload.get("request_id") or "").strip()
+        if not request_id:
+            # Через бота в этом pane запросов не было: ни адресата, ни журнала.
+            return None
+        log_path = paths["pane_log"]
+        offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+        locator = _transcript_locator_from_payload(payload)
+        if locator is not None and os.path.exists(locator.path):
+            locator = replace(locator, start_offset=os.path.getsize(locator.path))
+        raw_dest = payload.get("dest")
+        return TmuxRecoveryRequest(
+            request_id=request_id,
+            started_at=time.time(),
+            offset=offset,
+            prompt=str(payload.get("prompt") or ""),
+            dest=dict(raw_dest) if isinstance(raw_dest, dict) else {},
+            transcript_locator=locator,
+            observe=True,
+        )
+
     async def _handle_request_cancellation(self, session: Any, paths: dict[str, str]) -> None:
         if bool(getattr(session, "_preserve_tmux_on_shutdown", False)):
             logger.info(
@@ -1174,7 +1210,7 @@ class TmuxExecutionBackend:
                     # Refresh subagent paths too (new subagents can appear mid-run)
                     if _refresh_watched_transcripts():
                         last_change = time.time()
-                    if transcript_update.complete:
+                    if transcript_update.complete and not request.observe:
                         # The reader already gates this on the DONE marker and strips it from assistant_text,
                         # so re-checking the marker here would never match on a garbled pane.
                         complete = True
@@ -1216,7 +1252,7 @@ class TmuxExecutionBackend:
                     setattr(session, "last_assistant_text_value", latest_text)
                 if complete:
                     break
-                if parsed.complete and not transcript_authoritative:
+                if parsed.complete and not transcript_authoritative and not request.observe:
                     complete = True
                     completion_source = "pane"
                     break

@@ -170,6 +170,52 @@ async def test_recovered_tmux_send_failure_keeps_pending_queue(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_observed_tmux_silence_is_not_reported_to_chat(monkeypatch):
+    events: list[tuple] = []
+    service = _run_service(events)
+    session = _recovery_session()
+
+    async def _recover_silent(request):
+        assert request.observe is True
+        return "  \n"
+
+    session.recover_tmux_request = _recover_silent
+    recovery = TmuxRecoveryRequest(
+        request_id="observe-codex",
+        started_at=10.0,
+        offset=0,
+        prompt="original request",
+        dest={"kind": "telegram", "chat_id": 42, "message_thread_id": 9},
+        observe=True,
+    )
+    delivered: list[str] = []
+    monkeypatch.setattr(
+        TmuxExecutionBackend,
+        "mark_request_delivered",
+        lambda _session, request_id: delivered.append(str(request_id)) or True,
+    )
+
+    def _start_prompt_task(_session, prompt, dest, _context, *, task_name="run_prompt"):
+        events.append(("queue", str(prompt), str(task_name)))
+        return True
+
+    service.start_prompt_task = _start_prompt_task
+
+    await service.run_prompt(
+        session,
+        recovery.prompt,
+        recovery.dest,
+        context=object(),
+        recovery_request=recovery,
+    )
+
+    assert [event for event in events if event[0] == "output"] == []
+    assert events == [("queue", "queued next", "run_prompt.queue_next")]
+    assert delivered == ["observe-codex"]
+    assert list(session.queue) == []
+
+
+@pytest.mark.asyncio
 async def test_startup_reconciliation_schedules_all_supported_tmux_clis(monkeypatch):
     events: list[tuple] = []
     service = _run_service(events)
@@ -273,7 +319,53 @@ async def test_tmux_reread_detaches_monitor_without_interrupting_cli(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_tmux_reread_without_active_request_does_not_cancel_tasks(monkeypatch):
+async def test_tmux_reread_observes_live_pane_after_request_was_delivered(monkeypatch):
+    events: list[tuple] = []
+    service = _run_service(events)
+    session = _recovery_session()
+
+    async def _cancel_session(*, session_id, timeout_s):
+        return 1
+
+    service.bot_app.mode_session_control = SimpleNamespace(cancel_session=_cancel_session)
+    service.bot_app.build_telegram_reply_dest = lambda _session, chat_id, **_kwargs: {
+        "kind": "telegram",
+        "chat_id": int(chat_id),
+    }
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+
+    async def _no_recovery(_backend, _session):
+        return None
+
+    async def _observe(_backend, _session):
+        return TmuxRecoveryRequest(
+            request_id="observe-codex",
+            started_at=10.0,
+            offset=4096,
+            prompt="",
+            dest={"kind": "telegram", "chat_id": 42},
+        )
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _no_recovery)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", _observe)
+    scheduled: list[str] = []
+
+    def _start_session_task(_session, *, coro, name):
+        scheduled.append(str(name))
+        coro.close()
+        return True
+
+    service.start_session_task = _start_session_task
+
+    outcome = await service.reread_tmux_output(session, context=object())
+
+    assert outcome == "started"
+    assert scheduled == ["tmux_recovery:observe-codex"]
+    assert session.busy is True
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_without_live_pane_does_not_cancel_tasks(monkeypatch):
     events: list[tuple] = []
     service = _run_service(events)
     session = _recovery_session()
@@ -290,6 +382,7 @@ async def test_tmux_reread_without_active_request_does_not_cancel_tasks(monkeypa
         return None
 
     monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _no_recovery)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", _no_recovery)
 
     assert await service.reread_tmux_output(session, context=object()) == "no_request"
     assert cancelled == []

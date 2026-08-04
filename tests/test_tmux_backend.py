@@ -333,6 +333,117 @@ async def test_tmux_backend_waits_for_structured_completion_after_pane_done(tmp_
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_observe_ignores_stale_completion_markers(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            # Старый DONE уже отдан: журнал по-прежнему рапортует о завершении.
+            return TranscriptPollResult(
+                assistant_text="Новый текст живого агента",
+                complete=True,
+                available=True,
+                recognized=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.3,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write(f"старый ответ {done_marker('req-1')}\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="req-1",
+        started_at=time.time(),
+        offset=0,
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+        observe=True,
+    )
+    started_at = time.time()
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=5)
+
+    assert result.text == "Новый текст живого агента"
+    # Наблюдение живёт до тишины в выводе, а не до первого встреченного маркера.
+    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
+    assert time.time() - started_at >= 0.3
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_observe_request_starts_from_current_tail(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("уже доставленный вывод\n")
+    transcript_path = tmp_path / "rollout.jsonl"
+    transcript_path.write_text('{"type": "event_msg"}\n', encoding="utf-8")
+    backend._write_last_request(
+        paths,
+        {
+            "request_id": "req-1",
+            "started_at": 10.0,
+            "offset": 0,
+            "prompt": "исходный промпт",
+            "dest": {"kind": "telegram", "chat_id": 42},
+            "delivery_state": "delivered",
+            "transcript_provider": "claude",
+            "transcript_path": str(transcript_path),
+            "transcript_offset": 0,
+            "transcript_session_id": "sess-1",
+        },
+    )
+
+    request = await backend.build_observe_request(session)
+
+    assert request is not None
+    assert request.request_id == "req-1"
+    # Уже отданный вывод не перечитывается: курсоры стоят на текущем конце.
+    assert request.offset == os.path.getsize(paths["pane_log"])
+    assert request.dest == {"kind": "telegram", "chat_id": 42}
+    assert request.transcript_locator is not None
+    assert request.transcript_locator.start_offset == transcript_path.stat().st_size
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_observe_request_requires_live_session(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    backend._write_last_request(paths, {"request_id": "req-1", "delivery_state": "delivered"})
+
+    assert await backend.build_observe_request(session) is None
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_observe_request_requires_known_request(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+
+    assert await backend.build_observe_request(session) is None
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_falls_back_to_pane_for_unrecognized_transcript(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
 

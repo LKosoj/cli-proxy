@@ -287,15 +287,20 @@ class SessionRunService:
             setattr(session, "_preserve_tmux_on_shutdown", False)
 
     async def reread_tmux_output(self, session, context) -> str:
-        """Переподключить чтение вывода tmux для активного запроса сессии.
+        """Переподключить чтение вывода tmux для сессии.
 
         Возвращает код результата: started / not_tmux / no_request / failed.
         """
 
         if get_session_execution_backend(session) != "tmux":
             return "not_tmux"
+        backend = TmuxExecutionBackend()
         try:
-            request = await TmuxExecutionBackend().get_recovery_request(session)
+            request = await backend.get_recovery_request(session)
+            if request is None:
+                # Свой запрос бот уже закрыл и доставил, но CLI в pane продолжает
+                # работать — тогда читается живой вывод с текущего момента.
+                request = await backend.build_observe_request(session)
         except Exception:
             _log.exception("tmux reread: recovery request failed session=%s", getattr(session, "id", "?"))
             return "failed"
@@ -893,7 +898,17 @@ class SessionRunService:
                         tmux_request_id = recovery_request.request_id
                     elif managed_tmux:
                         tmux_request_id = str(getattr(session, "last_tmux_request_id", "") or "").strip()
-                    if tmux_request_id:
+                    observed_silence = bool(
+                        getattr(recovery_request, "observe", False) and not str(output or "").strip()
+                    )
+                    if tmux_request_id and observed_silence:
+                        # Чтение живого pane закончилось тишиной: заголовок с пустым
+                        # отчётом в чат слать не за чем.
+                        queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(
+                            session,
+                            tmux_request_id,
+                        )
+                    elif tmux_request_id:
                         send_output_scheduled = True
                         delivered = await self._send_output_task(session, dest, output, context)
                         if delivered:

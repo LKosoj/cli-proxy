@@ -217,6 +217,52 @@ async def test_desktop_tmux_reread_detaches_monitor_without_interrupting_cli(
 
 
 @pytest.mark.asyncio
+async def test_desktop_tmux_reread_observes_live_pane_after_delivery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
+
+    runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_observe")
+    facade: ApplicationFacade = runtime["facade"]
+    facade.config = runtime["config"]
+    session = runtime["session"]
+    session_uid = session_runtime_uid(session)
+
+    monkeypatch.setattr(
+        "desktop.services.application_facade.get_session_execution_backend",
+        lambda _session: "tmux",
+    )
+
+    async def _no_recovery(_backend, _session):
+        return None
+
+    async def _observe(_backend, _session):
+        return TmuxRecoveryRequest(
+            request_id="observe-desktop",
+            started_at=10.0,
+            offset=4096,
+            prompt="",
+            dest={},
+        )
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", _no_recovery)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", _observe)
+
+    async def _cancel_session(uid, *, timeout_s=1.0):
+        return 1
+
+    facade.task_service.cancel_session = _cancel_session
+    started: list[str] = []
+    facade._start_desktop_tmux_recovery = lambda _session, request: started.append(request.request_id)
+
+    outcome = await facade.reread_tmux_output(session_uid)
+
+    assert outcome == "started"
+    assert started == ["observe-desktop"]
+
+
+@pytest.mark.asyncio
 async def test_desktop_tmux_reread_callback_closes_menu_without_messages(tmp_path: Path) -> None:
     runtime = _build_desktop_facade_runtime(tmp_path, intent="tmux_reread_menu")
     facade: ApplicationFacade = runtime["facade"]
