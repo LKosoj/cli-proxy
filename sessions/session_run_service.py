@@ -795,7 +795,15 @@ class SessionRunService:
         self._track_session_task(session, name="run_prompt")
         _rp_log = logging.getLogger("bot.run_prompt")
         with bind_session_log_context(session=session, chat_id=dest.get("chat_id")):
-            _rp_log.info("[run_prompt] acquiring run_lock session=%s prompt=%r", session.id, prompt[:100])
+            # У восстановления tmux промпт берётся из last_request.json, поэтому в
+            # логе он неотличим от нового ввода пользователя. Помечаем источник.
+            origin = ""
+            if recovery_request is not None:
+                origin = " source={} request_id={}".format(
+                    "tmux_observe" if recovery_request.observe else "tmux_recovery",
+                    recovery_request.request_id,
+                )
+            _rp_log.info("[run_prompt] acquiring run_lock session=%s%s prompt=%r", session.id, origin, prompt[:100])
             async with session.run_lock:
                 _rp_log.info("[run_prompt] lock acquired session=%s", session.id)
                 session.busy = True

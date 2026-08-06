@@ -721,7 +721,7 @@ class InputDispatchService:
         try:
             from app.services.cli_backends import TmuxExecutionBackend
 
-            return await TmuxExecutionBackend().is_active(session)
+            return await TmuxExecutionBackend().can_accept_input(session)
         except Exception:
             logger.exception(
                 "input dispatch: active tmux availability check failed session_id=%s",

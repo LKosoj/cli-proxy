@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import deque
 from types import SimpleNamespace
 
@@ -213,6 +214,37 @@ async def test_observed_tmux_silence_is_not_reported_to_chat(monkeypatch):
     assert events == [("queue", "queued next", "run_prompt.queue_next")]
     assert delivered == ["observe-codex"]
     assert list(session.queue) == []
+
+
+@pytest.mark.asyncio
+async def test_recovery_run_is_marked_as_such_in_log(monkeypatch, caplog):
+    events: list[tuple] = []
+    service = _run_service(events)
+    session = _recovery_session()
+    recovery = TmuxRecoveryRequest(
+        request_id="observe-codex",
+        started_at=10.0,
+        offset=0,
+        prompt="original request",
+        dest={"kind": "telegram", "chat_id": 42, "message_thread_id": 9},
+        observe=True,
+    )
+    monkeypatch.setattr(TmuxExecutionBackend, "mark_request_delivered", lambda _session, _request_id: True)
+    service.start_prompt_task = lambda *_args, **_kwargs: True
+
+    with caplog.at_level(logging.INFO, logger="bot.run_prompt"):
+        await service.run_prompt(
+            session,
+            recovery.prompt,
+            recovery.dest,
+            context=object(),
+            recovery_request=recovery,
+        )
+
+    # Промпт восстановления читается из last_request.json: без пометки источника
+    # он в логе неотличим от нового сообщения пользователя.
+    started = [record.getMessage() for record in caplog.records if "acquiring run_lock" in record.getMessage()]
+    assert started and "source=tmux_observe request_id=observe-codex" in started[0]
 
 
 @pytest.mark.asyncio

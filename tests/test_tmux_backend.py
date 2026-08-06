@@ -465,6 +465,68 @@ async def test_tmux_backend_observe_request_picks_up_live_pane_on_startup(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_observe_request_picks_up_pane_with_growing_transcript(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("экран стоит на месте\n")
+    stale = time.time() - 600
+    os.utime(paths["pane_log"], (stale, stale))
+    transcript_path = tmp_path / "rollout.jsonl"
+    transcript_path.write_text('{"type": "event"}\n', encoding="utf-8")
+    backend._write_last_request(
+        paths,
+        {
+            "request_id": "req-1",
+            "delivery_state": "delivered",
+            "dest": {"kind": "telegram", "chat_id": 42},
+            "transcript_provider": "codex",
+            "transcript_path": str(transcript_path),
+        },
+    )
+
+    # Экран замер на долгом инструменте, но CLI пишет в журнал — он работает.
+    request = await backend.build_observe_request(session, require_recent_activity=True)
+
+    assert request is not None
+    assert request.observe is True
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_observe_request_skips_pane_with_stale_transcript(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("давно доставленный вывод\n")
+    transcript_path = tmp_path / "rollout.jsonl"
+    transcript_path.write_text('{"type": "event"}\n', encoding="utf-8")
+    stale = time.time() - 600
+    os.utime(paths["pane_log"], (stale, stale))
+    os.utime(transcript_path, (stale, stale))
+    backend._write_last_request(
+        paths,
+        {
+            "request_id": "req-1",
+            "delivery_state": "delivered",
+            "dest": {"kind": "telegram", "chat_id": 42},
+            "transcript_provider": "codex",
+            "transcript_path": str(transcript_path),
+        },
+    )
+
+    # Не растёт ни экран, ни журнал — активного в pane ничего нет.
+    assert await backend.build_observe_request(session, require_recent_activity=True) is None
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_observe_request_requires_live_session(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
@@ -621,6 +683,108 @@ async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
     assert state["state"] == "active"
     assert state["active_request_id"] == "request-1"
     assert state["last_activity_at"] > 1.0
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_sends_input_to_live_pane_without_own_request(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("CLI печатает прямо сейчас\n")
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "idle",
+            "active_request_id": None,
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+        },
+    )
+
+    # Свой запрос закрыт, но агент в pane работает — дописывать ему можно.
+    assert await backend.can_accept_input(session) is True
+    await backend.send_input(session, "не забудь про тесты")
+
+    assert driver.sent_prompts[-1] == "не забудь про тесты"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_accepts_input_while_only_transcript_grows(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("экран стоит на месте\n")
+    stale = time.time() - 600
+    os.utime(paths["pane_log"], (stale, stale))
+    transcript_path = tmp_path / "rollout.jsonl"
+    transcript_path.write_text('{"type": "event"}\n', encoding="utf-8")
+    backend._write_last_request(
+        paths,
+        {
+            "request_id": "req-1",
+            "delivery_state": "delivered",
+            "transcript_provider": "codex",
+            "transcript_path": str(transcript_path),
+        },
+    )
+
+    # Журнал растёт — агент работает, даже если экран замер на долгом инструменте.
+    assert await backend.can_accept_input(session) is True
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_rejects_input_when_live_pane_is_quiet(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("давно доставленный вывод\n")
+    stale = time.time() - 600
+    os.utime(paths["pane_log"], (stale, stale))
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "idle",
+            "active_request_id": None,
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+        },
+    )
+
+    assert await backend.can_accept_input(session) is False
+    with pytest.raises(TmuxDriverError, match="active tmux session is unavailable"):
+        await backend.send_input(session, "must stay pending")
+
+    assert driver.sent_prompts == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_rejects_input_when_pane_is_gone(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("свежий хвост от умершей сессии\n")
+
+    # Файл свежий, но самой tmux-сессии уже нет: отправлять некуда.
+    assert await backend.can_accept_input(session) is False
 
 
 @pytest.mark.asyncio

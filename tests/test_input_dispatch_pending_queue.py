@@ -320,6 +320,42 @@ async def test_handle_cli_input_busy_active_tmux_offers_direct_send(
 
 
 @pytest.mark.asyncio
+async def test_active_tmux_choice_follows_pane_availability(monkeypatch) -> None:
+    from app.services.cli_backends import TmuxExecutionBackend
+
+    sent: list[str] = []
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        ui_state=SimpleNamespace(pending={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+    session = SimpleNamespace(
+        id="s1",
+        busy=True,
+        queue=[],
+        is_active_by_tick=lambda: False,
+        run_lock=asyncio.Lock(),
+    )
+
+    # У бота своего запроса нет, но pane печатает: дописывать в него можно.
+    async def _can_accept(_backend, _session) -> bool:
+        return True
+
+    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _can_accept)
+
+    await service.handle_cli_input(session, "steer", chat_id=1, context=object())
+
+    pending = InputDispatchService.pending_head(
+        bot_app.ui_state.pending,
+        InputDispatchService._pending_ui_key(None, 1),
+    )
+    assert pending is not None
+    assert pending.action == InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM
+    assert sent == [InputDispatchService.tmux_busy_prompt_text()]
+
+
+@pytest.mark.asyncio
 async def test_active_tmux_choice_is_not_offered_for_attachments(monkeypatch) -> None:
     from app.services.cli_backends import TmuxExecutionBackend
 
@@ -341,7 +377,7 @@ async def test_active_tmux_choice_is_not_offered_for_attachments(monkeypatch) ->
     async def _active_tmux(_backend, _session) -> bool:
         raise AssertionError("tmux must not be probed when pending input has attachments")
 
-    monkeypatch.setattr(TmuxExecutionBackend, "is_active", _active_tmux)
+    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _active_tmux)
 
     await service.handle_cli_input(
         session,
