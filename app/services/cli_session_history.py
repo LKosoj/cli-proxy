@@ -26,6 +26,9 @@ from app.services.session_transfer.reader_claude import _project_key as _claude_
 from app.services.session_transfer.reader_codex import _is_synthetic_user_text as _codex_is_synthetic
 from app.services.session_transfer.reader_gemini import _project_hash as _gemini_project_hash
 from app.services.session_transfer.reader_grok import _workspace_key as _grok_workspace_key
+from app.services.session_transfer.reader_kimi import _content_text as _kimi_content_text
+from app.services.session_transfer.reader_kimi import _is_real_user_message as _kimi_is_real_user
+from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
 
 logger = logging.getLogger(__name__)
@@ -336,6 +339,42 @@ def _list_grok(workdir: str, limit: int) -> List[CliSessionCandidate]:
     return _newest(entries, cli="grok", limit=limit, preview=_grok_preview)
 
 
+def _kimi_preview(path: Path) -> str:
+    state = _load_json(path / "state.json") or {}
+    text = _clean_preview(str(state.get("title") or state.get("lastPrompt") or ""))
+    if text:
+        return text
+    for data in _iter_jsonl(path / "agents" / "main" / "wire.jsonl"):
+        if str(data.get("type") or "") != "context.append_message":
+            continue
+        message = data.get("message")
+        if not isinstance(message, dict) or str(message.get("role") or "") != "user":
+            continue
+        if not _kimi_is_real_user(message):
+            continue
+        text = _clean_preview(_kimi_content_text(message.get("content")))
+        if text:
+            return text
+    return ""
+
+
+def _list_kimi(workdir: str, limit: int) -> List[CliSessionCandidate]:
+    key = _kimi_workspace_key(workdir)
+    if not key:
+        return []
+    entries: List[Tuple[float, str, Path]] = []
+    for home in _home_dirs():
+        base = home / ".kimi-code" / "sessions" / key
+        if not base.is_dir():
+            continue
+        for child in base.iterdir():
+            if not child.is_dir():
+                continue
+            mtime = max(_mtime(child), _mtime(child / "agents" / "main" / "wire.jsonl"))
+            entries.append((mtime, child.name, child))
+    return _newest(entries, cli="kimi", limit=limit, preview=_kimi_preview)
+
+
 def _codex_preview(path: Path) -> str:
     for data in _iter_jsonl(path):
         if str(data.get("type") or "") != "response_item":
@@ -432,5 +471,6 @@ _LISTERS: Dict[str, Callable[[str, int], List[CliSessionCandidate]]] = {
     "codex": _list_codex,
     "gemini": _list_gemini,
     "grok": _list_grok,
+    "kimi": _list_kimi,
     "qwen": _list_qwen,
 }

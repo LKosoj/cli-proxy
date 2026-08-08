@@ -351,7 +351,7 @@ tools:
 
 - `headless` uses the current per-request CLI execution path and preserves existing behavior.
 - `tmux` starts one long-lived interactive `tmux` session, writes runtime state under `.cli-proxy/runtime/tmux/` inside the workdir, and submits prompts through the pane/buffer path without the headless command.
-- For Claude, Codex, and Grok, intermediate status, final output, and turn completion are read primarily from the native JSONL transcript. `pane.log` and the `DONE` marker remain a fallback for unavailable or unknown transcript formats. Missing output does not interrupt a live tmux session; `Ctrl-C` is sent only for an explicit stop.
+- For Claude, Codex, Grok, Qwen, Gemini, and Kimi, intermediate status, final output, and turn completion are read primarily from the native JSONL transcript. `pane.log` and the `DONE` marker remain a fallback for unavailable or unknown transcript formats. Missing output does not interrupt a live tmux session; `Ctrl-C` is sent only for an explicit stop.
 - On first start, the tmux backend can pin `resume_token` through `{session_id}` in `interactive_cmd` or through a CLI-specific session flag when the CLI supports it. If an interactive CLI prints a session id, configure `resume_regex` and the token is captured from the pane log.
 - Existing tmux sessions survive a graceful bot or Desktop restart. On startup, the runtime checks them, restores monitoring for an active request, delivers an answer that completed during downtime to the original chat/thread or Desktop session, and then continues the persisted queue. Explicit session close, interrupt, backend switch, active CLI switch, and `force fresh` still stop the corresponding tmux session. A CLI switch closes only the previous CLI's tmux instance for the current bot session; other bot sessions are untouched.
 - For reboot recovery, the backend checks tmux session presence before every non-first request. If the tmux session disappeared and `resume_token` is known, it starts `interactive_resume_cmd` with `{resume}` or the built-in resume command for the supported CLI instead of the headless path.
@@ -533,17 +533,30 @@ personal RPM/TPM quotas are available in Console and are not exposed through a
 stable CLI/API. Grok session transfer uses the same local session store and the
 compact transfer capsule.
 
-Kimi Code CLI is configured as `tools.kimi`; headless mode uses the official print
-mode `kimi --print --output-format stream-json --prompt "{prompt}"`. `--print`
-already auto-approves tool calls, so `--yolo` is not needed in headless (kimi
-rejects it together with `--prompt`); for tmux it is set in `interactive_cmd`.
-Session continuation: without a token `--continue` resumes the latest session of
-the directory, with a token `--resume <token>` is used; the flags are mutually
-exclusive and the bridge passes only one. The key comes from `KIMI_API_KEY` in
+Kimi Code CLI is configured as `tools.kimi`; headless mode uses the official
+prompt mode `kimi --output-format stream-json --prompt "{prompt}"`. `--prompt`
+already implies non-interactive mode, and kimi rejects `--yolo`, `--auto` and
+`--plan` together with it, so headless carries none of them; for tmux `--yolo` is
+set in `interactive_cmd`. Session continuation is token based: kimi prints the
+token as the last line of a turn (`{"role":"meta","type":"session.resume_hint",...}`),
+the bridge stores it and sends the next request with `--resume <token>` (an alias
+of `--session`). `--continue` is deliberately absent: it would pick up the latest
+session of the directory instead of starting a new one, and kimi refuses it
+together with `--session` anyway (if you add it to `config.yaml`, the bridge drops
+it on resume). The key comes from `KIMI_API_KEY` in
 `.env` or the process environment, OAuth login is done with `kimi login`. For
 `/limits`, Kimi reports that quotas are unavailable: the CLI does not publish
-usage. Session transfer and native transcript reading are not implemented for
-Kimi yet; headless and tmux backends are available.
+usage. Session transfer, native transcript reading in tmux mode and the recent
+session list of the resume picker all read the journal at
+`~/.kimi-code/sessions/<workdir key>/<session id>/agents/main/wire.jsonl`; the
+workdir key repeats kimi's `encodeWorkDirKey` (`wd_<slug of the directory
+name>_<12 hex of sha256 of the absolute path>`). A transferred session also gets a
+`profile.bind` record: headless `--resume` binds no profile of its own and dies
+with `model.not_configured` without it. The binding is taken from a session kimi
+already rendered for this directory, otherwise from `default_model` in
+`~/.kimi-code/config.toml`. On the first run in a new
+directory kimi asks whether the folder is trusted; in tmux mode the bridge detects
+that screen and asks you to open kimi in the workdir once.
 
 To refresh Gemini OAuth credentials while collecting CLI limits, set this in `config.yaml`:
 ```yaml

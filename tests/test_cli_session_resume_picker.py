@@ -227,6 +227,52 @@ def test_grok_lists_sessions_with_summary_preview(fake_home):
     ]
 
 
+def test_kimi_lists_sessions_of_this_workspace_only(fake_home):
+    workdir = "/srv/demo/app"
+    bucket = fake_home / ".kimi-code" / "sessions" / "wd_app_fa69cc192fc6"
+    titled = bucket / "session_titled"
+    titled.mkdir(parents=True)
+    (titled / "state.json").write_text(
+        json.dumps({"title": "Разбор логов"}, ensure_ascii=False), encoding="utf-8"
+    )
+    _write_lines(
+        titled / "agents" / "main" / "wire.jsonl",
+        [{"type": "metadata", "protocol_version": "1.5", "created_at": 1}],
+        1_700_000_500,
+    )
+    _write_lines(
+        bucket / "session_plain" / "agents" / "main" / "wire.jsonl",
+        [
+            {
+                "type": "context.append_message",
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "напоминание"}],
+                    "origin": {"kind": "injection"},
+                },
+            },
+            {
+                "type": "context.append_message",
+                "message": {"role": "user", "content": [{"type": "text", "text": "обнови зависимости"}]},
+            },
+        ],
+        1_700_000_000,
+    )
+    _write_lines(
+        fake_home / ".kimi-code" / "sessions" / "wd_other_000000000000" / "session_alien"
+        / "agents" / "main" / "wire.jsonl",
+        [{"type": "metadata", "protocol_version": "1.5", "created_at": 1}],
+        1_700_000_900,
+    )
+
+    found = list_recent_cli_sessions("kimi", workdir)
+
+    assert [(candidate.session_id, candidate.preview) for candidate in found] == [
+        ("session_titled", "Разбор логов"),
+        ("session_plain", "обнови зависимости"),
+    ]
+
+
 def test_unknown_cli_and_empty_workdir_return_nothing(fake_home):
     assert list_recent_cli_sessions("unknown-cli", "/srv/demo/app") == []
     assert list_recent_cli_sessions("claude", "") == []

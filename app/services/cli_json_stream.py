@@ -1012,9 +1012,11 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
 class KimiJsonStreamAdapter(BaseCliJsonStreamAdapter):
     """Kimi Code CLI в `--output-format stream-json` печатает чат-сообщения OpenAI-вида.
 
-    Каждая строка — это `{"role": ...}`: ответ ассистента, его же сообщение с
-    `tool_calls` или результат инструмента. Терминального события в потоке нет,
-    поэтому ход завершается по EOF процесса.
+    Строки бывают трёх видов: `role=assistant` (текст и/или `tool_calls`),
+    `role=tool` (результат вызова) и служебные `role=meta` (`system.version`,
+    `turn.step.retrying`, `session.resume_hint`). Токен для `--resume` приходит
+    только в самом конце хода, в `session.resume_hint`. Признака завершения в
+    потоке нет, поэтому ход закрывается по EOF процесса.
     """
 
     cli_name = "kimi"
@@ -1037,7 +1039,8 @@ class KimiJsonStreamAdapter(BaseCliJsonStreamAdapter):
             raise ValueError(f"CLI JSON stream line must decode to object, got {type(payload)!r}")
 
         role = str(payload.get("role") or "").strip().lower()
-        if not role:
+        # Сводка `/goal` печатается единственной строкой без `role`, но с `type`.
+        if not role and not str(payload.get("type") or "").strip():
             raise ValueError("CLI JSON stream event is missing role")
 
         events: list[CliJsonStreamEvent] = []
@@ -1100,15 +1103,13 @@ class KimiJsonStreamAdapter(BaseCliJsonStreamAdapter):
                     text=_tool_result_text(
                         tool_label,
                         detail=_tool_result_detail(payload.get("content")),
-                        is_error=bool(payload.get("is_error")),
+                        # Kimi не размечает провал инструмента отдельным полем,
+                        # текст ошибки приходит в том же `content`.
+                        is_error=False,
                     ),
                     payload=payload,
                 )
             )
-            return events
-
-        if role == "user":
-            # Эхо собственного ввода при `--input-format stream-json`.
             return events
 
         events.append(

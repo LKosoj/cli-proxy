@@ -25,12 +25,13 @@ _TARGET_USERNAMES: Dict[str, str] = {
 def _ensure_readers() -> Dict[str, Callable[[str, str], Optional[CanonicalSession]]]:
     if _READERS:
         return _READERS
-    from . import reader_claude, reader_codex, reader_gemini, reader_grok, reader_qwen
+    from . import reader_claude, reader_codex, reader_gemini, reader_grok, reader_kimi, reader_qwen
 
     _READERS["claude"] = reader_claude.read_session
     _READERS["codex"] = reader_codex.read_session
     _READERS["gemini"] = reader_gemini.read_session
     _READERS["grok"] = reader_grok.read_session
+    _READERS["kimi"] = reader_kimi.read_session
     _READERS["qwen"] = reader_qwen.read_session
     return _READERS
 
@@ -38,12 +39,13 @@ def _ensure_readers() -> Dict[str, Callable[[str, str], Optional[CanonicalSessio
 def _ensure_writers() -> Dict[str, Callable[..., Optional[str]]]:
     if _WRITERS:
         return _WRITERS
-    from . import writer_claude, writer_codex, writer_gemini, writer_grok, writer_qwen
+    from . import writer_claude, writer_codex, writer_gemini, writer_grok, writer_kimi, writer_qwen
 
     _WRITERS["claude"] = writer_claude.write_session
     _WRITERS["codex"] = writer_codex.write_session
     _WRITERS["gemini"] = writer_gemini.write_session
     _WRITERS["grok"] = writer_grok.write_session
+    _WRITERS["kimi"] = writer_kimi.write_session
     _WRITERS["qwen"] = writer_qwen.write_session
     return _WRITERS
 

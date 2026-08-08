@@ -22,7 +22,7 @@ Generated: 2026-06-17T10:39:27Z
 | --- | ---: |
 | `tests/` | 566 |
 | `modes/` | 220 |
-| `app/` | 166 |
+| `app/` | 168 |
 | `agent/` | 62 |
 | `desktop/` | 32 |
 | `miniapp/` | 120 |

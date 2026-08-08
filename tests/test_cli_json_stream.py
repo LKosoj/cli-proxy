@@ -426,8 +426,9 @@ def test_grok_json_stream_adapter_normalizes_semantic_events() -> None:
 def test_kimi_json_stream_adapter_normalizes_chat_messages() -> None:
     adapter = KimiJsonStreamAdapter()
     events = []
+    # Порядок и поля строк повторяют вывод kimi 0.34.0 (PromptJsonWriter).
     lines = (
-        '{"role":"user","content":"list python files"}',
+        '{"role":"meta","type":"system.version","version":"0.34.0"}',
         (
             '{"role":"assistant","content":"Let me check the current directory.",'
             '"tool_calls":[{"type":"function","id":"tc_1","function":'
@@ -441,14 +442,15 @@ def test_kimi_json_stream_adapter_normalizes_chat_messages() -> None:
         events.extend(adapter.feed_line(line))
 
     assert [event.kind for event in events] == [
+        "raw_event",
         "assistant_text",
         "tool_event",
         "tool_event",
         "assistant_text",
     ]
-    assert events[1].text == "Shell: ls"
-    assert events[2].text == "Shell: ls result: file1.py file2.py"
-    # Терминального события у kimi нет: ход закрывается по EOF процесса.
+    assert events[2].text == "Shell: ls"
+    assert events[3].text == "Shell: ls result: file1.py file2.py"
+    # Признака завершения у kimi нет: ход закрывается по EOF процесса.
     assert adapter.completed is False
     assert adapter.final_output_text() == "There are two Python files."
 
@@ -457,19 +459,31 @@ def test_kimi_json_stream_adapter_normalizes_chat_messages() -> None:
     assert recover_cli_text_from_raw_stream("kimi", raw_text) == "There are two Python files."
 
 
-def test_kimi_json_stream_adapter_reports_session_id_once() -> None:
+def test_kimi_json_stream_adapter_takes_session_id_from_resume_hint() -> None:
     adapter = KimiJsonStreamAdapter()
 
-    events = adapter.feed_line('{"role":"assistant","content":"hi","session_id":"kimi-42"}')
-    assert [event.kind for event in events] == ["session_started", "assistant_text"]
+    # До финальной подсказки токена нет: kimi печатает его последней строкой хода.
+    assert adapter.feed_line('{"role":"assistant","content":"hi"}')[0].kind == "assistant_text"
+    assert adapter.session_id is None
+
+    hint = (
+        '{"role":"meta","type":"session.resume_hint","session_id":"kimi-42",'
+        '"command":"kimi -r kimi-42","content":"To resume this session: kimi -r kimi-42"}'
+    )
+    events = adapter.feed_line(hint)
+    assert [event.kind for event in events] == ["session_started", "raw_event"]
     assert adapter.session_id == "kimi-42"
 
-    events = adapter.feed_line('{"role":"assistant","content":"again","session_id":"kimi-42"}')
-    assert [event.kind for event in events] == ["assistant_text"]
+    # Повторная подсказка тем же токеном не порождает второй session_started.
+    assert [event.kind for event in adapter.feed_line(hint)] == ["raw_event"]
 
 
-def test_kimi_json_stream_adapter_rejects_line_without_role() -> None:
+def test_kimi_json_stream_adapter_keeps_goal_summary_without_role() -> None:
     adapter = KimiJsonStreamAdapter()
 
+    # Сводка `/goal` - единственная строка kimi без `role`, ошибкой её считать нельзя.
+    events = adapter.feed_line('{"type":"goal.summary","goalId":"g1","status":"complete"}')
+    assert [event.kind for event in events] == ["raw_event"]
+
     with pytest.raises(ValueError):
-        adapter.feed_line('{"content":"no role here"}')
+        adapter.feed_line('{"content":"no role and no type"}')

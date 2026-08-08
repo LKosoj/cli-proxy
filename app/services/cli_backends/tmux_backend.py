@@ -67,7 +67,7 @@ _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
     "qwen": ["--session-id"],
     "grok": ["--session-id"],
 }
-_READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok"}
+_READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok", "kimi"}
 _SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
@@ -766,7 +766,7 @@ class TmuxExecutionBackend:
         text = normalize_terminal_text(pane)
         lower = text.lower()
         compact = "".join(lower.split())
-        if "doyoutrust" in compact:
+        if "doyoutrust" in compact or "trustthisfolder?" in compact:
             raise TmuxDriverError(
                 f"{cli_name} workspace trust prompt is blocking tmux backend; "
                 f"open {cli_name} once in this workdir and trust it"
@@ -789,6 +789,9 @@ class TmuxExecutionBackend:
             return "введите сообщение" in lower or "enter message" in lower or "❯" in text
         if cli_name == "grok":
             return "❯" in text or ("grok build" in lower and "ctrl+c" in lower)
+        if cli_name == "kimi":
+            # Статус-бар с индикатором контекста рисуется только на готовом экране ввода.
+            return "context:" in lower
         return True
 
     async def _wait_for_interactive_ready(self, session: Any, paths: dict[str, str]) -> None:

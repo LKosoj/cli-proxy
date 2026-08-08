@@ -31,10 +31,8 @@ class _FakeProc:
 
 KIMI_CMD = [
     "kimi",
-    "--print",
     "--output-format",
     "stream-json",
-    "--continue",
     "--prompt",
     "{prompt}",
     "--resume",
@@ -76,6 +74,8 @@ def test_kimi_headless_returns_final_assistant_message(monkeypatch, tmp_path):
                     b'"arguments":"{\\"command\\":\\"ls\\"}"}}]}\n',
                     b'{"role":"tool","tool_call_id":"tc_1","content":"bot.py\\nsession.py"}\n',
                     b'{"role":"assistant","content":"Two Python files."}\n',
+                    b'{"role":"meta","type":"session.resume_hint","session_id":"kimi-7",'
+                    b'"command":"kimi -r kimi-7","content":"To resume this session: kimi -r kimi-7"}\n',
                 ]
             )
 
@@ -84,9 +84,20 @@ def test_kimi_headless_returns_final_assistant_message(monkeypatch, tmp_path):
         out = await session._run_headless("what is here?")
 
         assert out == "Two Python files."
-        # Промпт уходит аргументом --prompt, а fresh-запуск продолжает последнюю сессию каталога.
-        assert commands[0][:6] == ["kimi", "--print", "--output-format", "stream-json", "--continue", "--prompt"]
-        assert "what is here?" in commands[0]
-        assert "--resume" not in commands[0]
+        assert commands[0] == ["kimi", "--output-format", "stream-json", "--prompt", "what is here?"]
+        # Токен kimi отдаёт последней строкой хода, с него продолжается следующий запрос.
+        assert session.resume_token == "kimi-7"
+
+        await session._run_headless("and now?")
+
+        assert commands[1] == [
+            "kimi",
+            "--output-format",
+            "stream-json",
+            "--prompt",
+            "and now?",
+            "--resume",
+            "kimi-7",
+        ]
 
     asyncio.run(_run())

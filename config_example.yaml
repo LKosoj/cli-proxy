@@ -94,9 +94,12 @@ tools:
       ENV6: null
   kimi:
     mode: headless
-    # `--print` включает неинтерактивный режим с авто-одобрением инструментов,
-    # поэтому `--yolo` здесь не нужен (и запрещён вместе с `--prompt`).
-    cmd: ["kimi", "--print", "--output-format", "stream-json", "--continue", "--prompt", "{prompt}", "--resume", "{resume}"]
+    # `--prompt` сам по себе включает неинтерактивный режим, а `--yolo`/`--auto`
+    # с ним несовместимы, поэтому в headless остаётся только `--prompt`.
+    # `--resume` - алиас `--session`; токен kimi печатает последней строкой хода
+    # (`meta` / `session.resume_hint`). `--continue` тут не нужен: он молча
+    # подхватил бы последнюю сессию каталога, и kimi запрещает его с `--session`.
+    cmd: ["kimi", "--output-format", "stream-json", "--prompt", "{prompt}", "--resume", "{resume}"]
     enabled: true
     interactive_cmd: ["kimi", "--yolo"]
     interactive_resume_cmd: ["kimi", "--yolo", "--resume", "{resume}"]

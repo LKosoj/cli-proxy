@@ -11,12 +11,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 from modes.sdk.runtime.json_normalizer import loads_safe
 
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_PROVIDERS = {"claude", "codex", "grok", "qwen", "gemini"}
+_SUPPORTED_PROVIDERS = {"claude", "codex", "grok", "qwen", "gemini", "kimi"}
 _DISCOVERY_TAIL_BYTES = 4 * 1024 * 1024
 _DISCOVERY_CANDIDATE_LIMIT = 30
 _CODEX_SESSION_ID_RE = re.compile(r"-([0-9a-fA-F-]{36})\.jsonl$")
@@ -53,6 +54,13 @@ def _event_timestamp(raw: Any) -> float:
     except ValueError:
         logger.debug("structured transcript timestamp is invalid value=%r", text)
         return time.time()
+
+
+def _kimi_activity(raw: Any) -> float:
+    """Kimi stamps every wire record in epoch milliseconds, unlike the other CLIs."""
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw > 0:
+        return float(raw) / 1000.0
+    return time.time()
 
 
 def _content_text(content: Any) -> str:
@@ -104,6 +112,7 @@ class CliTranscriptReader:
         self._grok_stream_key = ""
         self._grok_stream_chunks: list[str] = []
         self._grok_stream_raw = ""
+        self._kimi_step_parts: list[str] = []
         if locator is not None:
             self._restore_locator(locator)
 
@@ -129,6 +138,8 @@ class CliTranscriptReader:
             return self.home_dir / ".qwen" / "projects"
         if self.provider == "gemini":
             return self.home_dir / ".gemini" / "tmp"
+        if self.provider == "kimi":
+            return self.home_dir / ".kimi-code" / "sessions"
         return self.home_dir / ".cli-proxy-unsupported-transcript"
 
     def _path_is_allowed(self, path: Path) -> bool:
@@ -172,11 +183,24 @@ class CliTranscriptReader:
                 direct = self.root / workspace_key / self.session_id / "updates.jsonl"
                 if direct.is_file():
                     exact = [direct]
+            elif self.provider == "kimi":
+                direct = (
+                    self.root
+                    / _kimi_workspace_key(self.workdir)
+                    / self.session_id
+                    / "agents"
+                    / "main"
+                    / "wire.jsonl"
+                )
+                if direct.is_file():
+                    exact = [direct]
         if exact:
             return exact
 
         if self.provider == "grok":
             pattern = "updates.jsonl"
+        elif self.provider == "kimi":
+            pattern = "wire.jsonl"
         elif self.provider == "gemini":
             pattern = "session-*.json"
         else:
@@ -220,6 +244,10 @@ class CliTranscriptReader:
             return path.stem
         if self.provider == "grok":
             return path.parent.name
+        if self.provider == "kimi":
+            # <sessions>/<workspace key>/<session id>/agents/<agent id>/wire.jsonl
+            parents = path.parents
+            return parents[2].name if len(parents) > 2 else ""
         if self.provider == "gemini":
             return path.stem[len("session-"):] if path.stem.startswith("session-") else path.stem
         match = _CODEX_SESSION_ID_RE.search(path.name)
@@ -361,6 +389,55 @@ class CliTranscriptReader:
         if cleaned:
             self.latest_assistant_text = cleaned
 
+    def _handle_kimi(self, record: dict[str, Any]) -> None:
+        """Kimi journals a turn as prompt -> loop events -> turn.ended.
+
+        Assistant text never arrives as one record: each step emits its blocks as
+        separate `content.part` events, so the parts of the running step are joined
+        back together on every poll.
+        """
+        record_type = str(record.get("type") or "").strip()
+        if record_type in {"turn.prompt", "context.append_message", "context.append_loop_event", "turn.ended"}:
+            self.recognized = True
+        self.activity_at = _kimi_activity(record.get("time"))
+
+        if record_type == "context.append_message":
+            message = record.get("message") if isinstance(record.get("message"), dict) else {}
+            if str(message.get("role") or "").strip() != "assistant":
+                return
+            text = _content_text(message.get("content"))
+            if not text:
+                return
+            if self._done_marker() in text:
+                self.complete = True
+            cleaned = self._clean_assistant_text(text)
+            if cleaned:
+                self.latest_assistant_text = cleaned
+            return
+
+        if record_type != "context.append_loop_event":
+            return
+        event = record.get("event") if isinstance(record.get("event"), dict) else {}
+        event_type = str(event.get("type") or "").strip()
+        if event_type == "step.begin":
+            self._kimi_step_parts = []
+        elif event_type == "tool.call":
+            tool_name = str(event.get("name") or "").strip()
+            if tool_name:
+                self.latest_progress_text = tool_name
+        elif event_type == "content.part":
+            part = event.get("part")
+            text = _content_text([part]) if isinstance(part, dict) else ""
+            if not text:
+                return
+            self._kimi_step_parts.append(text)
+            joined = "\n".join(self._kimi_step_parts)
+            if self._done_marker() in joined:
+                self.complete = True
+            cleaned = self._clean_assistant_text(joined)
+            if cleaned:
+                self.latest_assistant_text = cleaned
+
     def _handle_record(self, record: dict[str, Any]) -> None:
         if self.provider == "claude":
             self._handle_claude(record)
@@ -370,6 +447,8 @@ class CliTranscriptReader:
             self._handle_qwen(record)
         elif self.provider == "grok":
             self._handle_grok(record)
+        elif self.provider == "kimi":
+            self._handle_kimi(record)
 
     def _read_gemini_snapshot(self) -> None:
         """Перечитывает файл сессии gemini целиком.

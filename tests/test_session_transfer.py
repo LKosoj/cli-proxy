@@ -1,8 +1,10 @@
 """Tests for cross-CLI session transfer (read source CLI session, write into target CLI)."""
 
 import json
+import os
 import time
 import urllib.parse
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -183,6 +185,13 @@ class TestService:
 
         assert "grok" in transfer_service._ensure_readers()
         assert "grok" in transfer_service._ensure_writers()
+
+    def test_service_registers_kimi_reader_and_writer(self):
+        transfer_service._READERS.clear()
+        transfer_service._WRITERS.clear()
+
+        assert "kimi" in transfer_service._ensure_readers()
+        assert "kimi" in transfer_service._ensure_writers()
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +546,121 @@ class TestReaderGrok:
         assert [msg.content for msg in result.messages] == ["Hello", "Hi"]
 
 
+class TestReaderKimi:
+    def test_workspace_key_repeats_kimi_encoding(self):
+        from app.services.session_transfer import reader_kimi
+
+        # Value produced by kimi's own `encodeWorkDirKey` for this path.
+        assert reader_kimi._workspace_key("/srv/demo/app") == "wd_app_fa69cc192fc6"
+        assert reader_kimi._workspace_key("") == ""
+        assert reader_kimi._slugify_workdir_name("My Project (v2)") == "my-project-v2"
+        assert reader_kimi._slugify_workdir_name("..") == "workspace"
+        assert reader_kimi._slugify_workdir_name("+++") == "workspace"
+
+    def test_reads_wire_journal(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_kimi
+
+        workspace = "/srv/demo/app"
+        session_id = "session_kimi-1"
+        session_dir = tmp_path / "sessions" / "wd_app_fa69cc192fc6" / session_id
+        (session_dir / "agents" / "main").mkdir(parents=True)
+        (session_dir / "state.json").write_text(
+            json.dumps({"title": "Разбор логов", "lastPrompt": "почему упал деплой?"}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        records = [
+            {"type": "metadata", "protocol_version": "1.5", "created_at": 1_700_000_000_000},
+            {"type": "profile.bind", "modelAlias": "kimi/k2", "profileName": "agent"},
+            {
+                "type": "context.append_message",
+                "time": 1_700_000_001_000,
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "почему упал деплой?"}],
+                    "origin": {"kind": "user"},
+                },
+            },
+            {
+                "type": "context.append_message",
+                "time": 1_700_000_002_000,
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "<system-reminder>"}],
+                    "origin": {"kind": "injection", "variant": "permission"},
+                },
+            },
+            {
+                "type": "context.append_loop_event",
+                "time": 1_700_000_003_000,
+                "event": {"type": "content.part", "part": {"type": "text", "text": "Смотрю логи."}},
+            },
+            {
+                "type": "context.append_loop_event",
+                "time": 1_700_000_004_000,
+                "event": {"type": "content.part", "part": {"type": "text", "text": "Упал тест."}},
+            },
+            {
+                "type": "context.append_loop_event",
+                "time": 1_700_000_005_000,
+                "event": {
+                    "type": "tool.result",
+                    "result": {"output": [{"type": "text", "text": "exit code 1"}]},
+                },
+            },
+        ]
+        (session_dir / "agents" / "main" / "wire.jsonl").write_text(
+            "\n".join(json.dumps(item, ensure_ascii=False) for item in records) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(reader_kimi, "KIMI_SESSIONS_BASE", tmp_path / "sessions")
+
+        result = reader_kimi.read_session(session_id, workspace)
+
+        assert result is not None
+        assert result.source_cli == "kimi"
+        assert result.summary == "Разбор логов"
+        # The injected user message is dropped, the streamed parts merge into one message.
+        assert [(msg.role, msg.content) for msg in result.messages] == [
+            ("user", "почему упал деплой?"),
+            ("assistant", "Смотрю логи.\nУпал тест."),
+            ("tool", "exit code 1"),
+        ]
+        # Wire records stamp milliseconds, canonical timestamps are seconds.
+        assert result.messages[0].timestamp == 1_700_000_001.0
+        assert result.messages[1].timestamp == 1_700_000_003.0
+
+    def test_finds_session_in_another_workspace_bucket(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_kimi
+
+        session_id = "session_kimi-2"
+        wire = tmp_path / "sessions" / "wd_other_000000000000" / session_id / "agents" / "main" / "wire.jsonl"
+        wire.parent.mkdir(parents=True)
+        wire.write_text(
+            json.dumps(
+                {
+                    "type": "context.append_message",
+                    "message": {"role": "user", "content": [{"type": "text", "text": "привет"}]},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(reader_kimi, "KIMI_SESSIONS_BASE", tmp_path / "sessions")
+
+        result = reader_kimi.read_session(session_id, "/srv/demo/app")
+
+        assert result is not None
+        assert [msg.content for msg in result.messages] == ["привет"]
+
+    def test_missing_session_returns_none(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_kimi
+
+        monkeypatch.setattr(reader_kimi, "KIMI_SESSIONS_BASE", tmp_path / "sessions")
+
+        assert reader_kimi.read_session("session_missing", "/srv/demo/app") is None
+        assert reader_kimi.read_session("", "/srv/demo/app") is None
+
+
 # ---------------------------------------------------------------------------
 # Writers
 # ---------------------------------------------------------------------------
@@ -727,3 +851,184 @@ class TestWriterGrok:
         assert rt.source_cli == "grok"
         assert len(rt.messages) == 3
         assert rt.messages[0].content == "Message 0"
+
+
+class TestWriterKimi:
+    @staticmethod
+    def _wire_records(home: Path, session_id: str) -> list:
+        wire = next(home.rglob(f"{session_id}/agents/main/wire.jsonl"))
+        return [json.loads(line) for line in wire.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def _write(self, tmp_path, monkeypatch, canonical, workspace):
+        from app.services.session_transfer import reader_kimi, writer_kimi
+
+        home = tmp_path / ".kimi-code"
+        monkeypatch.setattr(writer_kimi, "KIMI_HOME_BASE", home)
+        monkeypatch.setattr(reader_kimi, "KIMI_SESSIONS_BASE", home / "sessions")
+        return home, writer_kimi.write_session(canonical, workspace)
+
+    def test_writes_wire_state_and_index_and_round_trips(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_kimi
+
+        workspace = "/srv/demo/app"
+        canonical = _make_canonical(3, "codex")
+        home, new_id = self._write(tmp_path, monkeypatch, canonical, workspace)
+
+        assert new_id is not None
+        assert new_id.startswith("session_")
+        session_dir = home / "sessions" / "wd_app_fa69cc192fc6" / new_id
+        assert session_dir.is_dir()
+
+        records = self._wire_records(home, new_id)
+        assert records[0]["type"] == "metadata"
+        assert records[0]["protocol_version"] == "1.5"
+        messages = [item for item in records if item["type"] == "context.append_message"]
+        assert [item["message"]["role"] for item in messages] == ["user", "assistant", "user"]
+        assert messages[0]["message"]["origin"] == {"kind": "user"}
+        assert messages[0]["message"]["content"] == [{"type": "text", "text": "Message 0"}]
+        assert messages[0]["time"] == int(canonical.messages[0].timestamp * 1000)
+
+        state = json.loads((session_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["id"] == new_id
+        assert state["cwd"] == workspace
+        assert state["title"] == "Message 0"
+        assert state["agents"]["main"]["homedir"] == str(session_dir / "agents" / "main")
+        assert state["custom"] == {"transferred_from_cli": "codex", "source_session_id": "test-session-id"}
+
+        index = [
+            json.loads(line)
+            for line in (home / "session_index.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert index == [{"sessionId": new_id, "sessionDir": str(session_dir), "workDir": workspace}]
+
+        rt = reader_kimi.read_session(new_id, workspace)
+        assert rt is not None
+        assert rt.source_cli == "kimi"
+        assert [msg.content for msg in rt.messages] == ["Message 0", "Message 1", "Message 2"]
+
+    def test_skips_tool_messages_and_empty_session(self, tmp_path, monkeypatch):
+        canonical = CanonicalSession(
+            source_cli="claude",
+            session_id="x",
+            workspace="/srv/demo/app",
+            messages=[
+                CanonicalMessage(role="tool", content="tool output"),
+                CanonicalMessage(role="user", content="   "),
+            ],
+        )
+        _home, new_id = self._write(tmp_path, monkeypatch, canonical, "/srv/demo/app")
+
+        assert new_id is None
+
+    def test_binds_configured_default_model(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_kimi
+
+        home = tmp_path / ".kimi-code"
+        home.mkdir(parents=True)
+        (home / "config.toml").write_text('default_model = "kimi/k2-turbo"\n', encoding="utf-8")
+        monkeypatch.setattr(writer_kimi, "KIMI_HOME_BASE", home)
+
+        new_id = writer_kimi.write_session(_make_canonical(2, "codex"), "/srv/demo/app")
+
+        assert new_id is not None
+        bind = self._wire_records(home, new_id)[1]
+        assert bind["type"] == "profile.bind"
+        assert bind["modelAlias"] == "kimi/k2-turbo"
+        assert bind["profileName"] == "agent"
+        assert bind["systemPrompt"] == ""
+
+    def test_reuses_binding_kimi_rendered_for_this_workspace(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_kimi
+
+        home = tmp_path / ".kimi-code"
+        (home / "config.toml").parent.mkdir(parents=True)
+        (home / "config.toml").write_text('default_model = "kimi/k2-turbo"\n', encoding="utf-8")
+        existing = home / "sessions" / "wd_app_fa69cc192fc6" / "session_old" / "agents" / "main"
+        existing.mkdir(parents=True)
+        rendered = {
+            "type": "profile.bind",
+            "modelAlias": "kimi/k2",
+            "profileName": "agent",
+            "thinkingEffort": "off",
+            "systemPrompt": "You are Kimi Code CLI",
+            "activeToolNames": ["Read", "Bash"],
+            "disallowedTools": [],
+            "time": 1_700_000_000_000,
+        }
+        (existing / "wire.jsonl").write_text(
+            json.dumps({"type": "metadata", "protocol_version": "1.5", "created_at": 1}) + "\n"
+            + json.dumps(rendered) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(writer_kimi, "KIMI_HOME_BASE", home)
+
+        new_id = writer_kimi.write_session(_make_canonical(2, "codex"), "/srv/demo/app")
+
+        assert new_id is not None
+        bind = self._wire_records(home, new_id)[1]
+        assert bind["systemPrompt"] == "You are Kimi Code CLI"
+        assert bind["modelAlias"] == "kimi/k2"
+        assert bind["activeToolNames"] == ["Read", "Bash"]
+        assert bind["time"] != rendered["time"]
+
+    def test_prefers_a_rendered_binding_over_a_transferred_one(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_kimi
+
+        home = tmp_path / ".kimi-code"
+        bucket = home / "sessions" / "wd_app_fa69cc192fc6"
+        for name, system_prompt, mtime in (
+            ("session_rendered", "You are Kimi Code CLI", 1_700_000_000),
+            ("session_transferred", "", 1_700_000_500),
+        ):
+            wire_dir = bucket / name / "agents" / "main"
+            wire_dir.mkdir(parents=True)
+            wire = wire_dir / "wire.jsonl"
+            wire.write_text(
+                json.dumps({"type": "metadata", "protocol_version": "1.5", "created_at": 1}) + "\n"
+                + json.dumps(
+                    {
+                        "type": "profile.bind",
+                        "modelAlias": f"kimi/{name}",
+                        "profileName": "agent",
+                        "systemPrompt": system_prompt,
+                        "disallowedTools": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            os.utime(wire, (mtime, mtime))
+        monkeypatch.setattr(writer_kimi, "KIMI_HOME_BASE", home)
+
+        new_id = writer_kimi.write_session(_make_canonical(2, "codex"), "/srv/demo/app")
+
+        assert new_id is not None
+        bind = self._wire_records(home, new_id)[1]
+        assert bind["modelAlias"] == "kimi/session_rendered"
+
+    def test_ignores_binding_of_a_session_that_already_started(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_kimi
+
+        home = tmp_path / ".kimi-code"
+        existing = home / "sessions" / "wd_app_fa69cc192fc6" / "session_old" / "agents" / "main"
+        existing.mkdir(parents=True)
+        # A journal whose bind is gone (kimi's own legacy import) must not be mined
+        # for records that come after the first turn.
+        (existing / "wire.jsonl").write_text(
+            json.dumps({"type": "metadata", "protocol_version": "1.0", "created_at": 1}) + "\n"
+            + json.dumps({"type": "turn.prompt", "time": 2}) + "\n"
+            + json.dumps({"type": "profile.bind", "modelAlias": "stale", "systemPrompt": ""}) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(writer_kimi, "KIMI_HOME_BASE", home)
+
+        new_id = writer_kimi.write_session(_make_canonical(2, "codex"), "/srv/demo/app")
+
+        assert new_id is not None
+        records = self._wire_records(home, new_id)
+        assert [item["type"] for item in records] == [
+            "metadata",
+            "context.append_message",
+            "context.append_message",
+        ]

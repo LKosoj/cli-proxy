@@ -377,6 +377,150 @@ def test_grok_transcript_reader_uses_online_updates(tmp_path):
     assert result.complete is True
 
 
+def test_kimi_transcript_reader_merges_step_parts(tmp_path):
+    request_id = "kimi-request"
+    session_id = "session_55555555-5555-4555-8555-555555555555"
+    path = (
+        tmp_path
+        / ".kimi-code"
+        / "sessions"
+        / "wd_project_4f3f91f6b0b4"
+        / session_id
+        / "agents"
+        / "main"
+        / "wire.jsonl"
+    )
+    _append_jsonl(
+        path,
+        {
+            "type": "turn.prompt",
+            "input": [{"type": "text", "text": f"<<<CLI_PROXY_REQUEST:{request_id}>>> собери проект"}],
+            "origin": {"kind": "user"},
+            "time": 1_700_000_001_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "step.begin", "turnId": "0", "step": 1},
+            "time": 1_700_000_002_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "tool.call", "name": "Bash", "toolCallId": "call-1"},
+            "time": 1_700_000_003_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "content.part", "part": {"type": "text", "text": "Собираю."}},
+            "time": 1_700_000_004_000,
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="kimi",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id="",
+        home_dir=tmp_path,
+    )
+
+    intermediate = reader.poll()
+
+    assert intermediate.available is True
+    assert intermediate.recognized is True
+    assert intermediate.session_id == session_id
+    assert intermediate.progress_text == "Bash"
+    assert intermediate.assistant_text == "Собираю."
+    assert intermediate.complete is False
+    # Kimi stamps epoch milliseconds; the backend compares activity in seconds.
+    assert intermediate.activity_at == 1_700_000_004.0
+
+    _append_jsonl(
+        path,
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "content.part", "part": {"type": "text", "text": "Готово."}},
+            "time": 1_700_000_005_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "content.part", "part": {"type": "text", "text": f"<<<DONE:{request_id}>>>"}},
+            "time": 1_700_000_006_000,
+        },
+        {"type": "turn.ended", "turnId": 0, "reason": "completed", "time": 1_700_000_007_000},
+    )
+
+    result = reader.poll()
+
+    assert result.assistant_text == "Собираю.\nГотово."
+    assert result.complete is True
+
+
+def test_kimi_transcript_reader_restarts_text_on_next_step(tmp_path):
+    request_id = "kimi-steps"
+    session_id = "session_66666666-6666-4666-8666-666666666666"
+    path = (
+        tmp_path
+        / ".kimi-code"
+        / "sessions"
+        / "wd_project_4f3f91f6b0b4"
+        / session_id
+        / "agents"
+        / "main"
+        / "wire.jsonl"
+    )
+    _append_jsonl(
+        path,
+        {
+            "type": "context.append_message",
+            "message": {
+                "role": "user",
+                "content": [{"type": "text", "text": f"<<<CLI_PROXY_REQUEST:{request_id}>>> проверь тесты"}],
+                "origin": {"kind": "user"},
+            },
+            "time": 1_700_000_001_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "step.begin", "turnId": "0", "step": 1},
+            "time": 1_700_000_002_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "content.part", "part": {"type": "text", "text": "Запускаю тесты."}},
+            "time": 1_700_000_003_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "step.end", "turnId": "0", "step": 1, "finishReason": "tool_use"},
+            "time": 1_700_000_004_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "step.begin", "turnId": "0", "step": 2},
+            "time": 1_700_000_005_000,
+        },
+        {
+            "type": "context.append_loop_event",
+            "event": {"type": "content.part", "part": {"type": "text", "text": "Тесты зелёные."}},
+            "time": 1_700_000_006_000,
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="kimi",
+        request_id=request_id,
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id="",
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    # Only the last step's text is the answer; the previous step is progress noise.
+    assert result.assistant_text == "Тесты зелёные."
+    assert result.complete is False
+
+
 def test_transcript_reader_recovers_from_persisted_locator(tmp_path):
     request_id = "recover-request"
     session_id = "44444444-4444-4444-8444-444444444444"

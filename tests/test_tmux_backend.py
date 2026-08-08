@@ -16,6 +16,9 @@ from app.services.cli_backends.tmux_driver import TmuxDriverError
 from app.services.cli_backends.tmux_parser import done_marker, request_marker
 from app.services.cli_backends.transcript_reader import TranscriptLocator, TranscriptPollResult
 
+# Готовый экран Kimi Code 0.34.0: рамка ввода и статус-бар с индикатором контекста.
+KIMI_READY_PANE = "│ > │\n yolo  /work                                        context: 0%"
+
 
 class FakeTmuxDriver:
     def __init__(self):
@@ -1039,6 +1042,7 @@ async def test_tmux_backend_builtin_qwen_resume_drops_session_id_placeholder(tmp
 @pytest.mark.asyncio
 async def test_tmux_backend_builtin_kimi_resume_appends_resume_flag(tmp_path):
     driver = FakeTmuxDriver()
+    driver.capture_outputs = [KIMI_READY_PANE]
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
     session = _session(tmp_path)
     session.tool.name = "kimi"
@@ -1055,6 +1059,7 @@ async def test_tmux_backend_builtin_kimi_resume_appends_resume_flag(tmp_path):
 @pytest.mark.asyncio
 async def test_tmux_backend_kimi_resume_keeps_configured_continue_flag(tmp_path):
     driver = FakeTmuxDriver()
+    driver.capture_outputs = [KIMI_READY_PANE]
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
     session = _session(tmp_path)
     session.tool.name = "kimi"
@@ -1259,6 +1264,7 @@ def test_tmux_backend_does_not_treat_plain_shell_prompt_as_ready_claude() -> Non
         ("codex", "›"),
         ("qwen", "➜ qwen · qwen3.7-max\n> Введите сообщение"),
         ("grok", "Grok Build 0.2.56\n│❯│"),
+        ("kimi", KIMI_READY_PANE),
     ],
 )
 async def test_tmux_backend_waits_for_generic_cli_prompt_before_pasting(tmp_path, cli_name, ready_output):
@@ -1307,6 +1313,31 @@ async def test_tmux_backend_fails_fast_on_claude_trust_prompt(tmp_path):
 
     status = await backend.status(session)
     assert status.state == "failed"
+    assert driver.loaded_prompt_path is None
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_fails_fast_on_kimi_trust_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    # Kimi спрашивает про доверие другими словами, чем claude, и своего "❯" на этом экране нет.
+    driver.capture_outputs = [
+        "Trust this folder?\n↑↓ navigate · Enter select · Esc exit\n"
+        "❯ Trust this folder\n  Don't trust"
+    ]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.05,
+    )
+    session = _session(tmp_path)
+    session.tool.name = "kimi"
+    session.tool.interactive_cmd = ["kimi", "--yolo"]
+    session.cli.active_cli = "kimi"
+
+    with pytest.raises(TmuxDriverError, match="workspace trust prompt"):
+        await backend.run(session, "do work")
+
     assert driver.loaded_prompt_path is None
 
 

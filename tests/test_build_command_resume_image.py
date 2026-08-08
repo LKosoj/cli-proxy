@@ -27,7 +27,6 @@ def test_build_command_drops_resume_flag_and_value_when_resume_is_missing() -> N
 def test_build_command_kimi_swaps_continue_for_resume_token() -> None:
     template = [
         "kimi",
-        "--print",
         "--output-format",
         "stream-json",
         "--continue",
@@ -40,12 +39,12 @@ def test_build_command_kimi_swaps_continue_for_resume_token() -> None:
     fresh, fresh_stdin = build_command(template, prompt="hello", resume=None)
     resumed, resumed_stdin = build_command(template, prompt="hello", resume="kimi-session-1")
 
-    assert fresh == ["kimi", "--print", "--output-format", "stream-json", "--continue", "--prompt", "hello"]
+    assert fresh == ["kimi", "--output-format", "stream-json", "--continue", "--prompt", "hello"]
     assert fresh_stdin is False
-    # `--continue` и `--resume` у kimi взаимоисключающие, поэтому при токене остаётся только resume.
+    # `--resume` у kimi - алиас `--session`, а он несовместим с `--continue`,
+    # поэтому при токене в команде остаётся только resume.
     assert resumed == [
         "kimi",
-        "--print",
         "--output-format",
         "stream-json",
         "--prompt",
