@@ -47,7 +47,7 @@ class CliLimitsSnapshot:
 class CliLimitsService:
     """Собирает доступные лимиты и usage по активным CLI-сессиям."""
 
-    SUPPORTED_CLI_NAMES = ("claude", "codex", "gemini", "grok", "qwen")
+    SUPPORTED_CLI_NAMES = ("claude", "codex", "gemini", "grok", "kimi", "qwen")
     _CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
     _CLAUDE_OAUTH_BETA = "oauth-2025-04-20"
     _CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
@@ -179,6 +179,14 @@ class CliLimitsService:
                 status="unavailable",
                 lines=(
                     "⚠️ квоты недоступны (non-interactive)",
+                ),
+            )
+        if cli_name == "kimi":
+            return CliLimitsSnapshot(
+                cli_name="kimi",
+                status="unavailable",
+                lines=(
+                    "⚠️ квоты недоступны: Kimi CLI не публикует usage/quota",
                 ),
             )
         return CliLimitsSnapshot(
@@ -1404,6 +1412,7 @@ class CliLimitsService:
         "claude": "🤖",
         "gemini": "♊",
         "grok": "✕",
+        "kimi": "🌙",
         "qwen": "🔮",
     }
 

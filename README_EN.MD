@@ -2,7 +2,7 @@
 
 [English version](README_EN.MD) | [Russian version](README.md)
 
-Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok) with multiple sessions, request queueing, and HTML output.
+Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Kimi) with multiple sessions, request queueing, and HTML output.
 
 ## Features
 - Multiple CLI sessions in different directories.
@@ -125,7 +125,7 @@ For first-time setup on Ubuntu/Debian, use:
 
 The script will:
 - install system dependencies and Python venv;
-- install CLI tools (`codex`, `claude`, `gemini`, `qwen`, `grok`);
+- install CLI tools (`codex`, `claude`, `gemini`, `qwen`, `grok`, `kimi`);
 - create `config.yaml` and `.env`;
 - create/start a `systemd` service.
 
@@ -532,6 +532,18 @@ shows local usage for the latest project session from `~/.grok/sessions`; xAI
 personal RPM/TPM quotas are available in Console and are not exposed through a
 stable CLI/API. Grok session transfer uses the same local session store and the
 compact transfer capsule.
+
+Kimi Code CLI is configured as `tools.kimi`; headless mode uses the official print
+mode `kimi --print --output-format stream-json --prompt "{prompt}"`. `--print`
+already auto-approves tool calls, so `--yolo` is not needed in headless (kimi
+rejects it together with `--prompt`); for tmux it is set in `interactive_cmd`.
+Session continuation: without a token `--continue` resumes the latest session of
+the directory, with a token `--resume <token>` is used; the flags are mutually
+exclusive and the bridge passes only one. The key comes from `KIMI_API_KEY` in
+`.env` or the process environment, OAuth login is done with `kimi login`. For
+`/limits`, Kimi reports that quotas are unavailable: the CLI does not publish
+usage. Session transfer and native transcript reading are not implemented for
+Kimi yet; headless and tmux backends are available.
 
 To refresh Gemini OAuth credentials while collecting CLI limits, set this in `config.yaml`:
 ```yaml

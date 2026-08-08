@@ -48,6 +48,7 @@ _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "gemini": {"--resume", "-r"},
     "qwen": {"--resume", "-r", "--continue", "-c"},
     "grok": {"--resume", "-r", "--continue", "-c"},
+    "kimi": {"--session", "-S", "--resume", "-r", "--continue", "-c"},
 }
 _SESSION_ID_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--session-id"},
@@ -59,6 +60,7 @@ _RESUME_FLAGS_BY_CLI: dict[str, list[str]] = {
     "gemini": ["--resume"],
     "qwen": ["--resume"],
     "grok": ["--resume"],
+    "kimi": ["--resume"],
 }
 _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
     "claude": ["--session-id"],
@@ -69,7 +71,7 @@ _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok"}
 _SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
-_TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok"}
+_TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok", "kimi"}
 # Qwen Code пишет журнал чата в <base>/<project_key>/chats/<session_id>.jsonl.
 QWEN_CHAT_BASE_DIR = Path("/root/.qwen/projects")
 _RECOVERY_DEST_KEYS = (

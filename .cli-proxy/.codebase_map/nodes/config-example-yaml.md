@@ -49,4 +49,4 @@ Instruction node for `config_example.yaml` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-07-10T00:00:00Z
+- 2026-08-08T00:00:00Z

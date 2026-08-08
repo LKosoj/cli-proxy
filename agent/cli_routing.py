@@ -18,16 +18,16 @@ _log = logging.getLogger(__name__)
 
 # Hardcoded defaults (used when config.defaults.cli_routing is missing/invalid).
 DEFAULT_CLI_ROUTING: Dict[str, List[str]] = {
-    "analytics": ["gemini", "claude", "qwen", "codex", "grok"],
-    "planning": ["gemini", "claude", "qwen", "codex", "grok"],
+    "analytics": ["gemini", "claude", "qwen", "codex", "grok", "kimi"],
+    "planning": ["gemini", "claude", "qwen", "codex", "grok", "kimi"],
     # Aggregate development (preferred when backend/frontend split is ambiguous).
-    "development": ["claude", "codex", "qwen", "gemini", "grok"],
+    "development": ["claude", "codex", "qwen", "gemini", "grok", "kimi"],
     # Optional split types for higher routing precision.
-    "backend_dev": ["claude", "codex", "qwen", "gemini", "grok"],
-    "frontend_dev": ["gemini", "claude", "qwen", "codex", "grok"],
-    "administration": ["qwen", "gemini", "codex", "claude", "grok"],
-    "website_administration": ["codex", "gemini", "claude", "qwen", "grok"],
-    "default": ["claude", "codex", "gemini", "qwen", "grok"],
+    "backend_dev": ["claude", "codex", "qwen", "gemini", "grok", "kimi"],
+    "frontend_dev": ["gemini", "claude", "qwen", "codex", "grok", "kimi"],
+    "administration": ["qwen", "gemini", "codex", "claude", "grok", "kimi"],
+    "website_administration": ["codex", "gemini", "claude", "qwen", "grok", "kimi"],
+    "default": ["claude", "codex", "gemini", "qwen", "grok", "kimi"],
 }
 
 _WORK_TYPE_CLASSIFIER_SCHEMA: Dict[str, Any] = {

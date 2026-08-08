@@ -416,6 +416,17 @@ def test_format_snapshots_shows_cli_without_active_sessions() -> None:
     assert "⚫️ gemini · grok · qwen" in text
 
 
+@pytest.mark.asyncio
+async def test_collect_snapshot_reports_kimi_quota_as_unavailable() -> None:
+    service = CliLimitsService()
+
+    snapshot = await service._collect_cli_snapshot("kimi", [])
+
+    assert snapshot.cli_name == "kimi"
+    assert snapshot.status == "unavailable"
+    assert "kimi" in CliLimitsService.SUPPORTED_CLI_NAMES
+
+
 def test_refresh_gemini_credentials_uses_client_secret_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
     service = CliLimitsService(gemini_oauth_client_secret="config-gemini-secret")
     captured: dict[str, list[str]] = {}

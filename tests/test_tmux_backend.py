@@ -1037,6 +1037,40 @@ async def test_tmux_backend_builtin_qwen_resume_drops_session_id_placeholder(tmp
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_builtin_kimi_resume_appends_resume_flag(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session.tool.name = "kimi"
+    session.tool.interactive_cmd = ["kimi", "--yolo"]
+    session.cli.active_cli = "kimi"
+    session.resume_token = "kimi-token"
+
+    result = await backend.run(session, "after reboot")
+
+    assert result.abnormal_stop is False
+    assert driver.new_session_commands[0][2][-4:] == ["kimi", "--yolo", "--resume", "kimi-token"]
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_kimi_resume_keeps_configured_continue_flag(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session.tool.name = "kimi"
+    # `--continue` и `--session/--resume` у kimi взаимоисключающие: свой флаг не добавляем.
+    session.tool.interactive_cmd = ["kimi", "--yolo", "--continue"]
+    session.cli.active_cli = "kimi"
+    session.resume_token = "kimi-token"
+
+    result = await backend.run(session, "after reboot")
+
+    assert result.abnormal_stop is False
+    assert driver.new_session_commands[0][2][-3:] == ["kimi", "--yolo", "--continue"]
+    assert "kimi-token" not in driver.new_session_commands[0][2]
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_builtin_claude_resume_drops_session_id_placeholder(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)

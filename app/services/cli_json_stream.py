@@ -289,6 +289,20 @@ def _tool_label(tool_name: Any, payload: Any) -> str:
     return name
 
 
+def _kimi_tool_arguments(value: Any) -> Any:
+    """Kimi отдаёт аргументы инструмента JSON-строкой, как в OpenAI tool_calls."""
+
+    if isinstance(value, dict):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return loads_safe(text)
+    except Exception:
+        return None
+
+
 def _tool_result_detail(payload: Any) -> str:
     if isinstance(payload, dict):
         for key in ("output", "resultDisplay", "result", "description", "message", "content"):
@@ -995,6 +1009,119 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
         ]
 
 
+class KimiJsonStreamAdapter(BaseCliJsonStreamAdapter):
+    """Kimi Code CLI в `--output-format stream-json` печатает чат-сообщения OpenAI-вида.
+
+    Каждая строка — это `{"role": ...}`: ответ ассистента, его же сообщение с
+    `tool_calls` или результат инструмента. Терминального события в потоке нет,
+    поэтому ход завершается по EOF процесса.
+    """
+
+    cli_name = "kimi"
+
+    def __init__(self) -> None:
+        self._session_id: Optional[str] = None
+        self._final_output_text = ""
+        self._tool_labels: dict[str, str] = {}
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._session_id
+
+    def final_output_text(self) -> str:
+        return self._final_output_text
+
+    def feed_line(self, line: str) -> list[CliJsonStreamEvent]:
+        payload = loads_safe(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"CLI JSON stream line must decode to object, got {type(payload)!r}")
+
+        role = str(payload.get("role") or "").strip().lower()
+        if not role:
+            raise ValueError("CLI JSON stream event is missing role")
+
+        events: list[CliJsonStreamEvent] = []
+        session_id = str(payload.get("session_id") or payload.get("sessionId") or "").strip() or None
+        if session_id and session_id != self._session_id:
+            self._session_id = session_id
+            events.append(
+                CliJsonStreamEvent(
+                    kind="session_started",
+                    cli_name=self.cli_name,
+                    session_id=session_id,
+                    payload=payload,
+                )
+            )
+
+        if role == "assistant":
+            text = _coerce_message_text(payload.get("content"))
+            if text:
+                self._final_output_text = text
+                events.append(
+                    CliJsonStreamEvent(
+                        kind="assistant_text",
+                        cli_name=self.cli_name,
+                        session_id=self._session_id,
+                        text=text,
+                        payload=payload,
+                    )
+                )
+            tool_calls = payload.get("tool_calls")
+            for call in tool_calls if isinstance(tool_calls, list) else []:
+                if not isinstance(call, dict):
+                    continue
+                function = call.get("function")
+                function = function if isinstance(function, dict) else {}
+                call_id = str(call.get("id") or "").strip()
+                tool_label = _tool_label(function.get("name"), _kimi_tool_arguments(function.get("arguments")))
+                if call_id:
+                    self._tool_labels[call_id] = tool_label
+                events.append(
+                    CliJsonStreamEvent(
+                        kind="tool_event",
+                        cli_name=self.cli_name,
+                        session_id=self._session_id,
+                        turn_id=call_id or None,
+                        text=tool_label,
+                        payload=payload,
+                    )
+                )
+            return events
+
+        if role == "tool":
+            call_id = str(payload.get("tool_call_id") or payload.get("toolCallId") or "").strip()
+            tool_label = self._tool_labels.get(call_id) or (call_id or "tool")
+            events.append(
+                CliJsonStreamEvent(
+                    kind="tool_event",
+                    cli_name=self.cli_name,
+                    session_id=self._session_id,
+                    turn_id=call_id or None,
+                    text=_tool_result_text(
+                        tool_label,
+                        detail=_tool_result_detail(payload.get("content")),
+                        is_error=bool(payload.get("is_error")),
+                    ),
+                    payload=payload,
+                )
+            )
+            return events
+
+        if role == "user":
+            # Эхо собственного ввода при `--input-format stream-json`.
+            return events
+
+        events.append(
+            CliJsonStreamEvent(
+                kind="raw_event",
+                cli_name=self.cli_name,
+                session_id=self._session_id,
+                payload=payload,
+            )
+        )
+        return events
+
+
 def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAdapter]:
     name = str(cli_name or "").strip().lower()
     if name == "codex":
@@ -1007,6 +1134,8 @@ def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAd
         return ClaudeJsonStreamAdapter()
     if name == "grok":
         return GrokJsonStreamAdapter()
+    if name == "kimi":
+        return KimiJsonStreamAdapter()
     return None
 
 
@@ -1221,6 +1350,7 @@ __all__ = [
     "ClaudeJsonStreamAdapter",
     "CodexJsonStreamAdapter",
     "GeminiJsonStreamAdapter",
+    "KimiJsonStreamAdapter",
     "QwenJsonStreamAdapter",
     "build_cli_json_stream_adapter",
     "cli_json_stream_archive_enabled",

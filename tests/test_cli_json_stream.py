@@ -13,6 +13,7 @@ from app.services.cli_json_stream import (
     extract_cli_evidence_from_normalized_stream,
     GeminiJsonStreamAdapter,
     GrokJsonStreamAdapter,
+    KimiJsonStreamAdapter,
     QwenJsonStreamAdapter,
     recover_cli_text_from_raw_stream,
 )
@@ -420,3 +421,55 @@ def test_grok_json_stream_adapter_normalizes_semantic_events() -> None:
     assert build_cli_json_stream_adapter("grok").cli_name == "grok"
     raw_text = "\n".join(lines)
     assert recover_cli_text_from_raw_stream("grok", raw_text) == "OK"
+
+
+def test_kimi_json_stream_adapter_normalizes_chat_messages() -> None:
+    adapter = KimiJsonStreamAdapter()
+    events = []
+    lines = (
+        '{"role":"user","content":"list python files"}',
+        (
+            '{"role":"assistant","content":"Let me check the current directory.",'
+            '"tool_calls":[{"type":"function","id":"tc_1","function":'
+            '{"name":"Shell","arguments":"{\\"command\\":\\"ls\\"}"}}]}'
+        ),
+        '{"role":"tool","tool_call_id":"tc_1","content":"file1.py\\nfile2.py"}',
+        '{"role":"assistant","content":"There are two Python files."}',
+    )
+
+    for line in lines:
+        events.extend(adapter.feed_line(line))
+
+    assert [event.kind for event in events] == [
+        "assistant_text",
+        "tool_event",
+        "tool_event",
+        "assistant_text",
+    ]
+    assert events[1].text == "Shell: ls"
+    assert events[2].text == "Shell: ls result: file1.py file2.py"
+    # Терминального события у kimi нет: ход закрывается по EOF процесса.
+    assert adapter.completed is False
+    assert adapter.final_output_text() == "There are two Python files."
+
+    assert build_cli_json_stream_adapter("kimi").cli_name == "kimi"
+    raw_text = "\n".join(lines)
+    assert recover_cli_text_from_raw_stream("kimi", raw_text) == "There are two Python files."
+
+
+def test_kimi_json_stream_adapter_reports_session_id_once() -> None:
+    adapter = KimiJsonStreamAdapter()
+
+    events = adapter.feed_line('{"role":"assistant","content":"hi","session_id":"kimi-42"}')
+    assert [event.kind for event in events] == ["session_started", "assistant_text"]
+    assert adapter.session_id == "kimi-42"
+
+    events = adapter.feed_line('{"role":"assistant","content":"again","session_id":"kimi-42"}')
+    assert [event.kind for event in events] == ["assistant_text"]
+
+
+def test_kimi_json_stream_adapter_rejects_line_without_role() -> None:
+    adapter = KimiJsonStreamAdapter()
+
+    with pytest.raises(ValueError):
+        adapter.feed_line('{"content":"no role here"}')

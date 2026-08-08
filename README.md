@@ -2,7 +2,7 @@
 
 [English version](README_EN.MD) | [Русская версия](README.md)
 
-Telegram-бот для управления CLI-агентами (Codex / Gemini / Qwen / Claude / Grok) с поддержкой нескольких сессий, очереди запросов и HTML-вывода.
+Telegram-бот для управления CLI-агентами (Codex / Gemini / Qwen / Claude / Grok / Kimi) с поддержкой нескольких сессий, очереди запросов и HTML-вывода.
 
 ## Возможности
 - Несколько сессий CLI в разных каталогах.
@@ -125,7 +125,7 @@ scheduler:
 
 Скрипт:
 - установит системные зависимости и Python venv;
-- установит CLI-инструменты (`codex`, `claude`, `gemini`, `qwen`, `grok`);
+- установит CLI-инструменты (`codex`, `claude`, `gemini`, `qwen`, `grok`, `kimi`);
 - создаст `config.yaml` и `.env`;
 - поднимет `systemd`-сервис.
 
@@ -531,6 +531,18 @@ Grok Build CLI добавляется как `tools.grok`; headless-режим �
 локальный usage последней сессии проекта из `~/.grok/sessions`; персональные RPM/TPM
 квоты xAI доступны в Console и не выдаются стабильным CLI/API. Перенос сессий
 Grok использует тот же локальный session store и компактный transfer capsule.
+
+Kimi Code CLI добавляется как `tools.kimi`; headless-режим использует официальный
+print mode `kimi --print --output-format stream-json --prompt "{prompt}"`. Флаг
+`--print` уже включает авто-одобрение инструментов, поэтому `--yolo` в headless не
+нужен (kimi запрещает его вместе с `--prompt`); в tmux-режиме `--yolo` задаётся в
+`interactive_cmd`. Продолжение сессии: без токена работает `--continue` (последняя
+сессия каталога), с токеном используется `--resume <token>`; эти флаги
+взаимоисключающие, и мост подставляет только один. Ключ передаётся через
+`KIMI_API_KEY` в `.env` или системном окружении, авторизация по OAuth выполняется
+командой `kimi login`. `/limits` для Kimi показывает пометку о недоступности квот:
+CLI не публикует usage. Перенос сессий (`session_transfer`) и чтение native
+transcript для Kimi пока не реализованы, доступны headless- и tmux-режимы.
 
 Для обновления Gemini OAuth credentials при сборе CLI-лимитов задайте в `config.yaml`:
 ```yaml

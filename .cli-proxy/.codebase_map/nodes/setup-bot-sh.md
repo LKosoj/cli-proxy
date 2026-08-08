@@ -45,4 +45,4 @@ Instruction node for `setup_bot.sh` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-06-17T10:46:19Z
+- 2026-08-08T00:00:00Z

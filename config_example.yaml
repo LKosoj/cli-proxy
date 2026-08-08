@@ -92,6 +92,19 @@ tools:
     help_cmd: "/help"
     env:
       ENV6: null
+  kimi:
+    mode: headless
+    # `--print` включает неинтерактивный режим с авто-одобрением инструментов,
+    # поэтому `--yolo` здесь не нужен (и запрещён вместе с `--prompt`).
+    cmd: ["kimi", "--print", "--output-format", "stream-json", "--continue", "--prompt", "{prompt}", "--resume", "{resume}"]
+    enabled: true
+    interactive_cmd: ["kimi", "--yolo"]
+    interactive_resume_cmd: ["kimi", "--yolo", "--resume", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
+    help_cmd: "/help"
+    env:
+      KIMI_API_KEY: null
   grok:
     mode: headless
     cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "-p", "{prompt}", "--resume", "{resume}"]

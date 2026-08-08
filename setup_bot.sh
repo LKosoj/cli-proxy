@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Interactive first-time setup for CLI Proxy Telegram Bridge on Ubuntu/Debian.
 # - Installs system deps + Python venv deps
-# - Installs CLI tools (codex/claude/gemini/qwen via npm, grok via xAI installer)
+# - Installs CLI tools (codex/claude/gemini/qwen/kimi via npm, grok via xAI installer)
 # - Collects required config values from user
 # - Creates config.yaml + .env
 # - Creates and starts a systemd service
@@ -42,7 +42,7 @@ Non-interactive mode can also read env vars:
   SETUP_BOT_TOKEN, SETUP_WHITELIST_RAW, SETUP_ADMINLIST_RAW, SETUP_USER_WORKDIRS_RAW, SETUP_WORKDIR,
   SETUP_SERVICE_NAME, SETUP_SERVICE_USER, SETUP_CHOWN,
   OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BIG_MODEL, OPENAI_BASE_URL,
-  ANTHROPIC_API_KEY, GOOGLE_API_KEY, QWEN_API_KEY, XAI_API_KEY, ZAI_API_KEY, TAVILY_API_KEY, JINA_API_KEY
+  ANTHROPIC_API_KEY, GOOGLE_API_KEY, QWEN_API_KEY, XAI_API_KEY, KIMI_API_KEY, ZAI_API_KEY, TAVILY_API_KEY, JINA_API_KEY
 
 Required in all modes:
   OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BIG_MODEL
@@ -155,6 +155,7 @@ install_npm_cli "codex" "@openai/codex"
 install_npm_cli "claude" "@anthropic-ai/claude-code"
 install_npm_cli "gemini" "@google/gemini-cli"
 install_npm_cli "qwen" "@qwen-code/qwen-code"
+install_npm_cli "kimi" "@moonshot-ai/kimi-code"
 
 install_grok_cli() {
   if command -v grok >/dev/null 2>&1; then
@@ -230,6 +231,7 @@ ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
 QWEN_API_KEY="${QWEN_API_KEY:-}"
 XAI_API_KEY="${XAI_API_KEY:-}"
+KIMI_API_KEY="${KIMI_API_KEY:-}"
 ZAI_API_KEY="${ZAI_API_KEY:-}"
 TAVILY_API_KEY="${TAVILY_API_KEY:-}"
 JINA_API_KEY="${JINA_API_KEY:-}"
@@ -260,6 +262,7 @@ if [[ "$NON_INTERACTIVE" -ne 1 ]]; then
   read -r -p "GOOGLE_API_KEY: " GOOGLE_API_KEY
   read -r -p "QWEN_API_KEY: " QWEN_API_KEY
   read -r -p "XAI_API_KEY: " XAI_API_KEY
+  read -r -p "KIMI_API_KEY: " KIMI_API_KEY
   read -r -p "ZAI_API_KEY: " ZAI_API_KEY
   read -r -p "TAVILY_API_KEY: " TAVILY_API_KEY
   read -r -p "JINA_API_KEY: " JINA_API_KEY
@@ -373,6 +376,7 @@ echo "==> Writing .env (for CLI auth keys)"
   [[ -n "$GOOGLE_API_KEY" ]] && echo "GOOGLE_API_KEY=$GOOGLE_API_KEY"
   [[ -n "$QWEN_API_KEY" ]] && echo "QWEN_API_KEY=$QWEN_API_KEY"
   [[ -n "$XAI_API_KEY" ]] && echo "XAI_API_KEY=$XAI_API_KEY"
+  [[ -n "$KIMI_API_KEY" ]] && echo "KIMI_API_KEY=$KIMI_API_KEY"
   [[ -n "$ZAI_API_KEY" ]] && echo "ZAI_API_KEY=$ZAI_API_KEY"
   [[ -n "$TAVILY_API_KEY" ]] && echo "TAVILY_API_KEY=$TAVILY_API_KEY"
   [[ -n "$JINA_API_KEY" ]] && echo "JINA_API_KEY=$JINA_API_KEY"
