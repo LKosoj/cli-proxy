@@ -14,13 +14,26 @@ def build_command(
 ) -> Tuple[List[str], bool]:
     replaced = False
     cmd: List[str] = []
-    skip_next = False
     skip_continue = resume is not None
-    for part in cmd_template:
-        if skip_next:
-            skip_next = False
-            continue
+    template = [str(part) for part in cmd_template]
+    index = 0
+    while index < len(template):
+        part = template[index]
+        index += 1
         if skip_continue and part == "--continue":
+            continue
+        if (
+            resume is None
+            and part.startswith("-")
+            and index < len(template)
+            and template[index].strip() == "{resume}"
+        ):
+            # Флаг продолжения сессии без токена выбрасывается вместе со своим
+            # значением: `--resume {resume}` (codex/claude/kimi), `--session {resume}`
+            # (opencode). Иначе CLI получил бы флаг с промптом вместо токена.
+            # Слитая форма (`--resume={resume}`) отпадает ниже сама, свой флаг
+            # она уносит с собой.
+            index += 1
             continue
         if "{resume}" in part:
             if resume is None:
@@ -34,9 +47,6 @@ def build_command(
                 cmd.append(part.replace("{image}", ""))
                 continue
             cmd.append(part.replace("{image}", image))
-            continue
-        if part == "--resume" and resume is None:
-            skip_next = True
             continue
         if "{prompt}" in part:
             cmd.append(part.replace("{prompt}", prompt))

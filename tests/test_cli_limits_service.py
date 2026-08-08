@@ -427,6 +427,17 @@ async def test_collect_snapshot_reports_kimi_quota_as_unavailable() -> None:
     assert "kimi" in CliLimitsService.SUPPORTED_CLI_NAMES
 
 
+@pytest.mark.asyncio
+async def test_collect_snapshot_reports_opencode_quota_as_unavailable() -> None:
+    service = CliLimitsService()
+
+    snapshot = await service._collect_cli_snapshot("opencode", [])
+
+    assert snapshot.cli_name == "opencode"
+    assert snapshot.status == "unavailable"
+    assert "opencode" in CliLimitsService.SUPPORTED_CLI_NAMES
+
+
 def test_refresh_gemini_credentials_uses_client_secret_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
     service = CliLimitsService(gemini_oauth_client_secret="config-gemini-secret")
     captured: dict[str, list[str]] = {}

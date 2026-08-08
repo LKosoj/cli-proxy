@@ -53,3 +53,28 @@ def test_build_command_kimi_swaps_continue_for_resume_token() -> None:
         "kimi-session-1",
     ]
     assert resumed_stdin is False
+
+
+def test_build_command_opencode_drops_session_pair_before_positional_prompt() -> None:
+    template = ["opencode", "run", "--format", "json", "--session", "{resume}", "{prompt}"]
+
+    fresh, fresh_stdin = build_command(template, prompt="hello", resume=None)
+    resumed, resumed_stdin = build_command(template, prompt="hello", resume="ses_1")
+
+    # У opencode нет `--resume`, токен идёт в `--session`; без токена пара флаг +
+    # значение выпадает целиком, иначе промпт уехал бы в значение флага.
+    assert fresh == ["opencode", "run", "--format", "json", "hello"]
+    assert fresh_stdin is False
+    assert resumed == ["opencode", "run", "--format", "json", "--session", "ses_1", "hello"]
+    assert resumed_stdin is False
+
+
+def test_build_command_keeps_neighbour_flag_of_inline_resume_placeholder() -> None:
+    # Слитая форма уносит только себя: соседний флаг не является её значением.
+    cmd, _ = build_command(
+        ["cli", "--yolo", "--resume={resume}", "{prompt}"],
+        prompt="hello",
+        resume=None,
+    )
+
+    assert cmd == ["cli", "--yolo", "hello"]

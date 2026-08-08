@@ -1123,6 +1123,132 @@ class KimiJsonStreamAdapter(BaseCliJsonStreamAdapter):
         return events
 
 
+class OpencodeJsonStreamAdapter(BaseCliJsonStreamAdapter):
+    """opencode в `run --format json` печатает по строке на каждую готовую часть хода.
+
+    Строка - объект `{type, timestamp, sessionID, ...}`: `text` и `reasoning`
+    несут `part` с уже собранным текстом (не дельтой), `tool_use` - завершённый
+    или упавший вызов инструмента, `error` - ошибку хода. Терминального события
+    в потоке нет, ход закрывается по EOF процесса. `sessionID` присутствует в
+    каждом событии, поэтому токен для `--session` известен с первой строки.
+    """
+
+    cli_name = "opencode"
+
+    def __init__(self) -> None:
+        self._session_id: Optional[str] = None
+        self._assistant_texts: list[str] = []
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._session_id
+
+    def final_output_text(self) -> str:
+        return "\n\n".join(self._assistant_texts)
+
+    def feed_line(self, line: str) -> list[CliJsonStreamEvent]:
+        payload = loads_safe(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"CLI JSON stream line must decode to object, got {type(payload)!r}")
+
+        event_type = str(payload.get("type") or "").strip().lower()
+        if not event_type:
+            raise ValueError("CLI JSON stream event is missing type")
+
+        events: list[CliJsonStreamEvent] = []
+        session_id = str(payload.get("sessionID") or payload.get("sessionId") or "").strip() or None
+        if session_id and session_id != self._session_id:
+            self._session_id = session_id
+            events.append(
+                CliJsonStreamEvent(
+                    kind="session_started",
+                    cli_name=self.cli_name,
+                    session_id=session_id,
+                    payload=payload,
+                )
+            )
+
+        part = payload.get("part")
+        part = part if isinstance(part, dict) else {}
+
+        if event_type == "text":
+            # `synthetic`/`ignored` части opencode подставляет сам (служебные
+            # вставки в контекст), ответом модели они не являются.
+            if part.get("synthetic") or part.get("ignored"):
+                return events
+            text = _coerce_message_text(part.get("text"))
+            if text:
+                self._assistant_texts.append(text)
+                events.append(
+                    CliJsonStreamEvent(
+                        kind="assistant_text",
+                        cli_name=self.cli_name,
+                        session_id=self._session_id,
+                        turn_id=str(part.get("messageID") or "").strip() or None,
+                        text=text,
+                        payload=payload,
+                    )
+                )
+            return events
+
+        if event_type == "tool_use":
+            state = part.get("state")
+            state = state if isinstance(state, dict) else {}
+            is_error = str(state.get("status") or "").strip().lower() == "error"
+            detail = (
+                _truncate(state.get("error"), 180)
+                if is_error
+                else _tool_result_detail(state)
+            )
+            events.append(
+                CliJsonStreamEvent(
+                    kind="tool_event",
+                    cli_name=self.cli_name,
+                    session_id=self._session_id,
+                    turn_id=str(part.get("callID") or "").strip() or None,
+                    text=_tool_result_text(
+                        _tool_label(part.get("tool"), state.get("input")),
+                        detail=detail,
+                        is_error=is_error,
+                    ),
+                    payload=payload,
+                )
+            )
+            return events
+
+        if event_type == "error":
+            error = payload.get("error")
+            error = error if isinstance(error, dict) else {}
+            data = error.get("data")
+            data = data if isinstance(data, dict) else {}
+            message = str(data.get("message") or error.get("name") or "").strip()
+            events.append(
+                CliJsonStreamEvent(
+                    kind="failed",
+                    cli_name=self.cli_name,
+                    session_id=self._session_id,
+                    is_terminal=True,
+                    text=message or None,
+                    payload=payload,
+                )
+            )
+            return events
+
+        # `reasoning` - chain-of-thought модели, наружу его не отдаём.
+        if event_type == "reasoning":
+            return events
+
+        events.append(
+            CliJsonStreamEvent(
+                kind="raw_event",
+                cli_name=self.cli_name,
+                session_id=self._session_id,
+                payload=payload,
+            )
+        )
+        return events
+
+
 def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAdapter]:
     name = str(cli_name or "").strip().lower()
     if name == "codex":
@@ -1137,6 +1263,8 @@ def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAd
         return GrokJsonStreamAdapter()
     if name == "kimi":
         return KimiJsonStreamAdapter()
+    if name == "opencode":
+        return OpencodeJsonStreamAdapter()
     return None
 
 
@@ -1352,6 +1480,7 @@ __all__ = [
     "CodexJsonStreamAdapter",
     "GeminiJsonStreamAdapter",
     "KimiJsonStreamAdapter",
+    "OpencodeJsonStreamAdapter",
     "QwenJsonStreamAdapter",
     "build_cli_json_stream_adapter",
     "cli_json_stream_archive_enabled",

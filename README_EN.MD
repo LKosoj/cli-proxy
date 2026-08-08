@@ -2,7 +2,7 @@
 
 [English version](README_EN.MD) | [Russian version](README.md)
 
-Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Kimi) with multiple sessions, request queueing, and HTML output.
+Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Kimi / opencode) with multiple sessions, request queueing, and HTML output.
 
 ## Features
 - Multiple CLI sessions in different directories.
@@ -125,7 +125,7 @@ For first-time setup on Ubuntu/Debian, use:
 
 The script will:
 - install system dependencies and Python venv;
-- install CLI tools (`codex`, `claude`, `gemini`, `qwen`, `grok`, `kimi`);
+- install CLI tools (`codex`, `claude`, `gemini`, `qwen`, `grok`, `kimi`, `opencode`);
 - create `config.yaml` and `.env`;
 - create/start a `systemd` service.
 
@@ -557,6 +557,28 @@ already rendered for this directory, otherwise from `default_model` in
 `~/.kimi-code/config.toml`. On the first run in a new
 directory kimi asks whether the folder is trusted; in tmux mode the bridge detects
 that screen and asks you to open kimi in the workdir once.
+
+opencode is configured as `tools.opencode`; headless mode uses
+`opencode run --format json --session "{resume}" "{prompt}"` - the prompt is a
+positional argument here, not a flag. `--format json` turns on a line-based
+event stream (`text`, `tool_use`, `step_start`, `step_finish`, `reasoning`,
+`error`); every line carries `sessionID`, so no `resume_regex` is needed.
+opencode has no `--resume` flag: the token goes into `--session`, and with an
+empty token the whole `--session {resume}` pair is dropped from the command. The
+model is not pinned in `config.yaml` - opencode picks it itself (`opencode
+providers`, `~/.config/opencode/opencode.json`), and login is done with
+`opencode auth login`. tmux mode is not offered
+(`execution_backends: ["headless"]`): the opencode TUI only runs full screen and
+no screen parser was written for it. For `/limits`, opencode reports that quotas
+are unavailable: they belong to the provider it was pointed at, not to the CLI.
+Session transfer and the recent-session resume picker both read the single
+database `~/.local/share/opencode/opencode.db` (or
+`$XDG_DATA_HOME/opencode/opencode.db`). A transferred session is stamped with the
+provider and model of the newest message in that database: on `--session`
+opencode resolves the model from the last user message and dies with
+`ProviderModelNotFoundError` on an unknown name. If opencode has never run on
+this machine there is nothing to copy, and the bridge skips the transfer with a
+warning.
 
 To refresh Gemini OAuth credentials while collecting CLI limits, set this in `config.yaml`:
 ```yaml

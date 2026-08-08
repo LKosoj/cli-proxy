@@ -29,6 +29,9 @@ from app.services.session_transfer.reader_grok import _workspace_key as _grok_wo
 from app.services.session_transfer.reader_kimi import _content_text as _kimi_content_text
 from app.services.session_transfer.reader_kimi import _is_real_user_message as _kimi_is_real_user
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
+from app.services.session_transfer.reader_opencode import connect_readonly as _opencode_connect
+from app.services.session_transfer.reader_opencode import db_path as _opencode_db_path
+from app.services.session_transfer.reader_opencode import first_user_text as _opencode_first_user_text
 from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
 
 logger = logging.getLogger(__name__)
@@ -466,11 +469,64 @@ def _list_codex(workdir: str, limit: int) -> List[CliSessionCandidate]:
     return out
 
 
+def _opencode_db_paths() -> List[Path]:
+    """Databases to scan: the current user's (honouring XDG_DATA_HOME) plus other homes."""
+    out: List[Path] = []
+    seen: set[str] = set()
+    for candidate in [_opencode_db_path()] + [_opencode_db_path(home) for home in _home_dirs()]:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(candidate)
+    return out
+
+
+def _list_opencode(workdir: str, limit: int) -> List[CliSessionCandidate]:
+    """opencode keeps all conversations in one database; each session stores its workdir."""
+    target = os.path.realpath(workdir)
+    out: List[CliSessionCandidate] = []
+    # Session ids are unique across databases, so a copy of the same store in
+    # another home must not produce the same session twice.
+    seen: set[str] = set()
+    for path in _opencode_db_paths():
+        conn = _opencode_connect(path)
+        if conn is None:
+            continue
+        try:
+            # Child sessions belong to the `task` tool, they are not resumable turns.
+            rows = conn.execute(
+                "SELECT id, time_updated FROM session"
+                " WHERE directory = ? AND parent_id IS NULL AND time_archived IS NULL"
+                " ORDER BY time_updated DESC LIMIT ?",
+                (target, int(limit)),
+            ).fetchall()
+            for session_id, time_updated in rows:
+                sid = str(session_id or "").strip()
+                if not sid or sid in seen:
+                    continue
+                seen.add(sid)
+                out.append(
+                    CliSessionCandidate(
+                        cli="opencode",
+                        session_id=sid,
+                        mtime=float(time_updated or 0) / 1000.0,
+                        preview=_clean_preview(_opencode_first_user_text(conn, sid)),
+                    )
+                )
+        except Exception:
+            logger.exception("opencode session history failed db=%s", path)
+        finally:
+            conn.close()
+    return out
+
+
 _LISTERS: Dict[str, Callable[[str, int], List[CliSessionCandidate]]] = {
     "claude": _list_claude,
     "codex": _list_codex,
     "gemini": _list_gemini,
     "grok": _list_grok,
     "kimi": _list_kimi,
+    "opencode": _list_opencode,
     "qwen": _list_qwen,
 }

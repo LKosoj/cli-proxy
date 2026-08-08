@@ -2,6 +2,7 @@
 
 import json
 import os
+import sqlite3
 import time
 import urllib.parse
 from pathlib import Path
@@ -1032,3 +1033,315 @@ class TestWriterKimi:
             "context.append_message",
             "context.append_message",
         ]
+
+
+# opencode keeps every conversation in one SQLite store, so its tests build the
+# schema the reader and writer actually query instead of laying out files.
+_OPENCODE_SCHEMA = (
+    """
+    CREATE TABLE project (
+        id TEXT PRIMARY KEY,
+        worktree TEXT NOT NULL,
+        vcs TEXT,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        sandboxes TEXT
+    )
+    """,
+    """
+    CREATE TABLE session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        parent_id TEXT,
+        slug TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        title TEXT NOT NULL,
+        version TEXT NOT NULL,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        time_archived INTEGER
+    )
+    """,
+    """
+    CREATE TABLE message (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        data TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE part (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        data TEXT NOT NULL
+    )
+    """,
+)
+
+
+def _opencode_db(tmp_path: Path, monkeypatch) -> Path:
+    """Empty opencode store at $XDG_DATA_HOME/opencode/opencode.db."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    target = tmp_path / "opencode" / "opencode.db"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(target))
+    with conn:
+        for statement in _OPENCODE_SCHEMA:
+            conn.execute(statement)
+    conn.close()
+    return target
+
+
+def _opencode_seed_turn(
+    db: Path,
+    *,
+    session_id: str,
+    directory: str,
+    parts: list[tuple[str, dict]],
+    provider_id: str = "anthropic",
+    model_id: str = "claude-sonnet-4",
+    time_updated: int = 1_700_000_009_000,
+    parent_id: str | None = None,
+    time_archived: int | None = None,
+) -> None:
+    """One session with a user turn and an assistant turn carrying *parts*."""
+    conn = sqlite3.connect(str(db))
+    with conn:
+        conn.execute(
+            "INSERT INTO session (id, project_id, parent_id, slug, directory, title, version,"
+            " time_created, time_updated, time_archived) VALUES (?, 'global', ?, ?, ?, ?, '1.2.27', ?, ?, ?)",
+            (
+                session_id,
+                parent_id,
+                f"slug-{session_id}",
+                directory,
+                "seeded",
+                1_700_000_000_000,
+                time_updated,
+                time_archived,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)",
+            (
+                f"msg_{session_id}_1",
+                session_id,
+                1_700_000_001_000,
+                1_700_000_001_000,
+                json.dumps(
+                    {
+                        "role": "user",
+                        "time": {"created": 1_700_000_001_000},
+                        "agent": "build",
+                        "model": {"providerID": provider_id, "modelID": model_id},
+                    }
+                ),
+            ),
+        )
+        conn.execute(
+            "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                f"prt_{session_id}_1",
+                f"msg_{session_id}_1",
+                session_id,
+                1_700_000_001_000,
+                1_700_000_001_000,
+                json.dumps({"type": "text", "text": "почему упал деплой?"}, ensure_ascii=False),
+            ),
+        )
+        conn.execute(
+            "INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)",
+            (
+                f"msg_{session_id}_2",
+                session_id,
+                1_700_000_002_000,
+                1_700_000_002_000,
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "time": {"created": 1_700_000_002_000},
+                        "parentID": f"msg_{session_id}_1",
+                        "providerID": provider_id,
+                        "modelID": model_id,
+                    }
+                ),
+            ),
+        )
+        for index, (part_id, payload) in enumerate(parts, start=2):
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    part_id,
+                    f"msg_{session_id}_2",
+                    session_id,
+                    1_700_000_002_000,
+                    1_700_000_002_000,
+                    json.dumps(payload, ensure_ascii=False),
+                ),
+            )
+    conn.close()
+
+
+class TestReaderOpencode:
+    def test_reads_texts_and_tool_results(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_opencode
+
+        db = _opencode_db(tmp_path, monkeypatch)
+        _opencode_seed_turn(
+            db,
+            session_id="ses_1",
+            directory="/srv/demo/app",
+            parts=[
+                ("prt_a", {"type": "text", "text": "Смотрю логи."}),
+                # opencode injects synthetic/ignored parts into its own context.
+                ("prt_b", {"type": "text", "text": "<context>", "synthetic": True}),
+                ("prt_c", {"type": "text", "text": "Упал тест."}),
+                (
+                    "prt_d",
+                    {
+                        "type": "tool",
+                        "tool": "bash",
+                        "state": {"status": "completed", "output": "exit code 1"},
+                    },
+                ),
+                (
+                    "prt_e",
+                    {"type": "tool", "tool": "read", "state": {"status": "pending"}},
+                ),
+            ],
+        )
+
+        result = reader_opencode.read_session("ses_1", "/srv/demo/app")
+
+        assert result is not None
+        assert result.source_cli == "opencode"
+        assert [(msg.role, msg.content) for msg in result.messages] == [
+            ("user", "почему упал деплой?"),
+            ("assistant", "Смотрю логи.\nУпал тест."),
+            ("tool", "bash: exit code 1"),
+        ]
+        # opencode stamps milliseconds, canonical timestamps are seconds.
+        assert result.messages[0].timestamp == 1_700_000_001.0
+
+    def test_missing_database_and_session_return_none(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_opencode
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "empty"))
+        assert reader_opencode.read_session("ses_1", "/srv/demo/app") is None
+
+        _opencode_db(tmp_path, monkeypatch)
+        assert reader_opencode.read_session("ses_missing", "/srv/demo/app") is None
+        assert reader_opencode.read_session("", "/srv/demo/app") is None
+
+
+class TestWriterOpencode:
+    def test_writes_session_and_round_trips(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import reader_opencode, writer_opencode
+
+        db = _opencode_db(tmp_path, monkeypatch)
+        _opencode_seed_turn(db, session_id="ses_old", directory="/srv/demo/app", parts=[])
+        workspace = str(tmp_path / "work")
+        os.makedirs(workspace, exist_ok=True)
+
+        new_id = writer_opencode.write_session(_make_canonical(3, "codex"), workspace)
+
+        assert new_id is not None
+        assert new_id.startswith("ses_")
+
+        conn = sqlite3.connect(str(db))
+        row = conn.execute(
+            "SELECT directory, title, version FROM session WHERE id = ?", (new_id,)
+        ).fetchone()
+        messages = [
+            (message_id, json.loads(data))
+            for message_id, data in conn.execute(
+                "SELECT id, data FROM message WHERE session_id = ? ORDER BY id", (new_id,)
+            )
+        ]
+        conn.close()
+
+        assert row == (workspace, "Message 0", "1.2.27")
+        assert [item["role"] for _mid, item in messages] == ["user", "assistant", "user"]
+        # opencode resolves a resumed session's model from the last user message,
+        # so the copied pair must be one this installation really has.
+        assert messages[0][1]["model"] == {"providerID": "anthropic", "modelID": "claude-sonnet-4"}
+        assert messages[1][1]["providerID"] == "anthropic"
+        # `parentID` is mandatory for an assistant message and must point at the
+        # request it answers.
+        assert messages[1][1]["parentID"] == messages[0][0]
+
+        rt = reader_opencode.read_session(new_id, workspace)
+        assert rt is not None
+        assert [msg.content for msg in rt.messages] == ["Message 0", "Message 1", "Message 2"]
+
+    def test_refuses_without_database_or_known_model(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_opencode
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "empty"))
+        assert writer_opencode.write_session(_make_canonical(2, "codex"), "/srv/demo/app") is None
+
+        # A store opencode has never written to names no model to resume with.
+        _opencode_db(tmp_path, monkeypatch)
+        assert writer_opencode.write_session(_make_canonical(2, "codex"), "/srv/demo/app") is None
+
+    def test_titles_session_by_first_non_blank_request(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_opencode
+
+        db = _opencode_db(tmp_path, monkeypatch)
+        _opencode_seed_turn(db, session_id="ses_old", directory="/srv/demo/app", parts=[])
+        canonical = CanonicalSession(
+            source_cli="claude",
+            session_id="x",
+            workspace="/srv/demo/app",
+            messages=[
+                CanonicalMessage(role="user", content="\n\n"),
+                CanonicalMessage(role="user", content="Реальный вопрос\nвторая строка"),
+            ],
+        )
+
+        new_id = writer_opencode.write_session(canonical, "/srv/demo/app")
+
+        assert new_id is not None
+        conn = sqlite3.connect(str(db))
+        title = conn.execute("SELECT title FROM session WHERE id = ?", (new_id,)).fetchone()[0]
+        rows = conn.execute(
+            "SELECT count(*) FROM message WHERE session_id = ?", (new_id,)
+        ).fetchone()[0]
+        conn.close()
+
+        assert title == "Реальный вопрос"
+        # Пустое сообщение не попадает в перенос.
+        assert rows == 1
+
+    def test_uses_project_id_recorded_in_git_marker(self, tmp_path, monkeypatch):
+        from app.services.session_transfer import writer_opencode
+
+        db = _opencode_db(tmp_path, monkeypatch)
+        _opencode_seed_turn(db, session_id="ses_old", directory="/srv/demo/app", parts=[])
+        workspace = tmp_path / "repo"
+        (workspace / ".git").mkdir(parents=True)
+        (workspace / ".git" / "opencode").write_text("prj_from_marker\n", encoding="utf-8")
+
+        new_id = writer_opencode.write_session(_make_canonical(2, "codex"), str(workspace))
+
+        assert new_id is not None
+        conn = sqlite3.connect(str(db))
+        project_id = conn.execute(
+            "SELECT project_id FROM session WHERE id = ?", (new_id,)
+        ).fetchone()[0]
+        worktree = conn.execute(
+            "SELECT worktree FROM project WHERE id = 'prj_from_marker'"
+        ).fetchone()[0]
+        conn.close()
+
+        # opencode rewrites `.git/opencode` on bootstrap, so the marker wins over
+        # any project row the database still holds for this path.
+        assert project_id == "prj_from_marker"
+        assert worktree == str(workspace)

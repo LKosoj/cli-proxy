@@ -108,6 +108,22 @@ tools:
     help_cmd: "/help"
     env:
       KIMI_API_KEY: null
+  opencode:
+    mode: headless
+    # Промпт у `opencode run` - позиционный аргумент, а не флаг. `--format json`
+    # включает построчный поток событий; `sessionID` приходит в каждой строке,
+    # поэтому resume_regex не нужен. Токен подставляется в `--session`
+    # (у opencode нет `--resume`), при пустом токене пара флаг+значение выпадает.
+    # Модель не фиксируем: её выбирает сам opencode (`opencode providers`,
+    # `~/.config/opencode/opencode.json`).
+    cmd: ["opencode", "run", "--format", "json", "--session", "{resume}", "{prompt}"]
+    enabled: true
+    # TUI opencode работает только в полноэкранном режиме, парсер экрана под него
+    # не написан, поэтому tmux-бэкенд не заявляем.
+    execution_backends: ["headless"]
+    default_execution_backend: "headless"
+    env:
+      OPENCODE_API_KEY: null
   grok:
     mode: headless
     cmd: ["grok", "--no-auto-update", "--always-approve", "--disable-web-search", "--no-memory", "--output-format", "streaming-json", "-p", "{prompt}", "--resume", "{resume}"]

@@ -5111,7 +5111,7 @@
           const groups = {
             general: [
               fieldHtml({ id: "def-workdir", label: "workdir", hint: "Рабочая директория по умолчанию для новых сессий" }),
-              fieldHtml({ id: "def-default-cli", label: "default_cli", hint: "CLI-агент по умолчанию (qwen, codex, gemini, claude, grok, kimi)" }),
+              fieldHtml({ id: "def-default-cli", label: "default_cli", hint: "CLI-агент по умолчанию (qwen, codex, gemini, claude, grok, kimi, opencode)" }),
               fieldHtml({ id: "def-idle-timeout", label: "idle_timeout_sec", kind: "number", hint: "Таймаут простоя до очистки сессии (сек)" }),
               fieldHtml({ id: "def-summary-max", label: "summary_max_chars", kind: "number", hint: "Макс. размер summary (символы)" }),
               fieldHtml({ id: "def-html-prefix", label: "html_filename_prefix", hint: "Префикс для генерируемых HTML-артефактов" }),

@@ -2,7 +2,7 @@
 
 [English version](README_EN.MD) | [Русская версия](README.md)
 
-Telegram-бот для управления CLI-агентами (Codex / Gemini / Qwen / Claude / Grok / Kimi) с поддержкой нескольких сессий, очереди запросов и HTML-вывода.
+Telegram-бот для управления CLI-агентами (Codex / Gemini / Qwen / Claude / Grok / Kimi / opencode) с поддержкой нескольких сессий, очереди запросов и HTML-вывода.
 
 ## Возможности
 - Несколько сессий CLI в разных каталогах.
@@ -125,7 +125,7 @@ scheduler:
 
 Скрипт:
 - установит системные зависимости и Python venv;
-- установит CLI-инструменты (`codex`, `claude`, `gemini`, `qwen`, `grok`, `kimi`);
+- установит CLI-инструменты (`codex`, `claude`, `gemini`, `qwen`, `grok`, `kimi`, `opencode`);
 - создаст `config.yaml` и `.env`;
 - поднимет `systemd`-сервис.
 
@@ -555,6 +555,27 @@ sha256 от абсолютного пути>`). В перенесённую се
 этого каталога, иначе из `default_model` в `~/.kimi-code/config.toml`. Перед
 первым запуском в новом каталоге kimi спрашивает про доверие к папке; в tmux-режиме
 мост распознаёт этот экран и просит открыть kimi в рабочем каталоге вручную.
+
+opencode добавляется как `tools.opencode`; headless-режим использует
+`opencode run --format json --session "{resume}" "{prompt}"` - промпт здесь
+позиционный аргумент, а не флаг. `--format json` включает построчный поток
+событий (`text`, `tool_use`, `step_start`, `step_finish`, `reasoning`, `error`),
+в каждой строке приходит `sessionID`, поэтому `resume_regex` не нужен. Флага
+`--resume` у opencode нет: токен подставляется в `--session`, а при пустом
+токене пара `--session {resume}` из команды выпадает целиком. Модель в
+`config.yaml` не фиксируется - её выбирает сам opencode (`opencode providers`,
+`~/.config/opencode/opencode.json`), авторизация выполняется командой
+`opencode auth login`. tmux-режим не заявлен (`execution_backends: ["headless"]`):
+TUI opencode работает только в полноэкранном режиме, парсер экрана под него не
+написан. `/limits` для opencode показывает пометку о недоступности квот: лимиты
+держит выбранный провайдер, а не сам CLI. Перенос сессий и подстановка недавних
+сессий в пикер resume работают через единую базу
+`~/.local/share/opencode/opencode.db` (или `$XDG_DATA_HOME/opencode/opencode.db`).
+Перенесённой сессии мост проставляет провайдера и модель из самого свежего
+сообщения в этой базе: при `--session` opencode берёт модель из последнего
+пользовательского сообщения и с чужим именем падает с
+`ProviderModelNotFoundError`. Если opencode в этой системе ещё ни разу не
+запускался, переносить некуда - мост пропускает перенос с предупреждением.
 
 Для обновления Gemini OAuth credentials при сборе CLI-лимитов задайте в `config.yaml`:
 ```yaml

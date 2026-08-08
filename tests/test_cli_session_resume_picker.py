@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sqlite3
 import urllib.parse
 from functools import partial
 from pathlib import Path
@@ -271,6 +272,68 @@ def test_kimi_lists_sessions_of_this_workspace_only(fake_home):
         ("session_titled", "Разбор логов"),
         ("session_plain", "обнови зависимости"),
     ]
+
+
+def test_opencode_lists_top_level_sessions_of_this_workspace_only(tmp_path, monkeypatch):
+    # opencode keeps everything in one SQLite store, so the picker filters by the
+    # `directory` column instead of walking per-workspace folders.
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setattr(cli_session_history, "_home_dirs", lambda: [tmp_path / "home"])
+    db = tmp_path / "opencode" / "opencode.db"
+    db.parent.mkdir(parents=True)
+    conn = sqlite3.connect(str(db))
+    with conn:
+        conn.execute(
+            "CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT NOT NULL,"
+            " time_updated INTEGER NOT NULL, time_archived INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, data TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT NOT NULL,"
+            " session_id TEXT NOT NULL, data TEXT NOT NULL)"
+        )
+        rows = (
+            ("ses_new", None, "/srv/demo/app", 1_700_000_500_000, None),
+            ("ses_old", None, "/srv/demo/app", 1_700_000_000_000, None),
+            # Child sessions belong to the `task` tool, archived ones are hidden,
+            # and another workdir must not leak in.
+            ("ses_child", "ses_new", "/srv/demo/app", 1_700_000_900_000, None),
+            ("ses_archived", None, "/srv/demo/app", 1_700_000_900_000, 1_700_000_950_000),
+            ("ses_alien", None, "/srv/other", 1_700_000_900_000, None),
+        )
+        conn.executemany("INSERT INTO session VALUES (?, ?, ?, ?, ?)", rows)
+        for session_id, text, synthetic in (
+            ("ses_new", "обнови зависимости", False),
+            # A synthetic first part is opencode's own context injection.
+            ("ses_old", "<context>", True),
+            ("ses_child", "внутренняя задача", False),
+            ("ses_archived", "старое", False),
+            ("ses_alien", "чужое", False),
+        ):
+            conn.execute(
+                "INSERT INTO message VALUES (?, ?, ?)",
+                (f"msg_{session_id}", session_id, json.dumps({"role": "user"})),
+            )
+            payload = {"type": "text", "text": text}
+            if synthetic:
+                payload["synthetic"] = True
+            conn.execute(
+                "INSERT INTO part VALUES (?, ?, ?, ?)",
+                (f"prt_{session_id}", f"msg_{session_id}", session_id,
+                 json.dumps(payload, ensure_ascii=False)),
+            )
+    conn.close()
+
+    found = list_recent_cli_sessions("opencode", "/srv/demo/app")
+
+    assert [(candidate.session_id, candidate.preview) for candidate in found] == [
+        ("ses_new", "обнови зависимости"),
+        ("ses_old", ""),
+    ]
+    # Milliseconds in the store, seconds in the candidate.
+    assert found[0].mtime == 1_700_000_500.0
 
 
 def test_unknown_cli_and_empty_workdir_return_nothing(fake_home):

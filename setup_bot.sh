@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Interactive first-time setup for CLI Proxy Telegram Bridge on Ubuntu/Debian.
 # - Installs system deps + Python venv deps
-# - Installs CLI tools (codex/claude/gemini/qwen/kimi via npm, grok via xAI installer)
+# - Installs CLI tools (codex/claude/gemini/qwen/kimi/opencode via npm, grok via xAI installer)
 # - Collects required config values from user
 # - Creates config.yaml + .env
 # - Creates and starts a systemd service
@@ -156,6 +156,7 @@ install_npm_cli "claude" "@anthropic-ai/claude-code"
 install_npm_cli "gemini" "@google/gemini-cli"
 install_npm_cli "qwen" "@qwen-code/qwen-code"
 install_npm_cli "kimi" "@moonshot-ai/kimi-code"
+install_npm_cli "opencode" "opencode-ai"
 
 install_grok_cli() {
   if command -v grok >/dev/null 2>&1; then

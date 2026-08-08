@@ -14,6 +14,7 @@ from app.services.cli_json_stream import (
     GeminiJsonStreamAdapter,
     GrokJsonStreamAdapter,
     KimiJsonStreamAdapter,
+    OpencodeJsonStreamAdapter,
     QwenJsonStreamAdapter,
     recover_cli_text_from_raw_stream,
 )
@@ -487,3 +488,89 @@ def test_kimi_json_stream_adapter_keeps_goal_summary_without_role() -> None:
 
     with pytest.raises(ValueError):
         adapter.feed_line('{"content":"no role and no type"}')
+
+
+def test_opencode_json_stream_adapter_normalizes_parts() -> None:
+    adapter = OpencodeJsonStreamAdapter()
+    events = []
+    # Строки повторяют вывод `opencode run --format json` 1.2.27.
+    lines = (
+        (
+            '{"type":"step_start","timestamp":1,"sessionID":"ses_1",'
+            '"part":{"id":"prt_1","messageID":"msg_1","type":"step-start"}}'
+        ),
+        (
+            '{"type":"reasoning","timestamp":2,"sessionID":"ses_1",'
+            '"part":{"id":"prt_2","messageID":"msg_1","type":"reasoning","text":"thinking"}}'
+        ),
+        (
+            '{"type":"tool_use","timestamp":3,"sessionID":"ses_1",'
+            '"part":{"id":"prt_3","messageID":"msg_1","type":"tool","tool":"bash",'
+            '"callID":"call_1","state":{"status":"completed","input":{"command":"ls"},'
+            '"output":"file1.py\\nfile2.py","title":"ls"}}}'
+        ),
+        (
+            '{"type":"text","timestamp":4,"sessionID":"ses_1",'
+            '"part":{"id":"prt_4","messageID":"msg_1","type":"text",'
+            '"text":"There are two Python files."}}'
+        ),
+        (
+            '{"type":"step_finish","timestamp":5,"sessionID":"ses_1",'
+            '"part":{"id":"prt_5","messageID":"msg_1","type":"step-finish","reason":"stop"}}'
+        ),
+    )
+
+    for line in lines:
+        events.extend(adapter.feed_line(line))
+
+    assert [event.kind for event in events] == [
+        "session_started",
+        "raw_event",
+        "tool_event",
+        "assistant_text",
+        "raw_event",
+    ]
+    # `reasoning` - chain-of-thought, наружу не отдаётся.
+    assert events[2].text == "bash: ls result: file1.py file2.py"
+    assert adapter.session_id == "ses_1"
+    # Терминального события у opencode нет: ход закрывается по EOF процесса.
+    assert adapter.completed is False
+    assert adapter.final_output_text() == "There are two Python files."
+
+    assert build_cli_json_stream_adapter("opencode").cli_name == "opencode"
+    raw_text = "\n".join(lines)
+    assert recover_cli_text_from_raw_stream("opencode", raw_text) == "There are two Python files."
+
+
+def test_opencode_json_stream_adapter_skips_synthetic_text_and_reports_error() -> None:
+    adapter = OpencodeJsonStreamAdapter()
+
+    # Синтетические вставки opencode подставляет в контекст сам, ответом они не являются.
+    synthetic = adapter.feed_line(
+        '{"type":"text","timestamp":1,"sessionID":"ses_2",'
+        '"part":{"id":"prt_1","messageID":"msg_1","type":"text",'
+        '"text":"<system-reminder>","synthetic":true}}'
+    )
+    assert [event.kind for event in synthetic] == ["session_started"]
+    assert adapter.final_output_text() == ""
+
+    tool_failure = adapter.feed_line(
+        '{"type":"tool_use","timestamp":2,"sessionID":"ses_2",'
+        '"part":{"id":"prt_2","messageID":"msg_1","type":"tool","tool":"bash",'
+        '"callID":"call_1","state":{"status":"error","input":{"command":"false"},'
+        '"error":"exit code 1"}}}'
+    )
+    assert [event.kind for event in tool_failure] == ["tool_event"]
+    assert tool_failure[0].text == "bash: false failed: exit code 1"
+
+    failed = adapter.feed_line(
+        '{"type":"error","timestamp":3,"sessionID":"ses_2",'
+        '"error":{"name":"ProviderModelNotFoundError",'
+        '"data":{"message":"Model not found: acme/ghost."}}}'
+    )
+    assert [event.kind for event in failed] == ["failed"]
+    assert failed[0].is_terminal is True
+    assert failed[0].text == "Model not found: acme/ghost."
+
+    with pytest.raises(ValueError):
+        adapter.feed_line('{"sessionID":"ses_2"}')
