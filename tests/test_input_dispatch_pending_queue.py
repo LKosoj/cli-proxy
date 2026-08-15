@@ -418,8 +418,9 @@ async def test_pending_attachments_are_sent_to_tmux_as_file_refs(monkeypatch) ->
 
     await InputDispatchService.send_pending_to_active_tmux(session, pending)
 
-    # Файлы уже сохранены на диск, в панель уходит одна строка со ссылками.
-    assert sent_prompts == ["посмотри скрин @.attachments/shot.png @../tmp/outside.log"]
+    # Файлы уже сохранены на диск, в панель уходит одна строка со ссылками:
+    # внутри workdir — относительные, снаружи — абсолютные.
+    assert sent_prompts == ["посмотри скрин @.attachments/shot.png @/tmp/outside.log"]
 
 
 @pytest.mark.asyncio

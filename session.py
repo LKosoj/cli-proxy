@@ -38,7 +38,13 @@ from sessions.scoped_key import (
     sanitize_scoped_key_token as _sanitize_scoped_key_token,
     session_scoped_key,
 )
-from utils.cli import build_command, detect_prompt_regex, detect_resume_regex, resolve_env_value
+from utils.cli import (
+    build_attachment_ref,
+    build_command,
+    detect_prompt_regex,
+    detect_resume_regex,
+    resolve_env_value,
+)
 from utils.paths import legacy_sandbox_session_dir, sandbox_session_dir
 from utils.text import extract_tick_tokens, is_time_only_text, strip_ansi
 
@@ -902,90 +908,45 @@ class Session:
         directive = self._cli_language_directive()
         if directive:
             prompt = f"{directive}\n\n{prompt}"
-        if image_paths:
-            valid_paths = [str(p).strip() for p in image_paths if str(p).strip()]
-            if not valid_paths:
-                image_paths = None
-            else:
-                image_paths = valid_paths
+        raw_attachments = list(image_paths) if image_paths else ([image_path] if image_path else [])
+        attachments = [value for value in (str(p or "").strip() for p in raw_attachments) if value]
         selected_backend = get_session_execution_backend(self)
-        if selected_backend == EXECUTION_BACKEND_TMUX and (image_paths or image_path):
+        if selected_backend == EXECUTION_BACKEND_TMUX and attachments:
             raise RuntimeError("tmux backend does not support image requests in v1")
-        if image_paths:
+        if attachments:
             is_gemini = (self.tool.name or "").strip().lower() == "gemini"
             is_qwen = (self.tool.name or "").strip().lower() == "qwen"
-            is_claude = (self.tool.name or "").strip().lower() == "claude"
-            if not self.tool.image_cmd and not is_gemini and not is_qwen and not is_claude:
-                raise RuntimeError(f"{self.tool.name} не поддерживает изображения")
+            if is_qwen:
+                cmd_template = ["qwen", "{prompt}", "--model", "vision-model"]
+                if self.resume_token:
+                    cmd_template.extend(["--resume", "{resume}"])
+            else:
+                if self.resume_token and self.tool.resume_cmd:
+                    cmd_template = self.tool.resume_cmd
+                else:
+                    cmd_template = self.tool.headless_cmd or self.tool.cmd
+                if is_gemini and self.resume_token and not self.tool.resume_cmd:
+                    cmd_template = self._build_gemini_resume_template(cmd_template)
+            prompt_to_send = prompt
             image_arg: Optional[str] = None
-            if is_qwen:
-                cmd_template = ["qwen", "{prompt}", "--model", "vision-model"]
-                if self.resume_token:
-                    cmd_template.extend(["--resume", "{resume}"])
-            else:
-                if self.resume_token and self.tool.resume_cmd:
-                    cmd_template = self.tool.resume_cmd
-                else:
-                    cmd_template = self.tool.headless_cmd or self.tool.cmd
-                if is_gemini and self.resume_token and not self.tool.resume_cmd:
-                    cmd_template = self._build_gemini_resume_template(cmd_template)
-            prompt_to_send = prompt
-            if is_gemini:
-                refs = "\n".join(f"@{p}" for p in image_paths)
+            if self.tool.image_cmd:
+                # CLI с нативным флагом (codex --image) получает пути аргументом.
+                image_arg = ",".join(attachments)
+                cmd_template = cmd_template + self.tool.image_cmd
+            elif is_gemini:
+                refs = "\n".join(build_attachment_ref(p) for p in attachments)
                 prompt_to_send = f"{refs}\n{prompt}".strip()
-            elif is_qwen:
-                refs: List[str] = []
-                for p in image_paths:
-                    try:
-                        refs.append(os.path.relpath(p, self.workdir))
-                    except Exception:
-                        refs.append(p)
-                refs_str = " ".join(f"@{p}" for p in refs)
-                if prompt.strip():
-                    prompt_to_send = f"{prompt.strip()} {refs_str}".strip()
-                else:
-                    prompt_to_send = f"Расскажи о {refs_str}".strip()
             else:
-                image_arg = ",".join(image_paths)
-            if self.tool.image_cmd:
-                cmd_template = cmd_template + self.tool.image_cmd
-            return await self._run_headless(prompt_to_send, cmd_template=cmd_template, image_path=image_arg)
-        if image_path:
-            is_gemini = (self.tool.name or "").strip().lower() == "gemini"
-            is_qwen = (self.tool.name or "").strip().lower() == "qwen"
-            is_claude = (self.tool.name or "").strip().lower() == "claude"
-            if not self.tool.image_cmd and not is_gemini and not is_qwen and not is_claude:
-                raise RuntimeError(f"{self.tool.name} не поддерживает изображения")
-            if is_qwen:
-                cmd_template = ["qwen", "{prompt}", "--model", "vision-model"]
-                if self.resume_token:
-                    cmd_template.extend(["--resume", "{resume}"])
-            else:
-                if self.resume_token and self.tool.resume_cmd:
-                    cmd_template = self.tool.resume_cmd
-                else:
-                    cmd_template = self.tool.headless_cmd or self.tool.cmd
-                if is_gemini and self.resume_token and not self.tool.resume_cmd:
-                    cmd_template = self._build_gemini_resume_template(cmd_template)
-            prompt_to_send = prompt
-            if is_gemini:
-                attachment_ref = f"@{image_path}"
-                prompt_to_send = f"{attachment_ref}\n{prompt}".strip()
-            elif is_qwen:
-                try:
-                    attachment_path = os.path.relpath(image_path, self.workdir)
-                except Exception:
-                    attachment_path = image_path
-                # Qwen vision expects file mention inside the prompt, for example: "@diagram.png".
+                # Остальные CLI (qwen/claude/kimi/grok/opencode) читают вложение только
+                # по @-ссылке в промпте: без неё файл до агента не доходит.
+                refs = " ".join(build_attachment_ref(p, self.workdir) for p in attachments)
                 if prompt.strip():
-                    prompt_to_send = f"{prompt.strip()} @{attachment_path}"
+                    prompt_to_send = f"{prompt.strip()} {refs}"
                 else:
-                    prompt_to_send = f"Расскажи о @{attachment_path}"
-            if self.tool.image_cmd:
-                cmd_template = cmd_template + self.tool.image_cmd
+                    prompt_to_send = f"Расскажи о {refs}"
             # Images are never executed in "fresh" mode: image flows are typically interactive and
             # provider-specific; keep behavior unchanged unless explicitly required later.
-            return await self._run_headless(prompt_to_send, cmd_template=cmd_template, image_path=image_path)
+            return await self._run_headless(prompt_to_send, cmd_template=cmd_template, image_path=image_arg)
         if selected_backend == EXECUTION_BACKEND_TMUX:
             return await self._run_tmux(
                 prompt,

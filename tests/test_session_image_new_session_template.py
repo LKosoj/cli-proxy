@@ -104,7 +104,8 @@ def test_gemini_image_run_injects_attachment_into_prompt(tmp_path, monkeypatch) 
         assert out == "ok"
         assert captured["prompt"] == "@/tmp/image.png\nчто на изображении?"
         assert captured["cmd_template"] == ["gemini", "-p", "{prompt}"]
-        assert captured["image_path"] == "/tmp/image.png"
+        # Нативного флага у gemini нет, путь уходит только @-ссылкой в промпте.
+        assert captured["image_path"] is None
 
     asyncio.run(_run())
 
@@ -212,7 +213,7 @@ def test_qwen_image_run_uses_vision_model_and_prompt_attachment(tmp_path, monkey
         assert out == "ok"
         assert captured["prompt"] == "Расскажи о @.cli-proxy/.attachments/diagram.png"
         assert captured["cmd_template"] == ["qwen", "{prompt}", "--model", "vision-model"]
-        assert captured["image_path"] == image_path
+        assert captured["image_path"] is None
 
     asyncio.run(_run())
 
@@ -355,5 +356,109 @@ def test_gemini_multi_image_run_injects_all_attachments(tmp_path, monkeypatch) -
         assert out == "ok"
         assert captured["prompt"] == "@/tmp/a.png\n@/tmp/b.png\nСравни изображения"
         assert captured["image_path"] is None
+
+    asyncio.run(_run())
+
+
+def test_claude_image_run_injects_attachment_ref_into_prompt(tmp_path, monkeypatch) -> None:
+    async def _run() -> None:
+        workdir = tmp_path / "repo"
+        workdir.mkdir()
+        tool = ToolConfig(
+            name="claude",
+            mode="headless",
+            cmd=["claude", "--continue", "-p", "{prompt}", "--resume", "{resume}"],
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(workdir),
+            idle_timeout_sec=10,
+            config=None,
+        )
+        captured = {}
+        image_path = str(workdir / ".attachments" / "shot.png")
+
+        async def _fake_run_headless(prompt: str, cmd_template=None, image_path=None, *, force_fresh: bool = False):
+            captured["prompt"] = prompt
+            captured["cmd_template"] = list(cmd_template or [])
+            captured["image_path"] = image_path
+            return "ok"
+
+        monkeypatch.setattr(session, "_run_headless", _fake_run_headless)
+
+        out = await session.run_prompt("опиши скрин", image_path=image_path)
+        assert out == "ok"
+        # Без @-ссылки путь к файлу нигде не появлялся: у claude нет ни image_cmd,
+        # ни плейсхолдера {image} в шаблоне команды.
+        assert captured["prompt"] == "опиши скрин @.attachments/shot.png"
+        assert captured["cmd_template"] == ["claude", "--continue", "-p", "{prompt}", "--resume", "{resume}"]
+        assert captured["image_path"] is None
+
+    asyncio.run(_run())
+
+
+def test_cli_without_image_flag_sends_attachment_refs_instead_of_error(tmp_path, monkeypatch) -> None:
+    async def _run() -> None:
+        workdir = tmp_path / "repo"
+        workdir.mkdir()
+        tool = ToolConfig(
+            name="grok",
+            mode="headless",
+            cmd=["grok", "-p", "{prompt}"],
+            headless_cmd=["grok", "-p", "{prompt}"],
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(workdir),
+            idle_timeout_sec=10,
+            config=None,
+        )
+        captured = {}
+
+        async def _fake_run_headless(prompt: str, cmd_template=None, image_path=None, *, force_fresh: bool = False):
+            captured["prompt"] = prompt
+            return "ok"
+
+        monkeypatch.setattr(session, "_run_headless", _fake_run_headless)
+
+        out = await session.run_prompt(
+            "сравни",
+            image_paths=[str(workdir / ".attachments" / "a.png"), str(workdir / ".attachments" / "b.png")],
+        )
+        assert out == "ok"
+        assert captured["prompt"] == "сравни @.attachments/a.png @.attachments/b.png"
+
+    asyncio.run(_run())
+
+
+def test_attachment_outside_workdir_keeps_absolute_ref(tmp_path, monkeypatch) -> None:
+    async def _run() -> None:
+        workdir = tmp_path / "repo"
+        workdir.mkdir()
+        tool = ToolConfig(
+            name="kimi",
+            mode="headless",
+            cmd=["kimi", "--prompt", "{prompt}"],
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(workdir),
+            idle_timeout_sec=10,
+            config=None,
+        )
+        captured = {}
+
+        async def _fake_run_headless(prompt: str, cmd_template=None, image_path=None, *, force_fresh: bool = False):
+            captured["prompt"] = prompt
+            return "ok"
+
+        monkeypatch.setattr(session, "_run_headless", _fake_run_headless)
+
+        out = await session.run_prompt("", image_path="/var/tmp/outside.png")
+        assert out == "ok"
+        assert captured["prompt"] == "Расскажи о @/var/tmp/outside.png"
 
     asyncio.run(_run())

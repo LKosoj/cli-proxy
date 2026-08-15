@@ -59,7 +59,7 @@ def build_command(
 
 
 def build_attachment_ref(path: str, workdir: Optional[str] = None) -> str:
-    """@-ссылка на файл для CLI-агента, относительно workdir, если получается."""
+    """@-ссылка на файл для CLI-агента: относительная внутри workdir, иначе абсолютная."""
 
     ref = str(path or "").strip()
     if not ref:
@@ -67,9 +67,13 @@ def build_attachment_ref(path: str, workdir: Optional[str] = None) -> str:
     base = str(workdir or "").strip()
     if base:
         try:
-            ref = os.path.relpath(ref, base)
+            relative = os.path.relpath(ref, base)
         except Exception:
-            pass
+            relative = ""
+        # Файл вне workdir остаётся с абсолютным путём: `@../..`-ссылку агент
+        # резолвит от своего cwd, а он не обязан совпадать с workdir сессии.
+        if relative and not relative.startswith(".."):
+            ref = relative
     return f"@{ref}"
 
 
