@@ -181,6 +181,36 @@ def test_session_tick_tracking_ignores_time_only_assistant_text(tmp_path) -> Non
     ]
 
 
+def test_session_tick_tracking_keeps_assistant_text_containing_clock_time(tmp_path) -> None:
+    session = _build_session(tmp_path)
+
+    session._update_activity(
+        "Решение зафиксировано: сохраняем ссылки на посты, в воскресенье в 18:",
+        tick_kind="assistant_text",
+        replace_last=True,
+    )
+    session._update_activity(
+        "Решение зафиксировано: сохраняем ссылки на посты, в воскресенье в 18:00 публикуем итог.",
+        tick_kind="assistant_text",
+        replace_last=True,
+    )
+
+    assert session.last_assistant_text_value == (
+        "Решение зафиксировано: сохраняем ссылки на посты, в воскресенье в 18:00 публикуем итог."
+    )
+
+
+def test_session_tick_tracking_keeps_assistant_text_containing_duration(tmp_path) -> None:
+    session = _build_session(tmp_path)
+
+    session._update_activity(
+        "Отчёт готов, сборка заняла 1200 сек, все тесты зелёные.",
+        tick_kind="assistant_text",
+    )
+
+    assert session.last_assistant_text_value == "Отчёт готов, сборка заняла 1200 сек, все тесты зелёные."
+
+
 def test_session_tick_tracking_falls_back_to_full_text_for_short_token_when_allowed(tmp_path) -> None:
     session = _build_session(tmp_path)
 

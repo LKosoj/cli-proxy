@@ -2062,7 +2062,11 @@ class Session:
             return
         now = time.time()
         self.last_output_ts = now
-        tokens = extract_tick_tokens(raw)
+        # Тики (45s, 12%, 1:23) — прогресс-строки CLI. В ответе ассистента такие
+        # подстроки встречаются как обычный контент ("в воскресенье в 18:00"),
+        # поэтому текст ответа берётся целиком: иначе превью замирало на кадре
+        # до найденного токена либо подменялось самим токеном.
+        tokens = [] if normalized_tick_kind == "assistant_text" else extract_tick_tokens(raw)
         if tokens:
             candidate = str(tokens[-1] or "").strip()
             if len(candidate) < 6:
