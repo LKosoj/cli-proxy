@@ -13,6 +13,7 @@ from telegram.ext import ContextTypes
 from app.services.telegram_ui_scope import TelegramUiKey
 from i18n import t
 from modes.sdk import decode_mode_dirs
+from utils.cli import build_attachment_ref
 from utils.lang import resolve_user_lang
 
 
@@ -79,14 +80,7 @@ class MessageProcessor:
 
     @staticmethod
     def _attachment_ref(session, path: str) -> str:
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        attachment_path = str(path or "").strip()
-        if workdir and attachment_path:
-            try:
-                attachment_path = os.path.relpath(attachment_path, workdir)
-            except Exception:
-                pass
-        return f"@{attachment_path}"
+        return build_attachment_ref(path, str(getattr(session, "workdir", "") or "").strip())
 
     async def _resolve_session(
         self,

@@ -1093,6 +1093,19 @@ class TmuxExecutionBackend:
         paths: dict[str, str],
         request: TmuxRecoveryRequest,
     ) -> ExecutionResult:
+        # Пока монитор читает панель, запрос активен независимо от того, свой он
+        # или подхваченный: без этой отметки наблюдение (recover/observe) выглядит
+        # как простой, и дописать текст в живую панель нельзя.
+        monitor_state = self._read_state(paths)
+        monitor_state.update(
+            {
+                "state": "active",
+                "active_request_id": request.request_id,
+                "last_activity_at": time.time(),
+            }
+        )
+        self._write_state(paths, monitor_state)
+
         idle_probe_interval = self.idle_fallback_sec
         if idle_probe_interval is None:
             idle_probe_interval = max(1.0, float(getattr(session, "idle_timeout_sec", 100) or 100))

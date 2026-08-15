@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from typing import List, Optional, Tuple
 
@@ -57,6 +58,21 @@ def build_command(
     return cmd, use_stdin
 
 
+def build_attachment_ref(path: str, workdir: Optional[str] = None) -> str:
+    """@-ссылка на файл для CLI-агента, относительно workdir, если получается."""
+
+    ref = str(path or "").strip()
+    if not ref:
+        return ""
+    base = str(workdir or "").strip()
+    if base:
+        try:
+            ref = os.path.relpath(ref, base)
+        except Exception:
+            pass
+    return f"@{ref}"
+
+
 def detect_prompt_regex(lines: List[str]) -> Optional[str]:
     cleaned = [strip_ansi(line).rstrip("\n") for line in lines]
     cleaned = [line for line in cleaned if line.strip()]
@@ -91,6 +107,4 @@ def detect_resume_regex(text: str) -> Optional[str]:
 def resolve_env_value(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
-    import os
-
     return os.path.expandvars(value)

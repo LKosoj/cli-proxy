@@ -4,7 +4,7 @@ import re
 import stat
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from types import SimpleNamespace
 
 import pytest
@@ -788,6 +788,63 @@ async def test_tmux_backend_rejects_input_when_pane_is_gone(tmp_path):
 
     # Файл свежий, но самой tmux-сессии уже нет: отправлять некуда.
     assert await backend.can_accept_input(session) is False
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_marks_observed_request_active_while_monitoring(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+
+    class SilentTranscriptReader:
+        def __init__(self, **kwargs):
+            self.locator = None
+
+        def poll(self):
+            return TranscriptPollResult()
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SilentTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=30.0,
+    )
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("экран замер на долгом инструменте\n")
+    stale = time.time() - 600
+    os.utime(paths["pane_log"], (stale, stale))
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="observed-1",
+        started_at=time.time(),
+        offset=os.path.getsize(paths["pane_log"]),
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+        observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if TmuxExecutionBackend._read_state(paths).get("state") == "active":
+                break
+        state = TmuxExecutionBackend._read_state(paths)
+
+        assert state["state"] == "active"
+        assert state["active_request_id"] == "observed-1"
+        # Экран молчит дольше окна активности, но наблюдение идёт: ввод принимаем.
+        assert await backend.can_accept_input(session) is True
+    finally:
+        monitor.cancel()
+        with suppress(asyncio.CancelledError):
+            await asyncio.wait_for(monitor, timeout=5)
 
 
 @pytest.mark.asyncio

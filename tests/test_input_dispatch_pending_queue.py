@@ -356,7 +356,7 @@ async def test_active_tmux_choice_follows_pane_availability(monkeypatch) -> None
 
 
 @pytest.mark.asyncio
-async def test_active_tmux_choice_is_not_offered_for_attachments(monkeypatch) -> None:
+async def test_active_tmux_choice_is_offered_for_attachments(monkeypatch) -> None:
     from app.services.cli_backends import TmuxExecutionBackend
 
     sent: list[str] = []
@@ -370,21 +370,22 @@ async def test_active_tmux_choice_is_not_offered_for_attachments(monkeypatch) ->
         id="s1",
         busy=True,
         queue=[],
+        workdir="/work",
         is_active_by_tick=lambda: False,
         run_lock=asyncio.Lock(),
     )
 
-    async def _active_tmux(_backend, _session) -> bool:
-        raise AssertionError("tmux must not be probed when pending input has attachments")
+    async def _can_accept(_backend, _session) -> bool:
+        return True
 
-    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _active_tmux)
+    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _can_accept)
 
     await service.handle_cli_input(
         session,
         "caption",
         chat_id=1,
         context=object(),
-        image_paths=["/tmp/image.png"],
+        image_paths=["/work/.attachments/image.png"],
     )
 
     pending = InputDispatchService.pending_head(
@@ -392,8 +393,73 @@ async def test_active_tmux_choice_is_not_offered_for_attachments(monkeypatch) ->
         InputDispatchService._pending_ui_key(None, 1),
     )
     assert pending is not None
-    assert pending.action == InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM
-    assert sent == [InputDispatchService.queue_confirm_prompt_text()]
+    assert pending.action == InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM
+    assert sent == [InputDispatchService.tmux_busy_prompt_text()]
+
+
+@pytest.mark.asyncio
+async def test_pending_attachments_are_sent_to_tmux_as_file_refs(monkeypatch) -> None:
+    from app.services.cli_backends import TmuxExecutionBackend
+
+    sent_prompts: list[str] = []
+
+    async def _send_input(_backend, _session, text: str) -> None:
+        sent_prompts.append(text)
+
+    monkeypatch.setattr(TmuxExecutionBackend, "send_input", _send_input)
+
+    session = SimpleNamespace(id="s1", workdir="/work")
+    pending = PendingInput(
+        session_id="s1",
+        text="посмотри скрин",
+        dest={"kind": "telegram", "chat_id": 1},
+        image_paths=["/work/.attachments/shot.png", "/tmp/outside.log"],
+    )
+
+    await InputDispatchService.send_pending_to_active_tmux(session, pending)
+
+    # Файлы уже сохранены на диск, в панель уходит одна строка со ссылками.
+    assert sent_prompts == ["посмотри скрин @.attachments/shot.png @../tmp/outside.log"]
+
+
+@pytest.mark.asyncio
+async def test_attachment_only_pending_is_offered_to_tmux(monkeypatch) -> None:
+    from app.services.cli_backends import TmuxExecutionBackend
+
+    probed: list[str] = []
+
+    async def _can_accept(_backend, _session) -> bool:
+        probed.append("probe")
+        return True
+
+    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _can_accept)
+
+    session = SimpleNamespace(id="s1", workdir="/work")
+    pending = PendingInput(
+        session_id="s1",
+        text="",
+        dest={"kind": "telegram", "chat_id": 1},
+        image_paths=["/work/.attachments/shot.png"],
+    )
+
+    assert await InputDispatchService.can_send_pending_to_active_tmux(session, pending) is True
+    assert InputDispatchService.tmux_text_for_pending(session, pending) == "@.attachments/shot.png"
+    assert probed == ["probe"]
+
+
+@pytest.mark.asyncio
+async def test_empty_pending_is_not_offered_to_tmux(monkeypatch) -> None:
+    from app.services.cli_backends import TmuxExecutionBackend
+
+    async def _can_accept(_backend, _session) -> bool:
+        raise AssertionError("tmux must not be probed when there is nothing to send")
+
+    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _can_accept)
+
+    session = SimpleNamespace(id="s1", workdir="/work")
+    pending = PendingInput(session_id="s1", text="   ", dest={"kind": "telegram", "chat_id": 1})
+
+    assert await InputDispatchService.can_send_pending_to_active_tmux(session, pending) is False
 
 
 @pytest.mark.asyncio

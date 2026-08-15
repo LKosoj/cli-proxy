@@ -18,6 +18,7 @@ from app.services.input_dispatch_models import (
     PendingInputDecision,
 )
 from i18n import t
+from utils.cli import build_attachment_ref
 from utils.lang import resolve_user_lang
 from session import session_runtime_uid
 from app.services.telegram_ui_scope import TelegramUiKey
@@ -703,20 +704,39 @@ class InputDispatchService:
         return False
 
     @classmethod
-    def _pending_has_attachments(cls, pending_input: PendingInput) -> bool:
+    def _pending_attachment_paths(cls, pending_input: PendingInput) -> list[str]:
         dest = dict(getattr(pending_input, "dest", {}) or {})
-        return bool(
-            cls._normalize_image_paths(
-                image_path=getattr(pending_input, "image_path", None),
-                image_paths=getattr(pending_input, "image_paths", None),
-                dest=dest,
-            )
-            or dest.get("attachments")
+        paths = cls._normalize_image_paths(
+            image_path=getattr(pending_input, "image_path", None),
+            image_paths=getattr(pending_input, "image_paths", None),
+            dest=dest,
         )
+        for item in dest.get("attachments") or []:
+            value = item.strip() if isinstance(item, str) else ""
+            if value and value not in paths:
+                paths.append(value)
+        return paths
+
+    @classmethod
+    def tmux_text_for_pending(cls, session, pending_input: PendingInput) -> str:
+        """Текст для живой панели: вложения уже лежат файлами, идут как @-ссылки.
+
+        Ссылки добавляются в хвост той же строки, что и текст: перевод строки в
+        панели означает отправку, поэтому отдельной строкой их слать нельзя.
+        """
+
+        text = str(getattr(pending_input, "text", "") or "").strip()
+        workdir = str(getattr(session, "workdir", "") or "").strip()
+        refs = [
+            ref
+            for ref in (build_attachment_ref(path, workdir) for path in cls._pending_attachment_paths(pending_input))
+            if ref
+        ]
+        return " ".join([part for part in (text, *refs) if part])
 
     @classmethod
     async def can_send_pending_to_active_tmux(cls, session, pending_input: PendingInput) -> bool:
-        if cls._pending_has_attachments(pending_input):
+        if not cls.tmux_text_for_pending(session, pending_input):
             return False
         try:
             from app.services.cli_backends import TmuxExecutionBackend
@@ -731,14 +751,9 @@ class InputDispatchService:
 
     @classmethod
     async def send_pending_to_active_tmux(cls, session, pending_input: PendingInput) -> None:
-        if cls._pending_has_attachments(pending_input):
-            raise RuntimeError("attachments cannot be sent to the active tmux session")
         from app.services.cli_backends import TmuxExecutionBackend
 
-        await TmuxExecutionBackend().send_input(
-            session,
-            str(getattr(pending_input, "text", "") or ""),
-        )
+        await TmuxExecutionBackend().send_input(session, cls.tmux_text_for_pending(session, pending_input))
 
     async def refresh_busy_pending_action(self, session, pending_input: PendingInput) -> str:
         queue_has_items = bool(getattr(session, "queue", None))
