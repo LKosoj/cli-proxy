@@ -230,9 +230,11 @@ def _build_notification_queue_service() -> NotificationQueueService:
 
 def _build_cli_limits_service(config: AppConfig) -> CliLimitsService:
     try:
-        return CliLimitsService(
+        service = CliLimitsService(
             gemini_oauth_client_secret=config.defaults.gemini_oauth_client_secret,
         )
+        service.bind_usage_state(config.defaults.state_path)
+        return service
     except Exception:
         logger.exception("cli limits service init failed during bootstrap")
         raise

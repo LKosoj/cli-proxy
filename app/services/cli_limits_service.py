@@ -6,20 +6,26 @@ import json
 import logging
 import os
 import pwd
+import queue
 import re
 import shutil
+import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
+from app.services.cli_limits_trend import UsageTrendTracker
+from app.services.model_pricing import ModelPricing, build_model_pricing
+from app.services.state_repository import get_state_repository
 from modes.sdk.runtime.json_normalizer import loads_safe
 from session import session_active_cli_name
 
@@ -52,6 +58,7 @@ class CliLimitsService:
     _CLAUDE_OAUTH_BETA = "oauth-2025-04-20"
     _CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
     _CODEX_USER_AGENT = "codex_cli_rs/0.111.0 (Linux; x86_64)"
+    _CODEX_RPC_TIMEOUT_SEC = 8.0
     _GEMINI_USAGE_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
     _GEMINI_USER_AGENT = "GeminiCLI/0.31.0/load-code-assist (linux; x86_64)"
     _GEMINI_API_CLIENT_HEADER = "google-genai-sdk/1.41.0 gl-node/v22.19.0"
@@ -61,6 +68,12 @@ class CliLimitsService:
         re.IGNORECASE | re.MULTILINE,
     )
     _GROK_USAGE_RESET_RE = re.compile(r"^\s*Next\s+reset:\s*([^\r\n]+?)\s*$", re.IGNORECASE | re.MULTILINE)
+    _QWEN_QUOTA_NOTE = "⚠️ квоты недоступны (non-interactive)"
+    _QWEN_CHAT_FILE_LIMIT = 200
+    _OPENCODE_QUOTA_NOTE = "⚠️ квоты недоступны: лимиты держит выбранный в opencode провайдер"
+    _OPENCODE_REQUIRED_COLUMNS = frozenset(
+        {"model", "cost", "tokens_input", "tokens_output", "tokens_reasoning", "directory", "time_updated"}
+    )
 
     def __init__(
         self,
@@ -68,15 +81,23 @@ class CliLimitsService:
         codex_sessions_roots: Optional[Sequence[str | Path]] = None,
         claude_projects_roots: Optional[Sequence[str | Path]] = None,
         grok_sessions_roots: Optional[Sequence[str | Path]] = None,
+        qwen_projects_roots: Optional[Sequence[str | Path]] = None,
+        opencode_db_paths: Optional[Sequence[str | Path]] = None,
         claude_username: str = "claude-bot",
         network_timeout_sec: float = 5.0,
         gemini_oauth_client_secret: Optional[str] = None,
+        pricing: Optional[ModelPricing] = None,
+        trend_tracker: Optional[UsageTrendTracker] = None,
     ) -> None:
         self._codex_sessions_roots = [Path(item) for item in (codex_sessions_roots or self._default_codex_roots())]
         self._claude_projects_roots = [Path(item) for item in (claude_projects_roots or self._default_claude_roots(claude_username))]
         self._grok_sessions_roots = [Path(item) for item in (grok_sessions_roots or self._default_grok_roots())]
+        self._qwen_projects_roots = [Path(item) for item in (qwen_projects_roots or self._default_qwen_roots())]
+        self._opencode_db_paths = [Path(item) for item in (opencode_db_paths or self._default_opencode_db_paths())]
         self._claude_home = self._home_for_user(claude_username) or Path.home()
         self._gemini_oauth_client_secret = str(gemini_oauth_client_secret or "").strip()
+        self._pricing = pricing
+        self._trends = trend_tracker or UsageTrendTracker(None)
         try:
             timeout_value = float(network_timeout_sec)
         except Exception:
@@ -85,6 +106,14 @@ class CliLimitsService:
 
     def set_gemini_oauth_client_secret(self, value: Optional[str]) -> None:
         self._gemini_oauth_client_secret = str(value or "").strip()
+
+    def bind_usage_state(self, state_path: Any) -> None:
+        """Подключает прайс-кэш и историю трендов, привязанные к файлу состояния."""
+        try:
+            self._pricing = build_model_pricing(state_path)
+            self._trends = UsageTrendTracker(get_state_repository(state_path))
+        except Exception:
+            logger.exception("failed to bind cli limits usage state path=%s", state_path)
 
     async def describe_for_sessions(
         self,
@@ -174,27 +203,15 @@ class CliLimitsService:
         if cli_name == "grok":
             return await asyncio.to_thread(self._collect_grok_snapshot, refs)
         if cli_name == "qwen":
-            return CliLimitsSnapshot(
-                cli_name="qwen",
-                status="unavailable",
-                lines=(
-                    "⚠️ квоты недоступны (non-interactive)",
-                ),
-            )
+            return await asyncio.to_thread(self._collect_qwen_snapshot, refs)
+        if cli_name == "opencode":
+            return await asyncio.to_thread(self._collect_opencode_snapshot, refs)
         if cli_name == "kimi":
             return CliLimitsSnapshot(
                 cli_name="kimi",
                 status="unavailable",
                 lines=(
                     "⚠️ квоты недоступны: Kimi CLI не публикует usage/quota",
-                ),
-            )
-        if cli_name == "opencode":
-            return CliLimitsSnapshot(
-                cli_name="opencode",
-                status="unavailable",
-                lines=(
-                    "⚠️ квоты недоступны: лимиты держит выбранный в opencode провайдер",
                 ),
             )
         return CliLimitsSnapshot(
@@ -291,7 +308,7 @@ class CliLimitsService:
         return ordered
 
     def _collect_codex_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
-        direct_usage = self._read_codex_direct_usage()
+        direct_usage = self._read_codex_rpc_usage() or self._read_codex_direct_usage()
         target_workdirs = {os.path.realpath(ref.workdir) for ref in refs}
         file_candidates = self._iter_matching_codex_files(target_workdirs)
         if not file_candidates:
@@ -330,29 +347,39 @@ class CliLimitsService:
             lines.extend(self._format_codex_local_quota_lines(rate_limits))
         info = token_payload.get("info") if isinstance(token_payload, dict) else None
         total_usage = info.get("total_token_usage") if isinstance(info, dict) else None
-        tokens_line = self._format_codex_tokens_line(total_usage)
+        tokens_line = self._format_codex_tokens_line(total_usage, model=str(codex_config.get("model") or ""))
         if tokens_line:
             lines.append(tokens_line)
+        today_tokens = self._safe_int((direct_usage or {}).get("today_tokens"))
+        if today_tokens:
+            lines.append(f"🗓 сегодня {self._format_compact_number(today_tokens)}")
         return CliLimitsSnapshot(cli_name="codex", status="ok", lines=tuple(lines), subtitle=subtitle)
 
     def _collect_claude_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
         usage = self._read_claude_direct_usage()
         quota_lines = self._format_claude_direct_quota_lines(usage)
-        model = self._read_claude_active_model()
-        subtitle = model or ""
-        if quota_lines:
-            return CliLimitsSnapshot(
-                cli_name="claude",
-                status="ok",
-                lines=tuple(quota_lines),
-                subtitle=subtitle,
-            )
+        local_usage = self._read_claude_local_usage(refs)
+        model = str((local_usage or {}).get("model") or "") or (self._read_claude_active_model() or "")
+        subtitle = " · ".join(
+            part for part in (str((local_usage or {}).get("label") or ""), model) if part
+        )
+        lines = list(quota_lines) or ["⚠️ квоты недоступны"]
+        if local_usage is not None:
+            lines.extend(self._format_local_usage_lines(local_usage))
         return CliLimitsSnapshot(
             cli_name="claude",
-            status="unavailable",
-            lines=("⚠️ квоты недоступны",),
+            status="ok" if quota_lines else "unavailable",
+            lines=tuple(lines),
             subtitle=subtitle,
         )
+
+    def _read_claude_local_usage(self, refs: Sequence[CliProjectRef]) -> Optional[dict[str, Any]]:
+        for ref in refs:
+            usage = self._read_claude_project_usage(ref.workdir)
+            if usage is not None:
+                usage["label"] = ref.label
+                return usage
+        return None
 
     def _read_claude_active_model(self) -> Optional[str]:
         candidates: list[tuple[float, Path]] = []
@@ -444,6 +471,12 @@ class CliLimitsService:
     def _collect_grok_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
         direct_usage = self._read_grok_direct_usage()
         quota_line = self._format_grok_direct_quota_line(direct_usage)
+        if quota_line and isinstance(direct_usage, dict):
+            quota_line += self._trend_suffix(
+                f"grok:{str(direct_usage.get('window') or 'weekly')}",
+                direct_usage.get("used_percent"),
+                window=direct_usage.get("resets_at"),
+            )
         target_workdirs = {os.path.realpath(ref.workdir) for ref in refs}
         session_candidates = self._iter_matching_grok_session_dirs(target_workdirs)
         if not session_candidates:
@@ -480,6 +513,310 @@ class CliLimitsService:
             lines=tuple(lines),
             subtitle=subtitle,
         )
+
+    def _collect_qwen_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
+        usage = self._read_qwen_usage(refs)
+        if usage is None:
+            return CliLimitsSnapshot(cli_name="qwen", status="unavailable", lines=(self._QWEN_QUOTA_NOTE,))
+        lines = self._format_local_usage_lines(usage)
+        lines.append(self._QWEN_QUOTA_NOTE)
+        return CliLimitsSnapshot(
+            cli_name="qwen",
+            status="partial",
+            lines=tuple(lines),
+            subtitle=self._usage_subtitle(usage),
+        )
+
+    def _collect_opencode_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
+        usage = self._read_opencode_usage(refs)
+        if usage is None:
+            return CliLimitsSnapshot(cli_name="opencode", status="unavailable", lines=(self._OPENCODE_QUOTA_NOTE,))
+        lines = self._format_local_usage_lines(usage)
+        lines.append(self._OPENCODE_QUOTA_NOTE)
+        return CliLimitsSnapshot(
+            cli_name="opencode",
+            status="partial",
+            lines=tuple(lines),
+            subtitle=self._usage_subtitle(usage),
+        )
+
+    def _read_qwen_usage(self, refs: Sequence[CliProjectRef]) -> Optional[dict[str, Any]]:
+        for ref in refs:
+            workdir = os.path.realpath(ref.workdir)
+            chat_files = self._iter_qwen_chat_files(workdir)
+            if not chat_files:
+                continue
+            usage = self._summarize_qwen_chats(chat_files, workdir)
+            if usage is not None:
+                usage["label"] = ref.label
+                return usage
+        return None
+
+    def _iter_qwen_chat_files(self, workdir: str) -> list[Path]:
+        key = self._qwen_project_key(workdir)
+        if not key:
+            return []
+        files: list[tuple[float, Path]] = []
+        for root in self._qwen_projects_roots:
+            chats_dir = root / key / "chats"
+            if not chats_dir.is_dir():
+                continue
+            try:
+                for path in chats_dir.glob("*.jsonl"):
+                    files.append((path.stat().st_mtime, path))
+            except Exception:
+                logger.exception("failed to scan qwen chats dir=%s", chats_dir)
+        files.sort(key=lambda item: item[0], reverse=True)
+        return [path for _mtime, path in files[: self._QWEN_CHAT_FILE_LIMIT]]
+
+    @staticmethod
+    def _qwen_project_key(workdir: str) -> str:
+        raw = os.path.realpath(str(workdir or "")).rstrip(os.sep)
+        if not raw:
+            return ""
+        return re.sub(r"[^A-Za-z0-9]", "-", raw)
+
+    def _summarize_qwen_chats(self, chat_files: Sequence[Path], workdir: str) -> Optional[dict[str, Any]]:
+        totals = self._new_usage_totals()
+        sessions: set[str] = set()
+        sessions_today: set[str] = set()
+        saw_usage = False
+        now = time.time()
+        for path in chat_files:
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    for raw_line in handle:
+                        line = raw_line.strip()
+                        if not line:
+                            continue
+                        record = loads_safe(line)
+                        if not isinstance(record, dict):
+                            continue
+                        metadata = record.get("usageMetadata")
+                        if not isinstance(metadata, dict):
+                            continue
+                        record_cwd = str(record.get("cwd") or "").strip()
+                        if record_cwd and os.path.realpath(record_cwd) != workdir:
+                            continue
+                        saw_usage = True
+                        prompt_tokens = self._safe_int(metadata.get("promptTokenCount"))
+                        cached_tokens = self._safe_int(metadata.get("cachedContentTokenCount"))
+                        output_tokens = self._safe_int(metadata.get("candidatesTokenCount"))
+                        reasoning_tokens = self._safe_int(metadata.get("thoughtsTokenCount"))
+                        total_tokens = self._safe_int(metadata.get("totalTokenCount"))
+                        row_tokens = total_tokens or (prompt_tokens + output_tokens + reasoning_tokens)
+                        totals["input"] += max(0, prompt_tokens - cached_tokens)
+                        totals["cache_read"] += cached_tokens
+                        totals["output"] += output_tokens
+                        totals["reasoning"] += reasoning_tokens
+                        totals["total"] += row_tokens
+                        model = str(record.get("model") or "").strip()
+                        if model:
+                            totals["model"] = model
+                        session_id = str(record.get("sessionId") or "").strip()
+                        if session_id:
+                            sessions.add(session_id)
+                        timestamp = self._parse_timestamp(record.get("timestamp"))
+                        self._accumulate_usage_window(
+                            totals,
+                            timestamp,
+                            row_tokens,
+                            session_id,
+                            sessions_today,
+                            now,
+                        )
+            except Exception:
+                logger.exception("failed to read qwen chat file path=%s", path)
+        if not saw_usage:
+            return None
+        totals["sessions"] = len(sessions)
+        totals["sessions_today"] = len(sessions_today)
+        return totals
+
+    def _read_opencode_usage(self, refs: Sequence[CliProjectRef]) -> Optional[dict[str, Any]]:
+        if not refs:
+            return None
+        for db_path in self._opencode_db_paths:
+            if not db_path.is_file():
+                continue
+            for ref in refs:
+                usage = self._query_opencode_sessions(db_path, os.path.realpath(ref.workdir))
+                if usage is not None:
+                    usage["label"] = ref.label
+                    return usage
+        return None
+
+    def _query_opencode_sessions(self, db_path: Path, workdir: str) -> Optional[dict[str, Any]]:
+        uri = f"file:{urllib.parse.quote(str(db_path))}?mode=ro"
+        try:
+            connection = sqlite3.connect(uri, uri=True, timeout=1.0)
+        except Exception:
+            logger.exception("failed to open opencode database path=%s", db_path)
+            return None
+        try:
+            columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(session)")}
+            if not self._OPENCODE_REQUIRED_COLUMNS.issubset(columns):
+                return None
+            rows = connection.execute(
+                """
+                SELECT model, cost, tokens_input, tokens_output, tokens_reasoning,
+                       tokens_cache_read, tokens_cache_write, time_updated
+                FROM session
+                WHERE directory = ?
+                """,
+                (workdir,),
+            ).fetchall()
+        except Exception:
+            logger.exception("failed to query opencode sessions path=%s", db_path)
+            return None
+        finally:
+            connection.close()
+        if not rows:
+            return None
+        totals = self._new_usage_totals()
+        totals["cost_usd"] = 0.0
+        sessions_today: set[str] = set()
+        newest_ts = -1.0
+        now = time.time()
+        for index, row in enumerate(rows):
+            model_raw, cost, tokens_in, tokens_out, tokens_reasoning, cache_read, cache_write, time_updated = row
+            totals["input"] += self._safe_int(tokens_in)
+            totals["output"] += self._safe_int(tokens_out)
+            totals["reasoning"] += self._safe_int(tokens_reasoning)
+            totals["cache_read"] += self._safe_int(cache_read)
+            totals["cache_write"] += self._safe_int(cache_write)
+            row_tokens = sum(
+                self._safe_int(value) for value in (tokens_in, tokens_out, tokens_reasoning, cache_read, cache_write)
+            )
+            totals["total"] += row_tokens
+            totals["cost_usd"] += self._safe_float(cost)
+            updated_ts = self._safe_float(time_updated) / 1000.0
+            self._accumulate_usage_window(totals, updated_ts, row_tokens, str(index), sessions_today, now)
+            if updated_ts > newest_ts:
+                newest_ts = updated_ts
+                totals["model"] = self._parse_opencode_model(model_raw)
+        totals["sessions"] = len(rows)
+        totals["sessions_today"] = len(sessions_today)
+        if not totals["cost_usd"]:
+            totals.pop("cost_usd", None)
+        return totals
+
+    @staticmethod
+    def _parse_opencode_model(raw: Any) -> str:
+        value = str(raw or "").strip()
+        if not value:
+            return ""
+        if not value.startswith("{"):
+            return value
+        payload = loads_safe(value)
+        if not isinstance(payload, dict):
+            return value
+        model_id = str(payload.get("id") or "").strip()
+        provider = str(payload.get("providerID") or "").strip()
+        if model_id and provider:
+            return f"{provider}/{model_id}"
+        return model_id or provider or value
+
+    @staticmethod
+    def _new_usage_totals() -> dict[str, Any]:
+        return {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "total": 0,
+            "today_tokens": 0,
+            "week_tokens": 0,
+            "sessions": 0,
+            "sessions_today": 0,
+            "model": "",
+            "label": "",
+        }
+
+    @staticmethod
+    def _accumulate_usage_window(
+        totals: dict[str, Any],
+        timestamp: Optional[float],
+        tokens: int,
+        session_id: str,
+        sessions_today: set[str],
+        now: float,
+    ) -> None:
+        if timestamp is None or tokens <= 0:
+            return
+        if timestamp >= now - 7 * 86400:
+            totals["week_tokens"] += tokens
+        if time.localtime(timestamp)[:3] == time.localtime(now)[:3]:
+            totals["today_tokens"] += tokens
+            if session_id:
+                sessions_today.add(session_id)
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> Optional[float]:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+
+    def _usage_subtitle(self, usage: dict[str, Any]) -> str:
+        return " · ".join(part for part in (str(usage.get("label") or ""), str(usage.get("model") or "")) if part)
+
+    def _format_local_usage_lines(self, usage: dict[str, Any]) -> list[str]:
+        fmt = self._format_compact_number
+        lines: list[str] = []
+        total = self._safe_int(usage.get("total"))
+        if total:
+            lines.append(f"📊 {fmt(total)} total{self._format_cost_suffix(usage)}")
+        detail_parts: list[str] = []
+        for icon, key in (("↘️ in", "input"), ("💾", "cache_read"), ("🧠", "reasoning"), ("↗️ out", "output")):
+            tokens = self._safe_int(usage.get(key))
+            if tokens:
+                detail_parts.append(f"{icon} {fmt(tokens)}")
+        if detail_parts:
+            lines.append("(" + " · ".join(detail_parts) + ")")
+        window_parts: list[str] = []
+        today_tokens = self._safe_int(usage.get("today_tokens"))
+        week_tokens = self._safe_int(usage.get("week_tokens"))
+        if today_tokens:
+            window_parts.append(f"сегодня {fmt(today_tokens)}")
+        if week_tokens:
+            window_parts.append(f"7д {fmt(week_tokens)}")
+        sessions = self._safe_int(usage.get("sessions"))
+        if sessions:
+            window_parts.append(f"сессии {sessions}")
+        if window_parts:
+            lines.append("🗓 " + " · ".join(window_parts))
+        return lines
+
+    def _format_cost_suffix(self, usage: dict[str, Any]) -> str:
+        reported = usage.get("cost_usd")
+        if reported is not None:
+            amount = self._safe_float(reported)
+            return f" · 💵 {self._format_usd(amount)}" if amount > 0 else ""
+        if self._pricing is None:
+            return ""
+        estimated = self._pricing.estimate_usd(str(usage.get("model") or ""), usage)
+        if estimated is None or estimated <= 0:
+            return ""
+        return f" · 💵 ≈{self._format_usd(estimated)}"
+
+    @staticmethod
+    def _format_usd(value: float) -> str:
+        amount = max(0.0, float(value))
+        if amount >= 100:
+            return "$" + f"{amount:,.0f}".replace(",", " ")
+        if amount >= 1:
+            return f"${amount:.2f}"
+        if amount >= 0.01:
+            return f"${amount:.3f}"
+        return f"${amount:.4f}"
 
     def _read_grok_direct_usage(self) -> Optional[dict[str, Any]]:
         tmux_path = shutil.which("tmux")
@@ -806,17 +1143,12 @@ class CliLimitsService:
         compact_key = compact_key.rstrip("-")
         return [compact_key] if compact_key else []
 
-    @staticmethod
-    def _summarize_claude_usage_file(jsonl_path: Path) -> Optional[dict[str, Any]]:
-        summary = {
-            "input_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
-            "output_tokens": 0,
-            "updated_at": "",
-            "model": "",
-        }
+    @classmethod
+    def _summarize_claude_usage_file(cls, jsonl_path: Path) -> Optional[dict[str, Any]]:
+        totals = cls._new_usage_totals()
+        sessions_today: set[str] = set()
         saw_usage = False
+        now = time.time()
         try:
             with open(jsonl_path, "r", encoding="utf-8") as handle:
                 for raw_line in handle:
@@ -824,6 +1156,8 @@ class CliLimitsService:
                     if not line:
                         continue
                     record = loads_safe(line)
+                    if not isinstance(record, dict):
+                        continue
                     if bool(record.get("isSidechain")):
                         continue
                     if str(record.get("type") or "") == "progress":
@@ -834,28 +1168,36 @@ class CliLimitsService:
                     usage = message.get("usage")
                     if not isinstance(usage, dict):
                         continue
-                    input_tokens = CliLimitsService._safe_int(usage.get("input_tokens"))
-                    cache_creation = CliLimitsService._safe_int(usage.get("cache_creation_input_tokens"))
-                    cache_read = CliLimitsService._safe_int(usage.get("cache_read_input_tokens"))
-                    output_tokens = CliLimitsService._safe_int(usage.get("output_tokens"))
-                    if input_tokens or cache_creation or cache_read or output_tokens:
+                    input_tokens = cls._safe_int(usage.get("input_tokens"))
+                    cache_write = cls._safe_int(usage.get("cache_creation_input_tokens"))
+                    cache_read = cls._safe_int(usage.get("cache_read_input_tokens"))
+                    output_tokens = cls._safe_int(usage.get("output_tokens"))
+                    row_tokens = input_tokens + cache_write + cache_read + output_tokens
+                    if row_tokens:
                         saw_usage = True
-                    summary["input_tokens"] += input_tokens
-                    summary["cache_creation_input_tokens"] += cache_creation
-                    summary["cache_read_input_tokens"] += cache_read
-                    summary["output_tokens"] += output_tokens
-                    timestamp = str(record.get("timestamp") or "").strip()
-                    if timestamp:
-                        summary["updated_at"] = timestamp
+                    totals["input"] += input_tokens
+                    totals["cache_write"] += cache_write
+                    totals["cache_read"] += cache_read
+                    totals["output"] += output_tokens
+                    totals["total"] += row_tokens
                     model = str(message.get("model") or "").strip()
                     if model and not model.startswith("<"):
-                        summary["model"] = model
+                        totals["model"] = model
+                    cls._accumulate_usage_window(
+                        totals,
+                        cls._parse_timestamp(record.get("timestamp")),
+                        row_tokens,
+                        str(record.get("sessionId") or ""),
+                        sessions_today,
+                        now,
+                    )
         except Exception:
             logger.exception("failed to summarize claude usage file path=%s", jsonl_path)
             return None
         if not saw_usage:
             return None
-        return summary
+        totals["sessions_today"] = len(sessions_today)
+        return totals
 
     @staticmethod
     def _format_rate_limit_line(label: str, payload: Any) -> Optional[str]:
@@ -897,17 +1239,16 @@ class CliLimitsService:
             parts.append(f"balance={balance}")
         return f"credits: {', '.join(parts)}" if parts else None
 
-    @staticmethod
-    def _format_codex_tokens_line(payload: Any) -> Optional[str]:
+    def _format_codex_tokens_line(self, payload: Any, *, model: str = "") -> Optional[str]:
         if not isinstance(payload, dict):
             return None
-        input_tokens = CliLimitsService._safe_int(payload.get("input_tokens"))
-        cached_input = CliLimitsService._safe_int(payload.get("cached_input_tokens"))
-        output_tokens = CliLimitsService._safe_int(payload.get("output_tokens"))
-        total_tokens = CliLimitsService._safe_int(payload.get("total_tokens"))
+        input_tokens = self._safe_int(payload.get("input_tokens"))
+        cached_input = self._safe_int(payload.get("cached_input_tokens"))
+        output_tokens = self._safe_int(payload.get("output_tokens"))
+        total_tokens = self._safe_int(payload.get("total_tokens"))
         if not total_tokens and not input_tokens:
             return None
-        fmt = CliLimitsService._format_compact_number
+        fmt = self._format_compact_number
         detail_parts: list[str] = []
         if input_tokens:
             detail_parts.append(f"↘️ in {fmt(input_tokens)}")
@@ -915,30 +1256,19 @@ class CliLimitsService:
             detail_parts.append(f"💾 {fmt(cached_input)}")
         if output_tokens:
             detail_parts.append(f"↗️ out {fmt(output_tokens)}")
-        total_text = f"📊 {fmt(total_tokens)} total" if total_tokens else ""
+        cost_suffix = self._format_cost_suffix(
+            {
+                "model": model,
+                "input": max(0, input_tokens - cached_input),
+                "cache_read": cached_input,
+                "output": output_tokens,
+            }
+        )
+        total_text = f"📊 {fmt(total_tokens)} total{cost_suffix}" if total_tokens else ""
         detail_text = " · ".join(detail_parts)
         if total_text and detail_text:
             return f"{total_text}\n({detail_text})"
         return total_text or detail_text or None
-
-    @staticmethod
-    def _format_claude_usage_line(label: str, usage: dict[str, Any]) -> Optional[str]:
-        parts = []
-        input_tokens = CliLimitsService._safe_int(usage.get("input_tokens"))
-        cache_creation = CliLimitsService._safe_int(usage.get("cache_creation_input_tokens"))
-        cache_read = CliLimitsService._safe_int(usage.get("cache_read_input_tokens"))
-        output_tokens = CliLimitsService._safe_int(usage.get("output_tokens"))
-        if input_tokens:
-            parts.append(f"in {CliLimitsService._format_int(input_tokens)}")
-        if cache_creation:
-            parts.append(f"cache write {CliLimitsService._format_int(cache_creation)}")
-        if cache_read:
-            parts.append(f"cache read {CliLimitsService._format_int(cache_read)}")
-        if output_tokens:
-            parts.append(f"out {CliLimitsService._format_int(output_tokens)}")
-        if not parts:
-            return None
-        return f"{label}: {', '.join(parts)}"
 
     def _read_claude_direct_usage(self) -> Optional[dict[str, Any]]:
         credentials = self._read_json_file(self._claude_home / ".claude" / ".credentials.json")
@@ -968,33 +1298,206 @@ class CliLimitsService:
         if not isinstance(usage, dict):
             return []
         lines: list[str] = []
-        five_hour = self._format_claude_quota_window("5ч", usage.get("five_hour"))
-        if five_hour:
-            lines.append(five_hour)
-        seven_day = self._format_claude_quota_window("7д", usage.get("seven_day"))
-        if seven_day:
-            lines.append(seven_day)
+        for window_key, label in (("five_hour", "5ч"), ("seven_day", "7д")):
+            line = self._format_claude_quota_window(label, usage.get(window_key), trend_key=f"claude:{window_key}")
+            if line:
+                lines.append(line)
         return lines
 
-    @staticmethod
-    def _format_claude_quota_window(label: str, payload: Any) -> Optional[str]:
+    def _format_claude_quota_window(self, label: str, payload: Any, *, trend_key: str) -> Optional[str]:
         if not isinstance(payload, dict):
             return None
         utilization = payload.get("utilization")
         if utilization is None:
             return None
         try:
-            remaining = max(0.0, 100.0 - float(utilization))
+            used = float(utilization)
         except Exception:
             return None
-        indicator = CliLimitsService._status_indicator(remaining)
-        bar = CliLimitsService._progress_bar(remaining)
-        pct = CliLimitsService._format_percent(remaining)
+        remaining = max(0.0, 100.0 - used)
+        indicator = self._status_indicator(remaining)
+        bar = self._progress_bar(remaining)
+        pct = self._format_percent(remaining)
         reset_text = ""
         reset_raw = str(payload.get("resets_at") or "").strip()
         if reset_raw:
-            reset_text = f" ↻{CliLimitsService._format_datetime(reset_raw)}"
-        return f"{indicator} {label} {bar} {pct}{reset_text}"
+            reset_text = f" ↻{self._format_datetime(reset_raw)}"
+        trend_text = self._trend_suffix(trend_key, used, window=reset_raw)
+        return f"{indicator} {label} {bar} {pct}{reset_text}{trend_text}"
+
+    def _trend_suffix(self, key: str, used_percent: Any, *, window: Any = None) -> str:
+        reset_ts = self._reset_timestamp(window)
+        marker: Any = reset_ts if reset_ts is not None else str(window or "")
+        trend = self._trends.record(key, used_percent, window_marker=marker)
+        if trend is None:
+            return ""
+        parts = [f"⚡{self._format_percent(trend.percent_per_hour)}/ч"]
+        seconds = trend.seconds_to_exhaust
+        if seconds is not None and (reset_ts is None or time.time() + seconds < reset_ts):
+            parts.append(f"⏳~{self._format_duration(int(seconds))}")
+        return " " + " ".join(parts)
+
+    @staticmethod
+    def _reset_timestamp(value: Any) -> Optional[float]:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value) if value > 0 else None
+        return CliLimitsService._parse_timestamp(value)
+
+    def _read_codex_rpc_usage(self) -> Optional[dict[str, Any]]:
+        """Забирает квоты из `codex app-server` — официального RPC самого CLI."""
+        binary = shutil.which("codex")
+        if not binary:
+            return None
+        responses = self._call_codex_app_server(binary)
+        if responses is None:
+            return None
+        return self._normalize_codex_rpc_usage(responses.get("rate_limits"), responses.get("usage"))
+
+    def _call_codex_app_server(self, binary: str) -> Optional[dict[str, Any]]:
+        deadline = time.monotonic() + self._CODEX_RPC_TIMEOUT_SEC
+        try:
+            process = subprocess.Popen(
+                [binary, "-s", "read-only", "-a", "untrusted", "app-server"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,
+            )
+        except Exception:
+            logger.warning("failed to start codex app-server", exc_info=True)
+            return None
+        # Ответы читает отдельный поток: app-server шлёт ещё и нотификации,
+        # а построчное чтение из основного потока блокировало бы весь /limits.
+        inbox: queue.Queue[str] = queue.Queue()
+        reader = threading.Thread(target=self._drain_codex_stdout, args=(process, inbox), daemon=True)
+        reader.start()
+        try:
+            # app-server отвечает на запросы только после завершённого initialize,
+            # поэтому шлём их строго последовательно.
+            self._send_codex_rpc(
+                process,
+                {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "cli-proxy", "version": "1"}}},
+            )
+            if self._read_codex_rpc(inbox, 1, deadline) is None:
+                return None
+            self._send_codex_rpc(process, {"method": "initialized", "params": {}})
+            self._send_codex_rpc(process, {"id": 2, "method": "account/rateLimits/read", "params": {}})
+            rate_limits = self._read_codex_rpc(inbox, 2, deadline)
+            if rate_limits is None:
+                return None
+            self._send_codex_rpc(process, {"id": 3, "method": "account/usage/read", "params": {}})
+            usage = self._read_codex_rpc(inbox, 3, deadline)
+        except Exception:
+            logger.warning("codex app-server request failed", exc_info=True)
+            return None
+        finally:
+            process.kill()
+            try:
+                process.wait(timeout=2.0)
+            except Exception:
+                logger.debug("codex app-server did not exit in time", exc_info=True)
+        return {"rate_limits": rate_limits, "usage": usage}
+
+    @staticmethod
+    def _drain_codex_stdout(process: subprocess.Popen[str], inbox: "queue.Queue[str]") -> None:
+        stream = process.stdout
+        if stream is None:
+            return
+        try:
+            for line in stream:
+                inbox.put(line)
+        except Exception:
+            logger.debug("codex app-server stdout reader stopped", exc_info=True)
+
+    @staticmethod
+    def _send_codex_rpc(process: subprocess.Popen[str], request: dict[str, Any]) -> None:
+        if process.stdin is None:
+            raise RuntimeError("codex app-server stdin is not available")
+        process.stdin.write(json.dumps(request) + "\n")
+        process.stdin.flush()
+
+    @staticmethod
+    def _read_codex_rpc(inbox: "queue.Queue[str]", request_id: int, deadline: float) -> Optional[dict[str, Any]]:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            try:
+                line = inbox.get(timeout=remaining)
+            except queue.Empty:
+                return None
+            message = loads_safe(line)
+            if not isinstance(message, dict) or message.get("id") != request_id:
+                continue
+            result = message.get("result")
+            return result if isinstance(result, dict) else None
+
+    def _normalize_codex_rpc_usage(self, rate_limits: Any, usage: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(rate_limits, dict):
+            return None
+        snapshots = rate_limits.get("rateLimits")
+        if not isinstance(snapshots, dict):
+            return None
+        normalized = self._normalize_codex_rpc_limit(snapshots)
+        if normalized is None:
+            return None
+        by_limit_id = rate_limits.get("rateLimitsByLimitId")
+        extra: list[dict[str, Any]] = []
+        primary_limit_id = str(snapshots.get("limitId") or "").strip()
+        if isinstance(by_limit_id, dict):
+            for limit_id in sorted(by_limit_id):
+                payload = by_limit_id[limit_id]
+                if not isinstance(payload, dict) or str(limit_id) == primary_limit_id:
+                    continue
+                sibling = self._normalize_codex_rpc_limit(payload)
+                if sibling is None:
+                    continue
+                sibling["label"] = str(payload.get("limitName") or limit_id).strip()
+                extra.append(sibling)
+        normalized["extra_limits"] = extra
+        normalized["today_tokens"] = self._codex_rpc_today_tokens(usage)
+        return normalized
+
+    @classmethod
+    def _normalize_codex_rpc_limit(cls, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+        primary = cls._normalize_codex_rpc_window(payload.get("primary"))
+        secondary = cls._normalize_codex_rpc_window(payload.get("secondary"))
+        if primary is None and secondary is None:
+            return None
+        return {
+            "plan_type": str(payload.get("planType") or "").strip(),
+            "primary_window": primary,
+            "secondary_window": secondary,
+            "credits": payload.get("credits"),
+        }
+
+    @classmethod
+    def _normalize_codex_rpc_window(cls, payload: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return None
+        used_percent = payload.get("usedPercent")
+        if used_percent is None:
+            return None
+        window_minutes = cls._safe_int(payload.get("windowDurationMins"))
+        return {
+            "used_percent": used_percent,
+            "reset_at": cls._safe_int(payload.get("resetsAt")),
+            "limit_window_seconds": window_minutes * 60,
+        }
+
+    @classmethod
+    def _codex_rpc_today_tokens(cls, usage: Any) -> int:
+        if not isinstance(usage, dict):
+            return 0
+        buckets = usage.get("dailyUsageBuckets")
+        if not isinstance(buckets, list):
+            return 0
+        today = time.strftime("%Y-%m-%d", time.localtime())
+        for bucket in reversed(buckets):
+            if isinstance(bucket, dict) and str(bucket.get("startDate") or "") == today:
+                return cls._safe_int(bucket.get("tokens"))
+        return 0
 
     def _read_codex_direct_usage(self) -> Optional[dict[str, Any]]:
         auth_path = Path.home() / ".codex" / "auth.json"
@@ -1037,11 +1540,25 @@ class CliLimitsService:
     def _format_codex_direct_usage_lines(self, usage: Optional[dict[str, Any]]) -> list[str]:
         if not isinstance(usage, dict):
             return []
-        return self._format_codex_combined_quota_lines(
+        lines = self._format_codex_combined_quota_lines(
             usage.get("primary_window"),
             usage.get("secondary_window"),
             direct_api=True,
         )
+        extra_limits = usage.get("extra_limits")
+        if isinstance(extra_limits, list):
+            for limit in extra_limits:
+                if not isinstance(limit, dict):
+                    continue
+                lines.extend(
+                    self._format_codex_combined_quota_lines(
+                        limit.get("primary_window"),
+                        limit.get("secondary_window"),
+                        direct_api=True,
+                        label_prefix=str(limit.get("label") or "").strip(),
+                    )
+                )
+        return lines
 
     def _format_codex_local_quota_lines(self, rate_limits: Any) -> list[str]:
         if not isinstance(rate_limits, dict):
@@ -1058,50 +1575,67 @@ class CliLimitsService:
         secondary_payload: Any,
         *,
         direct_api: bool,
+        label_prefix: str = "",
     ) -> list[str]:
         lines: list[str] = []
-        primary_line = self._format_codex_window_summary("primary", primary_payload, direct_api=direct_api)
-        if primary_line:
-            lines.append(primary_line)
-        secondary_line = self._format_codex_window_summary("secondary", secondary_payload, direct_api=direct_api)
-        if secondary_line:
-            lines.append(secondary_line)
+        for window_key, payload in (("primary", primary_payload), ("secondary", secondary_payload)):
+            label = f"{label_prefix} {window_key}".strip()
+            line = self._format_codex_window_summary(
+                label,
+                payload,
+                direct_api=direct_api,
+                trend_key=f"codex:{label_prefix}:{window_key}" if label_prefix else f"codex:{window_key}",
+            )
+            if line:
+                lines.append(line)
         return lines
 
-    @staticmethod
-    def _format_codex_window_summary(label: str, payload: Any, *, direct_api: bool) -> Optional[str]:
+    def _format_codex_window_summary(
+        self,
+        label: str,
+        payload: Any,
+        *,
+        direct_api: bool,
+        trend_key: str,
+    ) -> Optional[str]:
         if not isinstance(payload, dict):
             return None
         used_percent = payload.get("used_percent")
-        remaining: Optional[float] = None
+        used: Optional[float] = None
         if used_percent is not None:
             try:
-                remaining = max(0.0, 100.0 - float(used_percent))
+                used = float(used_percent)
             except Exception:
-                remaining = None
-        if remaining is None:
+                used = None
+        if used is None:
             return None
-        bar = CliLimitsService._progress_bar(remaining)
-        pct = CliLimitsService._format_percent(remaining)
+        remaining = max(0.0, 100.0 - used)
+        bar = self._progress_bar(remaining)
+        pct = self._format_percent(remaining)
         reset_text = ""
+        reset_epoch = 0
         if direct_api:
-            reset_at = CliLimitsService._safe_int(payload.get("reset_at"))
-            reset_after_seconds = CliLimitsService._safe_int(payload.get("reset_after_seconds"))
-            window_seconds = CliLimitsService._safe_int(payload.get("limit_window_seconds"))
+            reset_at = self._safe_int(payload.get("reset_at"))
+            reset_after_seconds = self._safe_int(payload.get("reset_after_seconds"))
+            window_seconds = self._safe_int(payload.get("limit_window_seconds"))
             if reset_at > 0:
-                reset_text = f" ↻{CliLimitsService._format_epoch(reset_at)}"
+                reset_epoch = reset_at
+                reset_text = f" ↻{self._format_epoch(reset_at)}"
             elif reset_after_seconds > 0:
-                reset_text = f" ↻через {CliLimitsService._format_duration(reset_after_seconds)}"
+                reset_epoch = int(time.time()) + reset_after_seconds
+                reset_text = f" ↻через {self._format_duration(reset_after_seconds)}"
             elif window_seconds > 0:
-                reset_text = f" окно {CliLimitsService._format_duration(window_seconds)}"
+                reset_text = f" окно {self._format_duration(window_seconds)}"
         else:
-            resets_at = CliLimitsService._safe_int(payload.get("resets_at"))
-            window_minutes = CliLimitsService._safe_int(payload.get("window_minutes"))
+            resets_at = self._safe_int(payload.get("resets_at"))
+            window_minutes = self._safe_int(payload.get("window_minutes"))
             if resets_at > 0:
-                reset_text = f" ↻{CliLimitsService._format_epoch(resets_at)}"
+                reset_epoch = resets_at
+                reset_text = f" ↻{self._format_epoch(resets_at)}"
             elif window_minutes > 0:
                 reset_text = f" окно {window_minutes} мин"
-        return f"💎 {label} {bar} {pct}{reset_text}"
+        trend_text = self._trend_suffix(trend_key, used, window=reset_epoch or None)
+        return f"💎 {label} {bar} {pct}{reset_text}{trend_text}"
 
     def _read_gemini_usage_for_workdir(self, workdir: str) -> Optional[dict[str, Any]]:
         project_id = self._find_gemini_project_id(workdir)
@@ -1252,15 +1786,15 @@ class CliLimitsService:
         models = usage.get("models")
         if not isinstance(models, list):
             return []
+        project_id = str(usage.get("project_id") or "").strip()
         lines: list[str] = []
         for item in sorted(models, key=lambda value: str(value.get("model_id") or "")):
-            line = self._format_gemini_model_line(item)
+            line = self._format_gemini_model_line(item, project_id=project_id)
             if line:
                 lines.append(line)
         return lines
 
-    @staticmethod
-    def _format_gemini_model_line(item: Any) -> Optional[str]:
+    def _format_gemini_model_line(self, item: Any, *, project_id: str = "") -> Optional[str]:
         if not isinstance(item, dict):
             return None
         model_id = str(item.get("model_id") or "").strip()
@@ -1273,14 +1807,19 @@ class CliLimitsService:
             remaining_percent = max(0.0, min(100.0, float(remaining_fraction) * 100.0))
         except Exception:
             return None
-        indicator = CliLimitsService._status_indicator(remaining_percent)
-        bar = CliLimitsService._progress_bar(remaining_percent)
-        pct = CliLimitsService._format_percent(remaining_percent)
+        indicator = self._status_indicator(remaining_percent)
+        bar = self._progress_bar(remaining_percent)
+        pct = self._format_percent(remaining_percent)
         reset_text = ""
         reset_time = str(item.get("reset_time") or "").strip()
         if reset_time:
-            reset_text = f" ↻{CliLimitsService._format_datetime(reset_time)}"
-        return f"{indicator} {model_id} {bar} {pct}{reset_text}"
+            reset_text = f" ↻{self._format_datetime(reset_time)}"
+        trend_text = self._trend_suffix(
+            f"gemini:{project_id}:{model_id}",
+            100.0 - remaining_percent,
+            window=reset_time,
+        )
+        return f"{indicator} {model_id} {bar} {pct}{reset_text}{trend_text}"
 
     def _format_grok_usage_lines(self, summary: dict[str, Any], signals: dict[str, Any]) -> list[str]:
         lines: list[str] = []
@@ -1392,6 +1931,25 @@ class CliLimitsService:
         return [Path.home() / ".grok" / "sessions"]
 
     @staticmethod
+    def _default_qwen_roots() -> list[Path]:
+        return [Path.home() / ".qwen" / "projects"]
+
+    @staticmethod
+    def _default_opencode_db_paths() -> list[Path]:
+        data_home = str(os.environ.get("XDG_DATA_HOME") or "").strip()
+        roots = [Path(data_home)] if data_home else []
+        roots.append(Path.home() / ".local" / "share")
+        paths: list[Path] = []
+        seen: set[str] = set()
+        for root in roots:
+            candidate = root / "opencode" / "opencode.db"
+            if str(candidate) in seen:
+                continue
+            seen.add(str(candidate))
+            paths.append(candidate)
+        return paths
+
+    @staticmethod
     def _home_for_user(username: str) -> Optional[Path]:
         name = str(username or "").strip()
         if not name:
@@ -1448,10 +2006,6 @@ class CliLimitsService:
             result = value / 1_000
             return f"{result:.0f}K" if result >= 10 else f"{result:.1f}K"
         return str(value)
-
-    @staticmethod
-    def _format_int(value: int) -> str:
-        return f"{int(value):,}".replace(",", " ")
 
     @staticmethod
     def _format_percent(value: float) -> str:

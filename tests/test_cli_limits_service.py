@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import time
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from app.services.cli_limits_service import CliLimitsService
+from app.services.cli_limits_service import CliLimitsService, CliProjectRef
+from app.services.cli_limits_trend import UsageTrendTracker
+from app.services.model_pricing import ModelPricing
+from app.services.state_repository import JsonStateRepository
 
 
 def _session(cli_name: str, workdir: Path) -> SimpleNamespace:
@@ -62,6 +68,7 @@ async def test_describe_for_sessions_reads_codex_limits_from_matching_project(
         codex_sessions_roots=[tmp_path / "codex" / "sessions"],
         claude_projects_roots=[tmp_path / "claude" / "projects"],
     )
+    monkeypatch.setattr(service, "_read_codex_rpc_usage", lambda: None)
     monkeypatch.setattr(service, "_read_codex_direct_usage", lambda: None)
 
     text = await service.describe_for_sessions([_session("codex", project_dir)])
@@ -186,6 +193,7 @@ async def test_describe_for_sessions_appends_codex_direct_usage(tmp_path: Path, 
         codex_sessions_roots=[tmp_path / "codex" / "sessions"],
         claude_projects_roots=[tmp_path / "claude" / "projects"],
     )
+    monkeypatch.setattr(service, "_read_codex_rpc_usage", lambda: None)
     monkeypatch.setattr(
         service,
         "_read_codex_direct_usage",
@@ -507,6 +515,7 @@ async def test_describe_for_sessions_collects_all_available_clis(tmp_path: Path,
         codex_sessions_roots=[tmp_path / "codex" / "sessions"],
         claude_projects_roots=[tmp_path / "claude" / "projects"],
     )
+    monkeypatch.setattr(service, "_read_codex_rpc_usage", lambda: None)
     monkeypatch.setattr(service, "_read_codex_direct_usage", lambda: None)
     monkeypatch.setattr(
         service,
@@ -563,6 +572,290 @@ async def test_describe_for_sessions_collects_all_available_clis(tmp_path: Path,
     assert "session file не найден" not in text
     assert "🔮 qwen" in text
     assert "квоты недоступны (non-interactive)" in text
+
+
+def _qwen_chat_record(project_dir: Path, **overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "sessionId": "qwen-session-1",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": "qwen3-coder-plus",
+        "cwd": str(project_dir),
+        "usageMetadata": {
+            "promptTokenCount": 10_000,
+            "cachedContentTokenCount": 4_000,
+            "candidatesTokenCount": 1_500,
+            "thoughtsTokenCount": 500,
+            "totalTokenCount": 12_000,
+        },
+    }
+    record.update(overrides)
+    return record
+
+
+@pytest.mark.asyncio
+async def test_describe_for_sessions_reads_qwen_local_usage(tmp_path: Path) -> None:
+    project_dir = tmp_path / "repo-qwen"
+    project_dir.mkdir()
+    qwen_root = tmp_path / "qwen" / "projects"
+    chats_dir = qwen_root / CliLimitsService._qwen_project_key(str(project_dir)) / "chats"
+    chats_dir.mkdir(parents=True)
+    (chats_dir / "chat-1.jsonl").write_text(
+        json.dumps(_qwen_chat_record(project_dir)) + "\n",
+        encoding="utf-8",
+    )
+    service = CliLimitsService(
+        codex_sessions_roots=[tmp_path / "codex" / "sessions"],
+        claude_projects_roots=[tmp_path / "claude" / "projects"],
+        qwen_projects_roots=[qwen_root],
+    )
+
+    text = await service.describe_for_sessions([_session("qwen", project_dir)])
+
+    assert "🔮 qwen — repo-qwen · qwen3-coder-plus" in text
+    assert "📊 12K total" in text
+    assert "↘️ in 6.0K" in text
+    assert "💾 4.0K" in text
+    assert "🧠 500" in text
+    assert "↗️ out 1.5K" in text
+    assert "сегодня 12K" in text
+    assert "сессии 1" in text
+    assert "квоты недоступны (non-interactive)" in text
+
+
+@pytest.mark.asyncio
+async def test_qwen_usage_skips_records_from_other_workdirs(tmp_path: Path) -> None:
+    project_dir = tmp_path / "repo-qwen"
+    project_dir.mkdir()
+    other_dir = tmp_path / "repo-other"
+    other_dir.mkdir()
+    qwen_root = tmp_path / "qwen" / "projects"
+    chats_dir = qwen_root / CliLimitsService._qwen_project_key(str(project_dir)) / "chats"
+    chats_dir.mkdir(parents=True)
+    records = [
+        _qwen_chat_record(project_dir),
+        _qwen_chat_record(
+            project_dir,
+            cwd=str(other_dir),
+            usageMetadata={"promptTokenCount": 999_999, "totalTokenCount": 999_999},
+        ),
+    ]
+    (chats_dir / "chat-1.jsonl").write_text(
+        "\n".join(json.dumps(item) for item in records) + "\n",
+        encoding="utf-8",
+    )
+    service = CliLimitsService(qwen_projects_roots=[qwen_root])
+
+    usage = service._read_qwen_usage([CliProjectRef(cli_name="qwen", workdir=str(project_dir), label="repo-qwen")])
+
+    assert usage is not None
+    assert usage["total"] == 12_000
+    assert usage["input"] == 6_000
+    assert usage["cache_read"] == 4_000
+
+
+def _write_opencode_db(db_path: Path, rows: list[tuple[object, ...]]) -> None:
+    connection = sqlite3.connect(str(db_path))
+    try:
+        connection.execute(
+            """
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY,
+                model TEXT,
+                cost REAL,
+                tokens_input INTEGER,
+                tokens_output INTEGER,
+                tokens_reasoning INTEGER,
+                tokens_cache_read INTEGER,
+                tokens_cache_write INTEGER,
+                directory TEXT,
+                time_updated INTEGER
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+@pytest.mark.asyncio
+async def test_describe_for_sessions_reads_opencode_usage_from_sqlite(tmp_path: Path) -> None:
+    project_dir = tmp_path / "repo-opencode"
+    project_dir.mkdir()
+    db_path = tmp_path / "opencode.db"
+    now_ms = int(time.time() * 1000)
+    _write_opencode_db(
+        db_path,
+        [
+            (
+                "ses_1",
+                json.dumps({"providerID": "anthropic", "id": "claude-opus-4-5"}),
+                0.42,
+                1_000,
+                2_000,
+                0,
+                5_000,
+                100,
+                str(project_dir.resolve()),
+                now_ms,
+            ),
+            (
+                "ses_other",
+                "anthropic/claude-haiku-4-5",
+                9.99,
+                777,
+                777,
+                0,
+                0,
+                0,
+                str(tmp_path / "elsewhere"),
+                now_ms,
+            ),
+        ],
+    )
+    service = CliLimitsService(
+        codex_sessions_roots=[tmp_path / "codex" / "sessions"],
+        claude_projects_roots=[tmp_path / "claude" / "projects"],
+        opencode_db_paths=[db_path],
+    )
+
+    text = await service.describe_for_sessions([_session("opencode", project_dir)])
+
+    assert "🧩 opencode — repo-opencode · anthropic/claude-opus-4-5" in text
+    assert "📊 8.1K total" in text
+    assert "💵 $0.420" in text
+    assert "сессии 1" in text
+    assert "777" not in text
+    assert "лимиты держит выбранный в opencode провайдер" in text
+
+
+def test_opencode_usage_is_skipped_for_unknown_schema(tmp_path: Path) -> None:
+    db_path = tmp_path / "opencode-old.db"
+    connection = sqlite3.connect(str(db_path))
+    try:
+        connection.execute("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT)")
+        connection.commit()
+    finally:
+        connection.close()
+    service = CliLimitsService(opencode_db_paths=[db_path])
+
+    assert service._query_opencode_sessions(db_path, str(tmp_path)) is None
+
+
+def test_parse_opencode_model_supports_plain_and_json_values() -> None:
+    assert CliLimitsService._parse_opencode_model("gpt-5.3-codex") == "gpt-5.3-codex"
+    assert (
+        CliLimitsService._parse_opencode_model(json.dumps({"providerID": "anthropic", "id": "claude-opus-4-5"}))
+        == "anthropic/claude-opus-4-5"
+    )
+    assert CliLimitsService._parse_opencode_model(json.dumps({"id": "qwen3-coder"})) == "qwen3-coder"
+    assert CliLimitsService._parse_opencode_model(None) == ""
+
+
+def test_read_codex_rpc_usage_normalizes_app_server_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = CliLimitsService()
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    monkeypatch.setattr("app.services.cli_limits_service.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        service,
+        "_call_codex_app_server",
+        lambda binary: {
+            "rate_limits": {
+                "rateLimits": {
+                    "planType": "chatgpt-pro",
+                    "limitId": "gpt-5.3-codex",
+                    "primary": {"usedPercent": 62.0, "windowDurationMins": 300, "resetsAt": 1770689712},
+                    "secondary": {"usedPercent": 12.5, "windowDurationMins": 10_080, "resetsAt": 1771265156},
+                },
+                "rateLimitsByLimitId": {
+                    "gpt-5.3-codex": {"primary": {"usedPercent": 62.0, "windowDurationMins": 300}},
+                    "gpt-5.3-codex-spark": {
+                        "limitName": "GPT-5.3-Codex-Spark",
+                        "primary": {"usedPercent": 4.0, "windowDurationMins": 300},
+                    },
+                },
+            },
+            "usage": {
+                "dailyUsageBuckets": [
+                    {"startDate": "2020-01-01", "tokens": 5},
+                    {"startDate": today, "tokens": 123_456},
+                ]
+            },
+        },
+    )
+
+    usage = service._read_codex_rpc_usage()
+
+    assert usage is not None
+    assert usage["plan_type"] == "chatgpt-pro"
+    assert usage["primary_window"] == {
+        "used_percent": 62.0,
+        "reset_at": 1770689712,
+        "limit_window_seconds": 300 * 60,
+    }
+    assert usage["secondary_window"]["used_percent"] == 12.5
+    assert usage["today_tokens"] == 123_456
+    assert [item["label"] for item in usage["extra_limits"]] == ["GPT-5.3-Codex-Spark"]
+
+    lines = service._format_codex_direct_usage_lines(usage)
+
+    assert any("💎 primary" in line and "38%" in line for line in lines)
+    assert any("💎 GPT-5.3-Codex-Spark primary" in line and "96%" in line for line in lines)
+
+
+def test_read_codex_rpc_usage_returns_none_without_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = CliLimitsService()
+    monkeypatch.setattr("app.services.cli_limits_service.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(service, "_call_codex_app_server", lambda binary: {"rate_limits": None, "usage": None})
+
+    assert service._read_codex_rpc_usage() is None
+
+
+def test_read_codex_rpc_usage_returns_none_without_codex_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = CliLimitsService()
+    monkeypatch.setattr("app.services.cli_limits_service.shutil.which", lambda name: None)
+
+    def _unexpected_call(_binary: str) -> None:
+        raise AssertionError("app-server must not start without codex binary")
+
+    monkeypatch.setattr(service, "_call_codex_app_server", _unexpected_call)
+
+    assert service._read_codex_rpc_usage() is None
+
+
+def test_local_usage_lines_show_estimated_cost(tmp_path: Path) -> None:
+    cache_path = tmp_path / "model_prices.json"
+    cache_path.write_text(
+        json.dumps({"qwen3-coder-plus": {"input_cost_per_token": 1e-6, "output_cost_per_token": 5e-6}}),
+        encoding="utf-8",
+    )
+    service = CliLimitsService(pricing=ModelPricing(cache_path=cache_path))
+
+    lines = service._format_local_usage_lines(
+        {"model": "qwen3-coder-plus", "total": 1_500_000, "input": 1_000_000, "output": 500_000}
+    )
+
+    assert lines[0] == "📊 1.5M total · 💵 ≈$3.50"
+
+
+def test_quota_line_gains_burn_rate_on_second_measurement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService(trend_tracker=UsageTrendTracker(JsonStateRepository(tmp_path / "state.json")))
+    monkeypatch.setattr("app.services.cli_limits_trend.time.time", lambda: 1_000.0)
+
+    first = service._format_claude_quota_window("5ч", {"utilization": 10}, trend_key="claude:five_hour")
+    monkeypatch.setattr("app.services.cli_limits_trend.time.time", lambda: 1_000.0 + 3600.0)
+    second = service._format_claude_quota_window("5ч", {"utilization": 20}, trend_key="claude:five_hour")
+
+    assert first is not None and "⚡" not in first
+    assert second is not None
+    assert "⚡10%/ч" in second
+    assert "⏳~8ч" in second
 
 
 @pytest.mark.asyncio

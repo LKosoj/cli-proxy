@@ -2931,6 +2931,7 @@ class ApplicationFacade:
         self.cli_limits_service.set_gemini_oauth_client_secret(
             getattr(cfg.defaults, "gemini_oauth_client_secret", None)
         )
+        self.cli_limits_service.bind_usage_state(getattr(cfg.defaults, "state_path", None))
         self._desktop_mode_dependencies_instance = None
         self._desktop_run_operations_service = None
         self.notify("startup:config_loaded", path=str(cfg.path))
