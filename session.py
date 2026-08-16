@@ -21,6 +21,8 @@ from app.services.cli_json_stream import (
     CliJsonStreamRecorder,
     build_cli_json_stream_adapter,
     cli_json_stream_archive_enabled,
+    grok_stream_is_handshake_only,
+    raw_cli_stream_is_protocol_only,
     recover_cli_text_from_raw_stream,
 )
 from app.services.tool_availability import available_tools, is_tool_available
@@ -1018,6 +1020,7 @@ class Session:
         image_path: Optional[str] = None,
         *,
         force_fresh: bool = False,
+        handshake_retry: bool = False,
     ) -> str:
         _log = logging.getLogger("session.headless")
         is_codex = (self.tool.name or "").strip().lower() == "codex"
@@ -1604,11 +1607,32 @@ class Session:
             raw_text = bytes(out_buf).decode(errors="ignore")
             if semantic_output_text is not None:
                 text = semantic_output_text
+            elif stream_adapter:
+                recovered_stream_text = recover_cli_text_from_raw_stream(self.tool.name, raw_text)
+                if recovered_stream_text:
+                    text = recovered_stream_text
+                elif raw_cli_stream_is_protocol_only(raw_text):
+                    text = ""
+                else:
+                    text = raw_text
             else:
-                recovered_stream_text = ""
-                if stream_adapter:
-                    recovered_stream_text = recover_cli_text_from_raw_stream(self.tool.name, raw_text)
-                text = recovered_stream_text or raw_text
+                text = raw_text
+            if (
+                is_grok
+                and resume
+                and not force_fresh
+                and not handshake_retry
+                and not str(text or "").strip()
+                and grok_stream_is_handshake_only(raw_text)
+            ):
+                _log.info("grok resume handshake produced no model turn; retrying prompt once")
+                return await self._run_headless(
+                    prompt,
+                    cmd_template=cmd_template,
+                    image_path=image_path,
+                    force_fresh=False,
+                    handshake_retry=True,
+                )
             if stderr_text:
                 stderr_log_text, suppressed_stderr_lines = _prepare_headless_stderr_for_logging(
                     self.tool.name,

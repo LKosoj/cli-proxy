@@ -16,6 +16,8 @@ from app.services.cli_json_stream import (
     KimiJsonStreamAdapter,
     OpencodeJsonStreamAdapter,
     QwenJsonStreamAdapter,
+    grok_stream_is_handshake_only,
+    raw_cli_stream_is_protocol_only,
     recover_cli_text_from_raw_stream,
 )
 
@@ -422,6 +424,42 @@ def test_grok_json_stream_adapter_normalizes_semantic_events() -> None:
     assert build_cli_json_stream_adapter("grok").cli_name == "grok"
     raw_text = "\n".join(lines)
     assert recover_cli_text_from_raw_stream("grok", raw_text) == "OK"
+    assert grok_stream_is_handshake_only(raw_text) is False
+
+
+def test_grok_json_stream_adapter_ignores_available_commands_handshake() -> None:
+    adapter = GrokJsonStreamAdapter()
+    catalog = (
+        '{"type":"available_commands","tools":["read_file"],'
+        '"commands":["compact","chain-system"]}'
+    )
+    events = []
+    events.extend(adapter.feed_line(catalog))
+    events.extend(adapter.feed_line(catalog))
+    events.extend(
+        adapter.feed_line(
+            '{"type":"end","stopReason":"end_turn",'
+            '"sessionId":"8bab377b-2cd6-4bf8-b3f0-8a39642d7a71","requestId":""}'
+        )
+    )
+
+    assert [event.kind for event in events] == ["session_started", "completed"]
+    assert adapter.final_output_text() == ""
+    assert adapter.is_handshake_only() is True
+    raw = "\n".join(
+        [
+            catalog,
+            catalog,
+            (
+                '{"type":"end","stopReason":"end_turn",'
+                '"sessionId":"8bab377b-2cd6-4bf8-b3f0-8a39642d7a71","requestId":""}'
+            ),
+        ]
+    )
+    assert recover_cli_text_from_raw_stream("grok", raw) == ""
+    assert raw_cli_stream_is_protocol_only(raw) is True
+    assert grok_stream_is_handshake_only(raw) is True
+    assert raw_cli_stream_is_protocol_only("hello\n" + catalog) is False
 
 
 def test_kimi_json_stream_adapter_normalizes_chat_messages() -> None:

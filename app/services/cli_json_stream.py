@@ -909,6 +909,8 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
         self._session_id: Optional[str] = None
         self._final_output_text = ""
         self._completed = False
+        self._saw_available_commands = False
+        self._end_request_id = ""
 
     @property
     def session_id(self) -> Optional[str]:
@@ -920,6 +922,15 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
 
     def final_output_text(self) -> str:
         return self._final_output_text
+
+    def is_handshake_only(self) -> bool:
+        """True when Grok opened a session and exited without a model turn."""
+        return (
+            self._completed
+            and not str(self._final_output_text or "").strip()
+            and self._saw_available_commands
+            and not self._end_request_id
+        )
 
     def feed_line(self, line: str) -> list[CliJsonStreamEvent]:
         payload = loads_safe(line)
@@ -952,7 +963,14 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
                 )
             ]
 
+        if event_type == "available_commands":
+            self._saw_available_commands = True
+            return []
+
         if event_type == "end":
+            self._end_request_id = str(
+                payload.get("requestId") or payload.get("request_id") or ""
+            ).strip()
             session_id = str(
                 payload.get("sessionId")
                 or payload.get("session_id")
@@ -1300,6 +1318,42 @@ def recover_cli_text_from_raw_stream(cli_name: str, raw_text: str) -> str:
     return ""
 
 
+def raw_cli_stream_is_protocol_only(raw_text: str) -> bool:
+    """True when every non-empty line is a typed CLI protocol object."""
+    saw_line = False
+    for line in str(raw_text or "").splitlines():
+        payload_line = line.strip()
+        if not payload_line:
+            continue
+        saw_line = True
+        try:
+            payload = loads_safe(payload_line)
+        except Exception:
+            return False
+        if not isinstance(payload, dict):
+            return False
+        if not (
+            str(payload.get("type") or "").strip()
+            or str(payload.get("role") or "").strip()
+        ):
+            return False
+    return saw_line
+
+
+def grok_stream_is_handshake_only(raw_text: str) -> bool:
+    """True when a Grok stream opened a session and never sent the prompt."""
+    adapter = GrokJsonStreamAdapter()
+    for line in str(raw_text or "").splitlines():
+        payload_line = line.strip()
+        if not payload_line:
+            continue
+        try:
+            adapter.feed_line(payload_line)
+        except Exception:
+            return False
+    return adapter.is_handshake_only()
+
+
 class CliJsonStreamRecorder:
     def __init__(
         self,
@@ -1485,5 +1539,7 @@ __all__ = [
     "build_cli_json_stream_adapter",
     "cli_json_stream_archive_enabled",
     "extract_cli_evidence_from_normalized_stream",
+    "grok_stream_is_handshake_only",
+    "raw_cli_stream_is_protocol_only",
     "recover_cli_text_from_raw_stream",
 ]

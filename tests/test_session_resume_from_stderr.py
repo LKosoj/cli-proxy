@@ -1941,6 +1941,117 @@ def test_headless_grok_uses_saved_resume_token(monkeypatch, tmp_path):
     asyncio.run(_run())
 
 
+def test_headless_grok_retries_handshake_only_resume_once(monkeypatch, tmp_path):
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="grok",
+            mode="headless",
+            cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            resume_cmd=["grok", "--resume", "{resume}", "-p", "{prompt}"],
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"grok": tool},
+            defaults=DefaultsConfig(workdir=str(tmp_path)),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+        session.resume_token = "8bab377b-2cd6-4bf8-b3f0-8a39642d7a71"
+        captured_calls = []
+        handshake = (
+            b'{"type":"available_commands","tools":["read_file"],"commands":["compact"]}\n'
+            b'{"type":"available_commands","tools":["read_file"],"commands":["compact"]}\n'
+            b'{"type":"end","stopReason":"end_turn",'
+            b'"sessionId":"8bab377b-2cd6-4bf8-b3f0-8a39642d7a71","requestId":""}\n'
+        )
+
+        async def _fake_create_subprocess_exec(*args, **_kwargs):
+            captured_calls.append(list(args))
+            if len(captured_calls) == 1:
+                return _FakeProc(stdout_chunks=[handshake], stderr_chunks=[])
+            return _FakeProc(
+                stdout_chunks=[
+                    b'{"type":"text","data":"OK"}\n',
+                    b'{"type":"end","stopReason":"end_turn",'
+                    b'"sessionId":"8bab377b-2cd6-4bf8-b3f0-8a39642d7a71",'
+                    b'"requestId":"req-2"}\n',
+                ],
+                stderr_chunks=[],
+            )
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+
+        out = await session._run_headless("hello")
+
+        assert out == "OK"
+        assert len(captured_calls) == 2
+        assert "available_commands" not in out
+        assert captured_calls[0][captured_calls[0].index("-p") + 1] == "hello"
+        assert captured_calls[1][captured_calls[1].index("-p") + 1] == "hello"
+        ticks = [str(item.get("value")) for item in load_session_ticks(session)]
+        assert not any("available_commands" in item for item in ticks)
+        assert ticks[-1] == "OK"
+
+    asyncio.run(_run())
+
+
+def test_headless_grok_handshake_without_resume_does_not_leak_protocol(monkeypatch, tmp_path):
+    async def _run() -> None:
+        tool = ToolConfig(
+            name="grok",
+            mode="headless",
+            cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+            headless_cmd=["grok", "-p", "{prompt}", "--resume", "{resume}"],
+        )
+        cfg = AppConfig(
+            telegram=TelegramConfig(token="", whitelist_chat_ids=[]),
+            tools={"grok": tool},
+            defaults=DefaultsConfig(workdir=str(tmp_path)),
+            mcp=MCPConfig(enabled=False),
+            mcp_clients=[],
+            presets=[],
+            path=str(tmp_path / "config.yaml"),
+        )
+        session = Session(
+            id="s1",
+            tool=tool,
+            workdir=str(tmp_path),
+            idle_timeout_sec=10,
+            config=cfg,
+        )
+        captured_calls = []
+
+        async def _fake_create_subprocess_exec(*args, **_kwargs):
+            captured_calls.append(list(args))
+            return _FakeProc(
+                stdout_chunks=[
+                    b'{"type":"available_commands","tools":["read_file"],"commands":["compact"]}\n',
+                    b'{"type":"end","stopReason":"end_turn","sessionId":"new-grok","requestId":""}\n',
+                ],
+                stderr_chunks=[],
+            )
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+
+        out = await session._run_headless("hello")
+
+        assert out == ""
+        assert len(captured_calls) == 1
+        assert "available_commands" not in out
+
+    asyncio.run(_run())
+
+
 def test_headless_grok_force_fresh_skips_resume_and_token_update(monkeypatch, tmp_path):
     async def _run() -> None:
         tool = ToolConfig(
