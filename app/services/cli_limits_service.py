@@ -9,6 +9,7 @@ import pwd
 import queue
 import re
 import shutil
+import signal
 import sqlite3
 import subprocess
 import tempfile
@@ -155,7 +156,23 @@ class CliLimitsService:
             )
             for cli_name in target_clis
         ]
-        return list(await asyncio.gather(*tasks))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        snapshots: list[CliLimitsSnapshot] = []
+        for cli_name, result in zip(target_clis, results):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                logger.error("cli limits collection failed cli=%s", cli_name, exc_info=result)
+                snapshots.append(
+                    CliLimitsSnapshot(
+                        cli_name=cli_name,
+                        status="error",
+                        lines=("⚠️ не удалось собрать данные",),
+                    )
+                )
+                continue
+            snapshots.append(result)
+        return snapshots
 
     _SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -825,7 +842,9 @@ class CliLimitsService:
             return None
         deadline = time.monotonic() + self._network_timeout_sec
 
-        with tempfile.TemporaryDirectory(prefix="cli-proxy-grok-usage-") as temp_dir:
+        temp_dir = tempfile.mkdtemp(prefix="cli-proxy-grok-usage-")
+        pane_pid: Optional[int] = None
+        try:
             tmux_socket = str(Path(temp_dir) / "tmux.sock")
             grok_socket = str(Path(temp_dir) / "grok.sock")
             probe_workdir = Path(temp_dir) / "workdir"
@@ -872,6 +891,7 @@ class CliLimitsService:
                     "--no-memory",
                     "--no-subagents",
                 )
+                pane_pid = self._read_grok_pane_pid(tmux_prefix, probe_env)
                 while time.monotonic() < deadline:
                     pane_text = run_tmux("capture-pane", "-p", "-t", "grok-usage:0.0").stdout
                     if "❯" in pane_text:
@@ -893,16 +913,87 @@ class CliLimitsService:
                 logger.warning("failed to query Grok usage through isolated TUI", exc_info=True)
                 return None
             finally:
-                try:
-                    subprocess.run(
-                        [*tmux_prefix, "kill-server"],
-                        check=False,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=1.0,
-                    )
-                except Exception:
-                    logger.warning("failed to stop isolated Grok usage tmux server", exc_info=True)
+                self._stop_grok_probe(tmux_prefix, pane_pid, grok_socket)
+        finally:
+            self._remove_probe_dir(Path(temp_dir))
+
+    @staticmethod
+    def _read_grok_pane_pid(tmux_prefix: Sequence[str], env: dict[str, str]) -> Optional[int]:
+        """Возвращает pid процесса grok в панели: по нему проба гасит его вместе с потомками."""
+        try:
+            result = subprocess.run(
+                [*tmux_prefix, "list-panes", "-t", "grok-usage:0.0", "-F", "#{pane_pid}"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+                env=env,
+            )
+            return int(str(result.stdout or "").strip().splitlines()[0])
+        except Exception:
+            logger.warning("failed to read Grok usage probe pane pid", exc_info=True)
+            return None
+
+    @staticmethod
+    def _probe_process_matches(pid: int, marker: str) -> bool:
+        """Проверяет, что pid всё ещё принадлежит нашей пробе: pid мог быть переиспользован чужим процессом."""
+        try:
+            cmdline = Path("/proc") / str(pid) / "cmdline"
+            return marker in cmdline.read_bytes().decode("utf-8", "replace")
+        except OSError:
+            return False
+
+    @classmethod
+    def _stop_grok_probe(cls, tmux_prefix: Sequence[str], pane_pid: Optional[int], probe_marker: str) -> None:
+        """Гасит tmux и сам grok: без этого grok переживает kill-server и продолжает писать в temp-каталог."""
+        try:
+            subprocess.run(
+                [*tmux_prefix, "kill-server"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=1.0,
+            )
+        except Exception:
+            logger.warning("failed to stop isolated Grok usage tmux server", exc_info=True)
+        if pane_pid is None or not cls._probe_process_matches(pane_pid, probe_marker):
+            return
+        try:
+            group_pid = os.getpgid(pane_pid)
+            if group_pid in (0, 1) or group_pid == os.getpgrp():
+                logger.warning("Grok usage probe shares process group with the bot pid=%s", pane_pid)
+                return
+            os.killpg(group_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except Exception:
+            logger.warning("failed to kill Grok usage probe process pid=%s", pane_pid, exc_info=True)
+            return
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            try:
+                os.killpg(group_pid, 0)
+            except ProcessLookupError:
+                return
+            except Exception:
+                return
+            time.sleep(0.05)
+        logger.warning("Grok usage probe process is still alive pid=%s", pane_pid)
+
+    @staticmethod
+    def _remove_probe_dir(path: Path) -> None:
+        for attempt in range(3):
+            try:
+                shutil.rmtree(path)
+                return
+            except FileNotFoundError:
+                return
+            except OSError:
+                if attempt == 2:
+                    logger.warning("failed to remove Grok usage probe dir path=%s", path, exc_info=True)
+                    shutil.rmtree(path, ignore_errors=True)
+                    return
+                time.sleep(0.2)
 
     @classmethod
     def _parse_grok_direct_usage_output(cls, text: str) -> Optional[dict[str, Any]]:

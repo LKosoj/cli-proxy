@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import sqlite3
 import time
 import urllib.parse
@@ -10,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.cli_limits_service import CliLimitsService, CliProjectRef
+from app.services.cli_limits_service import CliLimitsService, CliLimitsSnapshot, CliProjectRef
 from app.services.cli_limits_trend import UsageTrendTracker
 from app.services.model_pricing import ModelPricing
 from app.services.state_repository import JsonStateRepository
@@ -382,6 +384,133 @@ def test_read_grok_direct_usage_uses_isolated_tmux(
     assert call_environments[0]["GROK_AUTH_PATH"] == str(auth_path)
     assert Path(call_environments[0]["GROK_HOME"]).name == "grok-home"
     assert call_environments[0]["GROK_HOME"] != str(Path.home() / ".grok")
+
+
+@pytest.mark.asyncio
+async def test_collect_for_sessions_keeps_other_clis_when_one_collector_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService()
+
+    async def fake_snapshot(cli_name: str, refs: object) -> CliLimitsSnapshot:
+        if cli_name == "grok":
+            raise OSError(39, "Directory not empty")
+        return CliLimitsSnapshot(cli_name=cli_name, status="ok", lines=("📊 context 1K / 2K",))
+
+    monkeypatch.setattr(service, "_collect_cli_snapshot", fake_snapshot)
+
+    snapshots = await service.collect_for_sessions([], available_clis=("codex", "grok"))
+
+    assert [item.cli_name for item in snapshots] == ["codex", "grok"]
+    assert snapshots[0].status == "ok"
+    assert snapshots[1].status == "error"
+    assert snapshots[1].lines == ("⚠️ не удалось собрать данные",)
+
+
+def _patch_grok_probe_process(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
+    sent_signals: list[tuple[int, int]] = []
+
+    def fake_killpg(pgid: int, sig: int) -> None:
+        sent_signals.append((pgid, sig))
+        if sig == 0:
+            raise ProcessLookupError
+
+    monkeypatch.setattr("app.services.cli_limits_service.os.getpgid", lambda pid: pid)
+    monkeypatch.setattr("app.services.cli_limits_service.os.killpg", fake_killpg)
+    monkeypatch.setattr(
+        CliLimitsService,
+        "_probe_process_matches",
+        staticmethod(lambda pid, marker: True),
+    )
+    return sent_signals
+
+
+def test_probe_process_matches_rejects_foreign_pid() -> None:
+    assert CliLimitsService._probe_process_matches(os.getpid(), "python") is True
+    assert CliLimitsService._probe_process_matches(os.getpid(), "cli-proxy-grok-usage-none") is False
+    assert CliLimitsService._probe_process_matches(2**30, "python") is False
+
+
+def test_read_grok_direct_usage_kills_probe_and_removes_temp_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService(network_timeout_sec=2.0)
+    capture_count = 0
+
+    monkeypatch.setattr("app.services.cli_limits_service.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr(
+        "app.services.cli_limits_service.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+
+    def fake_run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        nonlocal capture_count
+        stdout = ""
+        if "list-panes" in argv:
+            stdout = "4242\n"
+        elif "capture-pane" in argv:
+            capture_count += 1
+            stdout = (
+                "❯\n"
+                if capture_count == 1
+                else "Weekly limit: 12.5%\nNext reset: July 11, 17:03 PT\n❯\n"
+            )
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr("app.services.cli_limits_service.subprocess.run", fake_run)
+    sent_signals = _patch_grok_probe_process(monkeypatch)
+
+    usage = service._read_grok_direct_usage()
+
+    assert usage is not None
+    assert (4242, signal.SIGKILL) in sent_signals
+    assert list(tmp_path.glob("cli-proxy-grok-usage-*")) == []
+
+
+def test_read_grok_direct_usage_removes_temp_dir_when_probe_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService(network_timeout_sec=2.0)
+
+    monkeypatch.setattr("app.services.cli_limits_service.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr(
+        "app.services.cli_limits_service.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+
+    def fake_run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        if "new-session" in argv:
+            raise TimeoutError("tmux hangs")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.services.cli_limits_service.subprocess.run", fake_run)
+    _patch_grok_probe_process(monkeypatch)
+
+    assert service._read_grok_direct_usage() is None
+    assert list(tmp_path.glob("cli-proxy-grok-usage-*")) == []
+
+
+def test_remove_probe_dir_retries_and_gives_up_without_raising(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probe_dir = tmp_path / "cli-proxy-grok-usage-busy"
+    probe_dir.mkdir()
+    attempts: list[bool] = []
+
+    def fake_rmtree(path: object, ignore_errors: bool = False) -> None:
+        attempts.append(ignore_errors)
+        if not ignore_errors:
+            raise OSError(39, "Directory not empty")
+
+    monkeypatch.setattr("app.services.cli_limits_service.shutil.rmtree", fake_rmtree)
+    monkeypatch.setattr("app.services.cli_limits_service.time.sleep", lambda _seconds: None)
+
+    CliLimitsService._remove_probe_dir(probe_dir)
+
+    assert attempts == [False, False, False, True]
 
 
 def test_parse_grok_direct_usage_supports_monthly_limit() -> None:
