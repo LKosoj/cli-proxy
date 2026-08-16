@@ -39,6 +39,7 @@
 - **Configured tools** — `codex`, `claude`, `gemini`, `qwen` in `config_example.yaml`.
 - **Execution contracts** — session execution, active CLI switching and routed calls: `session.py`, `agent/cli_routing.py`.
 - **JSON/progress streams** — CLI stream adapters and transcript readers: `app/services/cli_json_stream.py`, `app/services/cli_backends/transcript_reader.py`, `app/services/cli_backends/codex_rollout_tail.py`.
+- **Transcript anchoring** — the `<<<CLI_PROXY_REQUEST:id>>>` marker anchors only the first poll; afterwards the persisted `TranscriptLocator` is reused, and a thread already known by `session_id` attaches to the journal tail even without the marker: `app/services/cli_backends/transcript_reader.py`, `app/services/cli_backends/tmux_backend.py`.
 - **CLI limits** — usage/status summaries for supported CLIs: `app/services/cli_limits_service.py`.
 - **CLI limits sources** — Claude OAuth usage API, Codex `app-server` JSON-RPC (`account/rateLimits/read`), Gemini `retrieveUserQuota`, Grok TUI probe, local transcripts (Claude/Qwen) and the opencode SQLite database: `app/services/cli_limits_service.py`.
 - **Token cost estimates** — LiteLLM price list cached under `<state dir>/.cli-proxy/runtime/model_prices.json`: `app/services/model_pricing.py`.

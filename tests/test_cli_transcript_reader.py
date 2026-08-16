@@ -1,9 +1,14 @@
 import json
 import time
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.services.cli_backends.transcript_reader import CliTranscriptReader, TranscriptLocator
+
+
+def _iso_utc(stamp: float) -> str:
+    return datetime.fromtimestamp(stamp, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _append_jsonl(path: Path, *records: dict) -> None:
@@ -1038,3 +1043,189 @@ def test_gemini_transcript_reader_finds_lowercase_project_dir(tmp_path):
     assert result.complete is True
     assert result.assistant_text == "Готово"
     assert result.session_id == session_id
+
+
+def test_codex_transcript_reader_attaches_to_known_thread_without_marker(tmp_path):
+    """Маркер запроса может не дойти до журнала (вытеснен из хвоста огромного
+    файла или записан CLI не дословно). Тред известен по session_id, поэтому
+    читатель цепляется к его текущему концу и берёт всё, что появится дальше."""
+    session_id = "019fade8-142e-7c91-ae5b-3dc3c03a2448"
+    path = (
+        tmp_path
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "07"
+        / "29"
+        / f"rollout-2026-07-29T15-44-55-{session_id}.jsonl"
+    )
+    _append_jsonl(
+        path,
+        {
+            "timestamp": "2026-07-29T15:44:55Z",
+            "type": "session_meta",
+            "payload": {"id": session_id, "cwd": "/srv/project"},
+        },
+        {
+            "timestamp": "2026-07-29T15:45:00Z",
+            "type": "event_msg",
+            "payload": {"type": "agent_message", "message": "ответ прошлого хода"},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="codex",
+        request_id="marker-lost",
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    first = reader.poll()
+
+    assert first.available is True
+    # Всё, что записано до привязки, уже отдано пользователю и не повторяется.
+    assert first.assistant_text == ""
+
+    _append_jsonl(
+        path,
+        {
+            "timestamp": "2026-07-29T15:46:00Z",
+            "type": "event_msg",
+            "payload": {"type": "task_complete", "last_agent_message": "свежий ответ"},
+        },
+    )
+    second = reader.poll()
+
+    assert second.assistant_text == "свежий ответ"
+    assert second.recognized is True
+    assert second.session_id == session_id
+
+
+def test_codex_transcript_reader_follows_marker_into_new_rollout(tmp_path):
+    """Если CLI продолжил тред в новом файле, поиск по session_id находит старый.
+    Маркер текущего запроса приводит читателя к настоящему журналу хода."""
+    session_id = "019fade8-142e-7c91-ae5b-3dc3c03a2448"
+    base = tmp_path / ".codex" / "sessions" / "2026" / "07" / "29"
+    _append_jsonl(
+        base / f"rollout-2026-07-29T15-44-55-{session_id}.jsonl",
+        {
+            "timestamp": "2026-07-29T15:44:55Z",
+            "type": "session_meta",
+            "payload": {"id": session_id, "cwd": "/srv/project"},
+        },
+    )
+    fresh_id = "01a00a64-0fe1-7fa3-a3d0-23124f88d3a4"
+    _append_jsonl(
+        base / f"rollout-2026-07-29T16-00-00-{fresh_id}.jsonl",
+        {
+            "timestamp": "2026-07-29T16:00:00Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "<<<CLI_PROXY_REQUEST:moved-req>>> посчитай"},
+        },
+        {
+            "timestamp": "2026-07-29T16:00:05Z",
+            "type": "event_msg",
+            "payload": {"type": "task_complete", "last_agent_message": "ответ из нового файла"},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="codex",
+        request_id="moved-req",
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.assistant_text == "ответ из нового файла"
+    assert result.locator is not None and result.locator.path.endswith(f"{fresh_id}.jsonl")
+    # Идентификатор треда переезжает вслед за журналом.
+    assert result.session_id == fresh_id
+
+
+def test_claude_transcript_reader_attaches_to_known_session_without_marker(tmp_path):
+    """Привязка без маркера работает одинаково для всех CLI с журналом-дописью."""
+    session_id = "77777777-7777-4777-8777-777777777777"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "timestamp": "2026-07-31T09:00:00Z",
+            "message": {"content": [{"type": "text", "text": "ответ прошлого хода"}]},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="claude",
+        request_id="marker-lost",
+        workdir="/srv/project",
+        started_at=time.time() - 5,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    first = reader.poll()
+
+    assert first.available is True
+    assert first.assistant_text == ""
+
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "timestamp": "2026-07-31T10:00:00Z",
+            "message": {"content": [{"type": "text", "text": "свежий ответ"}]},
+        },
+    )
+    second = reader.poll()
+
+    assert second.assistant_text == "свежий ответ"
+
+
+def test_gemini_transcript_reader_uses_start_time_without_marker(tmp_path):
+    """gemini переписывает файл целиком, поэтому без маркера границей служит
+    время старта запроса, а не байтовое смещение."""
+    session_id = "88888888-8888-4888-8888-888888888888"
+    started_at = time.time()
+    _write_gemini_session(
+        tmp_path,
+        session_id,
+        [
+            {"id": "m1", "type": "user", "content": "прошлый вопрос", "timestamp": "2026-07-31T09:00:00.000Z"},
+            {"id": "m2", "type": "gemini", "content": "прошлый ответ", "timestamp": "2026-07-31T09:00:01.000Z"},
+        ],
+    )
+    reader = CliTranscriptReader(
+        cli_name="gemini",
+        request_id="gemini-marker-lost",
+        workdir="/srv/project",
+        started_at=started_at,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    first = reader.poll()
+
+    assert first.available is True
+    assert first.assistant_text == ""
+
+    _write_gemini_session(
+        tmp_path,
+        session_id,
+        [
+            {"id": "m1", "type": "user", "content": "прошлый вопрос", "timestamp": "2026-07-31T09:00:00.000Z"},
+            {"id": "m2", "type": "gemini", "content": "прошлый ответ", "timestamp": "2026-07-31T09:00:01.000Z"},
+            {
+                "id": "m3",
+                "type": "gemini",
+                "content": "свежий ответ",
+                "timestamp": _iso_utc(started_at + 1),
+            },
+        ],
+    )
+    second = reader.poll()
+
+    assert second.assistant_text == "свежий ответ"

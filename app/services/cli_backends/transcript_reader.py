@@ -9,7 +9,7 @@ import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 from modes.sdk.runtime.json_normalizer import loads_safe
@@ -166,36 +166,34 @@ class CliTranscriptReader:
         if self.locator.session_id:
             self.session_id = self.locator.session_id
 
-    def _candidate_paths(self) -> list[Path]:
+    def _exact_paths(self) -> list[Path]:
+        """Журналы треда, найденные по известному идентификатору сессии."""
+        if self.provider not in _SUPPORTED_PROVIDERS or not self.session_id or not self.root.is_dir():
+            return []
+        if self.provider in {"claude", "qwen"}:
+            return list(self.root.rglob(f"{self.session_id}.jsonl"))
+        if self.provider == "codex":
+            return list(self.root.rglob(f"*-{self.session_id}.jsonl"))
+        if self.provider == "gemini":
+            return list(self.root.rglob(f"session-{self.session_id}.json"))
+        if self.provider == "grok":
+            workspace_key = urllib.parse.quote(self.workdir, safe="")
+            direct = self.root / workspace_key / self.session_id / "updates.jsonl"
+            return [direct] if direct.is_file() else []
+        direct = (
+            self.root
+            / _kimi_workspace_key(self.workdir)
+            / self.session_id
+            / "agents"
+            / "main"
+            / "wire.jsonl"
+        )
+        return [direct] if direct.is_file() else []
+
+    def _recent_paths(self) -> list[Path]:
+        """Свежие журналы провайдера — когда тред по идентификатору не найден."""
         if self.provider not in _SUPPORTED_PROVIDERS or not self.root.is_dir():
             return []
-
-        exact: list[Path] = []
-        if self.session_id:
-            if self.provider in {"claude", "qwen"}:
-                exact = list(self.root.rglob(f"{self.session_id}.jsonl"))
-            elif self.provider == "codex":
-                exact = list(self.root.rglob(f"*-{self.session_id}.jsonl"))
-            elif self.provider == "gemini":
-                exact = list(self.root.rglob(f"session-{self.session_id}.json"))
-            elif self.provider == "grok":
-                workspace_key = urllib.parse.quote(self.workdir, safe="")
-                direct = self.root / workspace_key / self.session_id / "updates.jsonl"
-                if direct.is_file():
-                    exact = [direct]
-            elif self.provider == "kimi":
-                direct = (
-                    self.root
-                    / _kimi_workspace_key(self.workdir)
-                    / self.session_id
-                    / "agents"
-                    / "main"
-                    / "wire.jsonl"
-                )
-                if direct.is_file():
-                    exact = [direct]
-        if exact:
-            return exact
 
         if self.provider == "grok":
             pattern = "updates.jsonl"
@@ -253,22 +251,52 @@ class CliTranscriptReader:
         match = _CODEX_SESSION_ID_RE.search(path.name)
         return match.group(1) if match else ""
 
-    def _discover(self) -> None:
-        for path in self._candidate_paths():
+    def _attach(self, path: Path, offset: int) -> None:
+        session_id = self._session_id_from_path(path) or self.session_id
+        self.locator = TranscriptLocator(
+            provider=self.provider,
+            path=str(path.resolve()),
+            start_offset=offset,
+            session_id=session_id,
+        )
+        self.cursor = offset
+        if session_id:
+            self.session_id = session_id
+
+    def _attach_by_marker(self, paths: Iterable[Path]) -> bool:
+        for path in paths:
             offset = self._marker_offset(path)
-            if offset is None:
-                continue
-            session_id = self._session_id_from_path(path) or self.session_id
-            self.locator = TranscriptLocator(
-                provider=self.provider,
-                path=str(path.resolve()),
-                start_offset=offset,
-                session_id=session_id,
-            )
-            self.cursor = offset
-            if session_id:
-                self.session_id = session_id
+            if offset is not None:
+                self._attach(path, offset)
+                return True
+        return False
+
+    def _discover(self) -> None:
+        exact = self._exact_paths()
+        if self._attach_by_marker(exact):
             return
+        # Маркер мог уехать в другой журнал: CLI умеет продолжить тред новым файлом.
+        if self._attach_by_marker(self._recent_paths()):
+            return
+        if not exact:
+            # Тред неизвестен: без маркера нельзя отличить свой журнал от чужого.
+            return
+        # Тред известен по идентификатору, а маркера в нём нет: он вытеснен из
+        # хвоста разросшегося журнала либо CLI записал промпт не дословно.
+        # Читаем всё, что появится дальше, — так же делает наблюдение за pane.
+        try:
+            tail = exact[0].stat().st_size
+        except OSError:
+            logger.debug("structured transcript tail stat failed path=%s", exact[0], exc_info=True)
+            return
+        logger.info(
+            "structured transcript attached without marker provider=%s session_id=%s path=%s offset=%d",
+            self.provider,
+            self.session_id,
+            exact[0],
+            tail,
+        )
+        self._attach(exact[0], tail)
 
     def _done_marker(self) -> str:
         return f"<<<DONE:{self.request_id}>>>"
@@ -482,7 +510,14 @@ class CliTranscriptReader:
             if isinstance(item, dict) and marker in str(item.get("content") or ""):
                 start = index
         if start < 0:
-            return
+            # Маркера нет, но сессия найдена по идентификатору: границей служит
+            # время старта запроса. Сообщения без времени считаем прошлыми.
+            for index, item in enumerate(messages):
+                if not isinstance(item, dict):
+                    continue
+                stamp = item.get("timestamp")
+                if (_event_timestamp(stamp) if stamp else 0.0) < self.started_at:
+                    start = index
         self.recognized = True
         for item in messages[start + 1:]:
             if not isinstance(item, dict):
