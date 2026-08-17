@@ -6,5 +6,4 @@ repos:
         entry: python3 scripts/check_i18n_parity.py
         language: python
         pass_filenames: false
-        args: [--analyst-dir, modes/analyst/templates, --manager-dir, modes/manager/i18n,
-               --languages, ru, en, zh, de, --lint-purity]
+        args: [--languages, ru, en, zh, de]

@@ -26,7 +26,6 @@ from app.services.cli_json_stream import (
     recover_cli_text_from_raw_stream,
 )
 from app.services.tool_availability import available_tools, is_tool_available
-from app.services.project_prompts_service import ensure_project_prompts
 from app.services.ssh_skill_generator import generate_ssh_skill_text
 from app.services.state_repository import get_state_repository
 from app.services.session_tick_history_store import append_session_tick
@@ -2671,10 +2670,6 @@ class SessionManager:
         # defensive cleanup for the canonical scoped sandbox path.
         self._cleanup_legacy_session_sandbox_dir(sid, scoped_key=scoped_key)
         self._clear_session_sandbox_dir(scoped_key)
-        try:
-            ensure_project_prompts(workdir)
-        except Exception:
-            logger.exception("project prompts bootstrap failed workdir=%s session_id=%s", workdir, sid)
         ensure_cli_proxy_gitignored(workdir)
         scope = conversation_scope or ConversationScope.from_parts(chat_id, message_thread_id)
         session = Session(

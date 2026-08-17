@@ -21,7 +21,6 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from modes.sdk import MessageModel
 from modes.sdk.services.callback_data import (
     build_session_mode_pick_callback_data,
     build_session_overview_callback_data,
@@ -42,7 +41,7 @@ from session import (
     session_scoped_key,
 )
 from app.services.report_history_service import InvalidReportIdError, ReportNotFoundError
-from sessions.session_state_access import get_active_mode, is_orchestrator_enabled, is_ssh_remote_enabled
+from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
 from tg.command_registry import build_command_registry
 from tg.markdown import escape_markdown_v2_all
@@ -584,17 +583,6 @@ class BotHandlers:
     def _active_session_status_text(
         self, s: Session, *, chat_id: Optional[int] = None, lang: Optional[str] = None
     ) -> str:
-        access_policy = getattr(self.bot_app, "access_policy_service", None)
-        show_orchestrator = True
-        if chat_id is not None:
-            checker = getattr(access_policy, "is_orchestrator_allowed_for_chat", None) if access_policy is not None else None
-            if callable(checker):
-                try:
-                    show_orchestrator = bool(checker(int(chat_id)))
-                except Exception:
-                    show_orchestrator = False
-            else:
-                show_orchestrator = False
         if lang is None:
             try:
                 lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
@@ -604,7 +592,7 @@ class BotHandlers:
             s,
             mode_registry=getattr(self.bot_app, "mode_registry_service", None),
             mode_items=self._registered_modes(chat_id=chat_id) if chat_id is not None else None,
-            show_orchestrator=show_orchestrator,
+            show_orchestrator=False,
             lang=lang,
         )
 
@@ -707,11 +695,6 @@ class BotHandlers:
         if callable(resolver):
             return resolver(reply_chat_id=int(chat_id), owner_chat_id=int(chat_id))
         return None
-
-    def _orchestrator_button(self, session: Session, lang: str = "ru") -> InlineKeyboardButton:
-        enabled = bool(is_orchestrator_enabled(session, False))
-        text = t("btn.orch.on", lang) if enabled else t("btn.orch.off", lang)
-        return InlineKeyboardButton(text, callback_data=f"sess_orch_toggle:{session.id}")
 
     def _ssh_remote_button(self, session: Session, lang: str = "ru") -> Optional[InlineKeyboardButton]:
         if not ssh_remote_available(session.workdir):
@@ -832,8 +815,6 @@ class BotHandlers:
         if ssh_btn and visibility.allows("ssh"):
             keyboard_rows.append([ssh_btn])
 
-        if visibility.allows("orchestrator"):
-            keyboard_rows.append([self._orchestrator_button(s, lang)])
         if visibility.allows("mode_selector"):
             keyboard_rows.extend(
                 self._build_mode_buttons_rows(
@@ -1348,24 +1329,6 @@ class BotHandlers:
 
     async def cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mode_id: str) -> None:
         mode_id = str(mode_id or "").strip()
-        if mode_id == "admin":
-            route = self.bot_app.resolve_telegram_inbound_route(update)
-            session = route.session or self.bot_app.resolve_telegram_scope_session(
-                reply_chat_id=int(route.reply_chat_id),
-                message_thread_id=route.message_thread_id,
-                owner_chat_id=int(route.owner_chat_id),
-            )
-            if not session:
-                try:
-                    lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
-                except Exception:
-                    lang = "ru"
-                await self.bot_app._send_message(
-                    context,
-                    text=t("msg.session.open_topic_first", lang),
-                    **route.reply_kwargs(),
-                )
-                return
         args = list(getattr(context, "args", []) or [])
         subcommand = str(args[0] or "").strip().lower() if args else ""
         await self._show_mode_menu(update, context, mode_id, subcommand=subcommand, command_args=args)
@@ -1403,52 +1366,6 @@ class BotHandlers:
             return
         if plugin is None or not hasattr(plugin, "build_menu"):
             await self.bot_app._send_message(context, text=t("msg.error.mode_unavailable_named", lang, mode_id=mode_id), **reply_kwargs)
-            return
-
-        if mode_id == "admin":
-            if not hasattr(plugin, "handle_input"):
-                await self.bot_app._send_message(context, text=t("msg.error.mode_unavailable_named", lang, mode_id=mode_id), **reply_kwargs)
-                return
-            payload_args = [str(x) for x in (command_args or []) if str(x).strip()]
-            command_text = "/admin"
-            if payload_args:
-                command_text = f"/admin {' '.join(payload_args)}"
-            runtime_payload = self._validate_telegram_runtime_payload(
-                {
-                    "bot_app": self.bot_app,
-                    "session": s,
-                    "chat_id": chat_id,
-                    "session_uid": str(
-                        route.session_uid
-                        or getattr(getattr(s, "conversation_scope", None), "session_uid", "")
-                        or ""
-                    ).strip(),
-                    "context": (
-                        self.bot_app.build_telegram_transport_context(
-                            context,
-                            session=s,
-                            chat_id=chat_id,
-                            dest=self.bot_app.build_telegram_reply_dest(
-                                s,
-                                chat_id,
-                                user_id=getattr(getattr(update, "effective_user", None), "id", None),
-                            ),
-                            user_id=getattr(getattr(update, "effective_user", None), "id", None),
-                        )
-                        if hasattr(self.bot_app, "build_telegram_transport_context")
-                        else context
-                    ),
-                    "mode_id": mode_id,
-                }
-            )
-            await plugin.handle_input(
-                MessageModel(
-                    text=command_text,
-                    chat_id=int(chat_id),
-                    user_id=getattr(getattr(update, "effective_user", None), "id", None),
-                ),
-                runtime_payload,
-            )
             return
 
         menu_visibility = build_mode_menu_visibility(

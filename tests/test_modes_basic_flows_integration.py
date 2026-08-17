@@ -1,7 +1,6 @@
 import asyncio
-import json
 import types
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -130,54 +129,8 @@ class _BlockingRunRuntime:
         return None
 
 
-class _WebmasterChatRuntime:
-    capabilities = frozenset({"webmaster_chat_completion"})
-
-    def supports_capability(self, capability: str) -> bool:
-        return str(capability or "").strip() in self.capabilities
-
-    async def chat_completion(
-        self,
-        config: Any,
-        system: str,
-        user: str,
-        *,
-        response_format: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        _ = config
-        _ = system
-        _ = user
-        _ = response_format
-        return json.dumps({"kind": "new_task", "reason": "integration"})
-
-
-def _analyst_intent_payload() -> Dict[str, Any]:
-    return {
-        "task_type": "analysis",
-        "template_id": "default",
-        "confidence": 0.92,
-        "reason": "integration",
-        "detail_level": "standard",
-        "document_kind": "analysis",
-        "needs_cli": False,
-        "needs_clarification": False,
-    }
-
-
-def _webmaster_intent_payload(user_text: str) -> Dict[str, Any]:
-    txt = str(user_text or "").strip()
-    return {
-        "goal": txt or "Задача",
-        "actions": [f"Сделать: {txt or 'задача'}"],
-        "constraints": ["Без регрессий"],
-        "acceptance_criteria": ["Проверка PASS"],
-        "ambiguities": [],
-        "assumptions": [],
-    }
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode_id", ["agent", "analyst", "manager", "webmaster"])
+@pytest.mark.parametrize("mode_id", ["agent"])
 async def test_basic_mode_flow_enable_run_busy_queue_completion_status_for_all_modes(tmp_path, mode_id: str) -> None:
     app = _build_app(tmp_path)
     session = app.manager.create(1, "dummy", str(tmp_path))
@@ -214,90 +167,16 @@ async def test_basic_mode_flow_enable_run_busy_queue_completion_status_for_all_m
     entered = asyncio.Event()
     release = asyncio.Event()
     run_inputs: List[str] = []
-    webmaster_intent_inputs: List[str] = []
-    webmaster_use_cli_calls = {"count": 0}
-
-    async def _tool_execute(tool_name: str, args: dict, ctx: dict) -> dict:
-        _ = ctx
-        name = str(tool_name or "").strip()
-        if name == "analyst_intent_plugin":
-            return {"success": True, "output": json.dumps(_analyst_intent_payload(), ensure_ascii=False)}
-        if name == "intent_plugin":
-            user_text = str((args or {}).get("user_text") or "")
-            webmaster_intent_inputs.append(user_text)
-            return {"success": True, "output": json.dumps(_webmaster_intent_payload(user_text), ensure_ascii=False)}
-        if name == "ask_user":
-            options = [str(x) for x in list((args or {}).get("options") or []) if str(x).strip()]
-            selected = options[0] if options else "Подтвердить"
-            return {"success": True, "output": {"selected_option": selected}}
-        if name == "use_cli":
-            webmaster_use_cli_calls["count"] += 1
-            if webmaster_use_cli_calls["count"] == 1:
-                entered.set()
-                await release.wait()
-            task_text = str((args or {}).get("task_text") or "")
-            if "Обязательный чеклист" in task_text:
-                validation = {
-                    "status": "PASS",
-                    "summary": "ok",
-                    "blocking_issues": [],
-                    "checklist_results": [
-                        {
-                            "item": "Семантический HTML",
-                            "status": "PASS",
-                            "evidence": "ok",
-                            "fixed": "",
-                            "why_not_done": "",
-                        }
-                    ],
-                    "defects": [],
-                }
-                return {"success": True, "output": json.dumps(validation, ensure_ascii=False)}
-            developer_report = (
-                "| пункт | статус | evidence |\n"
-                "| --- | --- | --- |\n"
-                "| Семантический HTML | PASS | ok |\n"
-            )
-            return {"success": True, "output": developer_report}
-        raise AssertionError(f"Unexpected tool execution in integration flow: {name}")
-
-    if mode_id == "agent":
-        app.register_mode_runtime(
-            "agent",
-            _BlockingRunRuntime(
-                capability="run_agent",
-                entered=entered,
-                release=release,
-                run_inputs=run_inputs,
-                block_first_run=True,
-            ),
-        )
-    elif mode_id == "analyst":
-        app.mode_tooling.execute_tool_fn = _tool_execute
-        app.register_mode_runtime(
-            "analyst",
-            _BlockingRunRuntime(
-                capability="run_analyst",
-                entered=entered,
-                release=release,
-                run_inputs=run_inputs,
-                block_first_run=True,
-            ),
-        )
-    elif mode_id == "manager":
-        app.register_mode_runtime(
-            "manager",
-            _BlockingRunRuntime(
-                capability="run_manager",
-                entered=entered,
-                release=release,
-                run_inputs=run_inputs,
-                block_first_run=True,
-            ),
-        )
-    else:
-        app.mode_tooling.execute_tool_fn = _tool_execute
-        app.register_mode_runtime("webmaster", _WebmasterChatRuntime())
+    app.register_mode_runtime(
+        "agent",
+        _BlockingRunRuntime(
+            capability="run_agent",
+            entered=entered,
+            release=release,
+            run_inputs=run_inputs,
+            block_first_run=True,
+        ),
+    )
 
     handler = CallbackHandler(app)
 
@@ -349,11 +228,7 @@ async def test_basic_mode_flow_enable_run_busy_queue_completion_status_for_all_m
 
     release.set()
 
-    expect_webmaster_runs = mode_id == "webmaster"
-
     def has_two_runs() -> bool:
-        if expect_webmaster_runs:
-            return len(webmaster_intent_inputs) >= 2
         return len(run_inputs) >= 2
 
     try:
@@ -396,15 +271,7 @@ async def test_basic_mode_flow_enable_run_busy_queue_completion_status_for_all_m
     assert session.modes.active_mode == mode_id
     assert InputDispatchService.pending_head(getattr(app, "pending", None), app.telegram_ui_key(1)) is None
     assert len(getattr(session, "queue", []) or []) == 0
-
-    if mode_id == "webmaster":
-        assert first_prompt in webmaster_intent_inputs
-        assert second_prompt in webmaster_intent_inputs
-    elif mode_id in {"analyst", "manager"}:
-        assert any(first_prompt in x for x in run_inputs)
-        assert any(second_prompt in x for x in run_inputs)
-    else:
-        assert list(run_inputs)[:2] == [first_prompt, second_prompt]
+    assert list(run_inputs)[:2] == [first_prompt, second_prompt]
 
 
 @pytest.mark.asyncio
@@ -433,138 +300,47 @@ async def test_mode_transitions_preserve_clean_session_state_between_runs(tmp_pa
     app._edit_message = _edit_message
     app.send_output = _send_output
 
-    run_inputs: Dict[str, List[str]] = {
-        "agent": [],
-        "analyst": [],
-        "manager": [],
-        "webmaster": [],
-    }
-
-    async def _tool_execute(tool_name: str, args: dict, ctx: dict) -> dict:
-        _ = ctx
-        name = str(tool_name or "").strip()
-        if name == "analyst_intent_plugin":
-            return {"success": True, "output": json.dumps(_analyst_intent_payload(), ensure_ascii=False)}
-        if name == "intent_plugin":
-            text = str((args or {}).get("user_text") or "")
-            run_inputs["webmaster"].append(text)
-            return {"success": True, "output": json.dumps(_webmaster_intent_payload(text), ensure_ascii=False)}
-        if name == "ask_user":
-            options = [str(x) for x in list((args or {}).get("options") or []) if str(x).strip()]
-            selected = options[0] if options else "Подтвердить"
-            return {"success": True, "output": {"selected_option": selected}}
-        if name == "use_cli":
-            task_text = str((args or {}).get("task_text") or "")
-            if "Обязательный чеклист" in task_text:
-                return {
-                    "success": True,
-                    "output": json.dumps(
-                        {
-                            "status": "PASS",
-                            "summary": "ok",
-                            "blocking_issues": [],
-                            "checklist_results": [
-                                {
-                                    "item": "Семантический HTML",
-                                    "status": "PASS",
-                                    "evidence": "ok",
-                                    "fixed": "",
-                                    "why_not_done": "",
-                                }
-                            ],
-                            "defects": [],
-                        },
-                        ensure_ascii=False,
-                    ),
-                }
-            return {
-                "success": True,
-                "output": (
-                    "| пункт | статус | evidence |\n"
-                    "| --- | --- | --- |\n"
-                    "| Семантический HTML | PASS | ok |\n"
-                ),
-            }
-        raise AssertionError(f"Unexpected tool call in transition flow: {name}")
-
-    app.mode_tooling.execute_tool_fn = _tool_execute
+    run_inputs: List[str] = []
     app.register_mode_runtime(
         "agent",
         _BlockingRunRuntime(
             capability="run_agent",
             entered=asyncio.Event(),
             release=asyncio.Event(),
-            run_inputs=run_inputs["agent"],
+            run_inputs=run_inputs,
             block_first_run=False,
         ),
     )
-    app.register_mode_runtime(
-        "analyst",
-        _BlockingRunRuntime(
-            capability="run_analyst",
-            entered=asyncio.Event(),
-            release=asyncio.Event(),
-            run_inputs=run_inputs["analyst"],
-            block_first_run=False,
-        ),
-    )
-    app.register_mode_runtime(
-        "manager",
-        _BlockingRunRuntime(
-            capability="run_manager",
-            entered=asyncio.Event(),
-            release=asyncio.Event(),
-            run_inputs=run_inputs["manager"],
-            block_first_run=False,
-        ),
-    )
-    app.register_mode_runtime("webmaster", _WebmasterChatRuntime())
 
     handler = CallbackHandler(app)
-    modes = ["agent", "analyst", "manager", "webmaster"]
+    mode_id = "agent"
+    await _wait_until(
+        lambda: not ModeCallbackRouterService._is_session_busy_for_mode_changes(session),
+        timeout=5.0,
+    )
+    await handler.handle_callback(
+        types.SimpleNamespace(callback_query=_FakeQuery(f"ma:{mode_id}:enable")),
+        context=object(),
+    )
+    assert session.modes.active_mode == mode_id
 
-    for mode_id in modes:
-        await _wait_until(
-            lambda: not ModeCallbackRouterService._is_session_busy_for_mode_changes(session),
-            timeout=5.0,
-        )
-        await handler.handle_callback(
-            types.SimpleNamespace(callback_query=_FakeQuery(f"ma:{mode_id}:enable")),
-            context=object(),
-        )
-        if session.modes.active_mode != mode_id:
-            await _wait_until(
-                lambda: not ModeCallbackRouterService._is_session_busy_for_mode_changes(session),
-                timeout=5.0,
-            )
-            await handler.handle_callback(
-                types.SimpleNamespace(callback_query=_FakeQuery(f"ma:{mode_id}:enable")),
-                context=object(),
-            )
-        assert session.modes.active_mode == mode_id
+    await app._handle_user_input(
+        session,
+        "transition-agent",
+        1,
+        context=object(),
+        dest={"kind": "telegram", "chat_id": 1, "user_id": 77},
+    )
 
-        prompt = f"transition-{mode_id}"
-        await app._handle_user_input(
-            session,
-            prompt,
-            1,
-            context=object(),
-            dest={"kind": "telegram", "chat_id": 1, "user_id": 77},
-        )
-
-        await _wait_until(
-            lambda: (
-                _three_busy_flags_released(session)
-                and len(getattr(session, "queue", []) or []) == 0
-                and len(app.mode_tasks.list(session_uid=session_runtime_uid(session), mode_id=mode_id) or []) == 0
-            ),
-            timeout=6.0,
-        )
-        assert _three_busy_flags_released(session) is True
-        assert InputDispatchService.pending_head(getattr(app, "pending", None), app.telegram_ui_key(1)) is None
-
-    assert any("transition-agent" in x for x in run_inputs["agent"])
-    assert any("transition-analyst" in x for x in run_inputs["analyst"])
-    assert any("transition-manager" in x for x in run_inputs["manager"])
-    assert any("transition-webmaster" in x for x in run_inputs["webmaster"])
-    assert session.modes.active_mode == "webmaster"
+    await _wait_until(
+        lambda: (
+            _three_busy_flags_released(session)
+            and len(getattr(session, "queue", []) or []) == 0
+            and len(app.mode_tasks.list(session_uid=session_runtime_uid(session), mode_id=mode_id) or []) == 0
+        ),
+        timeout=6.0,
+    )
+    assert _three_busy_flags_released(session) is True
+    assert InputDispatchService.pending_head(getattr(app, "pending", None), app.telegram_ui_key(1)) is None
+    assert any("transition-agent" in x for x in run_inputs)
+    assert session.modes.active_mode == "agent"

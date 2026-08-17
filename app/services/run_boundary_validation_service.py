@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from glob import glob
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence
 
-from modes.codebase_mapper_constants import CODEBASE_MAPPER_SUCCESS_ARTIFACT_STATUSES
 from modes.sdk.json_store import read_json_locked_if_exists
 from modes.sdk.runtime.final_qc import runtime_readiness_allows_finalization
 from modes.sdk.runtime.json_normalizer import loads_safe
@@ -29,8 +28,12 @@ _CODEBASE_MAPPER_GATEWAY_STATUS = frozenset(
     {
         "completed",
         "validated",
+        "full_updated",
+        "partial_updated",
+        "graph_verified",
+        "validation_done",
+        "repair_done",
     }
-    | set(CODEBASE_MAPPER_SUCCESS_ARTIFACT_STATUSES)
 )
 
 _CODEBASE_MAPPER_LEGACY_OPTIONAL_FIELD_TYPES: Dict[str, type] = {

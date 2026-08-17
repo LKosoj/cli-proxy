@@ -69,7 +69,7 @@ def _payload(tmp_path, *, token: str, extra_tool: str | None = None) -> dict:
         "defaults": {
             "workdir": str(tmp_path),
             "state_path": str(tmp_path / "state.json"),
-            "desktop_state_path": str(tmp_path / "desktop_state.json"),
+
             "toolhelp_path": str(tmp_path / "toolhelp.json"),
             "log_path": str(tmp_path / "bot.log"),
             "cli_json_stream_archive_enabled": False,

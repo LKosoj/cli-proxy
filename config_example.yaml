@@ -157,7 +157,6 @@ defaults:
   summary_max_chars: 4000
   html_filename_prefix: "cli-output"
   state_path: "state.json"
-  desktop_state_path: "desktop_state.json"
   toolhelp_path: "toolhelp.json"
   openai_api_key: null
   openai_model: null
@@ -184,22 +183,8 @@ defaults:
   memory_dreaming_batch_size: 20          # максимум runs/events-batches за один dreaming pass
   pending_input_confirmation_enabled: true  # если true, любое входящее сообщение сначала требует confirm; после confirm busy-сессия отдельно спрашивает о постановке в очередь. Если false, первое confirm пропускается, но вопрос о постановке в очередь для busy-сессии все равно показывается
 
-  # Manager mode (multi-agent orchestration: CLI developer + Agent reviewer)
-  manager_max_tasks: 10
-  manager_max_attempts: 3
-  manager_decompose_timeout_sec: 600
-  manager_dev_timeout_sec: 3600
-  manager_review_timeout_sec: 600
-  analyst_use_cli_timeout_sec: 3600
-  webmaster_use_cli_timeout_sec: 3600
-  webmaster_validation_max_fix_iterations: 2
-  manager_dev_report_max_chars: 8000
-  manager_auto_resume: true
-  manager_auto_commit: true         # git commit после каждого одобренного шага плана
-  manager_response_archive: true           # сохранять сырые ответы CLI/агентов в .cli-proxy/.manager/response/
   cli_json_stream_archive_enabled: false   # если true, JSON-stream CLIs архивируют сырые raw.jsonl и normalized.jsonl события в .cli-proxy/cli-json-stream/
-  assistant_preview_enabled: false         # если true, Telegram/Desktop показывают во время run один live preview из assistant_text и убирают его после финального ответа
-  codebase_mapper_usage: "auto"     # auto|enabled|disabled (сейчас auto работает как enabled)
+  assistant_preview_enabled: false         # если true, Telegram показывает во время run один live preview из assistant_text и убирает его после финального ответа
   run_artifacts_enabled: true       # включает durable run trace: STATE/PLAN/CHECKPOINTS/METRICS/RECOVERY/EVENTS для mode-run и shared recovery tooling
   run_artifacts_retention_days: 30  # prune_old_runs() удаляет завершённые run старше этого TTL; активные running run всегда shielded от cleanup
   run_doctor_enabled: true          # включает backend doctor/recover/resume: doctor читает run artifacts + legacy state и пишет рекомендации в RECOVERY.json
@@ -233,10 +218,7 @@ defaults:
     - "path:absolute"               # разрешает вручную подключать skill из абсолютного пути на локальной машине
     - "registry:npx-skills"         # разрешает discovery через npx registry adapter; без allowlist auto-install не произойдёт
     - "ref:owner-repo-skill"        # разрешает explicit owner/repo@skill refs; удобно для controlled install/promote сценариев
-  # Актуальные runtime-заметки (без дополнительных ключей):
-  # - Analyst pre-run reset выполняется mode-scoped и сохраняет project_root/agent_memory/active_mode/manager_quiet_mode.
-  # - Pending busy-вводы: FIFO deque per chat, жёсткий лимит 5, при переполнении отправляется уведомление.
-  # - Manager pending prompt очищается только после успешного resume; при сбое ask_user сохраняется.
+  # Pending busy-вводы: FIFO deque per chat, жёсткий лимит 5, при переполнении отправляется уведомление.
   clarification_enabled: true
   clarification_keywords:
     - "уточни"

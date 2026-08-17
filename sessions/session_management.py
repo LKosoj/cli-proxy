@@ -210,12 +210,7 @@ class SessionManagement:
         )
 
     def _reset_session_fields_like_sessions_reset(self, session: Session, *, preserve_mode_id: Optional[str]) -> None:
-        """
-        Runs mode-scoped pre-run reset.
-
-        The reset is intentionally narrow: for analyst mode it clears only analyst-specific
-        transient state, stale pending questions and runtime cache.
-        """
+        """Runs mode-scoped pre-run reset when a mode requires it."""
         self._mode_pre_run_reset.apply(
             session=session,
             mode_id=str(preserve_mode_id or "").strip() or None,

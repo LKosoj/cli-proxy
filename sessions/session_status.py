@@ -164,7 +164,7 @@ def build_session_status_text(
     *,
     mode_registry: Optional[Any] = None,
     mode_items: Optional[list[tuple[str, str]]] = None,
-    show_orchestrator: bool = True,
+    show_orchestrator: bool = False,
     title_prefix: Optional[str] = None,
     lang: str = "ru",
 ) -> str:

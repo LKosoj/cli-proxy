@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 RunOperationName = Literal["doctor", "recover", "resume", "apply_recommendation"]
 RunOperationStatus = Literal["ok", "blocked", "not_found", "disabled", "error"]
 WRITE_RUN_OPERATIONS = frozenset({"recover", "resume", "apply_recommendation"})
-_CODEBASE_MAPPER_OPERATION_ACTIONS = frozenset({"no_action", "rerun_same_operation", "run_validate", "run_repair"})
 _RESUME_ALLOWED_ACTIONS = frozenset({"no_action", "resume_same_phase"})
 _APPLY_RECOMMENDATION_ALLOWED_ACTIONS = frozenset({"rerun_same_operation", "run_validate", "run_repair"})
 _RECOVER_EXECUTION_ACTIONS = frozenset({"rollback_to_checkpoint", "restart_from_phase", "replay_finalize"})
@@ -938,11 +937,6 @@ class RunOperationsService:
                 return "Recovery отклонён: doctor рекомендует обычный resume, а не recovery workflow."
             if action == "manual_review_required":
                 return "Recovery отклонён: doctor требует ручного подтверждения перед повторным выполнением."
-            if mode_id == "codebase_mapper" and action in _CODEBASE_MAPPER_OPERATION_ACTIONS:
-                return (
-                    "Recovery отклонён: для Codebase Mapper используйте явную операцию rerun/validate/repair "
-                    "вместо generic recover."
-                )
             if action not in _RECOVER_ALLOWED_ACTIONS:
                 return f"Recovery отклонён: action `{action}` не поддерживается shared recovery backend."
         return None

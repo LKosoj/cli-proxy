@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANDATORY_FILES = {
     "sessions/session_run_service.py",
     "sessions/session_output_service.py",
-    "modes/admin/transports/local.py",
+    "modes/agent/mode.py",
 }
 SILENT_EXCEPT_PASS_RE = re.compile(
     r"(?m)^(?P<indent>[ \t]*)except Exception:\n(?P=indent)[ \t]+pass\b"

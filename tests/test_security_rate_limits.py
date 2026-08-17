@@ -125,7 +125,7 @@ def test_rate_limit_policies_are_loaded_from_app_config_without_explicit_limits(
         "defaults": {
             "workdir": str(tmp_path),
             "state_path": str(tmp_path / "state.json"),
-            "desktop_state_path": str(tmp_path / "desktop_state.json"),
+
             "toolhelp_path": str(tmp_path / "toolhelp.json"),
             "log_path": str(tmp_path / "bot.log"),
         },

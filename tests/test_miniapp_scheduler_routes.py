@@ -126,7 +126,7 @@ def test_miniapp_scheduler_routes_crud_and_run_now_for_owned_project(tmp_path) -
                     "project_slug": "alpha",
                     "job_name": "Morning digest",
                     "cron": "*/15 * * * *",
-                    "target_mode": "manager",
+                    "target_mode": "agent",
                     "enabled": True,
                     "notification_target": {"telegram_session_uid": telegram_session_uid},
                     "payload": {"project_slug": "alpha", "intent": "digest"},

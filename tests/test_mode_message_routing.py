@@ -73,33 +73,6 @@ def test_routes_to_active_mode_plugin_when_set(tmp_path):
     asyncio.run(_run())
 
 
-def test_migrated_active_mode_manager_routes_to_manager_plugin(tmp_path):
-    async def _run():
-        app = _build_app(tmp_path)
-        session = app.manager.create(1, "dummy", str(tmp_path))
-        # Simulate migrated state.
-        session.modes.active_mode = "manager"
-
-        called = {"plugin": 0}
-
-        plugin = app.mode_registry.get("manager")
-        assert plugin is not None
-
-        async def _plugin_handle_input(message, ctx):
-            called["plugin"] += 1
-            assert message.text == "hi"
-            assert ctx.get("session") is session
-            return ToolResult.ok()
-
-        plugin.handle_input = _plugin_handle_input  # type: ignore[assignment]
-        app._handle_cli_input = lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("cli called"))
-
-        await app._handle_user_input(session, "hi", 1, context=object())
-        assert called["plugin"] == 1
-
-    asyncio.run(_run())
-
-
 def test_unknown_active_mode_falls_back_to_cli(tmp_path):
     async def _run():
         app = _build_app(tmp_path)

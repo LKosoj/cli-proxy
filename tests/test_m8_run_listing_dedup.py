@@ -6,7 +6,6 @@ from app.services.run_utils import clean_text, summarize_run_skill_log
 
 _REPO = Path(__file__).resolve().parents[1]
 _MINIAPP = _REPO / "miniapp/routes.py"
-_FACADE = _REPO / "desktop/services/application_facade.py"
 
 
 # ---------------------------------------------------------------------------
@@ -125,19 +124,4 @@ def test_no_private_summarize_method_in_miniapp() -> None:
 
 def test_miniapp_imports_from_run_utils() -> None:
     text = _MINIAPP.read_text(encoding="utf-8")
-    assert "from app.services.run_utils import" in text
-
-
-def test_no_private_clean_method_in_facade() -> None:
-    text = _FACADE.read_text(encoding="utf-8")
-    assert "def _clean_run_listing_text(" not in text
-
-
-def test_no_private_summarize_method_in_facade() -> None:
-    text = _FACADE.read_text(encoding="utf-8")
-    assert "def _summarize_run_skill_log(" not in text
-
-
-def test_facade_imports_from_run_utils() -> None:
-    text = _FACADE.read_text(encoding="utf-8")
     assert "from app.services.run_utils import" in text

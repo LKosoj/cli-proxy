@@ -1813,25 +1813,6 @@ class BotApp:
                 dest=resolved_dest,
             )
             return self._with_recovery_degradation(dict(payload or {}), degradation_message)
-        if resolved_mode == "codebase_mapper":
-            if not hasattr(mode, "run_pipeline"):
-                return {"status": "blocked", "message": t("msg.recovery.codebase_mapper_unavailable", _rec_lang)}
-            output = await mode.run_pipeline(
-                session=session,
-                user_text=operation_name,
-                bot_app=self,
-                context=resolved_context,
-                dest=resolved_dest,
-            )
-            return self._with_recovery_degradation(
-                {
-                    "status": "ok",
-                    "message": str(output or "").strip() or t("bot.op_executed", _rec_lang, op=operation_name),
-                    "executed_operation": operation_name,
-                    "executed_via": "mode_run_pipeline",
-                },
-                degradation_message,
-            )
         if not hasattr(mode, "run_pipeline"):
             return {"status": "blocked", "message": t("msg.recovery.mode_no_pipeline", _rec_lang, mode_id=resolved_mode)}
         prompt_text = build_recovery_prompt(

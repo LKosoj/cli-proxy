@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, FrozenSet, Optional
 
-from app.services.advanced_orchestrator_service import DIRECT_CLI_MODE_ID, ORCHESTRATOR_MODE_ID
+from app.services.advanced_orchestrator_service import DIRECT_CLI_MODE_ID
 from app.services.run_operations_policy import RunOperationsPolicy
 from sessions.session_state_access import get_active_mode
 
@@ -19,7 +19,6 @@ _ADMIN_SESSION_ACTIONS = frozenset(
         "close",
         "reset",
         "ssh",
-        "orchestrator",
         "mode_selector",
         "new_session",
         "list_sessions",
@@ -47,54 +46,10 @@ _ADMIN_MODE_ACTIONS = {
             "clean_session",
         }
     ),
-    "analyst": frozenset(
-        {
-            "enable",
-            "disable",
-            "status",
-            "doctor",
-            "recover",
-            "resume",
-            "promote_skills",
-            "download",
-            "audit",
-            "template",
-        }
-    ),
-    "manager": frozenset(
-        {
-            "enable",
-            "disable",
-            "quiet_toggle",
-            "status",
-            "doctor",
-            "recover",
-            "resume",
-            "promote_skills",
-            "pause",
-            "resume_paused",
-            "reset",
-        }
-    ),
-    "webmaster": frozenset(
-        {
-            "enable",
-            "disable",
-            "status",
-            "doctor",
-            "recover",
-            "resume",
-            "promote_skills",
-            "reset",
-        }
-    ),
 }
 
 _USER_MODE_ACTIONS = {
     "agent": frozenset({"enable", "status", "project_connect", "project_change"}),
-    "analyst": frozenset({"enable", "status", "download", "audit"}),
-    "manager": frozenset({"enable", "status", "pause", "resume_paused", "reset"}),
-    "webmaster": frozenset({"enable", "status", "reset"}),
 }
 
 _RUN_OPERATION_ACTIONS = frozenset(
@@ -155,24 +110,6 @@ def _safe_is_direct_cli_allowed(*, access_policy: Any, chat_id: Any) -> bool:
     return False
 
 
-def _safe_is_orchestrator_allowed(*, access_policy: Any, chat_id: Any) -> bool:
-    if access_policy is None:
-        return False
-    orch_checker = getattr(access_policy, "is_orchestrator_allowed_for_chat", None)
-    if callable(orch_checker):
-        try:
-            return bool(orch_checker(int(chat_id)))
-        except Exception:
-            return False
-    mode_checker = getattr(access_policy, "is_mode_allowed_for_chat", None)
-    if callable(mode_checker):
-        try:
-            return bool(mode_checker(int(chat_id), ORCHESTRATOR_MODE_ID))
-        except Exception:
-            return False
-    return False
-
-
 def _with_run_operations_policy(
     *,
     mode_id: str,
@@ -220,8 +157,6 @@ def build_session_overview_visibility(
             actions.add("list_sessions")
         if not active_mode and int(available_tool_count) > 1:
             actions.add("cli_selector")
-        if _safe_is_orchestrator_allowed(access_policy=access_policy, chat_id=resolved_chat_id):
-            actions.add("orchestrator")
         if int(registered_mode_count) > 1 or (not active_mode and int(registered_mode_count) > 0):
             actions.add("mode_selector")
         return SessionOverviewVisibility(actions=frozenset(actions))

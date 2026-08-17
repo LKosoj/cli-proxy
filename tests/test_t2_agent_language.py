@@ -258,20 +258,16 @@ def test_needs_clarification_legacy_fallback():
 # 9.5 system_prompts.yaml commit_message_system
 # ---------------------------------------------------------------------------
 
-def test_commit_message_system_prompt_language_substitution():
-    import yaml
-    yaml_path = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "modes", "manager", "system_prompts.yaml")
+def test_system_prompt_language_substitution():
+    prompt_path = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "modes", "sdk", "runtime", "system.txt")
     )
-    with open(yaml_path, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    prompts = data.get("prompts") or {}
-    raw = prompts.get("commit_message_system", "")
-    assert "{response_language}" in raw, "Placeholder {response_language} missing from commit_message_system"
-    formatted = raw.format(response_language="English")
+    with open(prompt_path, encoding="utf-8") as f:
+        raw = f.read()
+    assert "{{response_language}}" in raw, "Placeholder {{response_language}} missing from system prompt"
+    formatted = raw.replace("{{response_language}}", "English")
     assert "English" in formatted
-    assert "по-русски" not in formatted
-    assert "русском" not in formatted
+    assert "{{response_language}}" not in formatted
 
 
 # ---------------------------------------------------------------------------

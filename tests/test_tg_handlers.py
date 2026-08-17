@@ -964,62 +964,6 @@ def test_reply_kwargs_prefers_inbound_route_thread_context() -> None:
     assert handlers._reply_kwargs(update) == {"chat_id": 101, "message_thread_id": 55}
 
 
-def test_admin_show_mode_menu_validates_and_passes_session_uid() -> None:
-    async def _run() -> None:
-        plugin_calls = []
-
-        class _Plugin:
-            def build_menu(self, *_args, **_kwargs):
-                return "unused", None
-
-            async def handle_input(self, message, ctx):
-                plugin_calls.append((message, ctx))
-                return None
-
-        session = types.SimpleNamespace(
-            id="sess-1",
-            conversation_scope=types.SimpleNamespace(session_uid="thread:101:55"),
-        )
-        bot_app = types.SimpleNamespace(
-            mode_registry_service=types.SimpleNamespace(get=lambda _mode_id: _Plugin()),
-            access_policy_service=types.SimpleNamespace(is_mode_allowed_for_chat=lambda _chat_id, _mode_id: True),
-            resolve_telegram_inbound_route=lambda _update: types.SimpleNamespace(
-                owner_chat_id=101,
-                reply_chat_id=101,
-                message_thread_id=55,
-                session_uid="thread:101:55",
-            ),
-            build_telegram_transport_context=lambda _context, **kwargs: {"dest": kwargs.get("dest")},
-            build_telegram_reply_dest=lambda *_args, **_kwargs: {"kind": "telegram"},
-            _send_message=AsyncMock(),
-        )
-        handlers = BotHandlers(bot_app)
-        handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]
-        handlers._require_scope_session = AsyncMock(return_value=session)  # type: ignore[method-assign]
-        handlers._reply_kwargs = lambda _update, _session=None: {}  # type: ignore[method-assign]
-
-        update = types.SimpleNamespace(
-            effective_chat=types.SimpleNamespace(id=101),
-            effective_user=types.SimpleNamespace(id=42),
-        )
-        context = types.SimpleNamespace(args=["status"])
-
-        await handlers._show_mode_menu(
-            update,
-            context,
-            "admin",
-            subcommand="status",
-            command_args=["status"],
-        )
-
-        assert len(plugin_calls) == 1
-        _message, runtime_ctx = plugin_calls[0]
-        assert runtime_ctx["chat_id"] == 101
-        assert runtime_ctx["session_uid"] == "thread:101:55"
-
-    asyncio.run(_run())
-
-
 def test_show_mode_menu_applies_simple_user_visibility_policy() -> None:
     async def _run() -> None:
         captured = {}

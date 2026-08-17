@@ -176,9 +176,9 @@ def config_schema() -> Dict[str, Any]:
                         "type": "map[int,all|array[string]]",
                         "required": False,
                         "description": (
-                            "Per-user allowed modes, including registered modes such as "
-                            "agent, analyst, manager, sdd, and webmaster; include direct_cli "
-                            "for direct CLI access and orchestrator for session orchestrator access."
+                            "Per-user allowed modes. Use agent for the helper agent, "
+                            "direct_cli for direct CLI access, and orchestrator for "
+                            "session orchestrator access."
                         ),
                     },
                     "connection_pool_size": {
@@ -247,11 +247,6 @@ def config_schema() -> Dict[str, Any]:
                         "type": "string",
                         "required": True,
                         "description": "Runtime state file path.",
-                    },
-                    "desktop_state_path": {
-                        "type": "string",
-                        "required": True,
-                        "description": "Desktop app state file path.",
                     },
                     "toolhelp_path": {
                         "type": "string",
@@ -397,66 +392,6 @@ def config_schema() -> Dict[str, Any]:
                         "required": True,
                         "description": "Keywords that trigger clarification handling.",
                     },
-                    "manager_max_tasks": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Max tasks for manager mode decomposition.",
-                    },
-                    "manager_max_attempts": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Max manager attempts per task.",
-                    },
-                    "manager_decompose_timeout_sec": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Manager decompose timeout in seconds.",
-                    },
-                    "manager_dev_timeout_sec": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Manager dev timeout in seconds.",
-                    },
-                    "manager_review_timeout_sec": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Manager review timeout in seconds.",
-                    },
-                    "analyst_use_cli_timeout_sec": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Analyst CLI timeout in seconds.",
-                    },
-                    "webmaster_use_cli_timeout_sec": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Webmaster CLI timeout in seconds.",
-                    },
-                    "webmaster_validation_max_fix_iterations": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Max webmaster validation/fix iterations.",
-                    },
-                    "manager_dev_report_max_chars": {
-                        "type": "int",
-                        "required": True,
-                        "description": "Max manager dev report size in characters.",
-                    },
-                    "manager_auto_resume": {
-                        "type": "bool",
-                        "required": True,
-                        "description": "Enable manager auto-resume.",
-                    },
-                    "manager_auto_commit": {
-                        "type": "bool",
-                        "required": True,
-                        "description": "Enable manager auto-commit.",
-                    },
-                    "manager_response_archive": {
-                        "type": "bool",
-                        "required": True,
-                        "description": "Archive raw manager responses.",
-                    },
                     "cli_json_stream_archive_enabled": {
                         "type": "bool",
                         "required": True,
@@ -465,12 +400,7 @@ def config_schema() -> Dict[str, Any]:
                     "assistant_preview_enabled": {
                         "type": "bool",
                         "required": True,
-                        "description": "Show in-progress assistant preview in Telegram and Desktop sessions.",
-                    },
-                    "codebase_mapper_usage": {
-                        "type": "enum[auto,enabled,disabled]",
-                        "required": True,
-                        "description": "Codebase mapper usage mode.",
+                        "description": "Show in-progress assistant preview in Telegram sessions.",
                     },
                     "run_artifacts_enabled": {
                         "type": "bool",

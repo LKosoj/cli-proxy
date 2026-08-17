@@ -84,68 +84,16 @@ def test_readme_feature_flags_are_documented_in_ru_and_en():
     en = (repo_root / "README_EN.MD").read_text(encoding="utf-8")
 
     expected_tokens = [
-        "defaults.codebase_mapper_usage",
         "defaults.memory_events_enabled",
         "defaults.memory_native_cli_hooks_enabled",
         "defaults.memory_outcomes_enabled",
         "defaults.memory_dreaming_enabled",
         "defaults.cli_json_stream_archive_enabled",
         "defaults.assistant_preview_enabled",
-        "manager_auto_commit",
-        "webmaster_validation_max_fix_iterations",
     ]
     for token in expected_tokens:
         assert token in ru
         assert token in en
-
-
-def test_readme_project_prompts_are_documented_in_ru_and_en():
-    repo_root = Path(__file__).resolve().parents[1]
-    ru = (repo_root / "README.md").read_text(encoding="utf-8")
-    en = (repo_root / "README_EN.MD").read_text(encoding="utf-8")
-
-    shared_tokens = [
-        ".cli-proxy/.manager/prompt/prompts.yaml",
-        ".cli-proxy/.manager/prompt/learning.yaml",
-        ".cli-proxy/.webmaster/prompt/prompts.yaml",
-        ".cli-proxy/.webmaster/prompt/learning.yaml",
-        "SessionManager.create",
-        "logger.exception",
-    ]
-    for token in shared_tokens:
-        assert token in ru
-        assert token in en
-
-    assert "при создании сессии" in ru
-    assert "при включении режима" in ru
-    assert "не запускается" in ru
-
-    assert "when a session is created" in en
-    assert "when mode is enabled" in en
-    assert "mode is not started" in en
-
-
-def test_readme_manager_dynamic_decomposition_is_documented_in_ru_and_en():
-    repo_root = Path(__file__).resolve().parents[1]
-    ru = (repo_root / "README.md").read_text(encoding="utf-8")
-    en = (repo_root / "README_EN.MD").read_text(encoding="utf-8")
-
-    shared_tokens = [
-        "_min_tasks_dynamic(analysis)",
-        "MIN_TASKS_FLOOR",
-        "MIN_TASKS_PER_REQ",
-        "MIN_TASKS_PER_REMAINING",
-        "ATOMICITY_MAX_REQS_PER_TASK",
-        "TASK_COUNT_BELOW_MIN",
-        "TASK_TOO_BROAD_REQ_COVERAGE",
-        "config.yaml",
-    ]
-    for token in shared_tokens:
-        assert token in ru
-        assert token in en
-
-    assert "не выносятся в `config.yaml`" in ru
-    assert "not exposed in `config.yaml`" in en
 
 
 def test_readme_handoff_and_status_model_are_documented_in_ru_and_en():
@@ -164,9 +112,6 @@ def test_readme_handoff_and_status_model_are_documented_in_ru_and_en():
     for token in shared_tokens:
         assert token in ru
         assert token in en
-
-    assert "Режим Вебмастер" in ru
-    assert "Webmaster mode" in en
 
 
 def test_readme_thread_mode_webhooks_and_scheduler_are_documented_in_ru_and_en():
@@ -222,7 +167,6 @@ def test_readme_run_operations_and_skill_runtime_are_documented_in_ru_and_en():
     shared_tokens = [
         "Run operations: `doctor` / `recover` / `resume`",
         "RECOVERY.json",
-        "Desktop",
         "MiniApp",
         "defaults.run_doctor_enabled",
         "defaults.run_boundary_validation_enabled",
@@ -233,7 +177,6 @@ def test_readme_run_operations_and_skill_runtime_are_documented_in_ru_and_en():
         "defaults.skill_allowlisted_sources",
         "project-local registry",
         ".skill_install_approval_ledger.json",
-        "/admin skills list|approve <approval_id>|reject <approval_id>",
         "manual_review_required",
     ]
     for token in shared_tokens:

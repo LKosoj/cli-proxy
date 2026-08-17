@@ -596,11 +596,9 @@ def test_config_schema_exposes_runtime_sections_and_missing_fields() -> None:
     sections = schema["sections"]
 
     assert "user_modes" in sections["telegram"]["fields"]
-    assert "sdd" in sections["telegram"]["fields"]["user_modes"]["description"]
+    assert "agent" in sections["telegram"]["fields"]["user_modes"]["description"]
     assert "direct_cli" in sections["telegram"]["fields"]["user_modes"]["description"]
     assert "orchestrator" in sections["telegram"]["fields"]["user_modes"]["description"]
-    assert "desktop_state_path" in sections["defaults"]["fields"]
-    assert "webmaster_use_cli_timeout_sec" in sections["defaults"]["fields"]
     assert "cli_json_stream_archive_enabled" in sections["defaults"]["fields"]
     assert "assistant_preview_enabled" in sections["defaults"]["fields"]
     assert "pending_input_confirmation_enabled" in sections["defaults"]["fields"]
@@ -608,7 +606,6 @@ def test_config_schema_exposes_runtime_sections_and_missing_fields() -> None:
     assert "memory_native_cli_hooks_enabled" in sections["defaults"]["fields"]
     assert "memory_outcomes_enabled" in sections["defaults"]["fields"]
     assert "memory_dreaming_enabled" in sections["defaults"]["fields"]
-    assert "codebase_mapper_usage" in sections["defaults"]["fields"]
     assert "skill_registry_paths" in sections["defaults"]["fields"]
     assert "bind_host" in sections["miniapp"]["fields"]
     assert "bind_port" in sections["miniapp"]["fields"]
@@ -637,10 +634,8 @@ def test_config_tab_source_covers_extended_config_surface() -> None:
         "tg-user-modes",
         (
             'fieldHtml({ id: "tg-user-modes", label: "user_modes", '
-            'hint: "chat_id=all или chat_id=agent,analyst,sdd,direct_cli,orchestrator", kind: "textarea" })'
+            'hint: "chat_id=all или chat_id=agent,direct_cli,orchestrator", kind: "textarea" })'
         ),
-        "def-desktop-state-path",
-        "def-webmaster-use-cli-timeout",
         "def-cli-json-stream-archive-enabled",
         "def-assistant-preview-enabled",
         "def-memory-events-enabled",
@@ -656,7 +651,6 @@ def test_config_tab_source_covers_extended_config_surface() -> None:
             'kind: "checkbox", hint: "Сначала подтверждать любое новое сообщение; '
             'после подтверждения busy-сессия отдельно спрашивает о постановке в очередь" })'
         ),
-        "def-codebase-mapper-usage",
         "def-run-artifacts-enabled",
         "def-skill-registry-paths",
         "mini-bind-host",

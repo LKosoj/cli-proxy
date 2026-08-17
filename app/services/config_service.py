@@ -75,7 +75,6 @@ class AppRuntimeParams:
     config_path: str
     workdir: str
     state_path: str
-    desktop_state_path: str
     toolhelp_path: str
     log_path: str
 
@@ -375,21 +374,17 @@ class ConfigService:
         cfg = config or self._config or await self.load()
         workdir = os.path.abspath(os.path.expanduser(str(cfg.defaults.workdir or os.getcwd())))
         state_path = self._resolve_path(str(cfg.defaults.state_path), workdir)
-        # desktop_state.json — в каталоге запуска (cwd), не в workdir
-        launch_dir = os.getcwd()
-        desktop_state_path = self._resolve_path(str(cfg.defaults.desktop_state_path), launch_dir)
         toolhelp_path = self._resolve_path(str(cfg.defaults.toolhelp_path), workdir)
         log_path = self._resolve_path(str(cfg.defaults.log_path), workdir)
 
         os.makedirs(workdir, exist_ok=True)
-        for p in (state_path, desktop_state_path, toolhelp_path, log_path):
+        for p in (state_path, toolhelp_path, log_path):
             os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
 
         return AppRuntimeParams(
             config_path=os.path.abspath(str(cfg.path)),
             workdir=workdir,
             state_path=state_path,
-            desktop_state_path=desktop_state_path,
             toolhelp_path=toolhelp_path,
             log_path=log_path,
         )

@@ -76,7 +76,6 @@ class DefaultsConfig:
     summary_max_chars: int = 4000
     html_filename_prefix: str = "cli-output"
     state_path: str = "state.json"
-    desktop_state_path: str = "desktop_state.json"
     toolhelp_path: str = "toolhelp.json"
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
@@ -109,7 +108,6 @@ class DefaultsConfig:
     # Runtime reload applies this setting to existing sessions; no session-level override is stored.
     default_execution_backend: str = "headless"
     # Global default language for users without explicit preference.
-    # Used by Desktop (single-user) and as final fallback in Telegram.
     # Supported values: "ru", "en", "zh", "de". Default: "ru".
     default_language: str = "ru"
     clarification_keywords: List[str] = dataclasses.field(
@@ -131,26 +129,8 @@ class DefaultsConfig:
             "de": ["unklar", "bitte präzisieren", "nicht klar", "klären sie", "erläutern sie"],
         }
     )
-    # Manager mode (multi-agent orchestration via CLI + reviewer Agent)
-    manager_max_tasks: int = 10
-    manager_max_attempts: int = 3
-    manager_decompose_timeout_sec: int = 1200
-    manager_dev_timeout_sec: int = 3600
-    manager_review_timeout_sec: int = 1200
-    analyst_use_cli_timeout_sec: int = 3600
-    webmaster_use_cli_timeout_sec: int = 3600
-    webmaster_validation_max_fix_iterations: int = 2
-    manager_dev_report_max_chars: int = 20000
-    manager_auto_resume: bool = True
-    manager_auto_commit: bool = True         # git commit после каждого одобренного шага плана
-    manager_response_archive: bool = True    # Сохранять сырые ответы CLI/агентов в .cli-proxy/.manager/
     cli_json_stream_archive_enabled: bool = False
     assistant_preview_enabled: bool = False
-    # Codebase mapper usage mode:
-    # - "auto": currently behaves same as enabled
-    # - "enabled": mapper mode is allowed to run map generation/update
-    # - "disabled": mapper mode returns disabled status and does not generate/update map
-    codebase_mapper_usage: str = "auto"
     run_artifacts_enabled: bool = True
     run_artifacts_retention_days: int = 30
     run_doctor_enabled: bool = True

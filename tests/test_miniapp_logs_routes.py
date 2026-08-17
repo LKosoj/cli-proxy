@@ -21,10 +21,6 @@ from miniapp.routes import MiniAppRoutes
 from miniapp.services.config_service import app_config_to_dict
 from miniapp.services.logs_service import LogAccessDeniedError, LogsService, ParsedLogEntry
 from modes.agent.mode import agent_project_scope_key
-from modes.analyst.state_store import AnalystStateStore, build_context_key
-from modes.sdk.planning import save_plan
-from modes.sdk.runtime.contracts import DevTask, ProjectPlan
-from modes.webmaster.state_store import WebmasterStateStore, build_user_key
 from session import session_runtime_uid, session_scoped_key
 from utils import cli_proxy_artifact_path
 
@@ -726,29 +722,10 @@ def test_miniapp_status_ws_snapshot_contains_selected_session_fields_for_explici
         app = BotApp(cfg)
         session = app.manager.create(2, "dummy", str(tmp_path))
         session.busy = True
-        session.modes.active_mode = "manager"
-        session.executor_profile = "analyst"
+        session.modes.active_mode = "agent"
+        session.executor_profile = "dummy"
         session.last_tick_value = "tick-42"
         session.state_summary = "S" * 640
-        save_plan(
-            str(tmp_path),
-            ProjectPlan(
-                project_goal="Miniapp manager status",
-                status="active",
-                tasks=[
-                    DevTask(
-                        id="task_1",
-                        title="Собрать статус",
-                        description="Показать план в miniapp",
-                        acceptance_criteria=["Есть отдельный аккордеон с планом"],
-                        status="in_progress",
-                        attempt=1,
-                        max_attempts=3,
-                    )
-                ],
-                current_task_id="task_1",
-            ),
-        )
         append_session_tick(session, value="tick-41", ts=1_772_279_997.0)
         append_session_tick(session, value="tick-42", ts=1_772_279_998.5)
         session.resume_token = "resume-abc-123"
@@ -783,14 +760,11 @@ def test_miniapp_status_ws_snapshot_contains_selected_session_fields_for_explici
                 assert active.get("id") == session.id
                 assert active.get("display_title") == f"{session.id} | {session.name}"
                 assert active.get("busy") is True
-                assert active.get("active_mode") == "manager"
+                assert active.get("active_mode") == "agent"
                 assert active.get("active_cli") == "dummy"
                 assert active.get("queue_len") == 1
                 assert active.get("active_resume_token") == "resume-abc-123"
                 assert active.get("resume_token_present") is True
-                manager_plan_status = str(active.get("manager_plan_status") or "")
-                assert "План: 0/1 задач выполнено. Статус: active." in manager_plan_status
-                assert "Собрать статус [in_progress]" in manager_plan_status
                 assert active.get("state_summary") == "S" * 640
                 assert active.get("tick_history") == [
                     {"ts": 1_772_279_997.0, "value": "tick-41"},
@@ -800,7 +774,7 @@ def test_miniapp_status_ws_snapshot_contains_selected_session_fields_for_explici
                 fields = active.get("fields", {})
                 assert isinstance(fields, dict)
                 assert fields.get("busy") is True
-                assert fields.get("active_mode") == "manager"
+                assert fields.get("active_mode") == "agent"
                 assert fields.get("state_summary") == "S" * 640
             finally:
                 await ws.close()
@@ -1101,35 +1075,6 @@ def test_miniapp_status_ws_refreshes_available_sessions_after_session_inventory_
     asyncio.run(_run())
 
 
-def test_miniapp_status_payload_includes_analyst_mode_status(tmp_path) -> None:
-    cfg = _build_config(tmp_path)
-    app = BotApp(cfg)
-    session = app.manager.create(2, "dummy", str(tmp_path))
-    session.modes.active_mode = "analyst"
-
-    store = AnalystStateStore(cli_proxy_artifact_path(str(tmp_path), ".analyst_data"))
-    ctx = store.load(build_context_key(2, session.id))
-    ctx.mode = "audit"
-    store.save(ctx)
-    app.ui_state.pending_questions = {
-        "q1": {
-            "session_id": session.id,
-            "awaiting_custom": False,
-        }
-    }
-
-    payload = MiniAppRoutes(app)._build_session_payload(session, session_chat_id=2)
-    text = str(payload.get("analyst_mode_status") or "")
-    assert "🧠 Статус Аналитика" in text
-    assert "Режим: включен" in text
-    details = payload.get("analyst_mode_status_details") or {}
-    assert isinstance(details, dict)
-    assert "pending_questions" in details
-    assert "active_plugin_flow" in details
-    assert "template" in details
-    assert "queue_origin" in details
-
-
 def test_miniapp_status_payload_includes_agent_mode_status_details(tmp_path) -> None:
     cfg = _build_config(tmp_path)
     app = BotApp(cfg)
@@ -1210,29 +1155,6 @@ def test_miniapp_status_payload_exposes_runtime_progress_for_non_agent_mode(tmp_
     assert isinstance(recent[-1], dict)
     assert recent[-1].get("phase") == "tool_batch"
     assert "agent_core/tool_batch/running" in str(payload.get("runtime_status") or "")
-
-
-def test_miniapp_status_payload_includes_webmaster_mode_status(tmp_path) -> None:
-    cfg = _build_config(tmp_path)
-    app = BotApp(cfg)
-    session = app.manager.create(2, "dummy", str(tmp_path))
-    session.modes.active_mode = "webmaster"
-
-    store = WebmasterStateStore(cli_proxy_artifact_path(str(tmp_path), ".webmaster_data"))
-    key = build_user_key(2, 2, session.id)
-    wm_ctx = store.reset(key)
-    wm_ctx.stage = "await_intent_update"
-    wm_ctx.task_kind = "continue_task"
-    wm_ctx.active_prompt_version = 3
-    wm_ctx.last_feedback_class = "new_task"
-    store.save(wm_ctx)
-
-    payload = MiniAppRoutes(app)._build_session_payload(session, session_chat_id=2)
-    text = str(payload.get("webmaster_mode_status") or "")
-    assert "🌐 Статус Вебмастера" in text
-    assert "Тип задачи: continue_task" in text
-    assert "Версия промпта: 3" in text
-    assert "Последняя классификация: new_task" in text
 
 
 def test_miniapp_status_ws_invalid_ticket_is_rejected(tmp_path) -> None:

@@ -4,7 +4,6 @@ from typing import Any
 
 import pytest
 
-from modes.admin.mode import AdminMode
 from modes.sdk import (
     DialogService,
     MessageModel,
@@ -214,51 +213,3 @@ def test_input_routing_send_output_fallback_uses_plain_text_helper():
     asyncio.run(_run())
 
 
-def test_admin_chat_plain_reply_uses_send_plain_text():
-    async def _run():
-        class PlainMessaging:
-            def __init__(self) -> None:
-                self.events: list[dict[str, Any]] = []
-
-            async def send_plain_text(self, chat_id: int, text: str, **kwargs: Any) -> None:
-                self.events.append(
-                    {
-                        "chat_id": int(chat_id),
-                        "text": str(text or ""),
-                        "kwargs": dict(kwargs or {}),
-                    }
-                )
-
-            async def send_text(self, *_args: Any, **_kwargs: Any) -> None:
-                raise AssertionError("admin literal chat replies must use send_plain_text")
-
-        async def _chat_send(**_kwargs):
-            return {
-                "reply_text": "literal _*[] reply",
-                "intent": {"type": "answer"},
-            }
-
-        mode = AdminMode()
-        mode._is_admin_enabled = lambda **_kwargs: True
-        mode._chat_service = SimpleNamespace(send=_chat_send)
-        messaging = PlainMessaging()
-
-        result = await mode._input_handle_chat(
-            bot_app=SimpleNamespace(),
-            session=SimpleNamespace(id="s1"),
-            chat_id=123,
-            user_id=7,
-            ms=messaging,
-            user_text="hello",
-        )
-
-        assert result.success is True
-        assert messaging.events == [
-            {
-                "chat_id": 123,
-                "text": "literal _*[] reply",
-                "kwargs": {},
-            }
-        ]
-
-    asyncio.run(_run())

@@ -41,11 +41,7 @@ _PLAN_REQUIRED_PHASES = {"plan", "develop", "review", "execute", "validation", "
 _METRICS_REQUIRED_PHASES = {"execute", "develop", "review", "validation", "complete", "dev"}
 _EVENTS_REQUIRED_PHASES = {"execute", "validation", "complete"}
 _MODE_RECOVERY_ACTIONS: Dict[str, frozenset[str]] = {
-    "admin": frozenset(),
     "agent": frozenset({"rollback_to_checkpoint", "restart_from_phase"}),
-    "analyst": frozenset({"rollback_to_checkpoint", "restart_from_phase"}),
-    "manager": frozenset({"replay_finalize"}),
-    "webmaster": frozenset({"rollback_to_checkpoint", "restart_from_phase", "replay_finalize"}),
 }
 _ACTIVE_RECOVERY_ACTIONS = frozenset({"rollback_to_checkpoint", "restart_from_phase", "replay_finalize"})
 

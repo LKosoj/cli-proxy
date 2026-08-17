@@ -217,6 +217,7 @@ __marimo__/
 
 config.yaml
 !modes/admin/templates/config.yaml
+*.bak
 state.json
 
 # Runtime-like root artifacts stay local after index cleanup.

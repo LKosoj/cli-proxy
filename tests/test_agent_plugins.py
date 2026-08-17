@@ -8,7 +8,6 @@ from agent.plugins.search_text import SearchTextTool
 from app.services import ConfigService, SessionService, TaskService
 from app.services.config_service import ConfigProvider
 from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, TelegramConfig, ToolConfig
-from desktop.services.application_facade import ApplicationFacade
 from session import SessionManager, session_runtime_uid
 
 
@@ -34,55 +33,6 @@ class _InMemoryConfigProvider(ConfigProvider):
                 return default
             current = getattr(current, token)
         return current
-
-
-def _build_desktop_config(tmp_path: Path, *, intent: str) -> AppConfig:
-    workdir = tmp_path / f"workdir_{intent}"
-    runtime = tmp_path / f"runtime_{intent}"
-    logs = tmp_path / f"logs_{intent}"
-    workdir.mkdir(parents=True, exist_ok=True)
-    runtime.mkdir(parents=True, exist_ok=True)
-    logs.mkdir(parents=True, exist_ok=True)
-    return AppConfig(
-        telegram=TelegramConfig(token="token", whitelist_chat_ids=[], admlist_chat_ids=[]),
-        tools={
-            "dummy": ToolConfig(
-                name="dummy",
-                mode="headless",
-                cmd=["bash", "-lc", "cat"],
-            )
-        },
-        defaults=DefaultsConfig(
-            workdir=str(workdir),
-            state_path=str(runtime / "state.json"),
-            toolhelp_path=str(runtime / "toolhelp.json"),
-            log_path=str(logs / "bot.log"),
-        ),
-        mcp=MCPConfig(enabled=False),
-        mcp_clients=[],
-        presets=[],
-        path=str(tmp_path / f"config_{intent}.yaml"),
-        miniapp=MiniAppConfig(enabled=False),
-    )
-
-
-def _build_desktop_ask_runtime(tmp_path: Path, *, intent: str) -> dict[str, object]:
-    cfg = _build_desktop_config(tmp_path, intent=intent)
-    task_service = TaskService()
-    session_service = SessionService(SessionManager(cfg), task_service)
-    facade = ApplicationFacade(
-        config_service=ConfigService(_InMemoryConfigProvider(cfg)),
-        session_service=session_service,
-        task_service=task_service,
-    )
-    workdir = Path(cfg.defaults.workdir) / "desktop-ask"
-    workdir.mkdir(parents=True, exist_ok=True)
-    session = session_service.create_desktop_session("dummy", str(workdir))
-    session.name = f"Desktop {intent}"
-    return {
-        "facade": facade,
-        "session": session,
-    }
 
 
 def _execute_list_directory(path: str | None, cwd: Path) -> dict:
@@ -187,72 +137,3 @@ def test_search_text_keeps_normal_search_behavior_and_output_limit(tmp_path) -> 
     assert lines[-1].endswith("199: needle")
 
 
-def test_ask_user_desktop_adapter_integration(tmp_path) -> None:
-    runtime = _build_desktop_ask_runtime(tmp_path, intent="agent_plugin_desktop_ask")
-
-    async def _run() -> None:
-        facade = runtime["facade"]
-        session = runtime["session"]
-        session_uid = session_runtime_uid(session)
-        notifications = []
-        tool = AskUserTool()
-        tool.initialize(services={})
-
-        unsubscribe = facade.subscribe(notifications.append)
-        await facade.start(validate_secrets=False)
-        try:
-            bot_app = facade._desktop_bot_app()
-            task = asyncio.create_task(
-                tool.execute(
-                    {
-                        "question": "Выбрать действие?",
-                        "options": ["Да", "Нет"],
-                        "allow_custom": False,
-                        "system_options": False,
-                    },
-                    {
-                        "bot": bot_app,
-                        "context": object(),
-                        "chat_id": session_uid,
-                        "session_id": "desktop-session-id",
-                    },
-                )
-            )
-
-            question_id = ""
-            for _ in range(100):
-                if bot_app.ui_state.pending_questions:
-                    question_id = next(iter(bot_app.ui_state.pending_questions))
-                    break
-                await asyncio.sleep(0)
-
-            assert question_id
-            pending = bot_app.ui_state.pending_questions[question_id]
-            assert pending["question_id"] == question_id
-            assert pending["question"] == "Выбрать действие?"
-            assert pending["options"] == ["Да", "Нет"]
-            assert pending["allow_custom"] is False
-            assert pending["chat_id"] == session_uid
-            assert pending["session_uid"] == session_uid
-            assert pending["session_id"] == "desktop-session-id"
-
-            assert notifications[-1].event == "ui:ask_question"
-            assert notifications[-1].payload["session_uid"] == session_uid
-            assert notifications[-1].payload["session_id"] == "desktop-session-id"
-            assert notifications[-1].payload["question_id"] == question_id
-            assert notifications[-1].payload["question"] == "Выбрать действие?"
-            assert notifications[-1].payload["options"] == ["Да", "Нет"]
-            assert notifications[-1].payload["allow_custom"] is False
-
-            pending_futures = tool.services["pending_questions"]
-            pending_futures[question_id].set_result("Да")
-            result = await task
-
-            assert result == {"success": True, "output": "User selected: Да"}
-            assert question_id not in pending_futures
-            assert question_id not in bot_app.ui_state.pending_questions
-        finally:
-            unsubscribe()
-            await facade.shutdown()
-
-    asyncio.run(_run())

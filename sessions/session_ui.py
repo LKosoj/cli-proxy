@@ -9,7 +9,6 @@ from i18n import t
 from utils.lang import resolve_user_lang
 
 from app.services.cli_session_history import CliSessionCandidate, list_recent_cli_sessions
-from app.services.session_run_service import ModeScopedPreRunResetService
 from app.services.state_repository import get_state_repository
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.advanced_orchestrator_service import ORCHESTRATOR_MODE_ID
@@ -63,7 +62,6 @@ class SessionUI:
         self._is_session_allowed = is_session_allowed
         self._bot_app = bot_app
         self._state_repo = get_state_repository(self.config.defaults.state_path)
-        self._mode_pre_run_reset = ModeScopedPreRunResetService(logger=logger)
         self.pending_session_rename: dict[TelegramUiKey, dict[str, object]] = {}
         self.pending_session_resume: dict[TelegramUiKey, dict[str, object]] = {}
 
@@ -108,32 +106,6 @@ class SessionUI:
         if access_policy is not None and hasattr(access_policy, "default_mode_id_for_chat"):
             default_mode_id = access_policy.default_mode_id_for_chat(owner_chat_id)
         reset_session_runtime_state(session, default_mode_id=default_mode_id)
-        self._mode_pre_run_reset.apply(
-            session=session,
-            mode_id="analyst",
-            clear_runtime_cache=lambda _session_token: None,
-            clear_pending_questions=self._clear_pending_questions_for_session,
-        )
-
-    def _clear_pending_questions_for_session(self, session_token: str) -> int:
-        clear_fn = getattr(self._bot_app, "_clear_pending_questions", None)
-        if not callable(clear_fn):
-            return 0
-        token = str(session_token or "").strip()
-        if not token:
-            return 0
-        for kwargs in (
-            {"session_id": token},
-            {"session_uid": token},
-        ):
-            try:
-                return int(clear_fn(**kwargs) or 0)
-            except TypeError:
-                continue
-        try:
-            return int(clear_fn(token) or 0)
-        except TypeError:
-            return 0
 
     async def _edit_msg(self, context: ContextTypes.DEFAULT_TYPE, query, text: str, *, reply_markup=None) -> bool:
         if not query.message:

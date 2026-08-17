@@ -61,25 +61,6 @@ def reset_session_runtime_state(session: Any, *, default_mode_id: Optional[str] 
     session.project_root = None
 
 
-def get_analyst_mode(session: Any, default: str = "spec") -> str:
-    has_modes, modes = _explicit_modes(session)
-    if has_modes and modes is not None and hasattr(modes, "analyst_mode"):
-        value = getattr(modes, "analyst_mode", default)
-    else:
-        value = getattr(session, "analyst_mode", default)
-    text = str(value or default).strip()
-    return text or default
-
-
-def set_analyst_mode(session: Any, value: Optional[str]) -> None:
-    normalized = str(value or "spec").strip() or "spec"
-    has_modes, modes = _explicit_modes(session)
-    if has_modes and modes is not None and hasattr(modes, "analyst_mode"):
-        modes.analyst_mode = normalized
-        return
-    setattr(session, "analyst_mode", normalized)
-
-
 def is_ssh_remote_enabled(session: Any, default: bool = False) -> bool:
     has_modes, modes = _explicit_modes(session)
     if has_modes and modes is not None and hasattr(modes, "ssh_remote_enabled"):

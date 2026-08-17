@@ -292,7 +292,7 @@ def build_command_registry(bot_app) -> List[Dict[str, object]]:
                 "desc_params": {"label": label},
                 "desc": f"Меню режима: {label}.",
                 "handler": _mode_handler,
-                "menu": command_name == "admin",
+                "menu": False,
             }
         )
         existing.add(command_name)

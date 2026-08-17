@@ -216,37 +216,3 @@ def test_settings_allows_logs_remote_mode_false(tmp_path) -> None:
     asyncio.run(_run())
 
 
-def test_desktop_rejects_logs_remote_mode() -> None:
-    """Desktop facade rejects logs_remote_mode=True."""
-    from desktop.services.application_facade import ApplicationFacade
-
-    facade = SimpleNamespace(
-        session_service=SimpleNamespace(
-            get_session_by_uid=lambda uid: SimpleNamespace(
-                workdir="/tmp", modes=SimpleNamespace(),
-            ),
-        ),
-        logger=__import__("logging").getLogger("test"),
-    )
-    result = asyncio.run(
-        ApplicationFacade.update_session_setting(facade, "1:s1", "logs_remote_mode", True)
-    )
-    assert result is False
-
-
-def test_desktop_rejects_config_remote_mode() -> None:
-    """Desktop facade rejects config_remote_mode=True."""
-    from desktop.services.application_facade import ApplicationFacade
-
-    facade = SimpleNamespace(
-        session_service=SimpleNamespace(
-            get_session_by_uid=lambda uid: SimpleNamespace(
-                workdir="/tmp", modes=SimpleNamespace(),
-            ),
-        ),
-        logger=__import__("logging").getLogger("test"),
-    )
-    result = asyncio.run(
-        ApplicationFacade.update_session_setting(facade, "1:s1", "config_remote_mode", True)
-    )
-    assert result is False

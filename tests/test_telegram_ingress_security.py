@@ -104,14 +104,14 @@ def test_access_policy_service_delegates_to_security_facade() -> None:
         security=SimpleNamespace(authorize=_authorize),
         _send_message=_send_message,
         config=SimpleNamespace(telegram=SimpleNamespace(whitelist_chat_ids=[7], user_modes={7: "all"})),
-        mode_registry_service=SimpleNamespace(list_modes=lambda: [("agent", "Agent"), ("manager", "Manager")]),
+        mode_registry_service=SimpleNamespace(list_modes=lambda: [("agent", "Agent")]),
     )
     service = AccessPolicyService(bot_app)
 
     assert service.is_allowed(7) is True
     assert service.is_admin(7, scope="files") is False
     assert asyncio.run(service.ensure_allowed(7, context=object())) is True
-    assert set(service.allowed_mode_ids_for_chat(7)) == {"agent", "manager", "direct_cli", "orchestrator"}
+    assert set(service.allowed_mode_ids_for_chat(7)) == {"agent", "direct_cli", "orchestrator"}
     assert sent == []
     assert calls == [
         (7, "generic", False),

@@ -67,7 +67,7 @@ def test_session_overview_visibility_for_admin_keeps_operational_actions() -> No
     assert visibility.allows("queue") is True
     assert visibility.allows("state") is True
     assert visibility.allows("close") is True
-    assert visibility.allows("orchestrator") is True
+    assert visibility.allows("orchestrator") is False
     assert visibility.allows("mode_selector") is True
     assert visibility.allows("list_sessions") is True
 

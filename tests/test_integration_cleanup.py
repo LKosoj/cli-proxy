@@ -30,7 +30,6 @@ from config import (
     load_config,
     save_config,
 )
-from desktop.services.application_facade import ApplicationFacade
 from miniapp.routes import MiniAppRoutes
 from miniapp.services.config_service import app_config_to_dict, validate_draft
 from modes.registry import ModeRegistry
@@ -261,85 +260,6 @@ def test_integration_cleanup_miniapp_config_session_telegram_scenario(tmp_path) 
 
 
 @pytest.mark.asyncio
-async def test_integration_cleanup_desktop_session_mode_scenario(tmp_path) -> None:
-    cfg = _save_and_reload_config(_build_config(tmp_path, intent="desktop_session_mode", chat_id=101))
-
-    registry = ModeRegistry()
-    mode_calls: list[dict[str, object]] = []
-
-    class _CaptureDesktopMode(BaseMode):
-        mode_id = "capture"
-
-        async def handle_input(self, message, ctx):
-            mode_calls.append(
-                {
-                    "text": str(message.text or ""),
-                    "chat_id": str(message.chat_id or ""),
-                    "session_id": str(getattr(ctx.get("session"), "id", "") or ""),
-                    "session_uid": str(
-                        getattr(getattr(ctx.get("session"), "conversation_scope", None), "session_uid", "") or ""
-                    ),
-                    "dest": dict(ctx.get("dest") or {}),
-                }
-            )
-            return ToolResult.ok("MODE:" + str(message.text or ""))
-
-        async def handle_callback(self, callback, ctx):
-            return ToolResult.ok()
-
-    registry.register(_CaptureDesktopMode())
-    mode_registry_service = ModeRegistryService(registry)
-    mode_registry_service.initialize_plugins(config=cfg, services={})
-
-    task_service = TaskService()
-    session_service = SessionService(SessionManager(cfg), task_service)
-    facade = ApplicationFacade(
-        config_service=ConfigService(_InMemoryConfigProvider(cfg)),
-        session_service=session_service,
-        task_service=task_service,
-        git_service=None,
-        mode_registry_service=mode_registry_service,
-    )
-    facade.config = cfg
-
-    workdir = tmp_path / "desktop-project"
-    workdir.mkdir()
-    session = session_service.create_desktop_session("dummy", str(workdir))
-    assert session.conversation_scope is not None
-    session_uid = session.conversation_scope.session_uid
-    assert session_uid.startswith("desktop:")
-
-    async def _no_prompt(*_args, **_kwargs):
-        raise AssertionError("desktop mode flow must not fall back to session.run_prompt")
-
-    session.run_prompt = _no_prompt  # type: ignore[assignment]
-
-    notifications: list[str] = []
-    facade.subscribe(lambda note: notifications.append(str(note.event or "")))
-
-    assert facade.set_session_mode(session_uid, "capture") is True
-    out = await facade.run_session_input(session_uid, "desktop hello")
-
-    assert out == "MODE:desktop hello"
-    assert get_active_mode(session, "") == "capture"
-    assert mode_calls == [
-        {
-            "text": "desktop hello",
-            "chat_id": session_uid,
-            "session_id": session.id,
-            "session_uid": session_uid,
-            "dest": {
-                "kind": "desktop",
-                "session_id": session_uid,
-                "chat_id": session_uid,
-            },
-        }
-    ]
-    assert "ui:mode_changed" in notifications
-    assert "task:started" in notifications
-    assert "task:completed" in notifications
-
-
 def test_integration_cleanup_config_reload_session_persistence_scenario(tmp_path) -> None:
     config_path = tmp_path / "config_reload.yaml"
     source_cfg = _build_config(

@@ -49,20 +49,15 @@ def _build_init_data(bot_token: str, user_id: int) -> str:
     )
 
 
-def _build_config(tmp_path, *, user_modes=None, with_openai: bool = True) -> AppConfig:
+def _build_config(tmp_path, *, user_modes=None) -> AppConfig:
     defaults_kwargs = {
         "workdir": str(tmp_path),
         "state_path": str(tmp_path / "state.json"),
         "toolhelp_path": str(tmp_path / "toolhelp.json"),
         "log_path": str(tmp_path / "bot.log"),
+        "openai_api_key": "test-openai-key",
+        "openai_model": "test-model",
     }
-    if with_openai:
-        defaults_kwargs.update(
-            {
-                "openai_api_key": "test-openai-key",
-                "openai_model": "test-model",
-            }
-        )
     cfg = AppConfig(
         telegram=TelegramConfig(
             token="t",
@@ -289,7 +284,7 @@ def test_session_settings_rejects_execution_backend_before_active_mode_update(tm
 
 def test_session_settings_get_filters_modes_for_non_admin_user(tmp_path) -> None:
     async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["sdd"]})
+        cfg = _build_config(tmp_path, user_modes={2: ["agent"]})
         app_inst = BotApp(cfg)
         session = app_inst.manager.create(2, "dummy", str(tmp_path))
         suid = session_runtime_uid(session)
@@ -307,7 +302,7 @@ def test_session_settings_get_filters_modes_for_non_admin_user(tmp_path) -> None
             assert resp.status == 200
             body = await resp.json()
             mode_ids = [item["id"] for item in body["available"]["modes"]]
-            assert "sdd" in mode_ids
+            assert "agent" in mode_ids
             assert "manager" not in mode_ids
 
         app_inst.shutdown_html_process_pool()
@@ -316,7 +311,7 @@ def test_session_settings_get_filters_modes_for_non_admin_user(tmp_path) -> None
 
 
 def test_miniapp_status_payload_filters_modes_for_non_admin_user(tmp_path) -> None:
-    cfg = _build_config(tmp_path, user_modes={2: ["sdd"]})
+    cfg = _build_config(tmp_path, user_modes={2: ["agent"]})
     app_inst = BotApp(cfg)
     app_inst.manager.create(2, "dummy", str(tmp_path))
     routes = MiniAppRoutes(app_inst)
@@ -324,7 +319,7 @@ def test_miniapp_status_payload_filters_modes_for_non_admin_user(tmp_path) -> No
     payload = routes._build_status_payload({"user_id": 2, "is_admin": False})
 
     mode_ids = [item["id"] for item in payload["modes"]]
-    assert "sdd" in mode_ids
+    assert "agent" in mode_ids
     assert "manager" not in mode_ids
     assert payload["direct_cli_allowed"] is False
     app_inst.shutdown_html_process_pool()
@@ -332,7 +327,7 @@ def test_miniapp_status_payload_filters_modes_for_non_admin_user(tmp_path) -> No
 
 def test_session_settings_put_rejects_active_mode_not_allowed_for_user(tmp_path) -> None:
     async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["sdd"]})
+        cfg = _build_config(tmp_path, user_modes={2: ["direct_cli"]})
         app_inst = BotApp(cfg)
         session = app_inst.manager.create(2, "dummy", str(tmp_path))
         suid = session_runtime_uid(session)
@@ -344,7 +339,7 @@ def test_session_settings_put_rejects_active_mode_not_allowed_for_user(tmp_path)
         async with TestClient(TestServer(web_app)) as client:
             resp = await client.put(
                 f"/api/session/{suid}/settings",
-                json={"active_mode": "manager"},
+                json={"active_mode": "agent"},
                 headers={"X-Telegram-Init-Data": init_data},
             )
 
@@ -419,7 +414,7 @@ def test_session_settings_put_allows_empty_active_mode_noop_in_full_save(tmp_pat
 
 def test_session_settings_put_rejects_active_mode_change_when_busy(tmp_path) -> None:
     async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["sdd"]})
+        cfg = _build_config(tmp_path, user_modes={2: ["agent"]})
         app_inst = BotApp(cfg)
         session = app_inst.manager.create(2, "dummy", str(tmp_path))
         session.busy = True
@@ -432,7 +427,7 @@ def test_session_settings_put_rejects_active_mode_change_when_busy(tmp_path) -> 
         async with TestClient(TestServer(web_app)) as client:
             resp = await client.put(
                 f"/api/session/{suid}/settings",
-                json={"active_mode": "sdd"},
+                json={"active_mode": "agent"},
                 headers={"X-Telegram-Init-Data": init_data},
             )
 
@@ -448,7 +443,7 @@ def test_session_settings_put_rejects_active_mode_change_when_busy(tmp_path) -> 
 
 def test_session_settings_put_allows_active_mode_for_user(tmp_path) -> None:
     async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["sdd"]})
+        cfg = _build_config(tmp_path, user_modes={2: ["agent"]})
         app_inst = BotApp(cfg)
         session = app_inst.manager.create(2, "dummy", str(tmp_path))
         suid = session_runtime_uid(session)
@@ -460,7 +455,7 @@ def test_session_settings_put_allows_active_mode_for_user(tmp_path) -> None:
         async with TestClient(TestServer(web_app)) as client:
             resp = await client.put(
                 f"/api/session/{suid}/settings",
-                json={"active_mode": "sdd"},
+                json={"active_mode": "agent"},
                 headers={"X-Telegram-Init-Data": init_data},
             )
 
@@ -468,7 +463,7 @@ def test_session_settings_put_allows_active_mode_for_user(tmp_path) -> None:
             body = await resp.json()
             assert body["ok"] is True
             assert "active_mode" in body["changed"]
-            assert get_active_mode(session, "") == "sdd"
+            assert get_active_mode(session, "") == "agent"
 
         app_inst.shutdown_html_process_pool()
 
@@ -640,73 +635,11 @@ def test_session_settings_put_restores_current_mode_when_disable_raises(tmp_path
     asyncio.run(_run())
 
 
-def test_session_settings_put_rejects_manager_without_openai(tmp_path) -> None:
-    async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["manager"]}, with_openai=False)
-        app_inst = BotApp(cfg)
-        session = app_inst.manager.create(2, "dummy", str(tmp_path))
-        suid = session_runtime_uid(session)
-        routes = MiniAppRoutes(app_inst)
-        web_app = web.Application()
-        routes.register(web_app)
-
-        init_data = _build_init_data("t", 2)
-        async with TestClient(TestServer(web_app)) as client:
-            resp = await client.put(
-                f"/api/session/{suid}/settings",
-                json={"active_mode": "manager"},
-                headers={"X-Telegram-Init-Data": init_data},
-            )
-
-            assert resp.status == 409
-            body = await resp.json()
-            assert body["ok"] is False
-            assert body["error"] == "ERR_OPENAI_REQUIRED"
-            assert get_active_mode(session, "") in ("", None)
-
-        app_inst.shutdown_html_process_pool()
-
-    asyncio.run(_run())
-
-
-def test_session_settings_put_keeps_current_mode_when_sdd_preflight_fails(tmp_path) -> None:
-    async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["manager", "sdd"]}, with_openai=False)
-        app_inst = BotApp(cfg)
-        session = app_inst.manager.create(2, "dummy", str(tmp_path))
-        set_active_mode(session, "manager")
-        suid = session_runtime_uid(session)
-        routes = MiniAppRoutes(app_inst)
-        web_app = web.Application()
-        routes.register(web_app)
-
-        init_data = _build_init_data("t", 2)
-        async with TestClient(TestServer(web_app)) as client:
-            resp = await client.put(
-                f"/api/session/{suid}/settings",
-                json={"active_mode": "sdd", "ssh_remote_enabled": True},
-                headers={"X-Telegram-Init-Data": init_data},
-            )
-
-            assert resp.status == 409
-            body = await resp.json()
-            assert body["ok"] is False
-            assert "OpenAI" in body["error"]
-            assert get_active_mode(session, "") == "manager"
-            assert is_ssh_remote_enabled(session) is False
-            assert not (tmp_path / ".cli-proxy" / "ssh.yaml").exists()
-
-        app_inst.shutdown_html_process_pool()
-
-    asyncio.run(_run())
-
-
 def test_session_settings_put_rolls_back_active_mode_when_ssh_template_raises(tmp_path, monkeypatch) -> None:
     async def _run() -> None:
-        cfg = _build_config(tmp_path, user_modes={2: ["manager", "sdd"]})
+        cfg = _build_config(tmp_path, user_modes={2: ["agent"]})
         app_inst = BotApp(cfg)
         session = app_inst.manager.create(2, "dummy", str(tmp_path))
-        set_active_mode(session, "manager")
         suid = session_runtime_uid(session)
         routes = MiniAppRoutes(app_inst)
         web_app = web.Application()
@@ -724,12 +657,12 @@ def test_session_settings_put_rolls_back_active_mode_when_ssh_template_raises(tm
         async with TestClient(TestServer(web_app)) as client:
             resp = await client.put(
                 f"/api/session/{suid}/settings",
-                json={"active_mode": "sdd", "ssh_remote_enabled": True},
+                json={"active_mode": "agent", "ssh_remote_enabled": True},
                 headers={"X-Telegram-Init-Data": init_data},
             )
 
             assert resp.status == 500
-            assert get_active_mode(session, "") == "manager"
+            assert get_active_mode(session, "") in ("", None)
             assert is_ssh_remote_enabled(session) is False
 
         app_inst.shutdown_html_process_pool()

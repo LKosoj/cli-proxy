@@ -141,7 +141,6 @@ class DefaultsConfigModel(ConfigModel):
     summary_max_chars: PositiveInt = 4000
     html_filename_prefix: NonEmptyStr = "cli-output"
     state_path: NonEmptyStr = "state.json"
-    desktop_state_path: NonEmptyStr = "desktop_state.json"
     toolhelp_path: NonEmptyStr = "toolhelp.json"
     openai_api_key: Optional[NonEmptyStr] = None
     openai_model: Optional[NonEmptyStr] = None
@@ -179,21 +178,8 @@ class DefaultsConfigModel(ConfigModel):
         ]
     )
     clarification_keywords_by_lang: dict[str, list[str]] = Field(default_factory=dict)
-    manager_max_tasks: Annotated[int, Field(ge=1)] = 10
-    manager_max_attempts: Annotated[int, Field(ge=1)] = 3
-    manager_decompose_timeout_sec: PositiveInt = 1200
-    manager_dev_timeout_sec: PositiveInt = 3600
-    manager_review_timeout_sec: PositiveInt = 1200
-    analyst_use_cli_timeout_sec: PositiveInt = 3600
-    webmaster_use_cli_timeout_sec: PositiveInt = 3600
-    webmaster_validation_max_fix_iterations: Annotated[int, Field(ge=1)] = 2
-    manager_dev_report_max_chars: PositiveInt = 20000
-    manager_auto_resume: bool = True
-    manager_auto_commit: bool = True
-    manager_response_archive: bool = True
     cli_json_stream_archive_enabled: bool = False
     assistant_preview_enabled: bool = False
-    codebase_mapper_usage: Literal["auto", "enabled", "disabled"] = "auto"
     run_artifacts_enabled: bool = True
     run_artifacts_retention_days: PositiveInt = 30
     run_doctor_enabled: bool = True

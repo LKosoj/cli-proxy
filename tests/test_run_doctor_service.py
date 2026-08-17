@@ -166,47 +166,6 @@ def _save_webmaster_context(session, *, goal: str, validation_json: dict | None 
     return key
 
 
-def test_run_doctor_missing_plan_after_plan_phase_downgrades_manager_to_manual_review(tmp_path) -> None:
-    _cfg, store, _boundary, service, session, run = _prepare_run(
-        tmp_path,
-        case_id="manager_missing_plan",
-        mode_id="manager",
-        phase="plan",
-    )
-    legacy_plan = _create_manager_plan(session.workdir, task_count=1)
-    store.save_state(
-        run,
-        {
-            "phase": "plan",
-            "checkpoint_index": 1,
-            "mode_context": {
-                "decompose_payload_valid": True,
-                "dynamic_validation_passed": True,
-            },
-        },
-    )
-    store.save_plan(
-        run,
-        {
-            "units": [{"id": "TASK-1"}],
-            "legacy_plan_sync": {"synced": True, "task_count": len(legacy_plan.tasks)},
-        },
-    )
-    store.append_checkpoint(run, {"phase": "plan", "status": "ok"})
-    os.remove(run.plan_path)
-
-    report = service.diagnose(run, mode_id="manager", phase="plan")
-    recovery = read_json_locked(run.recovery_path, default={})
-
-    assert report.status == "needs_recovery"
-    assert report.recommended_action == "manual_review_required"
-    assert report.can_resume is False
-    assert report.last_consistent_checkpoint == 1
-    assert any(issue.code == "missing_plan" for issue in report.issues)
-    assert recovery["recommended_action"] == "manual_review_required"
-    assert any(item["code"] == "missing_plan" for item in recovery["issues"])
-
-
 def test_run_doctor_missing_plan_after_plan_phase_keeps_analyst_rollback(tmp_path) -> None:
     _cfg, store, _boundary, service, session, run = _prepare_run(
         tmp_path,
@@ -284,45 +243,6 @@ def test_run_doctor_allows_not_ready_analyst_final_deliverable_without_state_sto
     assert report.issues == []
     assert recovery["recommended_action"] == "no_action"
     assert recovery["issues"] == []
-
-
-def test_run_doctor_checkpoint_gap_for_manager_downgrades_to_manual_review(tmp_path) -> None:
-    _cfg, store, _boundary, service, session, run = _prepare_run(
-        tmp_path,
-        case_id="manager_checkpoint_gap",
-        mode_id="manager",
-        phase="plan",
-    )
-    legacy_plan = _create_manager_plan(session.workdir, task_count=1)
-    store.save_state(
-        run,
-        {
-            "phase": "plan",
-            "checkpoint_index": 2,
-            "mode_context": {
-                "decompose_payload_valid": True,
-                "dynamic_validation_passed": True,
-            },
-        },
-    )
-    store.save_plan(
-        run,
-        {
-            "units": [{"id": "TASK-1"}],
-            "legacy_plan_sync": {"synced": True, "task_count": len(legacy_plan.tasks)},
-        },
-    )
-    store.append_checkpoint(run, {"phase": "plan", "status": "ok"})
-
-    report = service.diagnose(run, mode_id="manager", phase="plan")
-    recovery = read_json_locked(run.recovery_path, default={})
-
-    assert report.status == "needs_recovery"
-    assert report.recommended_action == "manual_review_required"
-    assert report.can_resume is False
-    assert any(issue.code == "checkpoint_gap" for issue in report.issues)
-    assert recovery["recommended_action"] == "manual_review_required"
-    assert any(item["code"] == "checkpoint_gap" for item in recovery["issues"])
 
 
 def test_run_doctor_manager_replay_recovery_run_uses_snapshot_without_recursive_action(tmp_path) -> None:
@@ -742,59 +662,6 @@ def test_run_doctor_admin_destructive_execution_requires_manual_review(tmp_path)
     assert report.recommended_action == "manual_review_required"
     assert report.can_resume is False
     assert any(issue.code == "admin_destructive_execution_requires_confirmation" for issue in report.issues)
-    assert recovery["recommended_action"] == "manual_review_required"
-
-
-def test_run_doctor_admin_boundary_failure_downgrades_to_manual_review(tmp_path) -> None:
-    _cfg, store, _boundary, service, _session, run = _prepare_run(
-        tmp_path,
-        case_id="admin_boundary_restart",
-        mode_id="admin",
-        phase="analyze",
-        now_value=1_710_888_000.0,
-    )
-    snapshot_id = "snapshot:admin-boundary"
-    snapshot_ids = ["srv-1:local:scan_local:1710000000250"]
-    store.save_plan(run, {"units": [{"id": "admin:watch_loop"}]})
-    store.append_checkpoint(run, {"phase": "analyze", "status": "ok"})
-    store.save_state(
-        run,
-        {
-            "phase": "analyze",
-            "status": "running",
-            "mode_context": {
-                "operation_payload": {"kind": "watch_loop", "chat_id": "1"},
-                "target_transport": "logical",
-                "snapshot_id": snapshot_id,
-                "snapshot_ids": list(snapshot_ids),
-                "snapshot_fidelity": {
-                    "snapshot_id": "snapshot:wrong",
-                    "snapshot_ids": list(snapshot_ids),
-                    "server_count": 1,
-                    "total_servers": 1,
-                    "ok_servers": 1,
-                    "failed_servers": 0,
-                    "verified_post_analyze": True,
-                },
-                "last_monitor_snapshot": {
-                    "server_count": 1,
-                    "total_servers": 1,
-                    "ok_servers": 1,
-                    "failed_servers": 0,
-                },
-                "last_analyzer_decision": {"action": "notify_admin", "confidence": "high"},
-            },
-        },
-    )
-
-    report = service.diagnose(run, mode_id="admin", phase="analyze")
-    recovery = read_json_locked(run.recovery_path, default={})
-
-    assert report.status == "needs_recovery"
-    assert report.recommended_action == "manual_review_required"
-    assert report.can_resume is False
-    assert any(issue.code == "boundary_contract_failed" for issue in report.issues)
-    assert all(issue.code != "admin_destructive_execution_requires_confirmation" for issue in report.issues)
     assert recovery["recommended_action"] == "manual_review_required"
 
 

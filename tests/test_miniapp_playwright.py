@@ -934,7 +934,7 @@ def test_miniapp_settings_ui_smoke_playwright(tmp_path) -> None:
 
 
 def test_miniapp_settings_active_mode_toggle_playwright(tmp_path) -> None:
-    """Playwright test: Active Mode select can enable SDD and clear it back to direct CLI."""
+    """Playwright test: Active Mode select can enable Agent and clear it back to direct CLI."""
     async def _run() -> None:
         cfg = _build_config(tmp_path, token="t")
         app = BotApp(cfg)
@@ -978,11 +978,11 @@ def test_miniapp_settings_active_mode_toggle_playwright(tmp_path) -> None:
                 "  });"
                 "  await page.waitForFunction(() => {"
                 "    const select = document.getElementById('settingsActiveMode');"
-                "    return select && Array.from(select.options).some((option) => option.value === 'sdd');"
+                "    return select && Array.from(select.options).some((option) => option.value === 'agent');"
                 "  }, null, { timeout: 10000 });"
-                "  await page.selectOption('#settingsActiveMode', 'sdd');"
+                "  await page.selectOption('#settingsActiveMode', 'agent');"
                 "  await page.click('#settingsSave');"
-                "  await page.waitForFunction(() => document.getElementById('settingsActiveMode')?.value === 'sdd',"
+                "  await page.waitForFunction(() => document.getElementById('settingsActiveMode')?.value === 'agent',"
                 "    null, { timeout: 10000 });"
                 "  const afterOn = await page.$eval('#settingsActiveMode', (el) => el.value);"
                 "  await page.selectOption('#settingsActiveMode', '');"
@@ -995,7 +995,7 @@ def test_miniapp_settings_active_mode_toggle_playwright(tmp_path) -> None:
             )
             result = await _playwright_run_code_json(session_name, toggle_script)
 
-            assert result == {"afterOn": "sdd", "afterOff": ""}
+            assert result == {"afterOn": "agent", "afterOff": ""}
             assert session.modes.active_mode is None
 
         finally:

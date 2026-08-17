@@ -17,7 +17,6 @@ _RGLOB_FILES_LIMIT = 5_000
 SOURCE_ARTIFACT_INCLUDE: tuple[str, ...] = (
     "app",
     "agent",
-    "desktop",
     "miniapp",
     "modes",
     "sessions",
@@ -41,7 +40,6 @@ REQUIRED_ARTIFACT_MEMBERS: tuple[str, ...] = (
     "bot.py",
     "config.py",
     "config_example.yaml",
-    "desktop/main.py",
     "miniapp/static/index.html",
     "README.md",
     "README_EN.MD",
@@ -50,7 +48,6 @@ REQUIRED_ARTIFACT_MEMBERS: tuple[str, ...] = (
     "setup_bot.sh",
     "summary.py",
     "tests/smoke/test_bot_entrypoint_smoke.py",
-    "tests/smoke/test_desktop_entrypoint_smoke.py",
     "tests/smoke/test_miniapp_server_smoke.py",
     "tests/smoke/test_setup_bot_script.py",
     "utils/paths.py",

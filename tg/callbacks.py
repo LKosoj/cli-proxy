@@ -10,8 +10,6 @@ from telegram.error import NetworkError, TimedOut
 from telegram.ext import ContextTypes
 
 from app.services.input_dispatch_service import InputDispatchService
-from modes.analyst.draft_service import build_draft_text as build_analyst_draft_text
-from modes.sdk.runtime.openai_client import chat_completion
 from session import session_runtime_uid
 from sessions.queue_item import normalize_queue_item
 from sessions.session_state_access import (
@@ -511,24 +509,6 @@ class CallbackHandler(CallbackActionsMixin):
             path=str(path),
             bot_app=self.bot_app,
         )
-
-    async def _build_analyst_draft_text(self, session) -> str:
-        chat_id = int(getattr(session, "chat_id", 0) or 0)
-        template = self._resolve_analyst_template_from_mode(session)
-        return await build_analyst_draft_text(
-            self.bot_app,
-            session,
-            chat_id=chat_id,
-            template_override=template,
-            chat_completion_fn=chat_completion,
-        )
-
-    def _resolve_analyst_template_from_mode(self, session) -> dict:
-        getter = getattr(self.bot_app, "get_runtime_by_capability", None)
-        runtime = getter("template_provider") if callable(getter) else None
-        if runtime is None or not hasattr(runtime, "get_template_for_session"):
-            return {}
-        return dict(runtime.get_template_for_session(session) or {})
 
     async def _dispatch_callback_protocol(self, *, data: str, chat_id: int, query, context) -> bool:
         for prefix, handler in self._callback_prefix_handlers:

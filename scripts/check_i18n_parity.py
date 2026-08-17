@@ -300,28 +300,30 @@ def _lint_purity_manager(manager_dir: str, languages: List[str]) -> None:
 
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check i18n parity for analyst/manager templates.")
-    parser.add_argument("--analyst-dir", required=True, help="Path to analyst templates dir (contains lang subdirs)")
-    parser.add_argument("--manager-dir", required=True, help="Path to manager i18n dir (contains lang subdirs)")
+    parser.add_argument("--analyst-dir", default="", help="Path to analyst templates dir (contains lang subdirs)")
+    parser.add_argument("--manager-dir", default="", help="Path to manager i18n dir (contains lang subdirs)")
     parser.add_argument("--languages", nargs="+", default=["ru", "en", "zh", "de"], help="Language codes to check")
     parser.add_argument("--lint-purity", action="store_true", help="Run script-aware purity lint (warnings only)")
     args = parser.parse_args(argv)
 
     errors: List[str] = []
+    analyst_dir = str(args.analyst_dir or "").strip()
+    manager_dir = str(args.manager_dir or "").strip()
 
-    # 7. YAML validity
-    errors.extend(_check_yaml_validity(args.analyst_dir, args.manager_dir, args.languages))
-
-    # 1-5. Analyst parity
-    errors.extend(_check_analyst_parity(args.analyst_dir, args.languages))
-
-    # 6. Manager key parity
-    errors.extend(_check_manager_parity(args.manager_dir, args.languages))
+    if analyst_dir and manager_dir:
+        errors.extend(_check_yaml_validity(analyst_dir, manager_dir, args.languages))
+    if analyst_dir:
+        errors.extend(_check_analyst_parity(analyst_dir, args.languages))
+    if manager_dir:
+        errors.extend(_check_manager_parity(manager_dir, args.languages))
 
     # Purity lint (non-blocking)
     if args.lint_purity:
         print("[purity lint] running...")
-        _lint_purity_analyst(args.analyst_dir, list(args.languages))
-        _lint_purity_manager(args.manager_dir, list(args.languages))
+        if analyst_dir:
+            _lint_purity_analyst(analyst_dir, list(args.languages))
+        if manager_dir:
+            _lint_purity_manager(manager_dir, list(args.languages))
 
     if errors:
         print("i18n parity check FAILED:", file=sys.stderr)

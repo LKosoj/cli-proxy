@@ -32,7 +32,6 @@
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-tasks" data-tab="tasks" data-i18n-key="miniapp.tab.tasks">Задачи</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-reports" data-tab="reports" data-i18n-key="miniapp.tab.reports">Отчёты</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" data-i18n-key="miniapp.tab.settings">Настройки</button>
-    <button type="button" role="tab" aria-selected="false" aria-controls="tab-admin" data-tab="admin" data-i18n-key="miniapp.tab.admin">Админ</button>
   </nav>
 
   <main>
@@ -180,21 +179,6 @@
                 <div class="kv-row"><span class="kv-key" data-i18n-key="miniapp.status.kv_project">Проект:</span> <span class="kv-val" id="stProjectRoot">-</span></div>
               </div>
             </div>
-          </details>
-
-          <details class="status-card-details hidden" id="stManagerPlanCard">
-            <summary data-i18n-key="miniapp.status.manager_plan">План Менеджера</summary>
-            <div class="status-card-body pre-wrap" id="statusManagerPlanText"></div>
-          </details>
-
-          <details class="status-card-details hidden" id="stAnalystCard">
-            <summary data-i18n-key="miniapp.status.analyst">Статус Аналитика</summary>
-            <div class="status-card-body pre-wrap" id="statusAnalystModeText"></div>
-          </details>
-
-          <details class="status-card-details hidden" id="stWebmasterCard">
-            <summary data-i18n-key="miniapp.status.webmaster">Статус Вебмастера</summary>
-            <div class="status-card-body pre-wrap" id="statusWebmasterModeText"></div>
           </details>
 
           <details class="status-card-details hidden" id="stAgentCard">
@@ -548,10 +532,8 @@
         </div>
       </div>
     </section>
-
-    <div id="tab-admin" class="tab"></div>
   </main>
 
-  <script src="./app.js?v=20260610-01"></script>
+  <script src="./app.js?v=20260817-02"></script>
 </body>
 </html>

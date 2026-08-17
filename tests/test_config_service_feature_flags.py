@@ -16,7 +16,7 @@ def test_config_service_is_feature_enabled_uses_defaults_flags(tmp_path):
                     "workdir": str(tmp_path),
                     "clarification_enabled": True,
                     "pending_input_confirmation_enabled": False,
-                    "manager_auto_commit": False,
+                    "assistant_preview_enabled": False,
                 },
                 "mcp": {"enabled": False},
                 "mcp_clients": [],
@@ -33,6 +33,6 @@ def test_config_service_is_feature_enabled_uses_defaults_flags(tmp_path):
 
     assert asyncio.run(svc.is_feature_enabled("clarification_enabled")) is True
     assert asyncio.run(svc.is_feature_enabled("pending_input_confirmation_enabled")) is False
-    assert asyncio.run(svc.is_feature_enabled("defaults.manager_auto_commit")) is False
+    assert asyncio.run(svc.is_feature_enabled("defaults.assistant_preview_enabled")) is False
     assert asyncio.run(svc.is_feature_enabled("unknown_flag")) is False
     assert asyncio.run(svc.is_feature_enabled("")) is False

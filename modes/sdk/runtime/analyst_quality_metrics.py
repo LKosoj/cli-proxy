@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from modes.analyst.template_service import assess_template_fitness
 from .evidence_pipeline import claim_has_repo_anchor
 from .final_qc import compute_runtime_readiness, strip_model_readiness_sections
 
@@ -10,28 +9,12 @@ from .final_qc import compute_runtime_readiness, strip_model_readiness_sections
 def _routing_quality(template_resolution: Dict[str, Any] | None) -> Dict[str, Any]:
     payload = dict(template_resolution or {}) if isinstance(template_resolution, dict) else {}
     effective = str(payload.get("effective_template_id") or "").strip().lower()
-    fitness = assess_template_fitness(
-        selected_template_id=str(payload.get("selected_template_id") or "").strip(),
-        intent_template_id=str(payload.get("intent_template_id") or "").strip(),
-        effective_template_id=effective,
-        document_kind=str(payload.get("document_kind") or "").strip(),
-        change_scope=str(payload.get("change_scope") or "").strip(),
-        runtime_template_id=str(payload.get("runtime_template_id") or "").strip(),
-    )
-    if not bool(fitness.get("applicable")):
-        return {
-            "applicable": False,
-            "correct": None,
-            "expected_template_id": "",
-            "effective_template_id": effective,
-            "reason": "",
-        }
     return {
-        "applicable": True,
-        "correct": str(fitness.get("status") or "") == "ok",
-        "expected_template_id": str(fitness.get("expected_template_id") or ""),
+        "applicable": False,
+        "correct": None,
+        "expected_template_id": "",
         "effective_template_id": effective,
-        "reason": str(fitness.get("reason") or ""),
+        "reason": "",
     }
 
 

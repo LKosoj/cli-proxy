@@ -6,8 +6,6 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-import pytest
-
 
 def _run_app_js_harness(
     admin_payload: dict,
@@ -452,16 +450,12 @@ def _run_app_js_harness(
             await wait(20);
 
             const adminButton = document.querySelector('.tabs button[data-tab="admin"]');
-            if (!adminButton || typeof adminButton.onclick !== "function") {
-              throw new Error("admin tab button handler missing");
+            if (adminButton && typeof adminButton.onclick === "function") {
+              adminButton.onclick();
+              await wait(20);
             }
-            adminButton.onclick();
-            await wait(20);
 
             const firstPollCount = fetchCalls.filter((item) => item.includes("./api/v1/admin/status")).length;
-            if (!intervalCalls.length) {
-              throw new Error("admin polling interval missing");
-            }
 
             await wait(20);
 
@@ -593,7 +587,7 @@ def _run_app_js_harness(
               await wait(waitBeforeIntervalMs);
             }
 
-            if (runInterval) {
+            if (runInterval && intervalCalls[0] && typeof intervalCalls[0].fn === "function") {
               await intervalCalls[0].fn();
               await wait(20);
             }
@@ -602,6 +596,9 @@ def _run_app_js_harness(
             const adminActionCount = fetchCalls.filter((item) => item.includes("./api/v1/admin/action")).length;
             const adminPane = document.getElementById("tab-admin");
             const adminSession = document.getElementById("adminSession");
+            const textOf = (el) => String(el?.textContent || "");
+            const hiddenOf = (el) => !el || el.classList.contains("hidden");
+            const disabledOf = (el) => !!el?.disabled;
             const filesSession = document.getElementById("filesSession");
             const adminPipelineStatus = document.getElementById("adminPipelineStatus");
             const adminMonitorReadiness = document.getElementById("adminMonitorReadiness");
@@ -639,38 +636,38 @@ def _run_app_js_harness(
             const tickListContainer = document.getElementById("tickListContainer");
 
             console.log(JSON.stringify({
-              tabActive: adminPane.classList.contains("active"),
-              adminSessionValue: String(adminSession.value || ""),
-              filesSessionValue: String(filesSession.value || ""),
+              tabActive: !!(adminPane && adminPane.classList.contains("active")),
+              adminSessionValue: String(adminSession?.value || ""),
+              filesSessionValue: String(filesSession?.value || ""),
               firstPollCount,
               secondPollCount,
               adminActionCount,
-              pollIntervalMs: Number(intervalCalls[0].ms || 0),
-              pipelineStatus: String(adminPipelineStatus.textContent || ""),
-              monitorReadiness: String(adminMonitorReadiness.textContent || ""),
-              monitorReadinessHint: String(adminMonitorReadinessHint.textContent || ""),
-              lastAnalyzerAction: String(adminLastAnalyzerAction.textContent || ""),
-              lastAnalyzerActionHint: String(adminLastAnalyzerActionHint.textContent || ""),
-              disabledHidden: adminDisabledState.classList.contains("hidden"),
-              activeHidden: adminActiveState.classList.contains("hidden"),
-              structuredHidden: adminStructuredState.classList.contains("hidden"),
-              disabledHint: String(adminDisabledHint.textContent || ""),
-              bannerText: String(adminStatusBanner.textContent || ""),
-              bannerHidden: adminStatusBanner.classList.contains("hidden"),
-              messageText: String(adminStatusMessage.textContent || ""),
-              messageHidden: adminStatusMessage.classList.contains("hidden"),
-              enableDisabled: !!adminEnableAction.disabled,
-              disableDisabled: !!adminDisableAction.disabled,
-              rescanDisabled: !!adminRescanAction.disabled,
-              pendingStateText: String(adminPendingState.textContent || ""),
-              pendingSkillInstallsText: String(adminPendingSkillInstalls.textContent || ""),
-              muteStateText: String(adminMuteState.textContent || ""),
-              recentIncidentsText: String(adminRecentIncidents.textContent || ""),
-              recentActionsText: String(adminRecentActions.textContent || ""),
-              approvedOverridesText: String(adminApprovedOverrides.textContent || ""),
-              lastDecisionText: String(adminLastDecision.textContent || ""),
-              lastActionText: String(adminLastAction.textContent || ""),
-              adminSkillApprovalSelectValue: String(adminSkillApprovalSelect.value || ""),
+              pollIntervalMs: Number(intervalCalls[0]?.ms || 0),
+              pipelineStatus: textOf(adminPipelineStatus),
+              monitorReadiness: textOf(adminMonitorReadiness),
+              monitorReadinessHint: textOf(adminMonitorReadinessHint),
+              lastAnalyzerAction: textOf(adminLastAnalyzerAction),
+              lastAnalyzerActionHint: textOf(adminLastAnalyzerActionHint),
+              disabledHidden: hiddenOf(adminDisabledState),
+              activeHidden: hiddenOf(adminActiveState),
+              structuredHidden: hiddenOf(adminStructuredState),
+              disabledHint: textOf(adminDisabledHint),
+              bannerText: textOf(adminStatusBanner),
+              bannerHidden: hiddenOf(adminStatusBanner),
+              messageText: textOf(adminStatusMessage),
+              messageHidden: hiddenOf(adminStatusMessage),
+              enableDisabled: disabledOf(adminEnableAction),
+              disableDisabled: disabledOf(adminDisableAction),
+              rescanDisabled: disabledOf(adminRescanAction),
+              pendingStateText: textOf(adminPendingState),
+              pendingSkillInstallsText: textOf(adminPendingSkillInstalls),
+              muteStateText: textOf(adminMuteState),
+              recentIncidentsText: textOf(adminRecentIncidents),
+              recentActionsText: textOf(adminRecentActions),
+              approvedOverridesText: textOf(adminApprovedOverrides),
+              lastDecisionText: textOf(adminLastDecision),
+              lastActionText: textOf(adminLastAction),
+              adminSkillApprovalSelectValue: String(adminSkillApprovalSelect?.value || ""),
               adminSubtabs: adminSubtabButtons.map((button) => String(button.dataset.adminSubtab || "")),
               adminActiveSubtab: String(
                 adminSubtabButtons.find((button) => button.classList.contains("active"))?.dataset.adminSubtab || ""
@@ -1788,76 +1785,6 @@ def _run_runs_app_js_harness(
     return json.loads(result.stdout.strip())
 
 
-def test_miniapp_app_js_switches_to_admin_tab_and_polls_status() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": True,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": True,
-            "pipeline_status": "running",
-            "analyzer_status": "completed",
-            "analyzer_message": "restart_nginx (high)",
-            "executor_status": "running",
-            "executor_message": "Executor ok",
-        }
-    )
-
-    assert payload["tabActive"] is True
-    assert payload["adminSessionValue"] == "thread:1:55"
-    assert payload["filesSessionValue"] == "thread:1:55"
-    assert payload["firstPollCount"] >= 1
-    assert payload["secondPollCount"] >= 2
-    assert payload["pollIntervalMs"] == 5000
-    assert "session_uid=thread%3A1%3A55" in payload["lastAdminStatusUrl"]
-    assert payload["pipelineStatus"] == "running"
-    assert payload["monitorReadiness"] == "Live"
-    assert "pipeline-run" in payload["monitorReadinessHint"]
-    assert payload["lastAnalyzerAction"] == "restart_nginx (high)"
-    assert payload["lastAnalyzerActionHint"] == "Analyzer status: completed"
-    assert payload["disabledHidden"] is True
-    assert payload["activeHidden"] is False
-    assert payload["structuredHidden"] is False
-    assert payload["adminSubtabs"] == ["overview", "monitoring", "operations", "config", "chat", "diagnostics"]
-    assert payload["adminActiveSubtab"] == "overview"
-    assert payload["adminVisibleSubtabPanels"] == ["overview"]
-    assert payload["bannerHidden"] is True
-    assert "pipeline_status" in payload["runtimeDetailsHtml"]
-    assert "running" in payload["runtimeDetailsHtml"]
-
-
-def test_miniapp_app_js_admin_inner_tabs_switch_sections() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": True,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pipeline_status": "idle",
-            "analyzer_status": "idle",
-            "analyzer_message": "",
-            "executor_status": "idle",
-            "executor_message": "",
-            "pending_skill_installs": {"count": 1, "active": True, "items": []},
-        },
-        click_admin_subtab="operations",
-        wait_before_interval_ms=0,
-        run_interval=False,
-    )
-
-    assert payload["adminActiveSubtab"] == "operations"
-    assert payload["adminVisibleSubtabPanels"] == ["operations"]
-    assert payload["pendingSkillInstallsText"] == "1 pending | active"
-
-
 def test_miniapp_app_js_files_tab_uses_its_own_session_selector() -> None:
     payload = _run_app_js_harness(
         {
@@ -1929,7 +1856,6 @@ def test_miniapp_app_js_files_tab_uses_its_own_session_selector() -> None:
         run_interval=False,
     )
 
-    assert payload["adminSessionValue"] == "thread:1:55"
     assert payload["filesSessionValue"] == "thread:1:77"
 
     assert "session_uid=thread%3A1%3A77" in payload["lastFilesTreeUrl"]
@@ -2211,493 +2137,12 @@ def test_miniapp_app_js_git_status_value_does_not_repeat_git_prefix() -> None:
     assert payload["gitText"] == "Свободен"
 
 
-def test_miniapp_app_js_renders_disabled_admin_state() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": False,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pipeline_status": "disabled",
-            "analyzer_status": "idle",
-            "analyzer_message": "",
-            "executor_status": "idle",
-            "executor_message": "",
-        }
-    )
-
-    assert payload["tabActive"] is True
-    assert payload["firstPollCount"] >= 1
-    assert payload["secondPollCount"] >= 2
-    assert payload["disabledHidden"] is False
-    assert payload["activeHidden"] is True
-    assert payload["structuredHidden"] is False
-    assert payload["disabledHint"]
-
-    assert "Admin-режим выключен" in payload["disabledHint"]
-    assert payload["enableDisabled"] is False
-    assert payload["disableDisabled"] is True
-    assert payload["rescanDisabled"] is False
-
-    assert "pipeline_status" in payload["runtimeDetailsHtml"]
-
-    assert "disabled" in payload["runtimeDetailsHtml"]
-
-
-def test_miniapp_admin_operations_separates_waiting_and_history_labels() -> None:
-    app_js = (Path(__file__).resolve().parent.parent / "miniapp" / "static" / "app.js").read_text(encoding="utf-8")
-
-    assert "Ожидает действий" in app_js
-    assert "Последние события" in app_js
-    assert "ручные подтверждения" in app_js
-    assert "История событий / overrides" in app_js
-    assert 'admin-section-eyebrow">Pending' not in app_js
-
-
 def test_miniapp_config_tools_exposes_interactive_resume_cmd() -> None:
     app_js = (Path(__file__).resolve().parent.parent / "miniapp" / "static" / "app.js").read_text(encoding="utf-8")
 
     assert 'label: "interactive_resume_cmd"' in app_js
     assert "tool.interactive_resume_cmd" in app_js
     assert "tools.${toolName}.interactive_resume_cmd" in app_js
-
-
-def test_miniapp_app_js_renders_admin_payload_fields_as_ui_sections() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": False,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pinned_cli": {},
-            "pinned_executor_profile": None,
-            "initialized_at": None,
-            "last_scan_at": None,
-            "scan_status": "not_started",
-            "scan_error": None,
-            "component_readiness": {
-                "monitor": False,
-                "analyzer": False,
-                "executor": False,
-                "notifier": False,
-            },
-            "environment_services": ["nginx", "python"],
-            "environment_stack_facts": {"python": "3.12", "nginx": "1.27"},
-            "pending_ask_user": {
-                "count": 1,
-                "active": True,
-                "current": {"kind": "confirm", "question": "Перезапустить nginx?"},
-            },
-            "pending_approvals": {"count": 2, "active": True},
-            "mute_state": {"muted_until_ts": None, "muted": False},
-            "recent_incidents": [{"id": "inc-1", "title": "HTTP 502"}],
-            "recent_admin_actions": [{"id": "act-1", "action": "restart_nginx"}],
-            "approved_overrides": [{"action": "restart_nginx", "ttl": 3600}],
-            "pipeline_status": "disabled",
-            "monitor_status": "disabled",
-            "analyzer_status": "idle",
-            "analyzer_message": "",
-            "executor_status": "idle",
-            "executor_message": "",
-            "notifier_status": "disabled",
-            "notifier_message": "",
-            "last_monitor_snapshot": {"http_502_count": 3},
-            "last_analyzer_decision": {"action": "notify_admin", "confidence": "low"},
-            "last_action": {"action": "restart_nginx", "status": "done"},
-        }
-    )
-
-    assert payload["structuredHidden"] is False
-
-    assert "session_uid" in payload["runtimeDetailsHtml"]
-
-    assert "thread:1:55" in payload["runtimeDetailsHtml"]
-
-    assert "session_id" in payload["runtimeDetailsHtml"]
-
-    assert "s1" in payload["runtimeDetailsHtml"]
-
-    assert "component_readiness" in payload["readinessDetailsHtml"]
-
-    assert "monitor" in payload["readinessDetailsHtml"]
-
-    assert "environment_services" in payload["environmentDetailsHtml"]
-
-    assert "nginx" in payload["environmentDetailsHtml"]
-
-    assert "pending_ask_user" in payload["operatorDetailsHtml"]
-
-    assert "Перезапустить nginx" in payload["operatorDetailsHtml"]
-
-    assert "last_analyzer_decision" in payload["decisionDetailsHtml"]
-
-    assert "notify_admin" in payload["decisionDetailsHtml"]
-
-    assert "recent_admin_actions" in payload["historyDetailsHtml"]
-
-    assert "restart_nginx" in payload["historyDetailsHtml"]
-
-    assert payload["pendingStateText"] == "ask_user 1 | approvals 2 | active"
-    assert payload["pendingSkillInstallsText"] == "0 pending"
-    assert payload["muteStateText"] == "off"
-    assert payload["recentIncidentsText"] == "1 | inc-1 | HTTP 502"
-    assert payload["recentActionsText"] == "1 | act-1 | restart_nginx"
-    assert payload["approvedOverridesText"] == "1 | restart_nginx"
-    assert payload["lastDecisionText"] == "action=notify_admin | confidence=low"
-    assert payload["lastActionText"] == "action=restart_nginx | status=done"
-    assert "{" not in payload["pendingStateText"]
-    assert "{" not in payload["recentIncidentsText"]
-    assert "{" not in payload["recentActionsText"]
-    assert "{" not in payload["lastDecisionText"]
-    assert "{" not in payload["lastActionText"]
-
-
-@pytest.mark.parametrize(
-    ("click_action", "payload_body"),
-    [
-        (
-            "adminEnableAction",
-            {
-                "mode": "admin",
-                "session_uid": "thread:1:55",
-                "session_id": "s1",
-                "active": False,
-                "busy": False,
-                "run_lock_locked": False,
-                "tick_active": False,
-                "mode_tasks_running": False,
-                "pipeline_status": "disabled",
-                "analyzer_status": "idle",
-                "analyzer_message": "",
-                "executor_status": "idle",
-                "executor_message": "",
-            },
-        ),
-        (
-            "adminDisableActionActive",
-            {
-                "mode": "admin",
-                "session_uid": "thread:1:55",
-                "session_id": "s1",
-                "active": True,
-                "busy": False,
-                "run_lock_locked": False,
-                "tick_active": False,
-                "mode_tasks_running": True,
-                "pipeline_status": "running",
-                "analyzer_status": "completed",
-                "analyzer_message": "notify_admin",
-                "executor_status": "idle",
-                "executor_message": "",
-            },
-        ),
-        (
-            "adminRescanActionActive",
-            {
-                "mode": "admin",
-                "session_uid": "thread:1:55",
-                "session_id": "s1",
-                "active": True,
-                "busy": False,
-                "run_lock_locked": False,
-                "tick_active": False,
-                "mode_tasks_running": True,
-                "pipeline_status": "running",
-                "analyzer_status": "completed",
-                "analyzer_message": "notify_admin",
-                "executor_status": "idle",
-                "executor_message": "",
-            },
-        ),
-    ],
-)
-def test_miniapp_app_js_admin_buttons_call_action_endpoint(click_action: str, payload_body: dict) -> None:
-    payload = _run_app_js_harness(
-        payload_body,
-        click_action=click_action,
-        wait_before_interval_ms=0,
-        run_interval=False,
-    )
-
-    assert payload["adminActionCount"] >= 1
-    assert payload["lastAdminActionBody"]["session_uid"] == "thread:1:55"
-
-    assert "session_id" not in payload["lastAdminActionBody"]
-
-
-def test_miniapp_app_js_admin_tab_treats_chat_session_uid_as_opaque_identifier() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "chat:1",
-            "session_id": "s1",
-            "active": False,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pipeline_status": "disabled",
-            "analyzer_status": "idle",
-            "analyzer_message": "",
-            "executor_status": "idle",
-            "executor_message": "",
-        },
-        status_snapshot={
-            "available_sessions": [
-                {
-                    "session_uid": "chat:1",
-                    "chat_id": 1,
-                    "session_id": "s1",
-                    "session_name": "Chat session",
-                    "tool": "dummy",
-                    "label": "Chat session (chat:1)",
-                },
-            ],
-            "selected_session_uid": "chat:1",
-            "session_count": 1,
-            "active_session": {
-                "id": "s1",
-                "session_uid": "chat:1",
-                "name": "Chat session",
-                "workdir": "/tmp",
-                "started_age_sec": 1,
-                "last_output_age_sec": 1,
-                "last_tick_age_sec": 1,
-                "busy": False,
-                "git_busy": False,
-                "git_conflict": False,
-                "queue_len": 0,
-                "advanced_orchestrator_enabled": False,
-                "active_mode": "admin",
-                "active_cli": "dummy",
-                "cli_work_type": "",
-                "manager_plan_status": "",
-                "agent_mode_status": "",
-                "analyst_mode_status": "",
-                "webmaster_mode_status": "",
-                "runtime_status": "",
-                "state_summary": "",
-                "last_tick_value": "",
-                "tick_history": [],
-                "fields": {},
-            },
-        },
-        click_action="adminEnableAction",
-        wait_before_interval_ms=0,
-        run_interval=False,
-    )
-
-    assert payload["adminSessionValue"] == "chat:1"
-    assert "session_uid=chat%3A1" in payload["lastAdminStatusUrl"]
-    assert payload["lastAdminActionBody"]["session_uid"] == "chat:1"
-    assert "session_id" not in payload["lastAdminActionBody"]
-
-
-def test_miniapp_app_js_admin_skill_approval_buttons_call_action_endpoint() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": True,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pipeline_status": "idle",
-            "monitor_status": "idle",
-            "analyzer_status": "idle",
-            "analyzer_message": "",
-            "executor_status": "idle",
-            "executor_message": "",
-            "notifier_status": "idle",
-            "notifier_message": "",
-            "scan_status": "ready",
-            "pending_skill_installs": {
-                "count": 1,
-                "active": True,
-                "items": [
-                    {
-                        "approval_id": "approval-1",
-                        "skill_id": "playwright-cli-local",
-                        "mode_id": "agent",
-                        "phase": "execute",
-                    }
-                ],
-            },
-        },
-        admin_action_response={
-            "ok": True,
-            "action": "approve_skill_install",
-            "result": {
-                "status": "ok",
-                "approval_id": "approval-1",
-                "skill_id": "playwright-cli-local",
-                "message": "Skill `playwright-cli-local` установлен локально после approve.",
-            },
-            "status": {
-                "mode": "admin",
-                "session_uid": "thread:1:55",
-                "session_id": "s1",
-                "active": True,
-                "busy": False,
-                "run_lock_locked": False,
-                "tick_active": False,
-                "mode_tasks_running": False,
-                "pipeline_status": "idle",
-                "monitor_status": "idle",
-                "analyzer_status": "idle",
-                "analyzer_message": "",
-                "executor_status": "idle",
-                "executor_message": "",
-                "notifier_status": "idle",
-                "notifier_message": "",
-                "scan_status": "ready",
-                "pending_skill_installs": {"count": 0, "active": False, "items": []},
-            },
-        },
-        click_action="adminSkillApprovalApprove",
-        wait_before_interval_ms=0,
-        run_interval=False,
-    )
-
-    assert payload["adminActionCount"] >= 1
-    assert payload["adminSkillApprovalSelectValue"] == "approval-1"
-    assert payload["lastAdminActionBody"]["action"] == "approve_skill_install"
-    assert payload["lastAdminActionBody"]["session_uid"] == "thread:1:55"
-    assert payload["lastAdminActionBody"]["approval_id"] == "approval-1"
-    assert payload["pendingSkillInstallsText"] == "0 pending"
-
-    assert "установлен локально" in payload["bannerText"]
-
-
-def test_miniapp_app_js_admin_tab_requires_explicit_session_uid_selection() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": True,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pipeline_status": "idle",
-            "analyzer_status": "idle",
-            "analyzer_message": "",
-            "executor_status": "idle",
-            "executor_message": "",
-        },
-        status_snapshot={
-            "available_sessions": [
-                {
-                    "session_uid": "thread:1:55",
-                    "chat_id": 1,
-                    "session_id": "s1",
-                    "session_name": "Admin session",
-                    "tool": "dummy",
-                    "label": "Admin session (thread:1:55)",
-                },
-            ],
-            "selected_session_uid": "",
-            "session_count": 1,
-            "active_session": None,
-            "status_text": "Сессия не выбрана",
-        },
-        wait_before_interval_ms=0,
-        run_interval=False,
-    )
-
-    assert payload["adminSessionValue"] == ""
-    assert payload["firstPollCount"] == 0
-    assert payload["messageHidden"] is False
-
-    assert "Сессия не выбрана" in payload["messageText"]
-
-
-def test_miniapp_app_js_uses_cached_admin_status_for_immediate_repeat_request() -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": True,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": False,
-            "pipeline_status": "idle",
-            "analyzer_status": "idle",
-            "analyzer_message": "Waiting for next cycle",
-            "executor_status": "idle",
-            "executor_message": "",
-        },
-        click_action="adminApply",
-        wait_before_interval_ms=0,
-        run_interval=False,
-    )
-
-    assert payload["firstPollCount"] == 1
-    assert payload["secondPollCount"] == 1
-
-
-@pytest.mark.parametrize(
-    ("error_response", "expected_banner"),
-    [
-        ({"kind": "timeout"}, "Таймаут запроса Admin status."),
-        ({"kind": "http", "status": 503, "body": {"error": "server unavailable"}}, "Сервер Admin status временно недоступен."),
-        ({"kind": "http", "status": 403, "body": {"error": "forbidden"}}, "Нет доступа к Admin status для выбранной сессии."),
-    ],
-)
-def test_miniapp_app_js_keeps_stale_admin_payload_on_status_errors(error_response: dict, expected_banner: str) -> None:
-    payload = _run_app_js_harness(
-        {
-            "mode": "admin",
-            "session_uid": "thread:1:55",
-            "session_id": "s1",
-            "active": True,
-            "busy": False,
-            "run_lock_locked": False,
-            "tick_active": False,
-            "mode_tasks_running": True,
-            "pipeline_status": "running",
-            "analyzer_status": "completed",
-            "analyzer_message": "notify_admin",
-            "executor_status": "running",
-            "executor_message": "Executor ok",
-        },
-        admin_responses=[
-            {
-                "mode": "admin",
-                "session_uid": "thread:1:55",
-                "session_id": "s1",
-                "active": True,
-                "busy": False,
-                "run_lock_locked": False,
-                "tick_active": False,
-                "mode_tasks_running": True,
-                "pipeline_status": "running",
-                "analyzer_status": "completed",
-                "analyzer_message": "notify_admin",
-                "executor_status": "running",
-                "executor_message": "Executor ok",
-            },
-            error_response,
-        ],
-    )
-
-    assert payload["pipelineStatus"] == "running"
-    assert payload["activeHidden"] is False
-    assert payload["bannerHidden"] is False
-    assert expected_banner in payload["bannerText"]
 
 
 def test_miniapp_app_js_scheduler_tab_creates_job_with_explicit_session_uid() -> None:

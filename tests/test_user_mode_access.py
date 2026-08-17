@@ -49,8 +49,8 @@ def test_non_admin_with_explicit_user_modes_gets_only_listed(tmp_path) -> None:
 
     allowed = set(app.access_policy_service.allowed_mode_ids_for_chat(1))
     assert "agent" in allowed
-    assert "sdd" in allowed
-    assert "webmaster" in allowed
+    assert "sdd" not in allowed
+    assert "webmaster" not in allowed
     assert "direct_cli" in allowed
     assert "orchestrator" in allowed
     assert "manager" not in allowed

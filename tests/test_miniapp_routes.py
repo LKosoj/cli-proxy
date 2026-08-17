@@ -17,7 +17,6 @@ import yaml
 from bot import BotApp
 from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, TelegramConfig, ToolConfig
 from miniapp.routes import MiniAppRoutes
-from miniapp.routes_admin import AdminRouteServices, register_admin_routes
 from miniapp.routes_config import ConfigRouteServices, register_config_routes
 from miniapp.routes_logs import LogsRouteServices, register_logs_routes
 from miniapp.routes_scheduler import SchedulerRouteServices, register_scheduler_routes
@@ -98,12 +97,6 @@ def test_config_route_module_uses_registration_pattern() -> None:
     signature = inspect.signature(register_config_routes)
     assert list(signature.parameters) == ["app", "ctx", "services"]
     assert is_dataclass(ConfigRouteServices)
-
-
-def test_admin_route_module_uses_registration_pattern() -> None:
-    signature = inspect.signature(register_admin_routes)
-    assert list(signature.parameters) == ["app", "ctx", "services"]
-    assert is_dataclass(AdminRouteServices)
 
 
 def test_scheduler_route_module_uses_registration_pattern() -> None:
@@ -263,37 +256,6 @@ def test_config_view_redacts_all_secret_values_with_valid_miniapp_auth(tmp_path)
     asyncio.run(_run())
 
 
-def test_miniapp_routes_wires_admin_registration_with_context_and_services(monkeypatch) -> None:
-    import miniapp.routes as routes_module
-
-    captured = {}
-
-    def fake_register(app, ctx, services):
-        captured["app"] = app
-        captured["ctx"] = ctx
-        captured["services"] = services
-
-    monkeypatch.setattr(routes_module, "register_admin_routes", fake_register)
-    bot_app = SimpleNamespace(
-        config=SimpleNamespace(
-            path="config.yaml",
-            defaults=SimpleNamespace(log_path="bot.log"),
-            miniapp=SimpleNamespace(max_edit_file_size_kb=5120),
-        ),
-        container=_fake_container(),
-    )
-    web_app = web.Application()
-    routes = MiniAppRoutes(bot_app)
-
-    routes.register(web_app)
-
-    assert captured == {
-        "app": web_app,
-        "ctx": routes.route_context,
-        "services": routes.admin_route_services,
-    }
-
-
 def test_miniapp_routes_wires_scheduler_registration_with_context_and_services(monkeypatch) -> None:
     import miniapp.routes as routes_module
 
@@ -400,7 +362,6 @@ def test_miniapp_routes_does_not_register_ssh_endpoints_directly() -> None:
     assert 'app.router.add_post("/api/ssh/secret"' not in source
     assert "register_ssh_routes(app, self.route_context, self.ssh_route_services)" in source
 
-
 def test_malformed_json_400_response(tmp_path) -> None:
     async def _run() -> None:
         cfg = _build_config(tmp_path, token="t")
@@ -440,10 +401,6 @@ def test_malformed_json_400_response(tmp_path) -> None:
                 response = await _post_raw_json(client, path, headers=headers, body="{")
                 assert response.status == 400
                 assert await response.json() == {"ok": False, "error": "invalid json body"}
-            for path in ["/api/v1/admin/config", "/api/v1/admin/monitor/servers"]:
-                response = await _put_raw_json(client, path, headers=headers, body="{")
-                assert response.status == 400
-                assert await response.json() == {"ok": False, "error": "invalid json body"}
 
             non_object_cases = [
                 ("/api/config/validate", "[]"),
@@ -455,10 +412,6 @@ def test_malformed_json_400_response(tmp_path) -> None:
             ]
             for path, raw_body in non_object_cases:
                 response = await _post_raw_json(client, path, headers=headers, body=raw_body)
-                assert response.status == 400
-                assert await response.json() == {"ok": False, "error": "request body must be an object"}
-            for path in ["/api/v1/admin/config", "/api/v1/admin/monitor/servers"]:
-                response = await _put_raw_json(client, path, headers=headers, body="[]")
                 assert response.status == 400
                 assert await response.json() == {"ok": False, "error": "request body must be an object"}
 
@@ -544,64 +497,6 @@ def test_malformed_json_400_response(tmp_path) -> None:
             )
             assert delete_response.status == 200
             assert (await delete_response.json())["ok"] is True
-
-            admin_config_response = await client.get(
-                f"/api/v1/admin/config?session_uid={quote(session_uid, safe='')}",
-                headers=headers,
-            )
-            assert admin_config_response.status == 200
-            admin_config_body = await admin_config_response.json()
-            assert set(admin_config_body) == {"ok", "config_path", "yaml"}
-            assert admin_config_body["ok"] is True
-            admin_config = yaml.safe_load(admin_config_body["yaml"])
-            admin_config["admin"]["monitor"]["interval_sec"] = 44
-
-            admin_config_save = await client.put(
-                "/api/v1/admin/config",
-                headers=headers,
-                json={"session_uid": session_uid, "yaml": yaml.safe_dump(admin_config, sort_keys=False)},
-            )
-            assert admin_config_save.status == 200
-            assert await admin_config_save.json() == {"ok": True}
-
-            monitor_save = await client.put(
-                "/api/v1/admin/monitor/servers",
-                headers=headers,
-                json={
-                    "session_uid": session_uid,
-                    "enabled": False,
-                    "interval_sec": 55,
-                    "servers": [
-                        {
-                            "id": "local-main",
-                            "target": "local",
-                            "action_id": "clear_logs",
-                            "timeout_sec": 12,
-                        }
-                    ],
-                },
-            )
-            assert monitor_save.status == 200
-            assert await monitor_save.json() == {"ok": True}
-
-            monitor_response = await client.get(
-                f"/api/v1/admin/monitor/servers?session_uid={quote(session_uid, safe='')}",
-                headers=headers,
-            )
-            assert monitor_response.status == 200
-            assert await monitor_response.json() == {
-                "ok": True,
-                "servers": [
-                    {
-                        "id": "local-main",
-                        "target": "local",
-                        "action_id": "clear_logs",
-                        "timeout_sec": 12.0,
-                    }
-                ],
-                "interval_sec": 55.0,
-                "enabled": False,
-            }
         finally:
             await client.close()
             await server.close()

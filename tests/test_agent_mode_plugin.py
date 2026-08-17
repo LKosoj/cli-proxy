@@ -841,30 +841,6 @@ def test_agent_mode_project_pick_invalid_payload_keeps_project_and_reports_stale
     asyncio.run(_run())
 
 
-def test_agent_mode_switch_to_manager_blocked_while_agent_busy(tmp_path):
-    async def _run():
-        app = _build_app(tmp_path)
-        session = app.manager.create(1, "dummy", str(tmp_path))
-        session.modes.active_mode = "agent"
-        session.busy = True
-        assert app.mode_registry.get("manager") is not None
-
-        sent = []
-
-        async def _send_message(_ctx, *, chat_id: int, text: str, **_kw):
-            sent.append((chat_id, text))
-            return None
-
-        app._send_message = _send_message
-
-        handler = CallbackHandler(app)
-        update = types.SimpleNamespace(callback_query=_FakeQuery("ma:manager:enable"))
-        await handler.handle_callback(update, context=object())
-
-        assert session.modes.active_mode == "agent"
-        assert any("Переключение/выключение режима" in text for (_chat, text) in sent)
-
-    asyncio.run(_run())
 
 
 def test_agent_mode_double_launch_queues_second_input_while_first_is_running(tmp_path):

@@ -13,7 +13,7 @@ import secrets
 import time
 from collections import deque
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib.parse import quote
 
 from aiohttp import web
@@ -21,7 +21,6 @@ from aiohttp import web
 from app.events import MiniAppCommandEvent
 from app.security import DenyReasonCode, SecurityRateLimitError, serialize_security_error
 from app.services.config_service import ConfigService
-from app.services.admin_config_service import AdminConfigService
 from app.services.actor_identity import miniapp_actor_id
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.session_tick_history_store import load_session_ticks
@@ -33,15 +32,10 @@ from i18n import t
 from i18n.resolver import SUPPORTED_LANGS
 from modes.sdk.runtime.json_normalizer import loads_safe
 from modes.sdk.session_busy import is_session_busy
-from modes.analyst.state_store import AnalystStateStore, build_context_key
 from modes.agent.mode import agent_project_scope_key, agent_project_session_key, normalize_agent_project_pending_entry
-from modes.analyst.ui import build_analyst_status_payload, build_analyst_status_text
 from modes.agent.ui import build_agent_status_payload, build_agent_status_text
-from modes.sdk import CallbackModel, decode_mode_dirs
-from modes.sdk.planning import format_manager_status_brief, load_plan
-from modes.sdk.services import ModeStatusService
-from modes.webmaster.state_store import WebmasterStateStore, build_user_key
-from session import session_runtime_uid, session_scoped_key
+from modes.sdk import decode_mode_dirs
+from session import session_runtime_uid
 from sessions.session_state_access import (
     get_active_mode,
     get_orchestrator_last_mode_id,
@@ -50,7 +44,6 @@ from sessions.session_state_access import (
     is_orchestrator_enabled,
 )
 from sessions.session_status import build_session_status_text
-from utils.paths import cli_proxy_artifact_path
 from utils.ui import format_session_selector_label
 from app.services.session_files_service import (
     FilesServiceError,
@@ -60,7 +53,6 @@ from app.services.session_files_service import (
 from app.services.scheduler_presentation_service import SchedulerPresentationService
 from .services.logs_service import LogsService, LogsServiceError
 from .route_context import MiniAppRouteContext
-from .routes_admin import AdminRouteServices, register_admin_routes
 from .routes_config import ConfigRouteServices, register_config_routes
 from .routes_foundation import FoundationRouteServices, register_foundation_routes
 from .routes_json import JsonRouteServices, register_json_routes
@@ -92,12 +84,6 @@ class MiniAppRoutes:
         self.run_operations_policy = RunOperationsPolicy()
         self.config_route_services = ConfigRouteServices(
             config_service=self._container_config_service(bot_app),
-            require_admin=self._require_admin,
-            read_json_object=self._read_json_object,
-            json_error=self._json_error,
-        )
-        self.admin_route_services = AdminRouteServices(
-            admin_config_service=AdminConfigService(bot_app),
             require_admin=self._require_admin,
             read_json_object=self._read_json_object,
             json_error=self._json_error,
@@ -453,7 +439,7 @@ class MiniAppRoutes:
         checker = getattr(mode, "_enable_requirements_error", None)
         if not callable(checker):
             mode_id = str(getattr(mode, "mode_id", "") or "").strip()
-            if mode_id not in {"agent", "analyst", "manager", "webmaster"}:
+            if mode_id not in {"agent"}:
                 return ""
             defaults = getattr(getattr(self.bot_app, "config", None), "defaults", None)
             if not getattr(defaults, "openai_api_key", None) or not getattr(defaults, "openai_model", None):
@@ -1301,7 +1287,6 @@ class MiniAppRoutes:
         tool_name = str(getattr(getattr(session, "tool", None), "name", "") or "")
         cli_state = getattr(session, "cli", None)
         git_state = getattr(session, "git", None)
-        modes_state = getattr(session, "modes", None)
         active_cli = str(
             getattr(cli_state, "active_cli", getattr(session, "active_cli", "")) or tool_name or ""
         )
@@ -1346,23 +1331,8 @@ class MiniAppRoutes:
             active_execution_backend = str(getattr(session, "_active_execution_backend", "") or "none")
             tmux_status = None
             has_live_tmux = False
-        analyst_template_id = str(
-            getattr(
-                modes_state,
-                "analyst_template_id",
-                getattr(session, "analyst_template_id", ""),
-            )
-            or ""
-        )
-        manager_quiet_mode = bool(
-            getattr(modes_state, "manager_quiet_mode", getattr(session, "manager_quiet_mode", False))
-        )
-        manager_plan_status: str | None = None
         agent_mode_status: str | None = None
         agent_mode_status_details: Dict[str, Any] | None = None
-        analyst_mode_status: str | None = None
-        analyst_mode_status_details: Dict[str, Any] | None = None
-        webmaster_mode_status: str | None = None
         runtime_progress = build_runtime_progress_payload(session, recent_limit=12)
         runtime_status: str | None = None
         try:
@@ -1380,17 +1350,7 @@ class MiniAppRoutes:
             _mode_status_lang = _resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
         except Exception:
             _mode_status_lang = "ru"
-        if active_mode == "manager":
-            try:
-                plan = load_plan(
-                    str(getattr(session, "workdir", "") or ""),
-                    scoped_key=session_scoped_key(session),
-                )
-                if plan is not None:
-                    manager_plan_status = str(format_manager_status_brief(plan) or "").strip() or None
-            except Exception:
-                logger.exception("miniapp status failed to load manager plan")
-        elif active_mode == "agent":
+        if active_mode == "agent":
             try:
                 mode_tasks = getattr(self.bot_app, "mode_tasks", None)
                 running = False
@@ -1458,120 +1418,6 @@ class MiniAppRoutes:
                 ).strip() or None
             except Exception:
                 logger.exception("miniapp status failed to build agent mode status")
-        elif active_mode == "analyst":
-            try:
-                workdir = str(getattr(session, "workdir", "") or "").strip()
-                state_root = (
-                    cli_proxy_artifact_path(workdir, ".analyst_data")
-                    if workdir
-                    else cli_proxy_artifact_path(os.getcwd(), ".analyst_data")
-                )
-                store = AnalystStateStore(state_root)
-                ctx = store.load(
-                    build_context_key(
-                        session_chat_id if session_chat_id is not None else getattr(session, "chat_id", None),
-                        str(getattr(session, "id", "") or "").strip() or "default",
-                    )
-                )
-                mode_tasks = getattr(self.bot_app, "mode_tasks", None)
-                running = False
-                if mode_tasks is not None and hasattr(mode_tasks, "list"):
-                    running = bool(
-                        mode_tasks.list(
-                            session_id=str(getattr(session, "id", "") or ""),
-                            mode_id="analyst",
-                        )
-                    )
-                analyst_mode_status_details = build_analyst_status_payload(
-                    session,
-                    analyst_context=ctx,
-                    analyst_running=running,
-                    pending_questions=self.bot_app.ui_state.pending_questions,
-                    mode_id="analyst",
-                )
-                analyst_mode_status = str(
-                    build_analyst_status_text(
-                        session,
-                        analyst_context=ctx,
-                        analyst_running=running,
-                        pending_questions=self.bot_app.ui_state.pending_questions,
-                        mode_id="analyst",
-                        lang=_mode_status_lang,
-                    )
-                    or ""
-                ).strip() or None
-            except Exception:
-                logger.exception("miniapp status failed to build analyst mode status")
-        elif active_mode == "webmaster":
-            try:
-                workdir = str(getattr(session, "workdir", "") or "").strip()
-                state_root = (
-                    cli_proxy_artifact_path(workdir, ".webmaster_data")
-                    if workdir
-                    else cli_proxy_artifact_path(os.getcwd(), ".webmaster_data")
-                )
-                owner_chat_id = session_chat_id
-                if owner_chat_id is None:
-                    raw_chat_id = getattr(session, "chat_id", None)
-                    if raw_chat_id is not None:
-                        owner_chat_id = int(raw_chat_id)
-                wm_chat_id = int(owner_chat_id or 0)
-                wm_user_id = wm_chat_id if wm_chat_id > 0 else 0
-                store = WebmasterStateStore(state_root)
-                wm_ctx = store.load(
-                    build_user_key(
-                        wm_chat_id,
-                        wm_user_id,
-                        str(getattr(session, "id", "") or "").strip() or None,
-                    )
-                )
-                mode_tasks = getattr(self.bot_app, "mode_tasks", None)
-                running = False
-                if mode_tasks is not None and hasattr(mode_tasks, "list"):
-                    running = bool(
-                        mode_tasks.list(
-                            session_id=str(getattr(session, "id", "") or ""),
-                            mode_id="webmaster",
-                        )
-                    )
-                stage = ModeStatusService.build_webmaster_mode_stage(
-                    enabled=True,
-                    running=running,
-                    busy=bool(getattr(session, "busy", False)),
-                    queue_len=ModeStatusService.get_session_queue_len(session),
-                    wm_stage=str(getattr(wm_ctx, "stage", "idle") or "idle"),
-                )
-                webmaster_mode_status = str(
-                    ModeStatusService.build_mode_status_text(
-                        session,
-                        title=t("session_status.webmaster_title", _mode_status_lang),
-                        stage=stage,
-                        enabled=True,
-                        task_suffix=f"{t('session_status.task', _mode_status_lang)}: "
-                        f"{t('session_status.task_active', _mode_status_lang) if running else t('session_status.none', _mode_status_lang)}",
-                        extra_sections=[
-                            (
-                                t("session_status.wm_task_kind", _mode_status_lang),
-                                str(getattr(wm_ctx, "task_kind", "unknown") or "unknown"),
-                            ),
-                            (
-                                t("session_status.wm_prompt_version", _mode_status_lang),
-                                str(getattr(wm_ctx, "active_prompt_version", 1)),
-                            ),
-                            (
-                                t("session_status.wm_last_class", _mode_status_lang),
-                                str(
-                                    getattr(wm_ctx, "last_feedback_class", "")
-                                    or t("session_status.none", _mode_status_lang)
-                                ),
-                            ),
-                        ],
-                        lang=_mode_status_lang,
-                    )
-                    or ""
-                ).strip() or None
-            except Exception:
-                logger.exception("miniapp status failed to build webmaster mode status")
 
         def _age(ts: Any) -> int | None:
             if ts is None:
@@ -1746,22 +1592,16 @@ class MiniAppRoutes:
             "assistant_tick_count": int(assistant_tick_count),
             "tick_history": tick_history,
             "tick_seen": int(getattr(session, "tick_seen", 0) or 0),
-            "analyst_template_id": analyst_template_id,
-            "manager_quiet_mode": manager_quiet_mode,
             "advanced_orchestrator_enabled": bool(is_orchestrator_enabled(session, False)),
             "orchestrator_pending_input": self._safe_status_value(get_orchestrator_pending_input(session, None)),
             "orchestrator_last_mode_output": self._safe_status_value(get_orchestrator_last_mode_output(session, None)),
             "orchestrator_last_mode_id": self._safe_status_value(get_orchestrator_last_mode_id(session, None)),
             "project_root": self._safe_status_value(getattr(session, "project_root", None)),
             "state_summary": getattr(session, "state_summary", None),
-            "manager_plan_status": manager_plan_status,
             "agent_mode_status": agent_mode_status,
             "agent_mode_status_details": self._safe_status_value(agent_mode_status_details),
             "runtime_status": runtime_status,
             "runtime_progress": runtime_progress,
-            "analyst_mode_status": analyst_mode_status,
-            "analyst_mode_status_details": self._safe_status_value(analyst_mode_status_details),
-            "webmaster_mode_status": webmaster_mode_status,
             "state_updated_at": self._safe_status_value(getattr(session, "state_updated_at", None)),
             "headless_forced_stop": self._safe_status_value(getattr(session, "headless_forced_stop", None)),
             "child_pid": child_pid,
@@ -1825,127 +1665,88 @@ class MiniAppRoutes:
             return ""
         return "\u0001".join(sorted(str(key) for key in by_id.keys()))
 
-    def _resolve_admin_status_session(
-        self,
-        *,
-        user: Dict[str, Any],
-        session_uid: str,
-    ) -> tuple[int, str, Any]:
-        session_uid_value = self._validate_session_uid_input(session_uid)
-        if not session_uid_value:
-            raise web.HTTPBadRequest(reason="session_uid is required")
-        canonical_uid, session = self._resolve_visible_session(
-            user_id=int(user["user_id"]),
-            is_admin=bool(user.get("is_admin", False)),
-            session_uid=session_uid_value,
-        )
-        if session is None:
-            raise web.HTTPNotFound(reason="session not found")
-        owner_chat_id = self._session_owner_chat_id(session)
-        if owner_chat_id is None:
-            raise web.HTTPNotFound(reason="session not found")
-        return (int(owner_chat_id), canonical_uid, session)
-
-    @staticmethod
-    def _map_admin_action_to_callback(
-        *, action: str, body: Dict[str, Any]
-    ) -> tuple[str, Dict[str, Any]]:
-        action_norm = str(action or "").strip().lower()
-        payload: Dict[str, Any] = {}
-        if action_norm == "ack_incident":
-            incident_id = str(body.get("incident_id") or body.get("id") or "").strip()
-            payload["id"] = incident_id
-            return ("ack", payload)
-        if action_norm == "revoke_approval":
-            override_id = str(body.get("override_id") or body.get("id") or "").strip()
-            payload["id"] = override_id
-            return ("revoke", payload)
-        if action_norm == "approvals_clear":
-            return ("approvals_clear", payload)
-        if action_norm == "mute":
-            minutes = body.get("minutes")
-            if minutes is not None:
-                payload["m"] = minutes
-            return ("mute", payload)
-        if action_norm == "unmute":
-            return ("unmute", payload)
-        if action_norm in {"set_dry_run", "dryrun_toggle"}:
-            return ("dryrun_toggle", payload)
-        return (action_norm, payload)
-
-    def _resolve_admin_mode_plugin(self) -> Any:
-        initializer = getattr(self.bot_app, "_initialize_mode_plugins", None)
-        if callable(initializer):
+    async def status_ws(self, request: web.Request) -> web.StreamResponse:
+        ticket = str(request.query.get("ticket", "") or "").strip()
+        if ticket:
             try:
-                initializer()
-            except Exception:
-                logger.exception("miniapp failed to initialize mode plugins before admin action")
-        mode_registry = getattr(self.bot_app, "mode_registry_service", None) or getattr(self.bot_app, "mode_registry", None)
-        if mode_registry is None or not hasattr(mode_registry, "get"):
-            return None
-        return mode_registry.get("admin")
+                user = self._consume_ws_ticket(ticket)
+            except web.HTTPException as exc:
+                return await self._json_error(int(exc.status), str(exc.reason or "unauthorized"))
+        else:
+            user = await self._require_access(request)
 
-    async def _build_admin_status_payload(
+        session_uid_filter = str(request.query.get("session_uid", "") or "").strip()
+        if session_uid_filter:
+            try:
+                canonical_uid, resolved_session = self._resolve_visible_session(
+                    user_id=int(user["user_id"]),
+                    is_admin=bool(user.get("is_admin", False)),
+                    session_uid=session_uid_filter,
+                )
+                if resolved_session is not None and canonical_uid:
+                    session_uid_filter = canonical_uid
+                self.logs.ensure_session_scope_allowed(
+                    user_id=int(user["user_id"]),
+                    is_admin=bool(user.get("is_admin", False)),
+                    session_uid=session_uid_filter,
+                )
+            except LogsServiceError as exc:
+                return await self._json_error(getattr(exc, "status", 400), str(exc))
+            except web.HTTPException as exc:
+                return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
+
+        ws = web.WebSocketResponse(heartbeat=20.0)
+        await ws.prepare(request)
+
+        try:
+            await self._run_status_ws_stream(ws, user=user, session_uid_filter=session_uid_filter or None)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "miniapp status websocket failed",
+                extra={
+                    "chat_id": int(user["user_id"]),
+                    "user_id": int(user["user_id"]),
+                    "action": "status_ws",
+                    "path": "status",
+                    "status": "error",
+                    "error": "",
+                },
+            )
+            if not ws.closed:
+                await ws.send_json({"type": "error", "error": "status stream failed"})
+        finally:
+            if not ws.closed:
+                await ws.close()
+        return ws
+
+    async def _run_status_ws_stream(
         self,
+        ws: web.WebSocketResponse,
         *,
         user: Dict[str, Any],
-        session_uid: str,
-    ) -> Dict[str, Any]:
-        resolved_chat_id, canonical_uid, session = self._resolve_admin_status_session(
-            user=user,
-            session_uid=session_uid,
-        )
-        admin_mode = self._resolve_admin_mode_plugin()
-        if admin_mode is None or not hasattr(admin_mode, "build_status_payload"):
-            raise web.HTTPServiceUnavailable(reason="admin mode unavailable")
-        payload = await asyncio.to_thread(
-            admin_mode.build_status_payload,
-            bot_app=self.bot_app,
-            session=session,
-            chat_id=int(resolved_chat_id),
-        )
-        return {
-            **dict(payload or {}),
-            "session_uid": str(canonical_uid or ""),
-            "chat_id": int(resolved_chat_id),
-        }
+        session_uid_filter: str | None,
+    ) -> None:
+        receive_task = asyncio.create_task(self._consume_ws_messages(ws))
+        stream_task = asyncio.create_task(self._stream_status_updates(ws, user=user, session_uid_filter=session_uid_filter))
+        try:
+            done, pending = await asyncio.wait({receive_task, stream_task}, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                exc = task.exception()
+                if exc is not None:
+                    raise exc
+        finally:
+            for task in (receive_task, stream_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(receive_task, stream_task, return_exceptions=True)
 
-    async def _run_admin_session_action(
-        self,
-        *,
-        user: Dict[str, Any],
-        session_uid: str,
-        action: str,
-        payload: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        resolved_chat_id, _canonical_uid, session = self._resolve_admin_status_session(
-            user=user,
-            session_uid=session_uid,
-        )
-        admin_mode = self._resolve_admin_mode_plugin()
-        if admin_mode is None or not hasattr(admin_mode, "handle_callback"):
-            raise web.HTTPServiceUnavailable(reason="admin mode unavailable")
-        result = await admin_mode.handle_callback(
-            CallbackModel(
-                action=str(action or "").strip(),
-                chat_id=int(resolved_chat_id),
-                user_id=int(user["user_id"]),
-                payload=dict(payload or {}),
-                raw={},
-            ),
-            {
-                "bot_app": self.bot_app,
-                "session": session,
-                "chat_id": int(resolved_chat_id),
-                "context": None,
-                "query": None,
-                "mode_id": "admin",
-            },
-        )
-        return bool(getattr(result, "success", True))
-
-    @staticmethod
-    def _build_session_option(*, session_uid: str, session: Any, is_admin: bool) -> Dict[str, Any]:
+    def _build_session_option(self, *, session_uid: str, session: Any, is_admin: bool) -> Dict[str, Any]:
         session_id = str(getattr(session, "id", "") or "").strip()
         session_name = str(getattr(session, "name", "") or session_id or session_uid)
         tool_name = str(getattr(getattr(session, "tool", None), "name", "") or "")
@@ -2058,87 +1859,6 @@ class MiniAppRoutes:
             ),
         }
 
-    async def status_ws(self, request: web.Request) -> web.StreamResponse:
-        ticket = str(request.query.get("ticket", "") or "").strip()
-        if ticket:
-            try:
-                user = self._consume_ws_ticket(ticket)
-            except web.HTTPException as exc:
-                return await self._json_error(int(exc.status), str(exc.reason or "unauthorized"))
-        else:
-            user = await self._require_access(request)
-
-        session_uid_filter = str(request.query.get("session_uid", "") or "").strip()
-        if session_uid_filter:
-            try:
-                canonical_uid, resolved_session = self._resolve_visible_session(
-                    user_id=int(user["user_id"]),
-                    is_admin=bool(user.get("is_admin", False)),
-                    session_uid=session_uid_filter,
-                )
-                if resolved_session is not None and canonical_uid:
-                    session_uid_filter = canonical_uid
-                self.logs.ensure_session_scope_allowed(
-                    user_id=int(user["user_id"]),
-                    is_admin=bool(user.get("is_admin", False)),
-                    session_uid=session_uid_filter,
-                )
-            except LogsServiceError as exc:
-                return await self._json_error(getattr(exc, "status", 400), str(exc))
-            except web.HTTPException as exc:
-                return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
-
-        ws = web.WebSocketResponse(heartbeat=20.0)
-        await ws.prepare(request)
-
-        try:
-            await self._run_status_ws_stream(ws, user=user, session_uid_filter=session_uid_filter or None)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception(
-                "miniapp status websocket failed",
-                extra={
-                    "chat_id": int(user["user_id"]),
-                    "user_id": int(user["user_id"]),
-                    "action": "status_ws",
-                    "path": "status",
-                    "status": "error",
-                    "error": "",
-                },
-            )
-            if not ws.closed:
-                await ws.send_json({"type": "error", "error": "status stream failed"})
-        finally:
-            if not ws.closed:
-                await ws.close()
-        return ws
-
-    async def _run_status_ws_stream(
-        self,
-        ws: web.WebSocketResponse,
-        *,
-        user: Dict[str, Any],
-        session_uid_filter: str | None,
-    ) -> None:
-        receive_task = asyncio.create_task(self._consume_ws_messages(ws))
-        stream_task = asyncio.create_task(self._stream_status_updates(ws, user=user, session_uid_filter=session_uid_filter))
-        try:
-            done, pending = await asyncio.wait({receive_task, stream_task}, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
-            for task in done:
-                exc = task.exception()
-                if exc is not None:
-                    raise exc
-        finally:
-            for task in (receive_task, stream_task):
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(receive_task, stream_task, return_exceptions=True)
-
     async def _stream_status_updates(
         self,
         ws: web.WebSocketResponse,
@@ -2183,1451 +1903,6 @@ class MiniAppRoutes:
                 await asyncio.sleep(0.5)
                 continue
             await asyncio.sleep(float(self._status_poll_interval_sec))
-
-    async def admin_status(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-
-        try:
-            payload = await self._build_admin_status_payload(
-                user=user,
-                session_uid=session_uid,
-            )
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        except Exception:
-            logger.exception(
-                "miniapp admin status failed",
-                extra={
-                    "chat_id": int(user["user_id"]),
-                    "user_id": int(user["user_id"]),
-                    "action": "admin_status",
-                    "path": str(session_uid),
-                    "status": "error",
-                    "error": "",
-                },
-            )
-            return await self._json_error(500, "admin status unavailable")
-
-        return web.json_response(payload)
-
-    async def admin_action(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
-
-        action = str(body.get("action", "") or "").strip().lower()
-        allowed_actions = {
-            "enable",
-            "disable",
-            "rescan",
-            "approve_skill_install",
-            "reject_skill_install",
-            "ack_incident",
-            "revoke_approval",
-            "approvals_clear",
-            "mute",
-            "unmute",
-            "set_dry_run",
-            "dryrun_toggle",
-        }
-        if action not in allowed_actions:
-            return await self._json_error(400, "unsupported admin action")
-        session_uid = str(body.get("session_uid", "") or "").strip()
-        approval_id = str(body.get("approval_id", "") or "").strip()
-        if action in {"approve_skill_install", "reject_skill_install"} and not approval_id:
-            return await self._json_error(400, "approval_id is required")
-
-        try:
-            result_payload = None
-            if action in {"approve_skill_install", "reject_skill_install"}:
-                _resolved_chat_id, _canonical_uid, session = self._resolve_admin_status_session(
-                    user=user,
-                    session_uid=session_uid,
-                )
-                skill_runtime = getattr(self.bot_app, "mode_skill_runtime", None)
-                if skill_runtime is None:
-                    raise web.HTTPServiceUnavailable(reason="skill runtime unavailable")
-                method = (
-                    skill_runtime.approve_pending_install
-                    if action == "approve_skill_install"
-                    else skill_runtime.reject_pending_install
-                )
-                result = await asyncio.to_thread(
-                    method,
-                    session=session,
-                    approval_id=approval_id,
-                    actor_chat_id=int(user["user_id"]),
-                    is_admin=True,
-                )
-                result_payload = result.to_dict()
-                ok = str(result_payload.get("status") or "").strip() == "ok"
-            else:
-                callback_action, callback_payload = self._map_admin_action_to_callback(
-                    action=action, body=body
-                )
-                ok = await self._run_admin_session_action(
-                    user=user,
-                    session_uid=session_uid,
-                    action=callback_action,
-                    payload=callback_payload,
-                )
-            payload = await self._build_admin_status_payload(
-                user=user,
-                session_uid=session_uid,
-            )
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        except Exception:
-            logger.exception(
-                "miniapp admin action failed",
-                extra={
-                    "chat_id": int(user["user_id"]),
-                    "user_id": int(user["user_id"]),
-                    "action": f"admin_{action}",
-                    "path": str(session_uid),
-                    "status": "error",
-                    "error": "",
-                },
-            )
-            return await self._json_error(500, "admin action failed")
-
-        response_payload = {"ok": bool(ok), "action": action, "status": payload}
-        if result_payload is not None:
-            response_payload["result"] = result_payload
-        return web.json_response(response_payload)
-
-    async def _admin_workdir_for_session(self, request, session_uid: str):
-        user = await self._require_admin(request)
-        try:
-            _resolved_chat_id, _canonical_uid, session = self._resolve_admin_status_session(
-                user=user,
-                session_uid=session_uid,
-            )
-        except web.HTTPException as exc:
-            return None, await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return None, await self._json_error(400, "session workdir is not set")
-        return workdir, None
-
-    async def admin_hosts_list(self, request: web.Request) -> web.Response:
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        workdir, error = await self._admin_workdir_for_session(request, session_uid)
-        if error is not None:
-            return error
-        from app.services.ssh_config_loader import load_ssh_config
-        hosts = load_ssh_config(workdir)
-        items = [{
-            "alias": "local",
-            "target": "local",
-            "host": "",
-            "user": "",
-            "port": 0,
-        }]
-        for alias, cfg in hosts.items():
-            items.append({
-                "alias": str(alias),
-                "target": "ssh",
-                "host": str(cfg.host or ""),
-                "user": str(cfg.user or ""),
-                "port": int(cfg.port or 22),
-            })
-        return web.json_response({"ok": True, "hosts": items})
-
-    async def admin_actions_ssh_get(self, request: web.Request) -> web.Response:
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        workdir, error = await self._admin_workdir_for_session(request, session_uid)
-        if error is not None:
-            return error
-        from modes.admin.config_store import AdminConfigStore, AdminConfigStoreError
-        try:
-            store = AdminConfigStore(workdir)
-            store.ensure_config()
-            payload = store.load_config()
-        except AdminConfigStoreError as exc:
-            return await self._json_error(400, str(exc))
-        admin_cfg = payload.get("admin") if isinstance(payload, dict) else None
-        actions_cfg = admin_cfg.get("actions") if isinstance(admin_cfg, dict) else None
-        ssh_actions = actions_cfg.get("ssh") if isinstance(actions_cfg, dict) else None
-        items: list = []
-        if isinstance(ssh_actions, dict):
-            for action_id, action_payload in ssh_actions.items():
-                if not isinstance(action_payload, dict):
-                    continue
-                argv = action_payload.get("argv")
-                argv_list = [str(x) for x in argv] if isinstance(argv, (list, tuple)) else []
-                timeout_raw = action_payload.get("timeout_sec")
-                try:
-                    timeout_sec = float(timeout_raw) if timeout_raw not in (None, "") else None
-                except (TypeError, ValueError):
-                    timeout_sec = None
-                risk_level = str(action_payload.get("risk_level") or "").strip().lower() or "low"
-                items.append({
-                    "action_id": str(action_id),
-                    "argv": argv_list,
-                    "timeout_sec": timeout_sec,
-                    "risk_level": risk_level,
-                    "read_only": bool(action_payload.get("read_only")),
-                    "description": str(action_payload.get("description") or ""),
-                })
-        return web.json_response({"ok": True, "actions": items})
-
-    async def admin_actions_ssh_put(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
-        session_uid = str(body.get("session_uid", "") or "").strip()
-        workdir, error = await self._admin_workdir_for_session(request, session_uid)
-        if error is not None:
-            return error
-        raw_actions = body.get("actions", [])
-        if not isinstance(raw_actions, list):
-            return await self._json_error(400, "actions must be a list")
-        valid_risk = {"low", "medium", "high"}
-        normalized: dict = {}
-        for item in raw_actions:
-            if not isinstance(item, dict):
-                return await self._json_error(400, "each action must be an object")
-            action_id = str(item.get("action_id") or "").strip()
-            if not action_id or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", action_id):
-                return await self._json_error(400, f"invalid action_id: {action_id or '(empty)'}")
-            argv = item.get("argv")
-            if not isinstance(argv, list) or not argv:
-                return await self._json_error(400, f"action {action_id}: argv must be non-empty list")
-            argv_list = [str(x) for x in argv if str(x).strip()]
-            if not argv_list:
-                return await self._json_error(400, f"action {action_id}: argv items must be non-empty")
-            timeout_raw = item.get("timeout_sec")
-            try:
-                timeout_sec = float(timeout_raw) if timeout_raw not in (None, "") else 30.0
-            except (TypeError, ValueError):
-                return await self._json_error(400, f"action {action_id}: timeout_sec must be numeric")
-            if timeout_sec <= 0:
-                return await self._json_error(400, f"action {action_id}: timeout_sec must be > 0")
-            risk_level = str(item.get("risk_level") or "low").strip().lower()
-            if risk_level not in valid_risk:
-                return await self._json_error(400, f"action {action_id}: risk_level must be low|medium|high")
-            read_only = bool(item.get("read_only"))
-            if read_only and risk_level != "low":
-                return await self._json_error(
-                    400,
-                    f"action {action_id}: read_only actions must have risk_level=low",
-                )
-            row: dict = {
-                "argv": argv_list,
-                "timeout_sec": timeout_sec,
-                "risk_level": risk_level,
-            }
-            if read_only:
-                row["read_only"] = True
-            description = str(item.get("description") or "").strip()
-            if description:
-                row["description"] = description
-            normalized[action_id] = row
-        from modes.admin.config_store import AdminConfigStore, AdminConfigStoreError
-        try:
-            store = AdminConfigStore(workdir)
-            store.ensure_config()
-            payload = store.load_config()
-            admin_cfg = payload.get("admin") if isinstance(payload, dict) else None
-            if not isinstance(admin_cfg, dict):
-                return await self._json_error(400, "admin config is missing `admin` mapping")
-            actions_cfg = admin_cfg.get("actions")
-            if not isinstance(actions_cfg, dict):
-                actions_cfg = {}
-            actions_cfg["ssh"] = normalized
-            admin_cfg["actions"] = actions_cfg
-            payload["admin"] = admin_cfg
-            store.validate_config(payload)
-            await asyncio.to_thread(store._write_config, payload)
-        except AdminConfigStoreError as exc:
-            return await self._json_error(400, str(exc))
-        except Exception:
-            logger.exception(
-                "miniapp admin_actions_ssh_put failed session_uid=%s",
-                session_uid,
-            )
-            return await self._json_error(500, "admin ssh actions write failed")
-        return web.json_response({"ok": True})
-
-    # ---------- admin chat ----------
-
-    def _resolve_admin_chat_service(self) -> Any:
-        modes = getattr(self.bot_app, "modes", None)
-        if modes is None:
-            modes = getattr(self.bot_app, "mode_registry", None)
-        plugin = None
-        if modes is not None:
-            try:
-                plugin = modes.get("admin")
-            except Exception:
-                plugin = None
-        return getattr(plugin, "_chat_service", None) if plugin is not None else None
-
-    async def _resolve_session_for_chat(
-        self, user: Dict[str, Any], session_uid: str
-    ) -> Any:
-        try:
-            _rid, _cuid, session = self._resolve_admin_status_session(
-                user=user, session_uid=session_uid
-            )
-        except web.HTTPException:
-            raise
-        return session
-
-    async def admin_chat_messages_get(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return await self._json_error(400, "session workdir is empty")
-        try:
-            messages = await asyncio.to_thread(service.list_messages, workdir)
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_messages_get failed session_uid=%s", session_uid
-            )
-            return await self._json_error(500, "chat messages load failed")
-        return web.json_response({"ok": True, "messages": messages})
-
-    async def admin_chat_messages_post(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        body = await self._read_json_object(request)
-        session_uid = str(body.get("session_uid", "") or "").strip()
-        text = str(body.get("text", "") or "").strip()
-        if not text:
-            return await self._json_error(400, "text is required")
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return await self._json_error(400, "session workdir is empty")
-        try:
-            result = await service.send(
-                session=session, bot_app=self.bot_app, text=text,
-            )
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_messages_post failed session_uid=%s", session_uid
-            )
-            return await self._json_error(500, "chat send failed")
-        return web.json_response(result)
-
-    async def admin_chat_pending_get(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return await self._json_error(400, "session workdir is empty")
-        try:
-            items = await asyncio.to_thread(service.list_pending, workdir)
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_pending_get failed session_uid=%s", session_uid
-            )
-            return await self._json_error(500, "chat pending load failed")
-        return web.json_response({"ok": True, "items": items})
-
-    async def admin_chat_pending_approve(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        body = await self._read_json_object(request)
-        session_uid = str(body.get("session_uid", "") or "").strip()
-        approval_id = str(
-            request.match_info.get("approval_id")
-            or body.get("approval_id")
-            or ""
-        ).strip()
-        if not approval_id:
-            return await self._json_error(400, "approval_id is required")
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        from utils.lang import resolve_user_lang
-        approve_lang = resolve_user_lang(self.bot_app.config, chat_id=self._session_owner_chat_id(session))
-        try:
-            result = await service.execute_pending(
-                session=session, approval_id=approval_id, lang=approve_lang,
-            )
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_pending_approve failed session_uid=%s approval_id=%s",
-                session_uid, approval_id,
-            )
-            return await self._json_error(500, "approve failed")
-        return web.json_response(result)
-
-    async def admin_chat_pending_reject(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        body = await self._read_json_object(request)
-        session_uid = str(body.get("session_uid", "") or "").strip()
-        approval_id = str(
-            request.match_info.get("approval_id")
-            or body.get("approval_id")
-            or ""
-        ).strip()
-        if not approval_id:
-            return await self._json_error(400, "approval_id is required")
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return await self._json_error(400, "session workdir is empty")
-        try:
-            result = await asyncio.to_thread(
-                service.reject_pending, workdir, approval_id=approval_id,
-            )
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_pending_reject failed session_uid=%s approval_id=%s",
-                session_uid, approval_id,
-            )
-            return await self._json_error(500, "reject failed")
-        return web.json_response(result)
-
-    async def admin_chat_memory_get(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return await self._json_error(400, "session workdir is empty")
-        try:
-            text = await asyncio.to_thread(service.get_memory_md, workdir)
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_memory_get failed session_uid=%s", session_uid
-            )
-            return await self._json_error(500, "memory read failed")
-        return web.json_response({"ok": True, "text": text})
-
-    async def admin_chat_memory_put(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        body = await self._read_json_object(request)
-        session_uid = str(body.get("session_uid", "") or "").strip()
-        text = str(body.get("text", "") or "")
-        service = self._resolve_admin_chat_service()
-        if service is None:
-            return await self._json_error(503, "chat service unavailable")
-        try:
-            session = await self._resolve_session_for_chat(user, session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            return await self._json_error(400, "session workdir is empty")
-        try:
-            await asyncio.to_thread(service.save_memory_md, workdir, text=text)
-        except Exception:
-            logger.exception(
-                "miniapp admin_chat_memory_put failed session_uid=%s", session_uid
-            )
-            return await self._json_error(500, "memory write failed")
-        return web.json_response({"ok": True})
-
-    async def admin_runs(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        try:
-            limit = int(request.query.get("limit", "20") or "20")
-        except (TypeError, ValueError):
-            limit = 20
-        try:
-            _resolved_chat_id, _canonical_uid, session = self._resolve_admin_status_session(
-                user=user,
-                session_uid=session_uid,
-            )
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        # TODO(M3): obtain RunArtifactStore via service injection instead of bot_app attribute introspection.
-        artifact_store = getattr(self.bot_app, "mode_run_artifact_store", None)
-        if artifact_store is None:
-            return web.json_response({"ok": True, "runs": []})
-        try:
-            handles = await asyncio.to_thread(
-                artifact_store.list_runs,
-                session=session,
-                mode_id="admin",
-                limit=int(max(1, limit)),
-            )
-        except Exception:
-            logger.exception("miniapp admin_runs list failed session_uid=%s", session_uid)
-            return await self._json_error(500, "admin runs unavailable")
-        rows: List[Dict[str, Any]] = []
-        for handle in handles or []:
-            try:
-                state = await asyncio.to_thread(artifact_store.load_state, handle) or {}
-            except Exception:
-                state = {}
-            rows.append(
-                {
-                    "run_id": str(handle.run_id),
-                    "status": str(state.get("status") or "-"),
-                    "phase": str(state.get("phase") or "-"),
-                    "started_at": state.get("started_at") or state.get("created_at") or "",
-                    "finished_at": state.get("finished_at") or "",
-                }
-            )
-        return web.json_response({"ok": True, "runs": rows})
-
-    async def admin_run_detail(self, request: web.Request) -> web.Response:
-        user = await self._require_admin(request)
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        run_id = str(request.match_info.get("run_id", "") or "").strip()
-        if not run_id:
-            return await self._json_error(400, "run_id is required")
-        try:
-            events_limit = int(request.query.get("events_limit", "50") or "50")
-        except (TypeError, ValueError):
-            events_limit = 50
-        try:
-            _resolved_chat_id, _canonical_uid, session = self._resolve_admin_status_session(
-                user=user,
-                session_uid=session_uid,
-            )
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        # TODO(M3): obtain RunArtifactStore via service injection instead of bot_app attribute introspection.
-        artifact_store = getattr(self.bot_app, "mode_run_artifact_store", None)
-        if artifact_store is None:
-            return await self._json_error(503, "run artifact store unavailable")
-        try:
-            handle = await asyncio.to_thread(
-                artifact_store.get_run, session=session, mode_id="admin", run_id=run_id
-            )
-        except Exception:
-            logger.exception(
-                "miniapp admin_run_detail get_run failed session_uid=%s run_id=%s",
-                session_uid,
-                run_id,
-            )
-            return await self._json_error(500, "admin run detail unavailable")
-        if handle is None:
-            return await self._json_error(404, "run not found")
-        try:
-            state = await asyncio.to_thread(artifact_store.load_state, handle) or {}
-            plan = await asyncio.to_thread(artifact_store.load_plan, handle) or {}
-            checkpoints = await asyncio.to_thread(artifact_store.load_checkpoints, handle) or {}
-            events = await asyncio.to_thread(
-                artifact_store.load_events_tail, handle, limit=int(max(1, events_limit))
-            ) or []
-        except Exception:
-            logger.exception(
-                "miniapp admin_run_detail load failed session_uid=%s run_id=%s",
-                session_uid,
-                run_id,
-            )
-            return await self._json_error(500, "admin run detail unavailable")
-        return web.json_response(
-            {
-                "ok": True,
-                "run_id": str(handle.run_id),
-                "session_uid": str(handle.session_uid),
-                "mode_id": str(handle.mode_id),
-                "state": dict(state),
-                "plan": dict(plan),
-                "checkpoints": dict(checkpoints),
-                "events": list(events),
-            }
-        )
-
-    # ------------------------------------------------------------------
-    # Admin Autonomy (baseline/drift/memory/runbooks/snapshots) endpoints
-    # ------------------------------------------------------------------
-
-    async def _autonomy_resolve_service(
-        self, request: web.Request, *, session_uid: str
-    ) -> tuple[Any, Any]:
-        """Resolve session + AdminAutonomyService or raise HTTPException."""
-        user = await self._require_admin(request)
-        _resolved_chat_id, _canonical_uid, session = self._resolve_admin_status_session(
-            user=user,
-            session_uid=session_uid,
-        )
-        workdir = str(getattr(session, "workdir", "") or "").strip()
-        if not workdir:
-            raise web.HTTPBadRequest(reason="session workdir is not set")
-        from modes.admin.facade import AdminAutonomyService
-        service = AdminAutonomyService(workdir)
-        return service, user
-
-    def _autonomy_handle_facade_error(self, exc: BaseException) -> web.Response:
-        from modes.admin.baseline import BaselineError
-        from modes.admin.snapshot_store import AdminSnapshotStoreError
-        from modes.admin.memory import ServerMemoryError
-        from modes.admin.runbooks import RunbookError
-        from modes.admin.runbook_builder import RunbookBuilderError
-        from modes.admin.runbook_promoter import RunbookPromoteError
-        from modes.admin.runbook_validator import RunbookValidatorError
-        from modes.admin.script_runner import ScriptRunnerError
-        from modes.admin.script_sources import ScriptSourceError
-        user_errors = (
-            ValueError,
-            BaselineError,
-            AdminSnapshotStoreError,
-            ServerMemoryError,
-            RunbookError,
-            RunbookBuilderError,
-            RunbookPromoteError,
-            RunbookValidatorError,
-            ScriptRunnerError,
-            ScriptSourceError,
-        )
-        if isinstance(exc, ScriptRunnerError) and "checksum mismatch" in str(exc):
-            return web.json_response(
-                {"ok": False, "error": str(exc), "code": "checksum_mismatch"},
-                status=409,
-            )
-        if isinstance(exc, FileNotFoundError):
-            return web.json_response({"ok": False, "error": str(exc) or "not found"}, status=404)
-        if isinstance(exc, PermissionError):
-            return web.json_response({"ok": False, "error": str(exc) or "permission denied"}, status=403)
-        if isinstance(exc, user_errors):
-            return web.json_response({"ok": False, "error": str(exc)}, status=400)
-        return web.json_response({"ok": False, "error": "autonomy operation failed"}, status=500)
-
-    @staticmethod
-    def _autonomy_serialize_report(report: Any) -> Dict[str, Any]:
-        import dataclasses
-        if dataclasses.is_dataclass(report):
-            return dataclasses.asdict(report)
-        if hasattr(report, "to_dict"):
-            return report.to_dict()
-        return dict(report or {})
-
-    @staticmethod
-    def _autonomy_session_uid_from_request(request: web.Request) -> str:
-        return str(request.query.get("session_uid", "") or "").strip()
-
-    async def _autonomy_session_uid_from_body(self, body: Dict[str, Any]) -> str:
-        return str(body.get("session_uid", "") or "").strip()
-
-    async def admin_autonomy_dashboard(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            global_summary = await asyncio.to_thread(service.global_summary)
-            servers = await asyncio.to_thread(service.list_servers)
-        except Exception as exc:
-            logger.exception("miniapp admin_autonomy_dashboard failed session_uid=%s", session_uid)
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response(
-            {
-                "ok": True,
-                "global": global_summary,
-                "servers": [s.to_dict() for s in servers or []],
-            }
-        )
-
-    async def admin_autonomy_servers(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            servers = await asyncio.to_thread(service.list_servers)
-        except Exception as exc:
-            logger.exception("miniapp admin_autonomy_servers failed session_uid=%s", session_uid)
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "servers": [s.to_dict() for s in servers or []]})
-
-    async def admin_autonomy_server_detail(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            summary = await asyncio.to_thread(service.get_server_summary, server_id)
-            if summary is None:
-                return await self._json_error(404, f"server {server_id!r} not found")
-            dossier = await asyncio.to_thread(service.get_dossier, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_server_detail failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response(
-            {
-                "ok": True,
-                "summary": summary.to_dict(),
-                "dossier": dossier,
-            }
-        )
-
-    async def admin_autonomy_rescan_server(self, request: web.Request) -> web.Response:
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        if not session_uid:
-            # support body-based session_uid as well
-            try:
-                body = await self._read_json_object(request)
-            except web.HTTPException:
-                body = {}
-            session_uid = str(body.get("session_uid", "") or "").strip()
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            report = await service.rescan_server(server_id)
-        except ValueError as exc:
-            return await self._json_error(404, str(exc))
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_rescan_server failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "report": self._autonomy_serialize_report(report)})
-
-    async def admin_autonomy_rescan_all(self, request: web.Request) -> web.Response:
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        if not session_uid:
-            try:
-                body = await self._read_json_object(request)
-            except web.HTTPException:
-                body = {}
-            session_uid = str(body.get("session_uid", "") or "").strip()
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            reports = await service.rescan_all()
-        except Exception as exc:
-            logger.exception("miniapp admin_autonomy_rescan_all failed session_uid=%s", session_uid)
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response(
-            {
-                "ok": True,
-                "reports": [self._autonomy_serialize_report(r) for r in reports or []],
-            }
-        )
-
-    async def admin_autonomy_baseline_get(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            payload = await asyncio.to_thread(service.get_baseline, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_baseline_get failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "baseline": payload})
-
-    async def admin_autonomy_baseline_accept(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
-        session_uid = str(body.get("session_uid", "") or request.query.get("session_uid", "") or "").strip()
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            result = await asyncio.to_thread(service.accept_baseline, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_baseline_accept failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "result": result})
-
-    async def admin_autonomy_baseline_discard(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        if not session_uid:
-            try:
-                body = await self._read_json_object(request)
-            except web.HTTPException:
-                body = {}
-            session_uid = str(body.get("session_uid", "") or "").strip()
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            removed = await asyncio.to_thread(service.discard_baseline_proposal, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_baseline_discard failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "removed": bool(removed)})
-
-    async def admin_autonomy_drifts_list(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            limit = int(request.query.get("limit", "50") or "50")
-        except (TypeError, ValueError):
-            limit = 50
-        severity_min = str(request.query.get("severity_min", "") or "").strip() or None
-        open_only_raw = str(request.query.get("open_only", "true") or "true").strip().lower()
-        open_only = open_only_raw not in {"0", "false", "no", ""}
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            drifts = await asyncio.to_thread(
-                service.list_drifts,
-                server_id,
-                limit=limit,
-                severity_min=severity_min,
-                open_only=open_only,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_drifts_list failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "drifts": list(drifts or [])})
-
-    async def admin_autonomy_drift_ack(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        drift_id_raw = str(request.match_info.get("drift_id", "") or "").strip()
-        if not server_id or not drift_id_raw:
-            return await self._json_error(400, "server_id and drift_id are required")
-        try:
-            drift_id = int(drift_id_raw)
-        except (TypeError, ValueError):
-            return await self._json_error(400, "drift_id must be integer")
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = str(body.get("session_uid", "") or request.query.get("session_uid", "") or "").strip()
-        by = str(body.get("by") or "").strip() or None
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            acked = await asyncio.to_thread(service.ack_drift, server_id, drift_id, by=by)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_drift_ack failed session_uid=%s server_id=%s drift_id=%s",
-                session_uid,
-                server_id,
-                drift_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "acknowledged": bool(acked)})
-
-    async def admin_autonomy_snapshots(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        check_id = str(request.query.get("check_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        if not check_id:
-            return await self._json_error(400, "check_id query param is required")
-        try:
-            limit = int(request.query.get("limit", "100") or "100")
-        except (TypeError, ValueError):
-            limit = 100
-        since_ts_raw = str(request.query.get("since_ts", "") or "").strip()
-        since_ts: Optional[int] = None
-        if since_ts_raw:
-            try:
-                since_ts = int(since_ts_raw)
-            except (TypeError, ValueError):
-                since_ts = None
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            snapshots = await asyncio.to_thread(
-                service.get_snapshots,
-                server_id,
-                check_id,
-                limit=limit,
-                since_ts=since_ts,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_snapshots failed session_uid=%s server_id=%s check_id=%s",
-                session_uid,
-                server_id,
-                check_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "snapshots": list(snapshots or [])})
-
-    async def admin_autonomy_snapshot_checks(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            checks = await asyncio.to_thread(service.list_snapshot_checks, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_snapshot_checks failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "checks": list(checks or [])})
-
-    async def admin_autonomy_memory_get(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            memory = await asyncio.to_thread(service.get_memory, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_memory_get failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "memory": memory})
-
-    async def admin_autonomy_memory_fact_put(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
-        session_uid = str(body.get("session_uid", "") or request.query.get("session_uid", "") or "").strip()
-        key = str(body.get("key") or "").strip()
-        if not key:
-            return await self._json_error(400, "fact key is required")
-        value = body.get("value")
-        by = str(body.get("by") or "").strip() or None
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            facts = await asyncio.to_thread(
-                service.update_memory_fact, server_id, key=key, value=value, by=by
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_memory_fact_put failed session_uid=%s server_id=%s key=%s",
-                session_uid,
-                server_id,
-                key,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "facts": facts})
-
-    async def admin_autonomy_memory_fact_delete(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        key = str(request.match_info.get("key", "") or "").strip()
-        if not server_id or not key:
-            return await self._json_error(400, "server_id and key are required")
-        session_uid = str(request.query.get("session_uid", "") or "").strip()
-        if not session_uid:
-            try:
-                body = await self._read_json_object(request)
-            except web.HTTPException:
-                body = {}
-            session_uid = str(body.get("session_uid", "") or "").strip()
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            removed = await asyncio.to_thread(service.delete_memory_fact, server_id, key)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_memory_fact_delete failed session_uid=%s server_id=%s key=%s",
-                session_uid,
-                server_id,
-                key,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "removed": bool(removed)})
-
-    async def admin_autonomy_memory_note(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "invalid request"))
-        session_uid = str(body.get("session_uid", "") or request.query.get("session_uid", "") or "").strip()
-        text = str(body.get("text") or "").strip()
-        if not text:
-            return await self._json_error(400, "text is required")
-        source = str(body.get("source") or "manual").strip() or "manual"
-        tags_raw = body.get("tags") or []
-        if isinstance(tags_raw, list):
-            tags = [str(t) for t in tags_raw if str(t or "").strip()]
-        else:
-            tags = []
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            entry = await asyncio.to_thread(
-                service.append_memory_note, server_id, text, source=source, tags=tags
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_memory_note failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response(
-            {
-                "ok": True,
-                "entry": {
-                    "ts": str(getattr(entry, "ts", "") or ""),
-                    "source": str(getattr(entry, "source", "") or ""),
-                    "text": str(getattr(entry, "text", "") or ""),
-                },
-            }
-        )
-
-    async def admin_autonomy_memory_compact(self, request: web.Request) -> web.Response:
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = str(body.get("session_uid", "") or request.query.get("session_uid", "") or "").strip()
-        force = bool(body.get("force", False))
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            result = await asyncio.to_thread(service.compact_memory, server_id, force=force)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_memory_compact failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "result": result})
-
-    async def admin_autonomy_runbooks_list(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        filter_server_id = str(request.query.get("server_id", "") or "").strip() or None
-        tags_raw = str(request.query.get("tags", "") or "").strip()
-        tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else []
-        try:
-            limit = int(request.query.get("limit", "20") or "20")
-        except (TypeError, ValueError):
-            limit = 20
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            runbooks = await asyncio.to_thread(
-                service.list_runbook_summary,
-                server_id=filter_server_id,
-                tags=tags,
-                limit=limit,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_runbooks_list failed session_uid=%s server_id=%s",
-                session_uid,
-                filter_server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "runbooks": list(runbooks or [])})
-
-    async def admin_autonomy_runbook_get(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        runbook_id = str(request.match_info.get("runbook_id", "") or "").strip()
-        if not runbook_id:
-            return await self._json_error(400, "runbook_id is required")
-        filter_server_id = str(request.query.get("server_id", "") or "").strip() or None
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            runbook = await asyncio.to_thread(
-                service.get_runbook, runbook_id, server_id=filter_server_id
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_runbook_get failed session_uid=%s runbook_id=%s",
-                session_uid,
-                runbook_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        if runbook is None:
-            return await self._json_error(404, f"runbook {runbook_id!r} not found")
-        return web.json_response({"ok": True, "runbook": runbook.as_dict()})
-
-    async def admin_autonomy_scripts_scan(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        directory = str(body.get("directory", "") or "").strip()
-        if not directory:
-            return await self._json_error(400, "directory is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            files = await asyncio.to_thread(service.scan_script_sources, directory)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_scripts_scan failed session_uid=%s dir=%s",
-                session_uid,
-                directory,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({
-            "ok": True,
-            "files": [
-                {
-                    "path": str(f.path),
-                    "name": f.name,
-                    "size_bytes": int(f.size_bytes),
-                    "sha1": f.sha1,
-                }
-                for f in files
-            ],
-        })
-
-    async def admin_autonomy_scripts_read(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        path = str(body.get("path", "") or "").strip()
-        if not path:
-            return await self._json_error(400, "path is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            text = await asyncio.to_thread(service.read_script_from_source, path)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_scripts_read failed session_uid=%s path=%s",
-                session_uid,
-                path,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "text": text})
-
-    async def admin_autonomy_runbook_build(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        title = str(body.get("title", "") or "").strip()
-        dev_server_id = str(body.get("dev_server_id", "") or "").strip()
-        rb_id = str(body.get("rb_id", "") or "").strip() or None
-        force = bool(body.get("force", False))
-        scripts_raw = body.get("scripts") or []
-        if not isinstance(scripts_raw, list) or not scripts_raw:
-            return await self._json_error(400, "scripts is required")
-        for entry in scripts_raw:
-            if not isinstance(entry, dict) or not str(entry.get("source_path") or "").strip():
-                return await self._json_error(400, "each script entry must include source_path")
-        tags = body.get("tags") or []
-        triggers = body.get("triggers") or []
-        description = str(body.get("description", "") or "").strip()
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            runbook = await asyncio.to_thread(
-                service.create_runbook_from_scripts,
-                title=title,
-                dev_server_id=dev_server_id,
-                scripts=scripts_raw,
-                rb_id=rb_id,
-                tags=tags,
-                triggers=triggers,
-                description=description,
-                force=force,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_runbook_build failed session_uid=%s title=%s",
-                session_uid,
-                title,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "runbook": runbook.as_dict()})
-
-    async def admin_autonomy_runbook_validate(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        runbook_id = str(request.match_info.get("runbook_id", "") or "").strip()
-        if not runbook_id:
-            return await self._json_error(400, "runbook_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            report = await service.validate_runbook(runbook_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_runbook_validate failed session_uid=%s runbook_id=%s",
-                session_uid,
-                runbook_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "report": report.to_dict()})
-
-    async def admin_autonomy_runbook_promote(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        runbook_id = str(request.match_info.get("runbook_id", "") or "").strip()
-        if not runbook_id:
-            return await self._json_error(400, "runbook_id is required")
-        add_servers = body.get("add_servers") or []
-        if not isinstance(add_servers, list) or not add_servers:
-            return await self._json_error(400, "add_servers is required")
-        confidence_raw = body.get("confidence")
-        confidence: Optional[float]
-        if confidence_raw is None or confidence_raw == "":
-            confidence = None
-        else:
-            try:
-                confidence = float(confidence_raw)
-            except (TypeError, ValueError):
-                return await self._json_error(400, "confidence must be numeric")
-        run_validation = bool(body.get("run_validation", True))
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            result = await service.promote_runbook(
-                runbook_id,
-                add_servers=add_servers,
-                confidence=confidence,
-                run_validation=run_validation,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_runbook_promote failed session_uid=%s runbook_id=%s",
-                session_uid,
-                runbook_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "result": result.to_dict()})
-
-    async def admin_autonomy_runbook_run_step(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        runbook_id = str(request.match_info.get("runbook_id", "") or "").strip()
-        step_name = str(body.get("step_name", "") or "").strip()
-        server_id = str(body.get("server_id", "") or "").strip()
-        if not runbook_id or not step_name or not server_id:
-            return await self._json_error(400, "runbook_id, step_name and server_id are required")
-        dry_run = bool(body.get("dry_run", True))
-        verify_checksum = bool(body.get("verify_checksum", True))
-        timeout_raw = body.get("timeout_sec")
-        timeout_sec: Optional[float] = None
-        if timeout_raw not in (None, ""):
-            try:
-                timeout_sec = float(timeout_raw)
-            except (TypeError, ValueError):
-                return await self._json_error(400, "timeout_sec must be numeric")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            result = await service.run_runbook_step(
-                rb_id=runbook_id,
-                step_name=step_name,
-                server_id=server_id,
-                dry_run=dry_run,
-                verify_checksum=verify_checksum,
-                timeout_sec=timeout_sec,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_runbook_run_step failed session_uid=%s runbook_id=%s step=%s",
-                session_uid,
-                runbook_id,
-                step_name,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "result": result.to_dict()})
-
-    async def admin_autonomy_maintenance_daily(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = str(body.get("session_uid", "") or request.query.get("session_uid", "") or "").strip()
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            report = await asyncio.to_thread(service.run_daily_maintenance)
-        except Exception as exc:
-            logger.exception("miniapp admin_autonomy_maintenance_daily failed session_uid=%s", session_uid)
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, "report": report})
-
-    async def admin_autonomy_prereqs_get(self, request: web.Request) -> web.Response:
-        session_uid = self._autonomy_session_uid_from_request(request)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            report = await asyncio.to_thread(service.check_server_prereqs, server_id)
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_prereqs_get failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        payload = report.to_dict() if hasattr(report, "to_dict") else {}
-        return web.json_response({"ok": True, "report": payload})
-
-    async def admin_autonomy_prereqs_bootstrap(self, request: web.Request) -> web.Response:
-        try:
-            body = await self._read_json_object(request)
-        except web.HTTPException:
-            body = {}
-        session_uid = await self._autonomy_session_uid_from_body(body)
-        server_id = str(request.match_info.get("server_id", "") or "").strip()
-        if not server_id:
-            return await self._json_error(400, "server_id is required")
-        force = bool(body.get("force", False))
-        try:
-            service, _user = await self._autonomy_resolve_service(request, session_uid=session_uid)
-        except web.HTTPException as exc:
-            return await self._json_error(int(exc.status), str(exc.reason or "request failed"))
-        try:
-            result = await asyncio.to_thread(
-                service.generate_bootstrap_runbook, server_id, force=force,
-            )
-        except Exception as exc:
-            logger.exception(
-                "miniapp admin_autonomy_prereqs_bootstrap failed session_uid=%s server_id=%s",
-                session_uid,
-                server_id,
-            )
-            return self._autonomy_handle_facade_error(exc)
-        return web.json_response({"ok": True, **(result or {})})
 
     async def session_settings_get(self, request: web.Request) -> web.Response:
         user = await self._require_access(request)
@@ -4684,7 +2959,6 @@ class MiniAppRoutes:
         register_foundation_routes(app, self.route_context, self.foundation_route_services)
         register_json_routes(app, self.route_context, self.json_route_services)
         register_config_routes(app, self.route_context, self.config_route_services)
-        register_admin_routes(app, self.route_context, self.admin_route_services)
         register_scheduler_routes(app, self.route_context, self.scheduler_route_services)
         register_logs_routes(app, self.route_context, self.logs_route_services)
         app.router.add_get("/api/auth/me", self.auth_me)
@@ -4692,48 +2966,6 @@ class MiniAppRoutes:
         app.router.add_get("/api/files/download", self.files_download)
         app.router.add_get("/api/status/ws_ticket", self.status_ws_ticket)
         app.router.add_get("/api/status/ws", self.status_ws)
-        app.router.add_get("/api/v1/admin/status", self.admin_status)
-        app.router.add_post("/api/v1/admin/action", self.admin_action)
-        app.router.add_get("/api/v1/admin/runs", self.admin_runs)
-        app.router.add_get("/api/v1/admin/runs/{run_id}", self.admin_run_detail)
-        app.router.add_get("/api/v1/admin/hosts", self.admin_hosts_list)
-        app.router.add_get("/api/v1/admin/actions/ssh", self.admin_actions_ssh_get)
-        app.router.add_put("/api/v1/admin/actions/ssh", self.admin_actions_ssh_put)
-        app.router.add_get("/api/v1/admin/chat/messages", self.admin_chat_messages_get)
-        app.router.add_post("/api/v1/admin/chat/messages", self.admin_chat_messages_post)
-        app.router.add_get("/api/v1/admin/chat/pending", self.admin_chat_pending_get)
-        app.router.add_post("/api/v1/admin/chat/pending/{approval_id}/approve", self.admin_chat_pending_approve)
-        app.router.add_post("/api/v1/admin/chat/pending/{approval_id}/reject", self.admin_chat_pending_reject)
-        app.router.add_get("/api/v1/admin/chat/memory", self.admin_chat_memory_get)
-        app.router.add_put("/api/v1/admin/chat/memory", self.admin_chat_memory_put)
-        app.router.add_get("/api/v1/admin/autonomy/dashboard", self.admin_autonomy_dashboard)
-        app.router.add_get("/api/v1/admin/autonomy/servers", self.admin_autonomy_servers)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}", self.admin_autonomy_server_detail)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/rescan", self.admin_autonomy_rescan_server)
-        app.router.add_post("/api/v1/admin/autonomy/rescan_all", self.admin_autonomy_rescan_all)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}/baseline", self.admin_autonomy_baseline_get)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/baseline/accept", self.admin_autonomy_baseline_accept)
-        app.router.add_delete("/api/v1/admin/autonomy/servers/{server_id}/baseline/proposal", self.admin_autonomy_baseline_discard)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}/drifts", self.admin_autonomy_drifts_list)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/drifts/{drift_id}/ack", self.admin_autonomy_drift_ack)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}/snapshots", self.admin_autonomy_snapshots)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}/snapshot-checks", self.admin_autonomy_snapshot_checks)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}/memory", self.admin_autonomy_memory_get)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/memory/facts", self.admin_autonomy_memory_fact_put)
-        app.router.add_delete("/api/v1/admin/autonomy/servers/{server_id}/memory/facts/{key}", self.admin_autonomy_memory_fact_delete)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/memory/notes", self.admin_autonomy_memory_note)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/memory/compact", self.admin_autonomy_memory_compact)
-        app.router.add_get("/api/v1/admin/autonomy/runbooks", self.admin_autonomy_runbooks_list)
-        app.router.add_get("/api/v1/admin/autonomy/runbooks/{runbook_id}", self.admin_autonomy_runbook_get)
-        app.router.add_post("/api/v1/admin/autonomy/scripts/scan", self.admin_autonomy_scripts_scan)
-        app.router.add_post("/api/v1/admin/autonomy/scripts/read", self.admin_autonomy_scripts_read)
-        app.router.add_post("/api/v1/admin/autonomy/runbooks/build", self.admin_autonomy_runbook_build)
-        app.router.add_post("/api/v1/admin/autonomy/runbooks/{runbook_id}/validate", self.admin_autonomy_runbook_validate)
-        app.router.add_post("/api/v1/admin/autonomy/runbooks/{runbook_id}/promote", self.admin_autonomy_runbook_promote)
-        app.router.add_post("/api/v1/admin/autonomy/runbooks/{runbook_id}/run-step", self.admin_autonomy_runbook_run_step)
-        app.router.add_post("/api/v1/admin/autonomy/maintenance/daily", self.admin_autonomy_maintenance_daily)
-        app.router.add_get("/api/v1/admin/autonomy/servers/{server_id}/prereqs", self.admin_autonomy_prereqs_get)
-        app.router.add_post("/api/v1/admin/autonomy/servers/{server_id}/prereqs/bootstrap", self.admin_autonomy_prereqs_bootstrap)
         app.router.add_get("/api/runs", self.runs_list)
         app.router.add_get("/api/runs/{run_id}", self.run_detail)
         app.router.add_post("/api/runs/{run_id}/{action}", self.run_action)
