@@ -1,10 +1,13 @@
 import asyncio
+import json
 import os
-import re
 import stat
 import time
+import urllib.parse
 import uuid
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -13,11 +16,131 @@ import app.services.cli_backends.tmux_backend as tmux_backend_module
 from config import ToolConfig
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, build_tmux_attach_command
 from app.services.cli_backends.tmux_driver import TmuxDriverError
-from app.services.cli_backends.tmux_parser import done_marker, request_marker
 from app.services.cli_backends.transcript_reader import TranscriptLocator, TranscriptPollResult
+from app.services.session_transfer.reader_claude import _project_key as _claude_project_key
+from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
+from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
 
 # Готовый экран Kimi Code 0.34.0: рамка ввода и статус-бар с индикатором контекста.
 KIMI_READY_PANE = "│ > │\n yolo  /work                                        context: 0%"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_home(tmp_path, monkeypatch):
+    """Журналы CLI лежат в домашнем каталоге — в тестах он свой."""
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+def _iso_utc(stamp: float) -> str:
+    return datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+_TRANSCRIPT_CLIS = ("claude", "codex", "gemini", "qwen", "kimi", "grok")
+
+
+def _write_cli_transcript(*, cli: str, workdir: str, session_id: str, text: str) -> Path:
+    """Пишет журнал CLI так, как его пишет сам CLI: ответ и конец хода.
+
+    Именно журнал закрывает ход: маркеров завершения в промпте больше нет.
+    """
+    root = Path(os.path.expanduser("~"))
+    workdir = os.path.realpath(workdir)
+    stamp = _iso_utc(time.time())
+    if cli == "claude":
+        path = root / ".claude" / "projects" / _claude_project_key(workdir) / f"{session_id}.jsonl"
+        records = [
+            {
+                "type": "assistant",
+                "sessionId": session_id,
+                "timestamp": stamp,
+                "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
+            },
+            {"type": "system", "subtype": "turn_duration", "sessionId": session_id, "timestamp": stamp},
+        ]
+    elif cli == "codex":
+        path = root / ".codex" / "sessions" / f"rollout-2026-08-21T00-00-00-{session_id}.jsonl"
+        records = [
+            {"type": "session_meta", "timestamp": stamp, "payload": {"id": session_id, "cwd": workdir}},
+            {
+                "type": "event_msg",
+                "timestamp": stamp,
+                "payload": {"type": "task_complete", "last_agent_message": text},
+            },
+        ]
+    elif cli == "qwen":
+        path = root / ".qwen" / "projects" / _qwen_project_keys(workdir)[0] / "chats" / f"{session_id}.jsonl"
+        # Отдельной записи о конце хода qwen не пишет: ход закрывает текст без вызова инструмента.
+        records = [
+            {
+                "type": "assistant",
+                "sessionId": session_id,
+                "timestamp": stamp,
+                "message": {"role": "model", "parts": [{"text": text}]},
+            }
+        ]
+    elif cli == "grok":
+        path = root / ".grok" / "sessions" / urllib.parse.quote(workdir, safe="") / session_id / "updates.jsonl"
+        records = [
+            {
+                "timestamp": time.time(),
+                "method": "session/update",
+                "params": {
+                    "sessionId": session_id,
+                    "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}},
+                },
+            },
+            {
+                "timestamp": time.time(),
+                "method": "_x.ai/session/update",
+                "params": {"sessionId": session_id, "update": {"sessionUpdate": "turn_completed"}},
+            },
+        ]
+    elif cli == "kimi":
+        path = (
+            root
+            / ".kimi-code"
+            / "sessions"
+            / _kimi_workspace_key(workdir)
+            / session_id
+            / "agents"
+            / "main"
+            / "wire.jsonl"
+        )
+        now_ms = int(time.time() * 1000)
+        records = [
+            {
+                "type": "context.append_loop_event",
+                "time": now_ms,
+                "event": {"type": "content.part", "part": {"type": "text", "text": text}},
+            },
+            {"type": "turn.ended", "time": now_ms, "turnId": 0, "reason": "completed"},
+        ]
+    elif cli == "gemini":
+        # gemini держит снимок сессии целиком и переписывает его на каждом ходе.
+        path = root / ".gemini" / "tmp" / "project-hash" / "chats" / f"session-{session_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "sessionId": session_id,
+                    "cwd": workdir,
+                    "messages": [{"id": "m1", "type": "gemini", "content": text, "timestamp": stamp}],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return path
+    else:
+        raise AssertionError(f"нет журнала для CLI {cli}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return path
 
 
 class FakeTmuxDriver:
@@ -31,7 +154,8 @@ class FakeTmuxDriver:
         self.kill_result = True
         self.new_session_commands = []
         self.fail_load = False
-        self.write_done_marker = True
+        self.autowrite_transcript = True
+        self.fallback_session_id = "00000000-0000-4000-8000-000000000001"
         self.loaded_buffer_name = None
         self.pasted_buffer_name = None
         self.paste_delete = False
@@ -81,14 +205,49 @@ class FakeTmuxDriver:
         self.events.append("send_enter")
         prompt = open(self.loaded_prompt_path, encoding="utf-8").read()
         self.sent_prompts.append(prompt)
-        match = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", prompt)
-        if match is None:
+        if not self.log_path:
             return
-        request_id = match.group(1)
         with open(self.log_path, "a", encoding="utf-8") as handle:
-            handle.write(f"{request_marker(request_id)}\n{self.response_text}\n")
-            if self.write_done_marker:
-                handle.write(f"{done_marker(request_id)}\n")
+            handle.write(f"{self.response_text}\n")
+        if self.autowrite_transcript:
+            self.write_transcript()
+
+    def _workdir(self):
+        # runtime_dir = <workdir>/.cli-proxy/runtime/tmux/<key>, pane.log лежит в нём.
+        path = os.path.abspath(str(self.log_path or ""))
+        for _ in range(5):
+            path = os.path.dirname(path)
+        return path
+
+    def _transcript_target(self):
+        """CLI и идентификатор сессии — те же, что видит настоящий журнал."""
+        command = self.new_session_commands[-1][2] if self.new_session_commands else ["claude"]
+        # Команда может начинаться с обёртки вида `env VAR=... claude`.
+        args = []
+        cli = "claude"
+        for index, token in enumerate(command):
+            if os.path.basename(token) in _TRANSCRIPT_CLIS:
+                cli = os.path.basename(token)
+                args = command[index + 1:]
+                break
+        session_id = ""
+        for flag in ("--session-id", "--resume"):
+            if flag in args:
+                index = args.index(flag)
+                if index + 1 < len(args):
+                    session_id = args[index + 1]
+        if not session_id and args[:1] == ["resume"] and len(args) > 1:
+            session_id = args[-1]
+        return cli, session_id or self.fallback_session_id
+
+    def write_transcript(self, text=None):
+        cli, session_id = self._transcript_target()
+        return _write_cli_transcript(
+            cli=cli,
+            workdir=self._workdir(),
+            session_id=session_id,
+            text=self.response_text if text is None else text,
+        )
 
     async def capture_pane(self, pane_target):
         self.capture_calls += 1
@@ -200,7 +359,7 @@ async def test_tmux_backend_run_returns_delta_and_state(tmp_path):
 @pytest.mark.asyncio
 async def test_tmux_backend_prefers_structured_transcript_and_persists_locator(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     driver.response_text = "garbled terminal repaint"
     transcript_path = tmp_path / "structured.jsonl"
     locator = TranscriptLocator(
@@ -260,7 +419,7 @@ async def test_tmux_backend_prefers_structured_transcript_and_persists_locator(t
 @pytest.mark.asyncio
 async def test_tmux_backend_uses_structured_transcript_without_request_context(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     locator = TranscriptLocator(
         provider="claude",
         path=str(tmp_path / "structured.jsonl"),
@@ -269,7 +428,7 @@ async def test_tmux_backend_uses_structured_transcript_without_request_context(t
 
     class FakeTranscriptReader:
         def __init__(self, **kwargs):
-            assert kwargs["request_id"]
+            assert kwargs["started_at"]
 
         def poll(self):
             return TranscriptPollResult(
@@ -336,7 +495,7 @@ async def test_tmux_backend_waits_for_structured_completion_after_pane_done(tmp_
 
 
 @pytest.mark.asyncio
-async def test_tmux_backend_observe_ignores_stale_completion_markers(tmp_path, monkeypatch):
+async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
 
     class FakeTranscriptReader:
@@ -344,7 +503,7 @@ async def test_tmux_backend_observe_ignores_stale_completion_markers(tmp_path, m
             pass
 
         def poll(self):
-            # Старый DONE уже отдан: журнал по-прежнему рапортует о завершении.
+            # Конец прошлого хода уже отдан: журнал по-прежнему рапортует о завершении.
             return TranscriptPollResult(
                 assistant_text="Новый текст живого агента",
                 complete=True,
@@ -364,7 +523,7 @@ async def test_tmux_backend_observe_ignores_stale_completion_markers(tmp_path, m
     driver.sessions.add(paths["session_name"])
     os.makedirs(paths["runtime_dir"], exist_ok=True)
     with open(paths["pane_log"], "w", encoding="utf-8") as handle:
-        handle.write(f"старый ответ {done_marker('req-1')}\n")
+        handle.write("старый ответ\n")
 
     request = tmux_backend_module.TmuxRecoveryRequest(
         request_id="req-1",
@@ -378,7 +537,7 @@ async def test_tmux_backend_observe_ignores_stale_completion_markers(tmp_path, m
     result = await asyncio.wait_for(backend.recover(session, request), timeout=5)
 
     assert result.text == "Новый текст живого агента"
-    # Наблюдение живёт до тишины в выводе, а не до первого встреченного маркера.
+    # Наблюдение живёт до тишины в выводе, а не до первого конца хода в журнале.
     assert result.diagnostics["completion_source"].endswith("quiet-timeout")
     assert time.time() - started_at >= 0.3
 
@@ -568,18 +727,27 @@ async def test_tmux_backend_falls_back_to_pane_for_unrecognized_transcript(tmp_p
             )
 
     monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
 
-    result = await backend.run(
-        session,
-        "do work",
-        request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+    result = await asyncio.wait_for(
+        backend.run(
+            session,
+            "do work",
+            request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+        ),
+        timeout=5,
     )
 
+    # Журнал не распознан, конца хода взять неоткуда — ход закрывает тишина.
     assert result.text == "assistant answer"
     assert result.abnormal_stop is False
-    assert result.diagnostics["completion_source"] == "pane"
+    assert result.diagnostics["completion_source"] == "pane-quiet-timeout"
 
 
 @pytest.mark.asyncio
@@ -587,7 +755,7 @@ async def test_tmux_backend_keeps_transcript_when_pane_choice_has_no_options(tmp
     # Экран TUI перерисован так, что варианты не читаются, а транскрипт распознан:
     # раньше сырой буфер экрана вытеснял текст из JSONL и уходил в чат целиком.
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     driver.response_text = (
         "• Ran find /tmp -name 'host_bwrap' -printf '%T@ %p\\n' | sort -nr\n"
         "  1754161234.5678900 /tmp/pytest-of-root/pytest-242/host_bwrap\n"
@@ -622,7 +790,7 @@ async def test_tmux_backend_keeps_transcript_when_pane_choice_has_no_options(tmp
 @pytest.mark.asyncio
 async def test_tmux_backend_reports_only_menu_block_for_real_choice(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     driver.response_text = (
         "• Ran pytest -q\n"
         "  120 passed\n"
@@ -678,7 +846,6 @@ async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
 
     state = TmuxExecutionBackend._read_state(paths)
     assert driver.sent_prompts[-1] == "steer the active request"
-    assert "CLI_PROXY_REQUEST" not in driver.sent_prompts[-1]
     assert driver.paste_delete is True
     paste_index = driver.events.index("paste_buffer")
     enter_index = driver.events.index("send_enter")
@@ -951,7 +1118,14 @@ async def test_tmux_backend_resumes_claude_when_tmux_session_missing_after_reboo
 @pytest.mark.asyncio
 async def test_tmux_backend_respects_preconfigured_claude_session_flags(tmp_path):
     driver = FakeTmuxDriver()
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    # Идентификатор сессии не назначается, журнал по нему не найти: ход закрывает тишина.
+    driver.autowrite_transcript = False
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
     session.tool.interactive_cmd = ["claude", "--continue"]
 
@@ -1194,7 +1368,13 @@ async def test_tmux_backend_uses_codex_resume_subcommand_for_resume_token(tmp_pa
 async def test_tmux_backend_captures_generic_resume_token_from_output(tmp_path):
     driver = FakeTmuxDriver()
     driver.response_text = "session_id=grok-captured-token\nassistant answer"
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    driver.autowrite_transcript = False
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
     session.tool.name = "grok"
     session.tool.interactive_cmd = ["grok", "--no-auto-update"]
@@ -1213,7 +1393,13 @@ async def test_tmux_backend_captures_generic_resume_token_from_output(tmp_path):
 async def test_tmux_backend_updates_existing_resume_token_from_output(tmp_path):
     driver = FakeTmuxDriver()
     driver.response_text = "session_id=rotated-token\nassistant answer"
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    driver.autowrite_transcript = False
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
     session.tool.name = "grok"
     session.tool.interactive_cmd = ["grok", "--no-auto-update"]
@@ -1296,7 +1482,13 @@ async def test_tmux_backend_returns_only_final_claude_screen_reader_message(tmp_
         "198: PromptBudgetBuilder — follow-up.\n"
         "$claude: Чистый финальный ответ."
     )
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    driver.autowrite_transcript = False
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
     session.tool.interactive_cmd = ["claude", "--ax-screen-reader"]
 
@@ -1402,7 +1594,7 @@ async def test_tmux_backend_fails_fast_on_kimi_trust_prompt(tmp_path):
 @pytest.mark.parametrize("cli_name", ["claude", "codex", "grok"])
 async def test_tmux_backend_keeps_waiting_for_live_session_after_idle_timeout(tmp_path, cli_name):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.03)
     session = _session(tmp_path)
     session.tool.name = cli_name
@@ -1420,9 +1612,7 @@ async def test_tmux_backend_keeps_waiting_for_live_session_after_idle_timeout(tm
     assert task.done() is False
     assert driver.sent_ctrl_c is False
 
-    request = TmuxExecutionBackend._read_last_request(backend.paths(session))
-    with open(driver.log_path, "a", encoding="utf-8") as handle:
-        handle.write(f"{done_marker(request['request_id'])}\n")
+    driver.write_transcript()
 
     result = await asyncio.wait_for(task, timeout=1)
     status = await backend.status(session)
@@ -1436,7 +1626,7 @@ async def test_tmux_backend_keeps_waiting_for_live_session_after_idle_timeout(tm
 @pytest.mark.asyncio
 async def test_tmux_backend_marks_failed_without_interrupt_when_session_disappears(tmp_path):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.03)
     session = _session(tmp_path)
     paths = backend.paths(session)
@@ -1463,7 +1653,7 @@ async def test_tmux_backend_marks_failed_without_interrupt_when_session_disappea
 @pytest.mark.asyncio
 async def test_tmux_backend_cancellation_interrupts_and_closes_active_state(tmp_path):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=30)
     session = _session(tmp_path)
 
@@ -1488,7 +1678,7 @@ async def test_tmux_backend_cancellation_interrupts_and_closes_active_state(tmp_
 @pytest.mark.asyncio
 async def test_tmux_backend_shutdown_cancellation_preserves_active_session(tmp_path):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=30)
     session = _session(tmp_path)
     session._preserve_tmux_on_shutdown = True
@@ -1526,11 +1716,13 @@ async def test_tmux_backend_recovers_existing_active_request_for_any_cli(tmp_pat
     driver.sessions.add(paths["session_name"])
     os.makedirs(paths["runtime_dir"], exist_ok=True)
     with open(paths["pane_log"], "w", encoding="utf-8") as handle:
-        handle.write(
-            f"{request_marker(request_id)}\n"
-            f"recovered {cli_name} answer\n"
-            f"{done_marker(request_id)}\n"
-        )
+        handle.write("перерисованный экран\n")
+    _write_cli_transcript(
+        cli=cli_name,
+        workdir=session.workdir,
+        session_id="00000000-0000-4000-8000-000000000042",
+        text=f"recovered {cli_name} answer",
+    )
     TmuxExecutionBackend._write_state(
         paths,
         {
@@ -1582,7 +1774,7 @@ async def test_tmux_backend_recovers_late_structured_completion_from_failed_stat
     driver.sessions.add(paths["session_name"])
     os.makedirs(paths["runtime_dir"], exist_ok=True)
     with open(paths["pane_log"], "w", encoding="utf-8") as handle:
-        handle.write(f"{request_marker(request_id)}\ngarbled unfinished pane\n")
+        handle.write("garbled unfinished pane\n")
     TmuxExecutionBackend._write_state(
         paths,
         {
@@ -1645,7 +1837,13 @@ async def test_tmux_backend_does_not_recover_delivered_request(tmp_path):
     driver.sessions.add(paths["session_name"])
     os.makedirs(paths["runtime_dir"], exist_ok=True)
     with open(paths["pane_log"], "w", encoding="utf-8") as handle:
-        handle.write(f"{request_marker(request_id)}\nanswer\n{done_marker(request_id)}\n")
+        handle.write("answer\n")
+    _write_cli_transcript(
+        cli="claude",
+        workdir=session.workdir,
+        session_id="00000000-0000-4000-8000-000000000043",
+        text="answer",
+    )
     TmuxExecutionBackend._write_state(
         paths,
         {
@@ -1929,17 +2127,17 @@ def test_pane_stream_restarts_screen_after_truncation(tmp_path):
     log_path = str(tmp_path / "pane.log")
     request_id = "req-trunc"
     with open(log_path, "w", encoding="utf-8") as handle:
-        handle.write(f"{request_marker(request_id)}\nстарый вывод\n")
+        handle.write("старый вывод\n")
     stream = tmux_backend_module._PaneStream(log_path, request_id)
 
-    assert "старый вывод" in stream.advance().parsed.text
+    assert "старый вывод" in stream.advance().parsed
 
-    # pipe-pane пересоздал журнал уже после маркера запроса: экран от прошлого
+    # pipe-pane пересоздал журнал уже после начала запроса: экран от прошлого
     # потока не должен протечь в разбор.
     with open(log_path, "w", encoding="utf-8") as handle:
         handle.write("новый вывод\n")
 
-    text = stream.advance().parsed.text
+    text = stream.advance().parsed
     assert "новый вывод" in text
     assert "старый вывод" not in text
 
@@ -1970,9 +2168,8 @@ def test_pane_stream_catches_up_by_tail_after_recovery_gap(tmp_path, monkeypatch
     request_id = "req-catchup"
     log_path = str(tmp_path / "pane.log")
     with open(log_path, "w", encoding="utf-8") as handle:
-        handle.write(f"{request_marker(request_id)}\n")
         handle.write("история запроса\n" * 5000)
-        handle.write(f"итоговый ответ\n{done_marker(request_id)}\n")
+        handle.write("итоговый ответ\n")
 
     fed: list[str] = []
     original_feed = tmux_backend_module.TmuxDeltaReader.feed
@@ -1984,12 +2181,11 @@ def test_pane_stream_catches_up_by_tail_after_recovery_gap(tmp_path, monkeypatch
     monkeypatch.setattr(tmux_backend_module.TmuxDeltaReader, "feed", _tracking_feed)
 
     # Восстановление стартует с начала запроса, а журнал успел вырасти: разбор
-    # должен ограничиться хвостом, где и лежит маркер завершения.
+    # должен ограничиться хвостом, где и лежит свежий вывод.
     stream = tmux_backend_module._PaneStream(log_path, request_id, offset=0)
     parsed = stream.advance().parsed
 
-    assert parsed.complete is True
-    assert "итоговый ответ" in parsed.text
+    assert "итоговый ответ" in parsed
     # Символов не больше, чем прочитанных байт: в эмулятор ушёл только хвост.
     assert sum(len(chunk) for chunk in fed) <= 4096
 
@@ -2006,7 +2202,7 @@ def test_pane_stream_returns_resume_token_without_touching_session(tmp_path):
     log_path = str(tmp_path / "pane.log")
     request_id = "req-token"
     with open(log_path, "w", encoding="utf-8") as handle:
-        handle.write(f"{request_marker(request_id)}\nsession_id: abcd-1234\n")
+        handle.write("session_id: abcd-1234\n")
     stream = tmux_backend_module._PaneStream(log_path, request_id)
 
     advance = stream.advance(resume_regex=r"session_id:\s*([0-9a-z-]{8,})")
@@ -2018,9 +2214,14 @@ def test_pane_stream_returns_resume_token_without_touching_session(tmp_path):
 @pytest.mark.asyncio
 async def test_tmux_backend_feeds_pane_log_without_rereading_history(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     driver.response_text = "streaming start"
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=5)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
 
     fed: list[str] = []
@@ -2037,13 +2238,10 @@ async def test_tmux_backend_feeds_pane_log_without_rereading_history(tmp_path, m
         # сделать несколько опросов до завершения запроса.
         while driver.log_path is None or not driver.sent_prompts:
             await asyncio.sleep(0.01)
-        request_id = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", driver.sent_prompts[0]).group(1)
         for index in range(5):
             with open(driver.log_path, "a", encoding="utf-8") as handle:
                 handle.write(f"chunk {index}: " + "x" * 500 + "\n")
             await asyncio.sleep(0.05)
-        with open(driver.log_path, "a", encoding="utf-8") as handle:
-            handle.write(f"{done_marker(request_id)}\n")
 
     streamer = asyncio.create_task(_stream_output())
     try:
@@ -2120,7 +2318,7 @@ async def test_tmux_recovery_check_keeps_event_loop_responsive(tmp_path, monkeyp
     driver.sessions.add(paths["session_name"])
     os.makedirs(paths["runtime_dir"], exist_ok=True)
     with open(paths["pane_log"], "w", encoding="utf-8") as handle:
-        handle.write(f"{request_marker(request_id)}\nответ\n{done_marker(request_id)}\n")
+        handle.write("ответ\n")
     TmuxExecutionBackend._write_state(
         paths,
         {
@@ -2134,7 +2332,22 @@ async def test_tmux_recovery_check_keeps_event_loop_responsive(tmp_path, monkeyp
         paths,
         {"request_id": request_id, "started_at": 10.0, "offset": 0, "delivery_state": "pending"},
     )
-    _slow_pane_read(monkeypatch, 0.8)
+
+    class SlowTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            # Чтение журнала упирается в диск — оно обязано уйти в поток.
+            time.sleep(0.8)
+            return TranscriptPollResult(
+                assistant_text="ответ",
+                complete=True,
+                available=True,
+                recognized=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SlowTranscriptReader)
 
     async with _loop_lag_probe() as lags:
         recovery = await backend.get_recovery_request(session)
@@ -2147,16 +2360,20 @@ async def test_tmux_recovery_check_keeps_event_loop_responsive(tmp_path, monkeyp
 @pytest.mark.asyncio
 async def test_tmux_backend_captures_resume_token_split_across_reads(tmp_path):
     driver = FakeTmuxDriver()
-    driver.write_done_marker = False
+    driver.autowrite_transcript = False
     driver.response_text = "working"
-    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=5)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5,
+        quiet_timeout_sec=0.2,
+    )
     session = _session(tmp_path)
     session.tool.resume_regex = r"session_id:\s*([0-9a-f-]{8,})"
 
     async def _stream_output():
         while driver.log_path is None or not driver.sent_prompts:
             await asyncio.sleep(0.01)
-        request_id = re.search(r"<<<CLI_PROXY_REQUEST:([^>]+)>>>", driver.sent_prompts[0]).group(1)
         # Токен разрывается между двумя опросами: первый кусок обрывается
         # посреди строки с идентификатором сессии.
         with open(driver.log_path, "a", encoding="utf-8") as handle:
@@ -2164,9 +2381,6 @@ async def test_tmux_backend_captures_resume_token_split_across_reads(tmp_path):
         await asyncio.sleep(0.08)
         with open(driver.log_path, "a", encoding="utf-8") as handle:
             handle.write("5678-9abc\n")
-        await asyncio.sleep(0.08)
-        with open(driver.log_path, "a", encoding="utf-8") as handle:
-            handle.write(f"{done_marker(request_id)}\n")
 
     streamer = asyncio.create_task(_stream_output())
     try:

@@ -21,12 +21,7 @@ from utils.text import strip_ansi
 from .models import ExecutionBackendStatus, ExecutionResult
 from .transcript_reader import CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
-from .tmux_parser import (
-    TmuxDeltaReader,
-    TmuxParseResult,
-    build_prompt_with_markers,
-    normalize_terminal_text,
-)
+from .tmux_parser import TmuxDeltaReader, normalize_terminal_text
 
 
 _SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -68,7 +63,6 @@ _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
     "grok": ["--session-id"],
 }
 _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok", "kimi"}
-_SINGLE_LINE_PROMPT_CLI_NAMES = {"codex", "qwen", "grok"}
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
 _TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok", "kimi"}
@@ -116,8 +110,8 @@ def _read_pane_chunk(log_path: str, cursor: int, *, max_bytes: int = 0) -> tuple
 
 @dataclass(frozen=True)
 class _PaneAdvance:
-    parsed: TmuxParseResult
-    raw_parsed: Optional[TmuxParseResult]
+    parsed: str
+    raw_parsed: Optional[str]
     resume_token: Optional[str]
 
 
@@ -137,7 +131,7 @@ class _PaneStream:
 
     def _restart(self) -> None:
         self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
-        self._reader = TmuxDeltaReader(self._request_id)
+        self._reader = TmuxDeltaReader()
         self._resume_tail = ""
 
     def advance(
@@ -191,8 +185,8 @@ class TmuxRecoveryRequest:
     prompt: str
     dest: dict[str, Any]
     transcript_locator: Optional[TranscriptLocator] = None
-    # Чтение живого pane без своего запроса: маркеры завершения относятся к уже
-    # доставленному ответу, и TUI выдаёт их снова при перерисовке экрана.
+    # Чтение живого pane без своего запроса: конец хода относится к уже
+    # доставленному ответу, поэтому завершать по нему наблюдение нельзя.
     observe: bool = False
 
 
@@ -550,7 +544,7 @@ class TmuxExecutionBackend:
         poll_interval_sec: float = 0.25,
         idle_fallback_sec: Optional[float] = None,
         startup_timeout_sec: float = 60.0,
-        quiet_timeout_sec: float = 300.0,  # 5 min default: if pane.log stops growing, treat as finished (for long tasks without DONE marker)
+        quiet_timeout_sec: float = 300.0,  # 5 мин: если ни экран, ни журнал CLI не растут, считаем ход законченным
     ):
         self.driver = driver
         self.poll_interval_sec = float(poll_interval_sec)
@@ -756,10 +750,6 @@ class TmuxExecutionBackend:
     def _uses_ready_wait(cls, session: Any) -> bool:
         return cls._interactive_cli_name(session) in _READY_WAIT_CLI_NAMES
 
-    @classmethod
-    def _uses_single_line_prompt(cls, session: Any) -> bool:
-        return cls._interactive_cli_name(session) in _SINGLE_LINE_PROMPT_CLI_NAMES
-
     @staticmethod
     def _is_interactive_ready(session: Any, pane: str) -> bool:
         cli_name = TmuxExecutionBackend._interactive_cli_name(session)
@@ -911,7 +901,6 @@ class TmuxExecutionBackend:
         tool = getattr(session, "tool", None)
         return CliTranscriptReader(
             cli_name=_active_cli(session),
-            request_id=request.request_id,
             workdir=str(getattr(session, "workdir", "") or ""),
             started_at=request.started_at,
             username=str(getattr(tool, "tmux_user", "") or ""),
@@ -993,15 +982,6 @@ class TmuxExecutionBackend:
             return recovery
         if delivery_state != "pending":
             return None
-        # История запроса к этому моменту может весить сотни мегабайт, поэтому
-        # чтение и разбор идут вне event loop.
-        stream = _PaneStream(paths["pane_log"], recovery.request_id, offset=recovery.offset)
-        advance = await asyncio.to_thread(
-            stream.advance,
-            claude_screen_reader=self._uses_claude_screen_reader(session),
-        )
-        if advance.parsed.complete:
-            return recovery
         try:
             transcript_reader = self._build_transcript_reader(session, recovery)
             transcript = await asyncio.to_thread(transcript_reader.poll) if transcript_reader is not None else None
@@ -1025,7 +1005,7 @@ class TmuxExecutionBackend:
         После доставки ответа запрос помечается delivered, и get_recovery_request
         перестаёт его отдавать — а CLI в pane продолжает работать. Чтение
         начинается с текущего конца pane.log и журнала, поэтому уже отданный
-        текст не дублируется, а старый DONE-маркер остаётся позади курсора.
+        текст не дублируется.
 
         require_recent_activity включает проверку, что pane работал только что:
         она нужна автоподхвату на старте, где кандидатами идут все сессии сразу.
@@ -1121,7 +1101,7 @@ class TmuxExecutionBackend:
         last_reported_text = ""
         last_progress_text = ""
         complete = False
-        completion_source = "pane"
+        completion_source = ""
         transcript_authoritative = False
         transcript_reader = None
         persisted_locator = request.transcript_locator
@@ -1172,8 +1152,8 @@ class TmuxExecutionBackend:
                 transcript_path = transcript_reader.locator.path
                 if transcript_path and os.path.exists(transcript_path):
                     last_transcript_size = os.path.getsize(transcript_path)
-            # Запасной путь: пока маркер запроса не попал в журнал, читатель его не
-            # находит, но рост файла уже годится как признак живого хода.
+            # Запасной путь: пока в журнале нет записей текущего хода, читатель к
+            # нему не привязан, но рост файла уже годится как признак живого хода.
             if not transcript_path:
                 cli_name = _active_cli(session)
                 if cli_name == "qwen":
@@ -1228,15 +1208,14 @@ class TmuxExecutionBackend:
                 )
                 if advance.resume_token:
                     _set_resume_token(session, advance.resume_token)
-                parsed = advance.parsed
-                pane_latest_text = parsed.text or pane_latest_text
+                pane_latest_text = advance.parsed or pane_latest_text
 
                 # Claude-specific: the choice question TUI (Enter selection, ☐ lists, esc prompts) lives in the
                 # raw pane output. claude_screen_reader extraction + transcript preference can mask it.
                 # Compute raw pane text (no claude extraction) for reliable choice detection.
                 pane_raw_for_choice = pane_latest_text
                 if advance.raw_parsed is not None:
-                    pane_raw_for_choice = advance.raw_parsed.text or pane_latest_text
+                    pane_raw_for_choice = advance.raw_parsed or pane_latest_text
 
                 transcript_update = None
                 if transcript_reader is not None:
@@ -1290,8 +1269,7 @@ class TmuxExecutionBackend:
                     if _refresh_watched_transcripts():
                         last_change = time.time()
                     if transcript_update.complete and not request.observe:
-                        # The reader already gates this on the DONE marker and strips it from assistant_text,
-                        # so re-checking the marker here would never match on a garbled pane.
+                        # Конец хода виден только в журнале CLI: экран панели о нём не сообщает.
                         complete = True
                         completion_source = "transcript"
 
@@ -1311,8 +1289,7 @@ class TmuxExecutionBackend:
                         pane_question, pane_options = _SRS._parse_cli_choice_question(pane_raw_for_choice)
                         # Подставляется только блок меню, и только когда варианты
                         # распознаны: иначе распознанный по ошибке экран выбрасывал
-                        # текст транскрипта, а при потерянном маркере запроса в чат
-                        # уходил буфер TUI целиком.
+                        # текст транскрипта, а в чат уходил буфер TUI целиком.
                         choice_text = "\n".join([pane_question, *pane_options]).strip()
                         if pane_options and choice_text:
                             latest_text = choice_text
@@ -1330,10 +1307,6 @@ class TmuxExecutionBackend:
                     setattr(session, "last_assistant_text_ts", time.time())
                     setattr(session, "last_assistant_text_value", latest_text)
                 if complete:
-                    break
-                if parsed.complete and not transcript_authoritative and not request.observe:
-                    complete = True
-                    completion_source = "pane"
                     break
 
                 # Quiet timeout: if neither pane.log nor (preferably) the session JSONL (incl. subagents) has grown
@@ -1428,10 +1401,9 @@ class TmuxExecutionBackend:
         started_at = time.time()
         log_path = paths["pane_log"]
         offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0
-        wrapped = build_prompt_with_markers(prompt, request_id, multiline=not self._uses_single_line_prompt(session))
         driver = self._driver(session)
         buffer_name = f"cli-proxy-{request_id}"
-        prompt_path = write_prompt_temp(paths["runtime_dir"], wrapped, owner_user=getattr(driver, "user", None))
+        prompt_path = write_prompt_temp(paths["runtime_dir"], prompt, owner_user=getattr(driver, "user", None))
         state = self._read_state(paths)
         state.update(
             {
@@ -1460,7 +1432,7 @@ class TmuxExecutionBackend:
                 await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
                 buffer_pasted = True
                 if self._uses_ready_wait(session):
-                    await self._wait_for_pasted_text(session, paths, request_id)
+                    await self._wait_for_pasted_text(session, paths, prompt)
                 await driver.send_enter(paths["pane_target"])
         except asyncio.CancelledError:
             await self._handle_request_cancellation(session, paths)

@@ -228,6 +228,29 @@ def test_grok_lists_sessions_with_summary_preview(fake_home):
     ]
 
 
+def test_grok_orders_sessions_by_journal_activity(fake_home):
+    workdir = "/srv/demo/app"
+    key = urllib.parse.quote(workdir, safe="")
+    base = fake_home / ".grok" / "sessions" / key
+    # В ACP-режиме grok ведёт журнал в updates.jsonl, в обычном — в chat_history.jsonl.
+    for session_id, journal, journal_mtime, dir_mtime in (
+        ("sid-acp", "updates.jsonl", 1_700_000_950, 1_700_000_000),
+        ("sid-fresh", "chat_history.jsonl", 1_700_000_900, 1_700_000_000),
+        ("sid-stale", "chat_history.jsonl", 1_700_000_100, 1_700_000_950),
+    ):
+        _write_lines(
+            base / session_id / journal,
+            [{"type": "user", "content": f"вопрос {session_id}"}],
+            journal_mtime,
+        )
+        # Каталог тронут позже журнала — активность сессии он не отражает.
+        os.utime(base / session_id, (dir_mtime, dir_mtime))
+
+    found = list_recent_cli_sessions("grok", workdir)
+
+    assert [candidate.session_id for candidate in found] == ["sid-acp", "sid-fresh", "sid-stale"]
+
+
 def test_kimi_lists_sessions_of_this_workspace_only(fake_home):
     workdir = "/srv/demo/app"
     bucket = fake_home / ".kimi-code" / "sessions" / "wd_app_fa69cc192fc6"
@@ -265,6 +288,10 @@ def test_kimi_lists_sessions_of_this_workspace_only(fake_home):
         [{"type": "metadata", "protocol_version": "1.5", "created_at": 1}],
         1_700_000_900,
     )
+    # Каталог сессии обновляется при появлении в нём файлов, поэтому его время
+    # ничего не говорит об активности: порядок задаёт журнал.
+    os.utime(titled, (1_700_000_000, 1_700_000_000))
+    os.utime(bucket / "session_plain", (1_700_000_900, 1_700_000_900))
 
     found = list_recent_cli_sessions("kimi", workdir)
 

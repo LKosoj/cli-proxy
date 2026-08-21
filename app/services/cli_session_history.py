@@ -44,7 +44,7 @@ _PREVIEW_SCAN_LINES = 200
 # Codex keeps every rollout in one global tree; cap the scan for the project filter.
 _CODEX_SCAN_LIMIT = 500
 
-# Bridge markers injected into prompts (see cli_backends/tmux_parser.py) are noise in previews.
+# Legacy bridge markers: prompts no longer carry them, but old CLI journals still do.
 _SERVICE_MARKER_RE = re.compile(r"<{2,3}[A-Z_]+:[0-9a-fA-F-]+>{2,3}")
 
 
@@ -123,6 +123,20 @@ def _mtime(path: Path) -> float:
         return float(path.stat().st_mtime)
     except OSError:
         return 0.0
+
+
+def _session_dir_mtime(session_dir: Path, *journals: str) -> float:
+    """Last activity of a session the CLI keeps as a directory.
+
+    A directory is only touched when files appear in it, so sibling sessions
+    often share its mtime and ordering by it turns arbitrary. The journals are
+    the source of truth; the directory is the fallback while none exists yet.
+    """
+    newest = max(
+        (_mtime(session_dir.joinpath(*journal.split("/"))) for journal in journals),
+        default=0.0,
+    )
+    return newest or _mtime(session_dir)
 
 
 def _clean_preview(text: str) -> str:
@@ -337,8 +351,9 @@ def _list_grok(workdir: str, limit: int) -> List[CliSessionCandidate]:
         for child in base.iterdir():
             if not child.is_dir():
                 continue
-            mtime = max(_mtime(child), _mtime(child / "chat_history.jsonl"))
-            entries.append((mtime, child.name, child))
+            entries.append(
+                (_session_dir_mtime(child, "chat_history.jsonl", "updates.jsonl"), child.name, child)
+            )
     return _newest(entries, cli="grok", limit=limit, preview=_grok_preview)
 
 
@@ -373,8 +388,7 @@ def _list_kimi(workdir: str, limit: int) -> List[CliSessionCandidate]:
         for child in base.iterdir():
             if not child.is_dir():
                 continue
-            mtime = max(_mtime(child), _mtime(child / "agents" / "main" / "wire.jsonl"))
-            entries.append((mtime, child.name, child))
+            entries.append((_session_dir_mtime(child, "agents/main/wire.jsonl"), child.name, child))
     return _newest(entries, cli="kimi", limit=limit, preview=_kimi_preview)
 
 

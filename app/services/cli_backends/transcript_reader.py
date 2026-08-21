@@ -11,7 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from app.services.session_transfer.reader_claude import _project_key as _claude_project_key
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
+from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
 from modes.sdk.runtime.json_normalizer import loads_safe
 
 
@@ -43,17 +45,22 @@ class TranscriptPollResult:
     locator: Optional[TranscriptLocator] = None
 
 
-def _event_timestamp(raw: Any) -> float:
-    if isinstance(raw, (int, float)):
+def _parse_timestamp(raw: Any) -> Optional[float]:
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
         return float(raw)
     text = str(raw or "").strip()
     if not text:
-        return time.time()
+        return None
     try:
         return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
     except ValueError:
         logger.debug("structured transcript timestamp is invalid value=%r", text)
-        return time.time()
+        return None
+
+
+def _event_timestamp(raw: Any) -> float:
+    stamp = _parse_timestamp(raw)
+    return stamp if stamp is not None else time.time()
 
 
 def _kimi_activity(raw: Any) -> float:
@@ -63,11 +70,17 @@ def _kimi_activity(raw: Any) -> float:
     return time.time()
 
 
-def _content_text(content: Any) -> str:
+def _content_text(content: Any, *, strip: bool = True) -> str:
+    """Текст сообщения CLI.
+
+    strip=False нужен стриминговым чанкам: они склеиваются встык, поэтому
+    пробелы по краям значимы — иначе «Grok » + «готов» даёт «Grokготов».
+    """
     if isinstance(content, str):
-        return content.strip()
+        return content.strip() if strip else content
     if isinstance(content, dict):
-        return str(content.get("text") or "").strip()
+        text = str(content.get("text") or "")
+        return text.strip() if strip else text
     if not isinstance(content, list):
         return ""
     parts: list[str] = []
@@ -76,7 +89,9 @@ def _content_text(content: Any) -> str:
             continue
         if str(item.get("type") or "").strip() != "text":
             continue
-        text = str(item.get("text") or "").strip()
+        text = str(item.get("text") or "")
+        if strip:
+            text = text.strip()
         if text:
             parts.append(text)
     return "\n".join(parts)
@@ -87,7 +102,6 @@ class CliTranscriptReader:
         self,
         *,
         cli_name: str,
-        request_id: str,
         workdir: str,
         started_at: float,
         username: str = "",
@@ -96,7 +110,6 @@ class CliTranscriptReader:
         locator: Optional[TranscriptLocator] = None,
     ):
         self.provider = str(cli_name or "").strip().lower()
-        self.request_id = str(request_id or "").strip()
         self.workdir = os.path.realpath(str(workdir or ""))
         self.started_at = float(started_at)
         self.session_id = str(session_id or "").strip()
@@ -111,8 +124,8 @@ class CliTranscriptReader:
         self.activity_at: Optional[float] = None
         self._grok_stream_key = ""
         self._grok_stream_chunks: list[str] = []
-        self._grok_stream_raw = ""
         self._kimi_step_parts: list[str] = []
+        self._gemini_turn_end: tuple[str, str] = ("", "")
         if locator is not None:
             self._restore_locator(locator)
 
@@ -190,9 +203,52 @@ class CliTranscriptReader:
         )
         return [direct] if direct.is_file() else []
 
+    def _workspace_dirs(self) -> list[Path]:
+        """Каталоги журналов провайдера, закреплённые за рабочей директорией.
+
+        У codex и gemini путь журнала workdir не кодирует, поэтому для них
+        принадлежность проверяется по полю cwd внутри самого журнала.
+        """
+        if not self.workdir:
+            return []
+        if self.provider == "claude":
+            return [self.root / _claude_project_key(self.workdir)]
+        if self.provider == "qwen":
+            return [self.root / key / "chats" for key in _qwen_project_keys(self.workdir)]
+        if self.provider == "grok":
+            return [self.root / urllib.parse.quote(self.workdir, safe="")]
+        if self.provider == "kimi":
+            return [self.root / _kimi_workspace_key(self.workdir)]
+        return []
+
+    def _matches_workdir(self, path: Path) -> bool:
+        if not self.workdir or self.provider not in {"codex", "gemini"}:
+            return True
+        cwd = ""
+        try:
+            if self.provider == "gemini":
+                payload = loads_safe(path.read_text(encoding="utf-8", errors="replace"), strict_first=True)
+                cwd = str(payload.get("cwd") or "").strip() if isinstance(payload, dict) else ""
+            else:
+                with path.open("r", encoding="utf-8", errors="replace") as handle:
+                    for _ in range(5):
+                        line = handle.readline()
+                        if not line:
+                            break
+                        record = loads_safe(line.strip(), strict_first=True)
+                        if not isinstance(record, dict) or record.get("type") != "session_meta":
+                            continue
+                        payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+                        cwd = str(payload.get("cwd") or "").strip()
+                        break
+        except Exception:
+            logger.debug("structured transcript workdir probe failed path=%s", path, exc_info=True)
+            return False
+        return not cwd or os.path.realpath(cwd) == self.workdir
+
     def _recent_paths(self) -> list[Path]:
         """Свежие журналы провайдера — когда тред по идентификатору не найден."""
-        if self.provider not in _SUPPORTED_PROVIDERS or not self.root.is_dir():
+        if self.provider not in _SUPPORTED_PROVIDERS:
             return []
 
         if self.provider == "grok":
@@ -203,25 +259,54 @@ class CliTranscriptReader:
             pattern = "session-*.json"
         else:
             pattern = "*.jsonl"
+        # Каталог рабочей директории — исчерпывающий ответ: если журнала там нет,
+        # его нет и вовсе, а поиск по всему корню подцепил бы чужой проект.
+        roots = self._workspace_dirs() or [self.root]
         candidates: list[tuple[float, Path]] = []
-        try:
-            for path in self.root.rglob(pattern):
-                try:
-                    stat_result = path.stat()
-                except OSError:
-                    logger.debug("structured transcript candidate stat failed path=%s", path, exc_info=True)
-                    continue
-                if stat_result.st_mtime < self.started_at - 30:
-                    continue
-                candidates.append((float(stat_result.st_mtime), path))
-        except OSError:
-            logger.exception("structured transcript discovery failed root=%s", self.root)
-            return []
+        for root in roots:
+            if not root.is_dir():
+                continue
+            try:
+                for path in root.rglob(pattern):
+                    try:
+                        stat_result = path.stat()
+                    except OSError:
+                        logger.debug("structured transcript candidate stat failed path=%s", path, exc_info=True)
+                        continue
+                    if stat_result.st_mtime < self.started_at - 30:
+                        continue
+                    candidates.append((float(stat_result.st_mtime), path))
+            except OSError:
+                logger.exception("structured transcript discovery failed root=%s", root)
         candidates.sort(key=lambda item: item[0], reverse=True)
         return [path for _, path in candidates[:_DISCOVERY_CANDIDATE_LIMIT]]
 
-    def _marker_offset(self, path: Path) -> Optional[int]:
-        marker = f"<<<CLI_PROXY_REQUEST:{self.request_id}>>>".encode("utf-8")
+    def _line_timestamp(self, raw_line: bytes) -> Optional[float]:
+        try:
+            text = raw_line.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            return None
+        if not text:
+            return None
+        try:
+            record = loads_safe(text, strict_first=True)
+        except Exception:
+            return None
+        if not isinstance(record, dict):
+            return None
+        if self.provider == "kimi":
+            # Kimi пишет время в миллисекундах эпохи, остальные CLI — в ISO.
+            raw = record.get("time")
+            stamp = _parse_timestamp(raw)
+            return stamp / 1000.0 if stamp and stamp > 0 else None
+        return _parse_timestamp(record.get("timestamp"))
+
+    def _start_offset(self, path: Path) -> Optional[int]:
+        """Смещение первой записи журнала, появившейся после старта запроса.
+
+        Границу хода задаёт время: запись с меткой раньше started_at относится к
+        прошлому ходу, всё после неё — к текущему.
+        """
         try:
             size = path.stat().st_size
             start = max(0, size - _DISCOVERY_TAIL_BYTES)
@@ -229,13 +314,26 @@ class CliTranscriptReader:
                 handle.seek(start)
                 data = handle.read()
         except OSError:
-            logger.debug("structured transcript marker read failed path=%s", path, exc_info=True)
+            logger.debug("structured transcript tail read failed path=%s", path, exc_info=True)
             return None
-        marker_index = data.rfind(marker)
-        if marker_index < 0:
-            return None
-        line_start = data.rfind(b"\n", 0, marker_index) + 1
-        return start + line_start
+        if start:
+            # Хвост мог начаться посреди строки — она достанется прошлому ходу.
+            head = data.find(b"\n")
+            if head < 0:
+                return None
+            start += head + 1
+            data = data[head + 1:]
+        offset = None
+        position = start + len(data)
+        for raw_line in reversed(data.splitlines(keepends=True)):
+            position -= len(raw_line)
+            stamp = self._line_timestamp(raw_line)
+            if stamp is None:
+                continue
+            if stamp < self.started_at:
+                break
+            offset = position
+        return offset
 
     def _session_id_from_path(self, path: Path) -> str:
         if self.provider in {"claude", "qwen"}:
@@ -263,46 +361,29 @@ class CliTranscriptReader:
         if session_id:
             self.session_id = session_id
 
-    def _attach_by_marker(self, paths: Iterable[Path]) -> bool:
+    def _attach_new_records(self, paths: Iterable[Path]) -> bool:
         for path in paths:
-            offset = self._marker_offset(path)
+            if not self._matches_workdir(path):
+                continue
+            offset = self._start_offset(path)
             if offset is not None:
                 self._attach(path, offset)
                 return True
         return False
 
     def _discover(self) -> None:
-        exact = self._exact_paths()
-        if self._attach_by_marker(exact):
+        if self.provider == "gemini":
+            # Снимок сессии переписывается целиком, поэтому смещение не нужно:
+            # границу хода задаёт время сообщений при каждом чтении.
+            for path in (*self._exact_paths(), *self._recent_paths()):
+                if self._matches_workdir(path):
+                    self._attach(path, 0)
+                    return
             return
-        # Маркер мог уехать в другой журнал: CLI умеет продолжить тред новым файлом.
-        if self._attach_by_marker(self._recent_paths()):
+        if self._attach_new_records(self._exact_paths()):
             return
-        if not exact:
-            # Тред неизвестен: без маркера нельзя отличить свой журнал от чужого.
-            return
-        # Тред известен по идентификатору, а маркера в нём нет: он вытеснен из
-        # хвоста разросшегося журнала либо CLI записал промпт не дословно.
-        # Читаем всё, что появится дальше, — так же делает наблюдение за pane.
-        try:
-            tail = exact[0].stat().st_size
-        except OSError:
-            logger.debug("structured transcript tail stat failed path=%s", exact[0], exc_info=True)
-            return
-        logger.info(
-            "structured transcript attached without marker provider=%s session_id=%s path=%s offset=%d",
-            self.provider,
-            self.session_id,
-            exact[0],
-            tail,
-        )
-        self._attach(exact[0], tail)
-
-    def _done_marker(self) -> str:
-        return f"<<<DONE:{self.request_id}>>>"
-
-    def _clean_assistant_text(self, text: str) -> str:
-        return str(text or "").replace(self._done_marker(), "").strip()
+        # Тред мог уехать в другой журнал: CLI умеет продолжить его новым файлом.
+        self._attach_new_records(self._recent_paths())
 
     def _handle_claude(self, record: dict[str, Any]) -> None:
         event_type = str(record.get("type") or "").strip()
@@ -314,11 +395,7 @@ class CliTranscriptReader:
             content = message.get("content")
             text = _content_text(content)
             if text:
-                if self._done_marker() in text:
-                    self.complete = True
-                cleaned_text = self._clean_assistant_text(text)
-                if cleaned_text:
-                    self.latest_assistant_text = cleaned_text
+                self.latest_assistant_text = text
             if isinstance(content, list):
                 for item in content:
                     if not isinstance(item, dict) or str(item.get("type") or "").strip() != "tool_use":
@@ -326,8 +403,8 @@ class CliTranscriptReader:
                     tool_name = str(item.get("name") or "").strip()
                     if tool_name:
                         self.latest_progress_text = tool_name
-        # system/turn_duration only marks a turn end: monitoring continues until the DONE marker,
-        # because background agents may keep working after it.
+        elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
+            self.complete = True
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         if str(record.get("type") or "").strip() != "event_msg":
@@ -340,16 +417,12 @@ class CliTranscriptReader:
         if event_type == "agent_message":
             text = str(payload.get("message") or "").strip()
             if text:
-                self.latest_assistant_text = self._clean_assistant_text(text)
+                self.latest_assistant_text = text
         elif event_type == "task_complete":
             text = str(payload.get("last_agent_message") or "").strip()
             if text:
-                self.latest_assistant_text = self._clean_assistant_text(text)
-            # Only mark complete if DONE marker seen (for long-running tasks wrapped with explicit completion protocol).
-            # This keeps monitoring active across turns for all CLIs until the AI prints the marker.
-            if self._done_marker() in (text or ""):
-                self.complete = True
-            # else: intermediate task complete, keep complete=False so outer monitor can continue
+                self.latest_assistant_text = text
+            self.complete = True
 
     def _handle_grok(self, record: dict[str, Any]) -> None:
         params = record.get("params") if isinstance(record.get("params"), dict) else {}
@@ -363,7 +436,7 @@ class CliTranscriptReader:
             if title:
                 self.latest_progress_text = title
         elif event_type == "agent_message_chunk":
-            text = _content_text(update.get("content"))
+            text = _content_text(update.get("content"), strip=False)
             if text:
                 metadata = update.get("_meta") if isinstance(update.get("_meta"), dict) else params.get("_meta")
                 metadata = metadata if isinstance(metadata, dict) else {}
@@ -372,14 +445,9 @@ class CliTranscriptReader:
                     self._grok_stream_key = stream_key
                     self._grok_stream_chunks = []
                 self._grok_stream_chunks.append(text)
-                self._grok_stream_raw = "".join(self._grok_stream_chunks)
-                self.latest_assistant_text = self._clean_assistant_text(self._grok_stream_raw)
+                self.latest_assistant_text = "".join(self._grok_stream_chunks).strip()
         elif event_type == "turn_completed":
-            # Only mark complete if DONE marker seen (consistent with other CLIs and long-running protocol).
-            # The raw stream is checked because latest_assistant_text has the marker stripped already.
-            if self._done_marker() in (self._grok_stream_raw or ""):
-                self.complete = True
-            # else keep monitoring until explicit marker for this request
+            self.complete = True
 
     def _handle_qwen(self, record: dict[str, Any]) -> None:
         event_type = str(record.get("type") or "").strip()
@@ -393,11 +461,13 @@ class CliTranscriptReader:
         if not isinstance(parts, list):
             return
         texts: list[str] = []
+        called_tool = False
         for part in parts:
             if not isinstance(part, dict):
                 continue
             call = part.get("functionCall")
             if isinstance(call, dict):
+                called_tool = True
                 tool_name = str(call.get("name") or "").strip()
                 if tool_name:
                     self.latest_progress_text = tool_name
@@ -411,11 +481,11 @@ class CliTranscriptReader:
         text = "\n".join(texts)
         if not text:
             return
-        if self._done_marker() in text:
+        self.latest_assistant_text = text
+        # Отдельной записи о конце хода qwen не пишет: ход закончен, когда модель
+        # ответила текстом и не позвала инструмент.
+        if not called_tool:
             self.complete = True
-        cleaned = self._clean_assistant_text(text)
-        if cleaned:
-            self.latest_assistant_text = cleaned
 
     def _handle_kimi(self, record: dict[str, Any]) -> None:
         """Kimi journals a turn as prompt -> loop events -> turn.ended.
@@ -429,18 +499,17 @@ class CliTranscriptReader:
             self.recognized = True
         self.activity_at = _kimi_activity(record.get("time"))
 
+        if record_type == "turn.ended":
+            self.complete = True
+            return
+
         if record_type == "context.append_message":
             message = record.get("message") if isinstance(record.get("message"), dict) else {}
             if str(message.get("role") or "").strip() != "assistant":
                 return
             text = _content_text(message.get("content"))
-            if not text:
-                return
-            if self._done_marker() in text:
-                self.complete = True
-            cleaned = self._clean_assistant_text(text)
-            if cleaned:
-                self.latest_assistant_text = cleaned
+            if text:
+                self.latest_assistant_text = text
             return
 
         if record_type != "context.append_loop_event":
@@ -459,12 +528,7 @@ class CliTranscriptReader:
             if not text:
                 return
             self._kimi_step_parts.append(text)
-            joined = "\n".join(self._kimi_step_parts)
-            if self._done_marker() in joined:
-                self.complete = True
-            cleaned = self._clean_assistant_text(joined)
-            if cleaned:
-                self.latest_assistant_text = cleaned
+            self.latest_assistant_text = "\n".join(self._kimi_step_parts).strip()
 
     def _handle_record(self, record: dict[str, Any]) -> None:
         if self.provider == "claude":
@@ -483,7 +547,7 @@ class CliTranscriptReader:
 
         В отличие от остальных CLI, gemini не дописывает журнал, а каждый раз
         переписывает его заново, поэтому байтовый курсор неприменим: сообщения
-        текущего запроса ищутся заново по маркеру.
+        текущего запроса каждый раз отбираются заново по времени старта.
         """
         if self.locator is None:
             return
@@ -504,21 +568,16 @@ class CliTranscriptReader:
         messages = payload.get("messages") if isinstance(payload, dict) else None
         if not isinstance(messages, list):
             return
-        marker = f"<<<CLI_PROXY_REQUEST:{self.request_id}>>>"
+        # Границей служит время старта запроса; сообщения без времени считаем прошлыми.
         start = -1
         for index, item in enumerate(messages):
-            if isinstance(item, dict) and marker in str(item.get("content") or ""):
+            if not isinstance(item, dict):
+                continue
+            stamp = item.get("timestamp")
+            if (_event_timestamp(stamp) if stamp else 0.0) < self.started_at:
                 start = index
-        if start < 0:
-            # Маркера нет, но сессия найдена по идентификатору: границей служит
-            # время старта запроса. Сообщения без времени считаем прошлыми.
-            for index, item in enumerate(messages):
-                if not isinstance(item, dict):
-                    continue
-                stamp = item.get("timestamp")
-                if (_event_timestamp(stamp) if stamp else 0.0) < self.started_at:
-                    start = index
         self.recognized = True
+        turn_end: tuple[str, str] = ("", "")
         for item in messages[start + 1:]:
             if not isinstance(item, dict):
                 continue
@@ -528,11 +587,14 @@ class CliTranscriptReader:
             text = str(item.get("content") or "").strip()
             if not text:
                 continue
-            if self._done_marker() in text:
-                self.complete = True
-            cleaned = self._clean_assistant_text(text)
-            if cleaned:
-                self.latest_assistant_text = cleaned
+            self.latest_assistant_text = text
+            turn_end = ("", "") if item.get("toolCalls") else (str(item.get("id") or ""), text)
+        # Записи о конце хода в снимке нет, а вызовы инструментов дописываются в
+        # то же сообщение следом за текстом: ход закончен, когда последний ответ
+        # модели не изменился между чтениями и инструментов в нём так и нет.
+        if turn_end[1] and turn_end == self._gemini_turn_end:
+            self.complete = True
+        self._gemini_turn_end = turn_end
 
     def _read_new_records(self) -> None:
         if self.locator is None:
@@ -622,7 +684,7 @@ class CliTranscriptReader:
         return paths
 
     def poll(self) -> TranscriptPollResult:
-        if self.provider not in _SUPPORTED_PROVIDERS or not self.request_id:
+        if self.provider not in _SUPPORTED_PROVIDERS:
             return TranscriptPollResult()
         if self.locator is None:
             self._discover()

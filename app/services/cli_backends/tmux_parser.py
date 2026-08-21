@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Optional
 
 from utils.text import strip_ansi
@@ -12,20 +11,11 @@ from .terminal_screen import TerminalScreen, render_terminal_output
 # Оборванная последовательность длиннее этого предела считается обычным
 # текстом: реальные CSI/OSC от TUI укладываются в сотню байт.
 _INCOMPLETE_ESCAPE_MAX = 256
-_FALLBACK_TAIL_LIMIT = 2_000_000
 _COMPLETE_ESCAPE_RE = re.compile(
     r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()*+].|[^\[\]()*+])"
 )
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-Z\\-_])")
-_DONE_INSTRUCTION = "When you are completely finished, print this exact marker on its own line:"
-_DONE_INSTRUCTION_COMPACT = "".join(_DONE_INSTRUCTION.split())
-_DONE_INSTRUCTION_PREFIX_COMPACT = "completelyfinish"
-_DONE_INSTRUCTION_MARKER_COMPACT = "exactmarker"
-_DONE_INSTRUCTION_START_COMPACT = "whenyouarecompletelyfinished"
-_DONE_INSTRUCTION_PRINT_MARKER_COMPACT = "printthisexactmarker"
-_DONE_INSTRUCTION_CONTINUATION_COMPACTS = {"ownline:", "onitsownline:"}
-_PROMPT_COMPLETION_SEPARATOR = "--- CLI-PROXY COMPLETION PROTOCOL ---"
 _CLAUDE_SCREEN_READER_EVENT_RE = re.compile(
     r"(?im)(?:"
     r"(?:^[ \t]*|\$+(?:\(B)?)(?P<role>claude|tool):[ \t]*"
@@ -42,135 +32,12 @@ _CLAUDE_SCREEN_READER_UI_LINE_RE = re.compile(
     r"|effort:\s*"
     r"|\$?(?:Baked|Cogitated|Cooked) for(?:\s|$)"
     r"|\(ctrl\+b\s+ctrl\+b\b"
-    r"|<{2,3}DONE:"
     r"|\$(?:\(B)*\s*$"
     r")"
 )
 _CODEX_COMPOSER_RE = re.compile(r"^[›❯]\s")
 _CODEX_STATUS_RE = re.compile(r"(?i)esc to interrupt")
 _BOX_DRAWING_ONLY_RE = re.compile(r"^[─-╿\s]+$")
-
-
-@dataclass(frozen=True)
-class TmuxParseResult:
-    text: str
-    complete: bool
-
-
-def request_marker(request_id: str) -> str:
-    return f"<<<CLI_PROXY_REQUEST:{request_id}>>>"
-
-
-def done_marker(request_id: str) -> str:
-    return f"<<<DONE:{request_id}>>>"
-
-
-def _is_done_line(line: str, request_id: str) -> bool:
-    compact = _compact_line(line)
-    return request_id in compact and "DONE:" in compact and "<<" in compact and ">>" in compact
-
-
-def _looks_like_done_line(line: str) -> bool:
-    compact = _compact_line(line)
-    return "DONE:" in compact and "<<" in compact and ">>" in compact
-
-
-def _is_request_line(line: str, request_id: str) -> bool:
-    compact = _compact_line(line)
-    return request_id in compact and "CLI_PROXY_REQUEST:" in compact
-
-
-def _is_done_instruction_line(line: str) -> bool:
-    compact = _compact_line(line).lower()
-    return (
-        _DONE_INSTRUCTION_COMPACT.lower() in compact
-        or (_DONE_INSTRUCTION_PREFIX_COMPACT in compact and _DONE_INSTRUCTION_MARKER_COMPACT in compact)
-    )
-
-
-def _is_done_instruction_fragment_line(line: str) -> bool:
-    return _has_done_instruction_fragment(line)
-
-
-def _is_done_instruction_continuation_line(line: str) -> bool:
-    return _compact_line(line).lower() in _DONE_INSTRUCTION_CONTINUATION_COMPACTS
-
-
-def _compact_line(line: str) -> str:
-    return "".join(str(line or "").strip().split())
-
-
-def _has_done_instruction_fragment(text: str) -> bool:
-    compact = _compact_line(text).lower()
-    return (
-        _DONE_INSTRUCTION_START_COMPACT in compact
-        or _DONE_INSTRUCTION_PRINT_MARKER_COMPACT in compact
-        or (_DONE_INSTRUCTION_MARKER_COMPACT in compact and "done:" in compact)
-    )
-
-
-def _parse_flat_delta(text: str, request_id: str) -> TmuxParseResult | None:
-    request = request_marker(request_id)
-    done = done_marker(request_id)
-    request_pos = text.rfind(request)
-    if request_pos >= 0:
-        text = text[request_pos + len(request):]
-    if done not in text:
-        return None
-
-    first_done = text.find(done)
-    if first_done >= 0 and _has_done_instruction_fragment(text[:first_done + len(done)]):
-        text = text[first_done + len(done):]
-    if done not in text:
-        return None
-
-    done_pos = text.rfind(done)
-    return TmuxParseResult(text=text[:done_pos].strip(), complete=True)
-
-
-def _next_nonblank_index(lines: list[str], start: int) -> int | None:
-    for idx in range(start, len(lines)):
-        if str(lines[idx]).strip():
-            return idx
-    return None
-
-
-def _has_later_response_line(lines: list[str], start: int) -> bool:
-    for idx in range(start, len(lines)):
-        raw = str(lines[idx]).strip()
-        if raw and not _looks_like_done_line(raw):
-            return True
-    return False
-
-
-def _latest_echo_guard_end_index(lines: list[str]) -> int | None:
-    latest = None
-    for idx, line in enumerate(lines):
-        if not _is_done_instruction_line(line):
-            continue
-        marker_idx = _next_nonblank_index(lines, idx + 1)
-        if marker_idx is None or not _looks_like_done_line(lines[marker_idx]):
-            continue
-        if _has_later_response_line(lines, marker_idx + 1):
-            latest = marker_idx
-    return latest
-
-
-def build_prompt_with_markers(prompt: str, request_id: str, *, multiline: bool = True) -> str:
-    if not multiline:
-        return (
-            f"{request_marker(request_id)} "
-            f"{prompt.rstrip()} "
-            "When you are completely finished, print this exact marker on a separate final line: "
-            f"{done_marker(request_id)}\n"
-        )
-    return (
-        f"{request_marker(request_id)}\n"
-        f"{prompt.rstrip()}\n\n"
-        f" {_PROMPT_COMPLETION_SEPARATOR} \n"
-        f"{_DONE_INSTRUCTION} \n"
-        f"{done_marker(request_id)}\n"
-    )
 
 
 def _clean_rendered_text(rendered: str) -> str:
@@ -184,20 +51,6 @@ def normalize_terminal_text(text: str) -> str:
     # проигрывается на модели экрана: без этого символы склеиваются в кашу
     # вида "WWoorrkkiinngg".
     return _clean_rendered_text(render_terminal_output(str(text or "")))
-
-
-def _strip_terminal_control(text: str) -> str:
-    """Вырезает управляющие последовательности, не проигрывая их.
-
-    Нужно как запасной путь детекции маркера завершения: если CLI разорвал
-    маркер перемещением курсора, на экране он выглядит искажённым, но в
-    потоке остаётся целым.
-    """
-
-    stripped = _ANSI_ESCAPE_RE.sub("", str(text or ""))
-    stripped = strip_ansi(stripped)
-    stripped = stripped.replace("\r\n", "\n").replace("\r", "\n")
-    return _CONTROL_RE.sub("", stripped)
 
 
 def _is_tui_chrome_line(line: str) -> bool:
@@ -249,17 +102,15 @@ class TmuxDeltaReader:
     запроса на каждом опросе не нужно: при выводе в сотни мегабайт один такой
     разбор занимал десятки секунд и блокировал event loop. Ридер хранит экран
     между вызовами и получает только новые байты.
+
+    Завершение ответа читатель не определяет: это делает журнал CLI (JSONL).
     """
 
-    def __init__(self, request_id: str) -> None:
-        self._request_id = request_id
+    def __init__(self) -> None:
         self._screen = TerminalScreen()
         self._pending = ""
-        self._fallback_chunks: list[str] = []
-        self._fallback_len = 0
-        self._cache: dict[tuple[bool, bool], TmuxParseResult] = {}
+        self._cache: dict[tuple[bool, bool], str] = {}
         self._rendered: Optional[str] = None
-        self._fallback_text: Optional[str] = None
 
     def feed(self, chunk: str) -> None:
         text = self._pending + str(chunk or "")
@@ -268,57 +119,23 @@ class TmuxDeltaReader:
             return
         self._cache.clear()
         self._rendered = None
-        self._fallback_text = None
         self._screen.feed(text)
-        self._append_fallback(_strip_terminal_control(text))
 
-    def parse(self, *, claude_screen_reader: bool = False, tui_chrome: bool = False) -> TmuxParseResult:
+    def parse(self, *, claude_screen_reader: bool = False, tui_chrome: bool = False) -> str:
         key = (bool(claude_screen_reader), bool(tui_chrome))
         cached = self._cache.get(key)
         if cached is not None:
             return cached
         if self._rendered is None:
             self._rendered = _clean_rendered_text(self._screen.to_text())
-        rendered = self._rendered
-        result = _parse_normalized_delta(
-            rendered,
-            self._request_id,
-            claude_screen_reader=claude_screen_reader,
-            tui_chrome=tui_chrome,
-        )
-        if not result.complete:
-            # Маркер мог быть разорван перемещением курсора — на экране он
-            # искажён, но в сыром потоке цел.
-            if self._fallback_text is None:
-                self._fallback_text = "".join(self._fallback_chunks)
-            fallback_text = self._fallback_text
-            if fallback_text != rendered:
-                fallback = _parse_normalized_delta(
-                    fallback_text,
-                    self._request_id,
-                    claude_screen_reader=claude_screen_reader,
-                    tui_chrome=tui_chrome,
-                )
-                if fallback.complete:
-                    result = fallback
+        if claude_screen_reader:
+            result = _extract_claude_screen_reader_message(self._rendered)
+        elif tui_chrome:
+            result = strip_tui_chrome(self._rendered)
+        else:
+            result = self._rendered.strip()
         self._cache[key] = result
         return result
-
-    def _append_fallback(self, text: str) -> None:
-        if not text:
-            return
-        self._fallback_chunks.append(text)
-        self._fallback_len += len(text)
-        # Сырой поток без проигрывания растёт неограниченно, поэтому для
-        # запасного пути хранится только хвост.
-        while self._fallback_len > _FALLBACK_TAIL_LIMIT and len(self._fallback_chunks) > 1:
-            self._fallback_len -= len(self._fallback_chunks.pop(0))
-        if self._fallback_len > _FALLBACK_TAIL_LIMIT:
-            # Первым куском может прийти вся история запроса — она не должна
-            # оседать в памяти целиком.
-            tail = self._fallback_chunks[0][-_FALLBACK_TAIL_LIMIT:]
-            self._fallback_chunks = [tail]
-            self._fallback_len = len(tail)
 
 
 def _split_incomplete_escape(text: str) -> tuple[str, str]:
@@ -340,90 +157,10 @@ def _split_incomplete_escape(text: str) -> tuple[str, str]:
 
 def parse_tmux_delta(
     delta: str,
-    request_id: str,
     *,
     claude_screen_reader: bool = False,
     tui_chrome: bool = False,
-) -> TmuxParseResult:
-    reader = TmuxDeltaReader(request_id)
+) -> str:
+    reader = TmuxDeltaReader()
     reader.feed(delta)
     return reader.parse(claude_screen_reader=claude_screen_reader, tui_chrome=tui_chrome)
-
-
-def _parse_normalized_delta(
-    text: str,
-    request_id: str,
-    *,
-    claude_screen_reader: bool = False,
-    tui_chrome: bool = False,
-) -> TmuxParseResult:
-    done = done_marker(request_id)
-    flat = _parse_flat_delta(text, request_id)
-    if flat is not None:
-        if claude_screen_reader:
-            return TmuxParseResult(
-                text=_extract_claude_screen_reader_message(flat.text),
-                complete=flat.complete,
-            )
-        if tui_chrome:
-            return TmuxParseResult(text=strip_tui_chrome(flat.text), complete=flat.complete)
-        return flat
-
-    raw_lines = text.splitlines()
-    request_indexes = [idx for idx, line in enumerate(raw_lines) if _is_request_line(line, request_id)]
-    if request_indexes:
-        request_idx = request_indexes[-1]
-        request = request_marker(request_id)
-        request_line = raw_lines[request_idx]
-        if request in request_line:
-            suffix = request_line.split(request, 1)[1]
-            raw_lines = ([suffix] if suffix.strip() else []) + raw_lines[request_idx + 1:]
-        else:
-            raw_lines = raw_lines[request_idx + 1:]
-    echo_seen = False
-    echo_guard_end = _latest_echo_guard_end_index(raw_lines)
-    if echo_guard_end is not None:
-        raw_lines = raw_lines[echo_guard_end + 1:]
-        while raw_lines and (not raw_lines[0].strip() or _looks_like_done_line(raw_lines[0])):
-            raw_lines = raw_lines[1:]
-        echo_seen = True
-
-    lines = []
-    complete = False
-    skip_echo_done_marker = False
-    for line in raw_lines:
-        raw = line.rstrip()
-        if _is_request_line(raw, request_id):
-            lines = []
-            skip_echo_done_marker = False
-            continue
-        if _is_done_instruction_line(raw):
-            if not echo_seen:
-                lines = []
-                skip_echo_done_marker = True
-                echo_seen = True
-                continue
-        if skip_echo_done_marker:
-            if not raw.strip() or _is_done_instruction_continuation_line(raw):
-                continue
-            if _looks_like_done_line(raw):
-                skip_echo_done_marker = False
-                echo_seen = True
-                continue
-            skip_echo_done_marker = False
-        if raw == done or _is_done_line(raw, request_id):
-            if not echo_seen and any(_is_done_instruction_fragment_line(line) for line in [*lines, raw]):
-                lines = []
-                echo_seen = True
-                skip_echo_done_marker = False
-                continue
-            complete = True
-            break
-        lines.append(raw)
-
-    cleaned = "\n".join(lines).strip()
-    if claude_screen_reader:
-        cleaned = _extract_claude_screen_reader_message(cleaned)
-    elif tui_chrome:
-        cleaned = strip_tui_chrome(cleaned)
-    return TmuxParseResult(text=cleaned, complete=complete)
