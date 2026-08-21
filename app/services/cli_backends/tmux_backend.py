@@ -640,39 +640,73 @@ class TmuxExecutionBackend:
         except Exception:
             return False
 
+    async def _deliver_prompt(
+        self,
+        session: Any,
+        paths: dict[str, str],
+        prompt: str,
+        *,
+        buffer_name: str,
+        ready_wait_sec: float,
+    ) -> None:
+        """Вставить текст в pane и отправить его Enter'ом.
+
+        Вставка и Enter неделимы: отмена задачи между ними (перечитывание tmux,
+        остановка бота) оставила бы текст висеть в поле ввода CLI — запрос бы не
+        ушёл, а бот ждал бы ответ на неотправленный промпт. Поэтому при отмене
+        уже вставленный текст всё равно досылается.
+        """
+
+        driver = self._driver(session)
+        prompt_path = write_prompt_temp(paths["runtime_dir"], prompt, owner_user=getattr(driver, "user", None))
+        buffer_loaded = False
+        buffer_pasted = False
+        try:
+            await driver.load_buffer(prompt_path, buffer_name=buffer_name)
+            buffer_loaded = True
+            await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
+            buffer_pasted = True
+            if self._uses_ready_wait(session):
+                await self._wait_for_pasted_text(session, paths, prompt, max_wait_sec=ready_wait_sec)
+            await driver.send_enter(paths["pane_target"])
+        except asyncio.CancelledError:
+            if buffer_pasted:
+                try:
+                    await driver.send_enter(paths["pane_target"])
+                except Exception:
+                    logger.exception(
+                        "failed to submit pasted prompt on cancel session_id=%s",
+                        getattr(session, "id", "?"),
+                    )
+            raise
+        finally:
+            if buffer_loaded and not buffer_pasted:
+                try:
+                    await driver.delete_buffer(buffer_name=buffer_name)
+                except Exception:
+                    logger.exception("failed to delete tmux buffer buffer=%s", buffer_name)
+            try:
+                os.remove(prompt_path)
+            except OSError:
+                logger.exception("failed to remove tmux prompt path=%s", prompt_path)
+
     async def send_input(self, session: Any, text: str) -> None:
         prompt = str(text or "")
         if not prompt.strip():
             raise TmuxDriverError("cannot send empty input to active tmux session")
 
         paths = self.paths(session)
-        driver = self._driver(session)
         async with self._pane_lock(session):
             if not await self.can_accept_input(session):
                 raise TmuxDriverError("active tmux session is unavailable")
 
-            buffer_name = f"cli-proxy-steer-{_new_request_id()}"
-            prompt_path = write_prompt_temp(paths["runtime_dir"], prompt, owner_user=getattr(driver, "user", None))
-            buffer_loaded = False
-            buffer_pasted = False
-            try:
-                await driver.load_buffer(prompt_path, buffer_name=buffer_name)
-                buffer_loaded = True
-                await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
-                buffer_pasted = True
-                if self._uses_ready_wait(session):
-                    await self._wait_for_pasted_text(session, paths, prompt, max_wait_sec=3.0)
-                await driver.send_enter(paths["pane_target"])
-            finally:
-                if buffer_loaded and not buffer_pasted:
-                    try:
-                        await driver.delete_buffer(buffer_name=buffer_name)
-                    except Exception:
-                        logger.exception("failed to delete tmux steer buffer buffer=%s", buffer_name)
-                try:
-                    os.remove(prompt_path)
-                except OSError:
-                    logger.exception("failed to remove tmux steer prompt path=%s", prompt_path)
+            await self._deliver_prompt(
+                session,
+                paths,
+                prompt,
+                buffer_name=f"cli-proxy-steer-{_new_request_id()}",
+                ready_wait_sec=3.0,
+            )
 
             state = self._read_state(paths)
             if self._has_active_runtime_state(session, state):
@@ -1401,9 +1435,7 @@ class TmuxExecutionBackend:
         started_at = time.time()
         log_path = paths["pane_log"]
         offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0
-        driver = self._driver(session)
         buffer_name = f"cli-proxy-{request_id}"
-        prompt_path = write_prompt_temp(paths["runtime_dir"], prompt, owner_user=getattr(driver, "user", None))
         state = self._read_state(paths)
         state.update(
             {
@@ -1423,17 +1455,15 @@ class TmuxExecutionBackend:
             },
         )
 
-        buffer_loaded = False
-        buffer_pasted = False
         try:
             async with self._pane_lock(session):
-                await driver.load_buffer(prompt_path, buffer_name=buffer_name)
-                buffer_loaded = True
-                await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
-                buffer_pasted = True
-                if self._uses_ready_wait(session):
-                    await self._wait_for_pasted_text(session, paths, prompt)
-                await driver.send_enter(paths["pane_target"])
+                await self._deliver_prompt(
+                    session,
+                    paths,
+                    prompt,
+                    buffer_name=buffer_name,
+                    ready_wait_sec=10.0,
+                )
         except asyncio.CancelledError:
             await self._handle_request_cancellation(session, paths)
             raise
@@ -1449,16 +1479,6 @@ class TmuxExecutionBackend:
             )
             self._write_state(paths, state)
             raise
-        finally:
-            if buffer_loaded and not buffer_pasted:
-                try:
-                    await driver.delete_buffer(buffer_name=buffer_name)
-                except Exception:
-                    logger.exception("failed to delete tmux request buffer buffer=%s", buffer_name)
-            try:
-                os.remove(prompt_path)
-            except OSError:
-                pass
         return await self._monitor_request(
             session,
             paths,

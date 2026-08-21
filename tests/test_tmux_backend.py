@@ -855,6 +855,75 @@ async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
     assert state["last_activity_at"] > 1.0
 
 
+def _hang_capture_after_paste(driver):
+    """Подвесить драйвер на ожидании вставленного текста.
+
+    Так воспроизводится окно между вставкой промпта и Enter: именно в нём
+    перечитывание tmux отменяет задачу отправки.
+    """
+
+    pasted = asyncio.Event()
+    original = driver.capture_pane
+
+    async def capture(pane_target):
+        if "paste_buffer" in driver.events:
+            pasted.set()
+            await asyncio.Future()
+        return await original(pane_target)
+
+    driver.capture_pane = capture
+    return pasted
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_submits_pasted_prompt_when_run_is_cancelled(tmp_path):
+    driver = FakeTmuxDriver()
+    pasted = _hang_capture_after_paste(driver)
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    # Перечитывание tmux и остановка бота отменяют задачу, но панель сохраняют.
+    session._preserve_tmux_on_shutdown = True
+
+    task = asyncio.create_task(backend.run(session, "Да"))
+    await asyncio.wait_for(pasted.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert driver.sent_prompts == ["Да"]
+    state = TmuxExecutionBackend._read_state(backend.paths(session))
+    assert state["active_request_id"]
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_submits_pasted_input_when_send_input_is_cancelled(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": 1.0,
+        },
+    )
+    pasted = _hang_capture_after_paste(driver)
+
+    task = asyncio.create_task(backend.send_input(session, "да"))
+    await asyncio.wait_for(pasted.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert driver.sent_prompts == ["да"]
+
+
 @pytest.mark.asyncio
 async def test_tmux_backend_sends_input_to_live_pane_without_own_request(tmp_path):
     driver = FakeTmuxDriver()
