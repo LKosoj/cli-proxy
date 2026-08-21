@@ -5,6 +5,7 @@ import html
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 ExtractSessionFn = Callable[[str, str, str], Any]
+
+_CHAT_REPLIES_LIMIT = 50
+# Claude-транскрипт хранит вызов инструмента внутри ответа ассистента строкой
+# "[tool: Name]" (app/services/session_transfer/reader_claude.py).
+_TOOL_CALL_LINE_RE = re.compile(r"\[tool:[^\]]*\]")
 
 
 @dataclass(frozen=True)
@@ -50,7 +56,7 @@ _REPORT_COPIES: dict[str, _ReportCopy] = {
             ),
             "overview_title": "At a glance",
             "runs_title": "Artifacts and progress",
-            "chat_title": "Recent messages",
+            "chat_title": "Recent agent replies",
             "reports_title": "Saved reports",
             "session_card_title": "Technical session card",
             "run_card_title": "What matters",
@@ -119,7 +125,8 @@ _REPORT_COPIES: dict[str, _ReportCopy] = {
             "chat_no_token": "Active CLI resume token is unavailable.",
             "chat_no_workdir": "Session workdir is not set.",
             "chat_missing": "Native CLI transcript is unavailable.",
-            "chat_note": "Showing the latest messages out of {count}. Source: {source}. Roles: {roles}.",
+            "chat_no_replies": "The CLI transcript has no agent replies yet.",
+            "chat_note": "Latest agent replies: {shown} of {count}. Source: {source}. Tool calls are omitted.",
             "status_missing": "status is not specified",
             "message": "Message",
         },
@@ -152,7 +159,7 @@ _REPORT_COPIES: dict[str, _ReportCopy] = {
             ),
             "overview_title": "Коротко",
             "runs_title": "Артефакты и прогресс",
-            "chat_title": "Последние сообщения",
+            "chat_title": "Последние ответы агента",
             "reports_title": "Сохранённые отчёты",
             "session_card_title": "Техническая карточка сессии",
             "run_card_title": "Что важно",
@@ -222,7 +229,8 @@ _REPORT_COPIES: dict[str, _ReportCopy] = {
             "chat_no_token": "Resume token активного CLI недоступен.",
             "chat_no_workdir": "Рабочая папка сессии не задана.",
             "chat_missing": "Transcript нативного CLI недоступен.",
-            "chat_note": "Показаны последние сообщения из {count}. Источник: {source}. Роли: {roles}.",
+            "chat_no_replies": "В журнале CLI пока нет ответов агента.",
+            "chat_note": "Последние ответы агента: {shown} из {count}. Источник: {source}. Вызовы инструментов не показаны.",
             "status_missing": "статус не указан",
             "message": "Сообщение",
         },
@@ -259,7 +267,7 @@ _REPORT_COPIES["de"] = _ReportCopy(
         ),
         "overview_title": "Kurzüberblick",
         "runs_title": "Artefakte und Fortschritt",
-        "chat_title": "Letzte Nachrichten",
+        "chat_title": "Letzte Antworten des Agenten",
         "reports_title": "Gespeicherte Berichte",
         "session_card_title": "Technische Sitzungskarte",
         "run_card_title": "Wichtig",
@@ -328,7 +336,8 @@ _REPORT_COPIES["de"] = _ReportCopy(
         "chat_no_token": "Resume-Token der aktiven CLI ist nicht verfügbar.",
         "chat_no_workdir": "Arbeitsverzeichnis der Sitzung ist nicht gesetzt.",
         "chat_missing": "Transcript der nativen CLI ist nicht verfügbar.",
-        "chat_note": "Gezeigt werden die neuesten Nachrichten aus {count}. Quelle: {source}. Rollen: {roles}.",
+        "chat_no_replies": "Im CLI-Protokoll gibt es noch keine Antworten des Agenten.",
+        "chat_note": "Letzte Antworten des Agenten: {shown} von {count}. Quelle: {source}. Werkzeugaufrufe werden ausgelassen.",
         "status_missing": "Status ist nicht angegeben",
         "message": "Nachricht",
     },
@@ -363,7 +372,7 @@ _REPORT_COPIES["zh"] = _ReportCopy(
         ),
         "overview_title": "概览",
         "runs_title": "产物和进度",
-        "chat_title": "最近消息",
+        "chat_title": "最近的助手回复",
         "reports_title": "已保存报告",
         "session_card_title": "会话技术卡片",
         "run_card_title": "重点",
@@ -429,7 +438,8 @@ _REPORT_COPIES["zh"] = _ReportCopy(
         "chat_no_token": "当前 CLI 的 resume token 不可用。",
         "chat_no_workdir": "未设置会话工作目录。",
         "chat_missing": "原生 CLI transcript 不可用。",
-        "chat_note": "显示 {count} 条消息中的最新消息。来源：{source}。角色：{roles}。",
+        "chat_no_replies": "CLI transcript 中还没有助手回复。",
+        "chat_note": "最近的助手回复：{shown}/{count}。来源：{source}。已省略工具调用。",
         "status_missing": "未指定状态",
         "message": "消息",
     },
@@ -666,26 +676,29 @@ class SessionSnapshotReportService:
         messages = list(getattr(canonical, "messages", []) or []) if canonical is not None else []
         if not messages:
             return _empty(copy.t("chat_missing"))
-        role_counts: dict[str, int] = {}
+        replies: list[tuple[Any, str]] = []
         for msg in messages:
-            role = str(getattr(msg, "role", "") or "unknown").strip() or "unknown"
-            role_counts[role] = role_counts.get(role, 0) + 1
-        roles_text = ", ".join(f"{_role_label(key, copy)}: {value}" for key, value in sorted(role_counts.items()))
+            if str(getattr(msg, "role", "") or "").strip().lower() != "assistant":
+                continue
+            text = _assistant_reply_text(msg)
+            if text:
+                replies.append((msg, text))
+        if not replies:
+            return _empty(copy.t("chat_no_replies"))
+        shown = replies[-_CHAT_REPLIES_LIMIT:]
         note = copy.t(
             "chat_note",
-            count=len(messages),
+            shown=len(shown),
+            count=len(replies),
             source=getattr(canonical, "source_cli", "") or active_cli,
-            roles=roles_text,
         )
         chunks = [f'<p class="note">{_e(note)}</p>']
-        for idx, msg in enumerate(messages[-8:], start=max(1, len(messages) - 7)):
-            role = str(getattr(msg, "role", "") or "message").strip() or "message"
+        for idx, (msg, text) in enumerate(shown, start=len(replies) - len(shown) + 1):
             ts = _format_ts(getattr(msg, "timestamp", None))
-            text = _truncate(str(getattr(msg, "content", "") or ""), 2500)
             chunks.append(
-                f'<article class="message role-{_css_token(role)}">'
-                f"<h3>{idx}. {_e(_role_label(role, copy))} <span>{_e(ts)}</span></h3>"
-                f"<p>{_e(text)}</p></article>"
+                '<article class="message role-assistant">'
+                f"<h3>{idx}. {_e(_role_label('assistant', copy))} <span>{_e(ts)}</span></h3>"
+                f"<p>{_e(_truncate(text, 2500))}</p></article>"
             )
         return "\n".join(chunks)
 
@@ -872,9 +885,11 @@ def _role_label(role: str, copy: _ReportCopy) -> str:
     return copy.roles.get(str(role or "").strip().lower(), role or copy.t("message"))
 
 
-def _css_token(value: str) -> str:
-    token = "".join(ch.lower() if ch.isalnum() else "-" for ch in str(value or "message"))
-    return token.strip("-") or "message"
+def _assistant_reply_text(message: Any) -> str:
+    """Ответ агента без строк о вызовах инструментов — как в превью бота."""
+    lines = str(getattr(message, "content", "") or "").splitlines()
+    kept = [line for line in lines if not _TOOL_CALL_LINE_RE.fullmatch(line.strip())]
+    return "\n".join(kept).strip()
 
 
 def _short_json(value: Any) -> str:

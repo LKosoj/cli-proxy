@@ -76,8 +76,9 @@ def test_session_snapshot_report_collects_active_mode_runs_reports_and_chat(tmp_
     assert "run_analyst" in content
     assert "fact_pack.md" in content
     assert "report_19700101_001640.md" in content
-    assert "Пользователь" in content
-    assert "initial task" in content
+    assert "Ассистент" in content
+    assert "done" in content
+    assert "initial task" not in content
     assert "run_manager" not in content
 
 
@@ -122,3 +123,42 @@ def test_session_snapshot_report_uses_requested_language(tmp_path: Path) -> None
     en_content = service.build_html_report(session, now=2000, lang="unknown").html
     assert '<html lang="en">' in en_content
     assert "Session report" in en_content
+
+
+def test_session_snapshot_report_chat_shows_last_agent_replies_without_tool_calls(tmp_path: Path) -> None:
+    reports = ReportHistoryService()
+    session = _session(tmp_path)
+
+    messages = [CanonicalMessage(role="user", content="initial task", timestamp=1000)]
+    for index in range(60):
+        messages.append(
+            CanonicalMessage(role="assistant", content=f"reply-{index}\n[tool: Bash]", timestamp=1000 + index)
+        )
+        messages.append(CanonicalMessage(role="tool", content=f"tool-output-{index}", timestamp=1000 + index))
+    messages.append(CanonicalMessage(role="assistant", content="[tool: Read]", timestamp=2000))
+
+    def _extract_session(source_cli: str, session_id: str, workspace: str) -> CanonicalSession:
+        return CanonicalSession(
+            source_cli=source_cli,
+            session_id=session_id,
+            workspace=workspace,
+            messages=messages,
+        )
+
+    service = SessionSnapshotReportService(
+        report_history_service=reports,
+        run_artifacts_service=types.SimpleNamespace(is_enabled=lambda: False),
+        extract_session_fn=_extract_session,
+        now_fn=lambda: 2000,
+    )
+
+    content = service.build_html_report(session, now=2000, lang="ru").html
+
+    assert "Последние ответы агента" in content
+    assert "Последние ответы агента: 50 из 60." in content
+    assert "reply-59" in content
+    assert "reply-10" in content
+    assert "reply-9" not in content
+    assert "[tool: Bash]" not in content
+    assert "tool-output-59" not in content
+    assert "initial task" not in content
