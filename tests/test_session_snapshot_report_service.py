@@ -160,5 +160,73 @@ def test_session_snapshot_report_chat_shows_last_agent_replies_without_tool_call
     assert "reply-10" in content
     assert "reply-9" not in content
     assert "[tool: Bash]" not in content
-    assert "tool-output-59" not in content
+    assert "tool-output-58" not in content
     assert "initial task" not in content
+    # Хвост после последнего ответа агента: вывод инструмента и следующий вызов.
+    assert "tool-output-59" in content
+    assert "Вызов: Read" in content
+
+
+def test_session_snapshot_report_shows_truncated_tool_output_after_last_reply(tmp_path: Path) -> None:
+    reports = ReportHistoryService()
+    session = _session(tmp_path)
+
+    messages = [
+        CanonicalMessage(role="assistant", content="Смотрю тесты.", timestamp=1000),
+        CanonicalMessage(role="assistant", content="[tool: Bash]", timestamp=1001),
+        CanonicalMessage(role="tool", content="pytest output " + "x" * 2000 + " END", timestamp=1002),
+        CanonicalMessage(role="assistant", content="[tool: Read]", timestamp=1003),
+        CanonicalMessage(role="tool", content="file body", timestamp=1004),
+    ]
+
+    service = SessionSnapshotReportService(
+        report_history_service=reports,
+        run_artifacts_service=types.SimpleNamespace(is_enabled=lambda: False),
+        extract_session_fn=lambda source_cli, session_id, workspace: CanonicalSession(
+            source_cli=source_cli,
+            session_id=session_id,
+            workspace=workspace,
+            messages=messages,
+        ),
+        now_fn=lambda: 2000,
+    )
+
+    content = service.build_html_report(session, now=2000, lang="ru").html
+
+    assert "Смотрю тесты." in content
+    assert "Инструменты после последнего ответа" in content
+    assert "Шаги после последнего ответа: 4 из 4. Вывод обрезан." in content
+    assert "Вызов: Bash" in content
+    assert "Вызов: Read" in content
+    assert "pytest output" in content
+    assert "[truncated]" in content
+    assert "END" not in content
+    assert "file body" in content
+
+
+def test_session_snapshot_report_skips_tool_tail_when_reply_is_last(tmp_path: Path) -> None:
+    reports = ReportHistoryService()
+    session = _session(tmp_path)
+
+    messages = [
+        CanonicalMessage(role="tool", content="old tool output", timestamp=1000),
+        CanonicalMessage(role="assistant", content="Готово.", timestamp=1001),
+    ]
+
+    service = SessionSnapshotReportService(
+        report_history_service=reports,
+        run_artifacts_service=types.SimpleNamespace(is_enabled=lambda: False),
+        extract_session_fn=lambda source_cli, session_id, workspace: CanonicalSession(
+            source_cli=source_cli,
+            session_id=session_id,
+            workspace=workspace,
+            messages=messages,
+        ),
+        now_fn=lambda: 2000,
+    )
+
+    content = service.build_html_report(session, now=2000, lang="ru").html
+
+    assert "Готово." in content
+    assert "Инструменты после последнего ответа" not in content
+    assert "old tool output" not in content

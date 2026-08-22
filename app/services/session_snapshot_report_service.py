@@ -5,12 +5,12 @@ import html
 import json
 import logging
 import os
-import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from app.services.report_history_service import ReportHistoryService, ReportSummary
+from app.services.session_transfer.canonical import TOOL_CALL_MARKER_RE, strip_tool_calls
 from app.services.session_transfer.service import extract_session
 from session import session_active_cli_name, session_runtime_uid
 from sessions.session_state_access import get_active_mode
@@ -21,9 +21,8 @@ logger = logging.getLogger(__name__)
 ExtractSessionFn = Callable[[str, str, str], Any]
 
 _CHAT_REPLIES_LIMIT = 50
-# Claude-транскрипт хранит вызов инструмента внутри ответа ассистента строкой
-# "[tool: Name]" (app/services/session_transfer/reader_claude.py).
-_TOOL_CALL_LINE_RE = re.compile(r"\[tool:[^\]]*\]")
+_TOOL_TAIL_LIMIT = 20
+_TOOL_OUTPUT_MAX_CHARS = 600
 
 
 @dataclass(frozen=True)
@@ -127,6 +126,10 @@ _REPORT_COPIES: dict[str, _ReportCopy] = {
             "chat_missing": "Native CLI transcript is unavailable.",
             "chat_no_replies": "The CLI transcript has no agent replies yet.",
             "chat_note": "Latest agent replies: {shown} of {count}. Source: {source}. Tool calls are omitted.",
+            "tool_tail_title": "Tool activity after the last reply",
+            "tool_tail_note": "Steps after the last reply: {shown} of {count}. Output is truncated.",
+            "tool_call": "Call: {name}",
+            "tool_output": "Tool output",
             "status_missing": "status is not specified",
             "message": "Message",
         },
@@ -231,6 +234,10 @@ _REPORT_COPIES: dict[str, _ReportCopy] = {
             "chat_missing": "Transcript нативного CLI недоступен.",
             "chat_no_replies": "В журнале CLI пока нет ответов агента.",
             "chat_note": "Последние ответы агента: {shown} из {count}. Источник: {source}. Вызовы инструментов не показаны.",
+            "tool_tail_title": "Инструменты после последнего ответа",
+            "tool_tail_note": "Шаги после последнего ответа: {shown} из {count}. Вывод обрезан.",
+            "tool_call": "Вызов: {name}",
+            "tool_output": "Вывод инструмента",
             "status_missing": "статус не указан",
             "message": "Сообщение",
         },
@@ -338,6 +345,10 @@ _REPORT_COPIES["de"] = _ReportCopy(
         "chat_missing": "Transcript der nativen CLI ist nicht verfügbar.",
         "chat_no_replies": "Im CLI-Protokoll gibt es noch keine Antworten des Agenten.",
         "chat_note": "Letzte Antworten des Agenten: {shown} von {count}. Quelle: {source}. Werkzeugaufrufe werden ausgelassen.",
+        "tool_tail_title": "Werkzeuge nach der letzten Antwort",
+        "tool_tail_note": "Schritte nach der letzten Antwort: {shown} von {count}. Ausgabe ist gekürzt.",
+        "tool_call": "Aufruf: {name}",
+        "tool_output": "Werkzeugausgabe",
         "status_missing": "Status ist nicht angegeben",
         "message": "Nachricht",
     },
@@ -440,6 +451,10 @@ _REPORT_COPIES["zh"] = _ReportCopy(
         "chat_missing": "原生 CLI transcript 不可用。",
         "chat_no_replies": "CLI transcript 中还没有助手回复。",
         "chat_note": "最近的助手回复：{shown}/{count}。来源：{source}。已省略工具调用。",
+        "tool_tail_title": "最后一条回复之后的工具",
+        "tool_tail_note": "最后一条回复之后的步骤：{shown}/{count}。输出已截断。",
+        "tool_call": "调用：{name}",
+        "tool_output": "工具输出",
         "status_missing": "未指定状态",
         "message": "消息",
     },
@@ -676,13 +691,13 @@ class SessionSnapshotReportService:
         messages = list(getattr(canonical, "messages", []) or []) if canonical is not None else []
         if not messages:
             return _empty(copy.t("chat_missing"))
-        replies: list[tuple[Any, str]] = []
-        for msg in messages:
+        replies: list[tuple[int, Any, str]] = []
+        for position, msg in enumerate(messages):
             if str(getattr(msg, "role", "") or "").strip().lower() != "assistant":
                 continue
             text = _assistant_reply_text(msg)
             if text:
-                replies.append((msg, text))
+                replies.append((position, msg, text))
         if not replies:
             return _empty(copy.t("chat_no_replies"))
         shown = replies[-_CHAT_REPLIES_LIMIT:]
@@ -693,13 +708,14 @@ class SessionSnapshotReportService:
             source=getattr(canonical, "source_cli", "") or active_cli,
         )
         chunks = [f'<p class="note">{_e(note)}</p>']
-        for idx, (msg, text) in enumerate(shown, start=len(replies) - len(shown) + 1):
+        for idx, (_position, msg, text) in enumerate(shown, start=len(replies) - len(shown) + 1):
             ts = _format_ts(getattr(msg, "timestamp", None))
             chunks.append(
                 '<article class="message role-assistant">'
                 f"<h3>{idx}. {_e(_role_label('assistant', copy))} <span>{_e(ts)}</span></h3>"
                 f"<p>{_e(_truncate(text, 2500))}</p></article>"
             )
+        chunks.extend(_render_tool_tail(messages[replies[-1][0] + 1:], copy=copy))
         return "\n".join(chunks)
 
 
@@ -887,9 +903,36 @@ def _role_label(role: str, copy: _ReportCopy) -> str:
 
 def _assistant_reply_text(message: Any) -> str:
     """Ответ агента без строк о вызовах инструментов — как в превью бота."""
-    lines = str(getattr(message, "content", "") or "").splitlines()
-    kept = [line for line in lines if not _TOOL_CALL_LINE_RE.fullmatch(line.strip())]
-    return "\n".join(kept).strip()
+    return strip_tool_calls(str(getattr(message, "content", "") or ""))
+
+
+def _render_tool_tail(messages: list[Any], *, copy: _ReportCopy) -> list[str]:
+    """Инструменты, которые агент вызвал уже после последнего своего ответа."""
+    steps: list[tuple[str, str, Any]] = []
+    for msg in messages:
+        role = str(getattr(msg, "role", "") or "").strip().lower()
+        content = str(getattr(msg, "content", "") or "")
+        timestamp = getattr(msg, "timestamp", None)
+        if role == "assistant":
+            for name in TOOL_CALL_MARKER_RE.findall(content):
+                steps.append((copy.t("tool_call", name=name.strip() or "-"), "", timestamp))
+        elif role == "tool":
+            steps.append((copy.t("tool_output"), content.strip(), timestamp))
+    if not steps:
+        return []
+    visible = steps[-_TOOL_TAIL_LIMIT:]
+    note = copy.t("tool_tail_note", shown=len(visible), count=len(steps))
+    blocks = [
+        f"<h3>{_e(copy.t('tool_tail_title'))}</h3>",
+        f'<p class="note">{_e(note)}</p>',
+    ]
+    for label, output, timestamp in visible:
+        body = f"<p>{_e(_truncate(output, _TOOL_OUTPUT_MAX_CHARS))}</p>" if output else ""
+        blocks.append(
+            '<article class="message role-tool">'
+            f"<h3>{_e(label)} <span>{_e(_format_ts(timestamp))}</span></h3>{body}</article>"
+        )
+    return blocks
 
 
 def _short_json(value: Any) -> str:

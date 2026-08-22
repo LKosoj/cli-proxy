@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional
+
+# Вызов инструмента живёт внутри ответа ассистента: у CLI нет отдельной роли
+# для него, а вывод инструмента приходит следующим сообщением с ролью "tool".
+TOOL_CALL_MARKER_RE = re.compile(r"\[tool:([^\]]*)\]")
+
+
+def tool_call_marker(name: str) -> str:
+    return f"[tool: {name}]"
+
+
+def strip_tool_calls(content: str) -> str:
+    """Сообщение без строк о вызовах инструментов."""
+    lines = str(content or "").splitlines()
+    return "\n".join(line for line in lines if not TOOL_CALL_MARKER_RE.fullmatch(line.strip())).strip()
 
 
 @dataclass

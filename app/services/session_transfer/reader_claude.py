@@ -12,7 +12,7 @@ from typing import List, Optional, Set
 from modes.sdk.runtime.json_normalizer import loads_safe
 
 from ._user_paths import home_for_user
-from .canonical import CanonicalMessage, CanonicalSession
+from .canonical import CanonicalMessage, CanonicalSession, tool_call_marker
 
 logger = logging.getLogger(__name__)
 
@@ -101,19 +101,33 @@ def _extract_text_from_content(content: object) -> str:
         elif item_type == "tool_use":
             name = str(item.get("name") or "").strip()
             if name:
-                parts.append(f"[tool: {name}]")
-        elif item_type == "tool_result":
-            # Flatten nested tool result content.
-            nested = item.get("content")
-            if isinstance(nested, str) and nested.strip():
-                parts.append(nested.strip())
-            elif isinstance(nested, list):
-                for sub in nested:
-                    if isinstance(sub, dict) and str(sub.get("type") or "") == "text":
-                        t = str(sub.get("text") or "").strip()
-                        if t:
-                            parts.append(t)
+                parts.append(tool_call_marker(name))
     return "\n".join(parts)
+
+
+def _extract_tool_results(content: object) -> list[str]:
+    """Tool outputs from a Claude message: they arrive inside user-role records."""
+    if not isinstance(content, list):
+        return []
+    results: list[str] = []
+    for item in content:
+        if not isinstance(item, dict) or str(item.get("type") or "").strip() != "tool_result":
+            continue
+        nested = item.get("content")
+        if isinstance(nested, str):
+            text = nested.strip()
+        elif isinstance(nested, list):
+            parts = [
+                str(sub.get("text") or "").strip()
+                for sub in nested
+                if isinstance(sub, dict) and str(sub.get("type") or "") == "text"
+            ]
+            text = "\n".join(part for part in parts if part)
+        else:
+            text = ""
+        if text:
+            results.append(text)
+    return results
 
 
 def read_session(session_id: str, workspace: str) -> Optional[CanonicalSession]:
@@ -142,9 +156,12 @@ def read_session(session_id: str, workspace: str) -> Optional[CanonicalSession]:
 
                 if event_type == "user":
                     message = data.get("message", {})
-                    text = _extract_text_from_content(message.get("content"))
+                    content = message.get("content")
+                    text = _extract_text_from_content(content)
                     if text:
                         messages.append(CanonicalMessage(role="user", content=text, timestamp=ts))
+                    for tool_text in _extract_tool_results(content):
+                        messages.append(CanonicalMessage(role="tool", content=tool_text, timestamp=ts))
 
                 elif event_type == "assistant":
                     message = data.get("message", {})

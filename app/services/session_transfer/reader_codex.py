@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from modes.sdk.runtime.json_normalizer import loads_safe
 
-from .canonical import CanonicalMessage, CanonicalSession
+from .canonical import CanonicalMessage, CanonicalSession, tool_call_marker
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,14 @@ def _extract_message_text(content: object) -> str:
     return "\n".join(parts)
 
 
+def _tool_output_text(payload: dict) -> str:
+    """Codex writes a tool result either as plain text or as content blocks."""
+    output = payload.get("output")
+    if isinstance(output, str):
+        return output.strip()
+    return _extract_message_text(output)
+
+
 def _is_synthetic_user_text(text: str) -> bool:
     """Filter Codex injected developer/system blocks that arrive as user-role messages."""
     head = text.lstrip()[:200]
@@ -116,7 +124,22 @@ def read_session(session_id: str, workspace: str) -> Optional[CanonicalSession]:
                 payload = data.get("payload") or {}
                 if not isinstance(payload, dict):
                     continue
-                if str(payload.get("type") or "") != "message":
+                payload_type = str(payload.get("type") or "")
+                ts = _parse_iso_timestamp(data.get("timestamp"))
+
+                if payload_type in ("function_call", "custom_tool_call"):
+                    name = str(payload.get("name") or "").strip()
+                    if name:
+                        messages.append(
+                            CanonicalMessage(role="assistant", content=tool_call_marker(name), timestamp=ts)
+                        )
+                    continue
+                if payload_type in ("function_call_output", "custom_tool_call_output"):
+                    output = _tool_output_text(payload)
+                    if output:
+                        messages.append(CanonicalMessage(role="tool", content=output, timestamp=ts))
+                    continue
+                if payload_type != "message":
                     continue
 
                 role = str(payload.get("role") or "").strip().lower()
@@ -129,7 +152,6 @@ def read_session(session_id: str, workspace: str) -> Optional[CanonicalSession]:
                 if role == "user" and _is_synthetic_user_text(text):
                     continue
 
-                ts = _parse_iso_timestamp(data.get("timestamp"))
                 messages.append(CanonicalMessage(role=role, content=text, timestamp=ts))
     except Exception:
         logger.exception("codex reader: failed to read %s", path)

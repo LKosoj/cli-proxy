@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .canonical import CanonicalMessage, CanonicalSession
+from .canonical import CanonicalMessage, CanonicalSession, strip_tool_calls
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,10 @@ def _recent_excerpt(messages: list[CanonicalMessage], *, max_chars: int) -> tupl
     total = 0
     included = 0
     for idx, msg in reversed(list(enumerate(messages, start=1))):
-        text = _trim_text(msg.content, 1_800)
+        if str(msg.role or "").strip().lower() == "tool":
+            # Вывод инструментов целиком лежит в evidence-файлах: бюджет капсулы нужен диалогу.
+            continue
+        text = _trim_text(strip_tool_calls(msg.content), 1_800)
         if not text:
             continue
         block = f"### Message {idx} ({msg.role})\n{text}\n"

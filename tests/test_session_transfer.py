@@ -159,6 +159,35 @@ class TestService:
         transcript_lines = (packs[0] / "canonical.jsonl").read_text(encoding="utf-8").splitlines()
         assert len(transcript_lines) == 30
 
+    def test_capsule_skips_tool_output_and_tool_calls(self, tmp_path, monkeypatch):
+        captured = {}
+
+        def _writer(canonical, workspace, username=None):
+            captured["canonical"] = canonical
+            return "target-token"
+
+        monkeypatch.setattr(transfer_service, "_ensure_writers", lambda: {"codex": _writer})
+        canonical = CanonicalSession(
+            source_cli="claude",
+            session_id="source-session",
+            workspace=str(tmp_path),
+            messages=[
+                CanonicalMessage(role="user", content="Прогони тесты", timestamp=time.time()),
+                CanonicalMessage(role="assistant", content="Запускаю.\n[tool: Bash]", timestamp=time.time()),
+                CanonicalMessage(role="tool", content="pytest output " + ("y" * 500), timestamp=time.time()),
+                CanonicalMessage(role="assistant", content="Всё зелёное.", timestamp=time.time()),
+            ],
+        )
+
+        assert transfer_service.write_target_session(canonical, "codex", str(tmp_path)) == "target-token"
+
+        capsule = captured["canonical"].messages[0].content
+        assert "Прогони тесты" in capsule
+        assert "Запускаю." in capsule
+        assert "Всё зелёное." in capsule
+        assert "[tool: Bash]" not in capsule
+        assert "pytest output" not in capsule
+
     def test_write_target_session_can_keep_full_native_mode(self, tmp_path, monkeypatch):
         captured = {}
 
@@ -285,6 +314,44 @@ class TestReaderClaude:
         assert result.messages[0].content == "Hello"
         assert result.messages[1].role == "assistant"
         assert result.messages[1].content == "Hi there!"
+
+    def test_tool_results_are_read_as_tool_messages(self, tmp_path):
+        from app.services.session_transfer.reader_claude import read_session
+
+        session_id = "tool-uuid-1"
+        project_dir = tmp_path / ".claude" / "projects" / "-tmp"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        jsonl_path = project_dir / f"{session_id}.jsonl"
+
+        events = [
+            {"type": "user", "timestamp": "2026-01-01T00:00:00Z",
+             "message": {"content": "Run the tests"}},
+            {"type": "assistant", "timestamp": "2026-01-01T00:00:01Z",
+             "message": {"content": [
+                 {"type": "text", "text": "Running them now."},
+                 {"type": "tool_use", "name": "Bash"},
+             ]}},
+            {"type": "user", "timestamp": "2026-01-01T00:00:02Z",
+             "message": {"content": [
+                 {"type": "tool_result", "content": [{"type": "text", "text": "4 passed"}]},
+             ]}},
+        ]
+        with open(jsonl_path, "w") as f:
+            for event in events:
+                f.write(json.dumps(event) + "\n")
+
+        with patch(
+            "app.services.session_transfer.reader_claude._candidate_project_dirs",
+            return_value=[project_dir],
+        ):
+            result = read_session(session_id, "/tmp")
+
+        assert result is not None
+        assert [(msg.role, msg.content) for msg in result.messages] == [
+            ("user", "Run the tests"),
+            ("assistant", "Running them now.\n[tool: Bash]"),
+            ("tool", "4 passed"),
+        ]
 
     def test_returns_none_for_missing_file(self):
         from app.services.session_transfer.reader_claude import read_session
@@ -438,11 +505,49 @@ class TestReaderCodex:
 
         assert result is not None
         assert result.source_cli == "codex"
-        assert len(result.messages) == 2
-        assert result.messages[0].role == "user"
-        assert result.messages[0].content == "What is Codex?"
-        assert result.messages[1].role == "assistant"
-        assert result.messages[1].content == "Codex is a coding agent."
+        assert [(msg.role, msg.content) for msg in result.messages] == [
+            ("user", "What is Codex?"),
+            ("assistant", "Codex is a coding agent."),
+            ("assistant", "[tool: exec]"),
+        ]
+
+    def test_reads_codex_tool_calls_and_outputs(self, tmp_path):
+        from app.services.session_transfer import reader_codex
+
+        session_id = "019d9fbe-e199-7c90-b614-eaffe8f1f640"
+        rollout_dir = tmp_path / "sessions" / "2026" / "04" / "18"
+        rollout_dir.mkdir(parents=True, exist_ok=True)
+        rollout = rollout_dir / f"rollout-2026-04-18T11-39-40-{session_id}.jsonl"
+
+        events = [
+            {"timestamp": "2026-04-18T08:40:07.000Z", "type": "response_item",
+             "payload": {"type": "message", "role": "assistant",
+                         "content": [{"type": "output_text", "text": "Смотрю проект."}]}},
+            {"timestamp": "2026-04-18T08:40:08.000Z", "type": "response_item",
+             "payload": {"type": "function_call", "name": "exec_command", "arguments": "{}"}},
+            {"timestamp": "2026-04-18T08:40:09.000Z", "type": "response_item",
+             "payload": {"type": "function_call_output", "call_id": "call_1", "output": "exit code 0"}},
+            {"timestamp": "2026-04-18T08:40:10.000Z", "type": "response_item",
+             "payload": {"type": "custom_tool_call", "name": "apply_patch"}},
+            {"timestamp": "2026-04-18T08:40:11.000Z", "type": "response_item",
+             "payload": {"type": "custom_tool_call_output", "call_id": "call_2",
+                         "output": [{"type": "input_text", "text": "patch applied"}]}},
+        ]
+        with open(rollout, "w") as f:
+            for ev in events:
+                f.write(json.dumps(ev) + "\n")
+
+        with patch.object(reader_codex, "CODEX_SESSIONS_BASE", tmp_path / "sessions"):
+            result = reader_codex.read_session(session_id, "/tmp")
+
+        assert result is not None
+        assert [(msg.role, msg.content) for msg in result.messages] == [
+            ("assistant", "Смотрю проект."),
+            ("assistant", "[tool: exec_command]"),
+            ("tool", "exit code 0"),
+            ("assistant", "[tool: apply_patch]"),
+            ("tool", "patch applied"),
+        ]
 
     def test_returns_none_for_missing(self, tmp_path):
         from app.services.session_transfer import reader_codex
