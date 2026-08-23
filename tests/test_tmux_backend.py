@@ -286,6 +286,18 @@ def _session(tmp_path):
     )
 
 
+async def _wait_for_preview(session, timeout: float = 5.0) -> str:
+    """Ждёт текст, который монитор отдаёт в превью, не дожидаясь конца хода."""
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = str(getattr(session, "last_assistant_text_value", "") or "")
+        if value:
+            return value
+        await asyncio.sleep(0.01)
+    raise AssertionError("монитор не отдал текст в превью")
+
+
 def test_tmux_runtime_paths_are_stable_across_thread_rebind(tmp_path):
     backend = TmuxExecutionBackend(driver=FakeTmuxDriver(), poll_interval_sec=0.01, idle_fallback_sec=0.05)
     session = _session(tmp_path)
@@ -781,10 +793,15 @@ async def test_tmux_backend_keeps_transcript_when_pane_choice_has_no_options(tmp
         idle_fallback_sec=5.0,
         quiet_timeout_sec=0.3,
     )
+    session = _session(tmp_path)
 
-    result = await asyncio.wait_for(backend.run(_session(tmp_path), "do work"), timeout=5)
-
-    assert result.text == "Чистый ответ из JSONL"
+    task = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        assert await _wait_for_preview(session) == "Чистый ответ из JSONL"
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 @pytest.mark.asyncio
@@ -812,14 +829,60 @@ async def test_tmux_backend_reports_only_menu_block_for_real_choice(tmp_path, mo
         driver=driver,
         poll_interval_sec=0.01,
         idle_fallback_sec=5.0,
-        quiet_timeout_sec=0.3,
+        quiet_timeout_sec=0.1,
+    )
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    task = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        assert await _wait_for_preview(session) == (
+            "Do you want to proceed?\n1. Yes\n2. No, tell Claude what to do differently"
+        )
+        # Вопрос уходит в чат из превью, поэтому тишина на экране — это ожидание
+        # ответа, а не конец хода: таймаут её не закрывает.
+        await asyncio.sleep(0.3)
+        assert task.done() is False
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_closes_turn_on_choice_without_preview(tmp_path, monkeypatch):
+    # Без превью вопрос кнопками не уходит, отвечать на него некому: ход
+    # закрывается по тишине, а меню попадает в чат обычным текстом.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = (
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No, tell Claude what to do differently"
     )
 
-    result = await asyncio.wait_for(backend.run(_session(tmp_path), "do work"), timeout=5)
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=False)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.1,
+    )
+    session = _session(tmp_path)
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
 
     assert result.text == (
         "Do you want to proceed?\n1. Yes\n2. No, tell Claude what to do differently"
     )
+    assert result.diagnostics["completion_source"] == "pane-quiet-timeout"
 
 
 @pytest.mark.asyncio
@@ -2211,6 +2274,49 @@ def test_pane_stream_restarts_screen_after_truncation(tmp_path):
     assert "старый вывод" not in text
 
 
+def test_pane_stream_truncates_read_log_and_keeps_stream(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    stream = tmux_backend_module._PaneStream(log_path, "req-rotate")
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write("первый экран\n")
+
+    assert "первый экран" in stream.advance().parsed
+    assert stream.truncate_read_log(8) is True
+    assert os.path.getsize(log_path) == 0
+
+    # Журнал обнулён по дочитанному месту, поэтому поток продолжается: дописанное
+    # читается как продолжение, а не как пересозданный журнал.
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write("продолжение\n")
+    parsed = stream.advance().parsed
+
+    assert "продолжение" in parsed
+    assert "первый экран" in parsed
+
+
+def test_pane_stream_keeps_unread_pane_log(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    stream = tmux_backend_module._PaneStream(log_path, "req-unread")
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write("непрочитанный хвост\n")
+
+    # Непрочитанное усечение бы потеряло, поэтому журнал остаётся как есть.
+    assert stream.truncate_read_log(8) is False
+    assert os.path.getsize(log_path) > 0
+    assert "непрочитанный хвост" in stream.advance().parsed
+
+
+def test_pane_stream_keeps_small_pane_log(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    stream = tmux_backend_module._PaneStream(log_path, "req-small")
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write("короткий вывод\n")
+    stream.advance()
+
+    assert stream.truncate_read_log(1_000_000) is False
+    assert os.path.getsize(log_path) > 0
+
+
 def test_read_pane_chunk_limits_catchup_to_tail(tmp_path):
     log_path = str(tmp_path / "pane.log")
     with open(log_path, "wb") as handle:
@@ -2265,6 +2371,27 @@ def test_pane_stream_catches_up_by_tail_after_recovery_gap(tmp_path, monkeypatch
     stream.advance()
 
     assert fed == ["продолжение\n"]
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_truncates_grown_pane_log_during_request(tmp_path, monkeypatch):
+    monkeypatch.setattr(tmux_backend_module, "_PANE_LOG_MAX_BYTES", 1024)
+    driver = FakeTmuxDriver()
+    # Перерисовки TUI за один ход набирают журнал больше порога.
+    driver.response_text = "перерисовка экрана\n" * 200 + "assistant answer"
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.2,
+    )
+    session = _session(tmp_path)
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    # Журнал обнулён прямо в ходе запроса, а ответ дошёл целиком.
+    assert result.text.endswith("assistant answer")
+    assert os.path.getsize(backend.paths(session)["pane_log"]) < 1024
 
 
 def test_pane_stream_returns_resume_token_without_touching_session(tmp_path):

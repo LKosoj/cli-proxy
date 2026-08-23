@@ -108,7 +108,6 @@ def test_restored_legacy_session_without_backend_uses_current_settings(tmp_path)
 
     assert restored is not None
     assert get_session_execution_backend(restored) == "tmux"
-    assert restored.cli.execution_backends == {}
 
 
 def test_set_session_execution_backend_rejects_non_noop_as_settings_only(tmp_path) -> None:

@@ -8,7 +8,7 @@ Instruction node for `app` area.
 ## Scope
 - Source glob: `app/**`
 - Estimated files: 168
-- Current files: 172 under `app/**` as of last review.
+- Current files: 170 under `app/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -80,4 +80,4 @@ Instruction node for `app` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-21T00:00:00Z
+- 2026-08-23T00:00:00Z

@@ -427,7 +427,6 @@ def session_runtime_uid(session: Any) -> str:
 class CliState:
     active_cli: Optional[str] = None
     resume_tokens: Dict[str, Optional[str]] = field(default_factory=dict)
-    execution_backends: Dict[str, str] = field(default_factory=dict)
     tmux_users: Dict[str, Optional[str]] = field(default_factory=dict)
     cli_work_type: Optional[str] = None
     auto_commands_ran: bool = False
@@ -580,8 +579,6 @@ class Session:
             self.cli.resume_tokens = dict(resume_tokens)
         elif not isinstance(self.cli.resume_tokens, dict):
             self.cli.resume_tokens = {}
-        if not isinstance(getattr(self.cli, "execution_backends", None), dict):
-            self.cli.execution_backends = {}
         if not isinstance(getattr(self.cli, "tmux_users", None), dict):
             self.cli.tmux_users = {}
         for cli_name, configured_tool in (getattr(self.config, "tools", None) or {}).items():
@@ -745,7 +742,6 @@ class Session:
             cli=SimpleNamespace(
                 active_cli=name,
                 resume_tokens=dict(getattr(self.cli, "resume_tokens", None) or {}),
-                execution_backends=dict(getattr(self.cli, "execution_backends", None) or {}),
             ),
             conversation_scope=self.conversation_scope,
             scope=self.scope,
@@ -2001,9 +1997,6 @@ class Session:
             tmux_backend = TmuxExecutionBackend()
             active_cli = str(getattr(getattr(self, "cli", None), "active_cli", "") or "").strip()
             candidate_clis = [active_cli, *[str(name or "").strip() for name in (getattr(self.config, "tools", None) or {})]]
-            for cli_name, backend_name in (getattr(self.cli, "execution_backends", None) or {}).items():
-                if str(backend_name or "").strip().lower() == EXECUTION_BACKEND_TMUX:
-                    candidate_clis.append(str(cli_name or "").strip())
             errors: list[BaseException] = []
             seen_clis: set[str] = set()
 

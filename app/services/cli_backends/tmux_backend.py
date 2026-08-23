@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Optional
 
+from app.services.assistant_preview_service import assistant_preview_enabled
 from utils.cli import resolve_env_value
 from utils.text import strip_ansi
 
@@ -33,6 +34,10 @@ _RESUME_SCAN_TAIL_CHARS = 512
 # определяется последними строками, а текст ответа берётся из JSONL-транскрипта,
 # поэтому догоняющее чтение ограничено хвостом.
 _PANE_CATCHUP_TAIL_BYTES = 2_000_000
+# Экран TUI перерисовывается целиком по многу раз в секунду, поэтому pane.log
+# набирает десятки мегабайт за один ход. Прочитанный журнал обнуляется на этом
+# пороге: дальше хвоста читатели всё равно не заглядывают.
+_PANE_LOG_MAX_BYTES = 16_000_000
 # Живым считаем pane, у которого только что рос экран или журнал CLI. Без этого
 # окна перезапуск занимал бы наблюдением все tmux-сессии, включая те, где CLI
 # просто ждёт ввода, а кнопка «в текущую tmux-сессию» уводила бы запрос мимо
@@ -133,6 +138,35 @@ class _PaneStream:
         self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self._reader = TmuxDeltaReader()
         self._resume_tail = ""
+
+    def truncate_read_log(self, max_bytes: int) -> bool:
+        """Обнуляет pane.log, когда он дорос до предела и уже дочитан.
+
+        Усечение идёт только по дочитанному файлу, поэтому поток не рвётся:
+        накопленный экран и хвост для resume-токена остаются валидными, а
+        `cat >>` из pipe-pane после усечения пишет с нулевого смещения.
+        """
+
+        try:
+            size = os.path.getsize(self._log_path)
+        except OSError:
+            logger.debug("pane log size probe failed path=%s", self._log_path, exc_info=True)
+            return False
+        if size < max_bytes or self._cursor < size:
+            return False
+        try:
+            os.truncate(self._log_path, 0)
+        except OSError:
+            logger.exception("tmux pane log truncate failed path=%s", self._log_path)
+            return False
+        self._cursor = 0
+        logger.info(
+            "tmux pane log truncated at %s bytes request_id=%s path=%s",
+            size,
+            self._request_id,
+            self._log_path,
+        )
+        return True
 
     def advance(
         self,
@@ -1124,6 +1158,13 @@ class TmuxExecutionBackend:
         if idle_probe_interval is None:
             idle_probe_interval = max(1.0, float(getattr(session, "idle_timeout_sec", 100) or 100))
         quiet_timeout = self.quiet_timeout_sec
+        # Висящий вопрос удерживает ход только тогда, когда пользователь его
+        # видит: кнопки шлёт assistant preview в Telegram. Без превью или в
+        # другом канале отвечать некому, и ход должен закрыться по таймауту.
+        choice_holds_turn = (
+            assistant_preview_enabled(getattr(session, "config", None))
+            and str((request.dest or {}).get("kind") or "telegram").strip().lower() == "telegram"
+        )
         driver = self._driver(session)
         log_path = paths["pane_log"]
         last_size = request.offset
@@ -1243,6 +1284,8 @@ class TmuxExecutionBackend:
                 if advance.resume_token:
                     _set_resume_token(session, advance.resume_token)
                 pane_latest_text = advance.parsed or pane_latest_text
+                if pane_stream.truncate_read_log(_PANE_LOG_MAX_BYTES):
+                    last_size = 0
 
                 # Claude-specific: the choice question TUI (Enter selection, ☐ lists, esc prompts) lives in the
                 # raw pane output. claude_screen_reader extraction + transcript preference can mask it.
@@ -1314,6 +1357,7 @@ class TmuxExecutionBackend:
                 # - If detected in pane, prefer that text for latest_text so preview + final send_output
                 #   route the prompt to _is_cli... -> _send_ask_question (Telegram buttons).
                 # - Force complete=False so monitoring continues until user feeds the choice via send_input.
+                awaiting_choice = False
                 try:
                     # Local import avoids any potential circular at module load time.
                     from sessions.session_run_service import SessionRunService as _SRS
@@ -1329,12 +1373,16 @@ class TmuxExecutionBackend:
                             latest_text = choice_text
                         elif not transcript_authoritative:
                             latest_text = pane_raw_for_choice or latest_text
-                    if choice_in_pane or choice_in_transcript:
-                        complete = False
+                    awaiting_choice = choice_in_pane or choice_in_transcript
                 except Exception:
                     # Fallback to legacy string check if import/func unavailable
-                    if "Enter selection [" in (latest_text or "") or "or Escape to cancel" in (latest_text or "") or "☐ " in (latest_text or ""):
-                        complete = False
+                    awaiting_choice = (
+                        "Enter selection [" in (latest_text or "")
+                        or "or Escape to cancel" in (latest_text or "")
+                        or "☐ " in (latest_text or "")
+                    )
+                if awaiting_choice:
+                    complete = False
                 if latest_text and latest_text != last_reported_text:
                     last_reported_text = latest_text
                     setattr(session, "last_output_ts", time.time())
@@ -1345,7 +1393,9 @@ class TmuxExecutionBackend:
 
                 # Quiet timeout: if neither pane.log nor (preferably) the session JSONL (incl. subagents) has grown
                 # for quiet_timeout (default 5min), treat as finished. Growth of any related JSONL resets the timer.
-                if time.time() - last_change >= quiet_timeout:
+                # Доставленный пользователю вопрос таймаут не закрывает: CLI ждёт
+                # ответа, экран и журнал при этом не растут, а ответ вернёт ход к работе.
+                if not (awaiting_choice and choice_holds_turn) and time.time() - last_change >= quiet_timeout:
                     if not complete:
                         complete = True
                         has_json = bool(watched_transcript_paths or transcript_path)
