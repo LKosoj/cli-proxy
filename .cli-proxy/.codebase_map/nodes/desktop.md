@@ -8,7 +8,10 @@ Instruction node for `desktop` area.
 ## Scope
 - Source glob: `desktop/**`
 - Estimated files: 32
-- Current files: 32 under `desktop/**` as of last review.
+- Current files: 0 under `desktop/**` as of last review — каталог удалён
+  коммитом `0a28a2f` («Удалены устаревшие режимы, desktop-компоненты и связанные
+  тесты»). Узел и зеркало `api/desktop/**` остались от прошлой генерации карты;
+  считать их описанием несуществующего слоя.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -78,4 +81,4 @@ Instruction node for `desktop` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-04T00:00:00Z
+- 2026-08-25T00:00:00Z

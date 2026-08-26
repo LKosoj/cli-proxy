@@ -42,6 +42,7 @@ from sessions.session_state_access import (
     get_orchestrator_last_mode_output,
     get_orchestrator_pending_input,
     is_orchestrator_enabled,
+    is_session_unread,
 )
 from sessions.session_status import build_session_status_text
 from utils.ui import format_session_selector_label
@@ -1563,6 +1564,7 @@ class MiniAppRoutes:
             "backend_switch_blockers": self._safe_status_value(["configured in settings"]),
             "tmux_status": self._safe_status_value(tmux_status),
             "busy": bool(getattr(session, "busy", False)),
+            "unread": bool(is_session_unread(session, False)),
             "git_busy": git_busy,
             "git_conflict": git_conflict,
             "git_conflict_kind": self._safe_status_value(git_conflict_kind),
@@ -1762,6 +1764,7 @@ class MiniAppRoutes:
             "session_name": session_name,
             "tool": tool_name,
             "label": session_title,
+            "unread": bool(is_session_unread(session, False)),
         }
 
     def _build_status_payload(

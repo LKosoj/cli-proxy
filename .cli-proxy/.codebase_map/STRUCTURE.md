@@ -2,15 +2,15 @@
 
 Generated: 2026-06-17T10:39:27Z
 
-- total indexed files: 1209
+- total indexed files: 1038
 
 ## Top-level areas
-- `tests`: 557
-- `modes`: 220
-- `app`: 165
-- `agent`: 61
-- `desktop`: 32
-- `miniapp`: 120
+- `tests`: 375
+- `modes`: 89
+- `app`: 172
+- `agent`: 51
+- `desktop`: 0
+- `miniapp`: 119
 - `tg`: 18
 - `sessions`: 10
 - `utils`: 8
@@ -20,17 +20,19 @@ Generated: 2026-06-17T10:39:27Z
 
 | Area | Files |
 | --- | ---: |
-| `tests/` | 569 |
-| `modes/` | 220 |
+| `tests/` | 375 |
+| `modes/` | 89 |
 | `app/` | 172 |
-| `agent/` | 62 |
-| `desktop/` | 32 |
-| `miniapp/` | 120 |
+| `agent/` | 51 |
+| `desktop/` | 0 |
+| `miniapp/` | 119 |
 | `tg/` | 18 |
 | `sessions/` | 10 |
 | `utils/` | 8 |
 
 ## Representative paths
+- `app/services/cli_backends/pane_signals.py`
+- `app/services/cli_backends/pane_title_status.py`
 - `locales/zh.json`
 - `locales/en.json`
 - `locales/de.json`

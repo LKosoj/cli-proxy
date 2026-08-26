@@ -201,6 +201,7 @@ After that, the main bot can continue running as root: `claude` commands are lau
 
 5. **Sessions and continuation**
    - Use `/sessions` to switch, rename, or close sessions.
+- The `🔵 Mark as unread` button in the session menu leaves a "come back later" bookmark: the session gets a 🔵 marker in the session list and in the MiniApp session pickers (status, files, settings, reports; the scheduler picker and the logs filter show no marker). The mark is manual, cleared with `⚪ Mark as read`, and survives a bot restart.
    - Resume tokens are saved and can be restored automatically.
 
 6. **Agent mode**
@@ -213,6 +214,13 @@ After that, the main bot can continue running as root: `claude` commands are lau
 ## Launching a mode from a webhook or the scheduler
 - Webhooks and the scheduler do not talk to the CLI directly: the event goes through a policy check and `ModeLaunchAdapter`, then starts an allowed mode (`agent` or direct CLI).
 - The report returns to the same Telegram chat or topic stored in `notification_target.telegram_session_uid`.
+
+## Cross-mode handoff (orchestrator)
+- Orchestration is enabled per session from the `/sessions` menu (`session.orchestrator.enabled` flag). After a mode run finishes, the orchestrator may propose a transition to another mode via the `✅ Pass forward` / `⛔ Stop process` buttons.
+- Every mode run result is stored in `session.orchestrator.last_mode_output`, and the input prepared for the next mode is kept in `session.orchestrator.pending_input` until confirmation.
+- On confirm, the next mode input becomes the full payload from `session.orchestrator.last_mode_output`, not a shortened summary. If there is no full payload, the original user request is passed instead.
+- Cancel clears `session.orchestrator.pending_input`; for a post-run proposal it also disables orchestration for the session.
+- A transition target can be direct CLI (`direct_cli`) or any registered mode except `agent`: the orchestrator never routes into it, and no transition is proposed after an `agent` run.
 
 ## Mode status model
 - Base stages are unified via `ModeStatusService.build_common_mode_stage`: `disabled`, `processing task`, `waiting in queue`, `waiting for new request`.
@@ -258,6 +266,7 @@ tools:
 - For reboot recovery, the backend checks tmux session presence before every non-first request. If the tmux session disappeared and `resume_token` is known, it starts `interactive_resume_cmd` with `{resume}` or the built-in resume command for the supported CLI instead of the headless path.
 - Built-in resume commands exist for known CLIs: `claude --resume <token>`, `gemini --resume <token>`, `qwen --resume <token>`, `grok --resume <token>`, and `codex resume <token>`. Explicit `interactive_resume_cmd` takes precedence.
 - `tools.<name>.tmux_user` optionally runs tmux commands through `su - <user>`. A root systemd service must also set it for CLIs that run as root (for example, `root` for Codex/Grok): the login session moves the tmux server out of the `bot.service` cgroup, so a systemd restart does not kill it together with headless processes. Claude Code normally uses a dedicated `claude-bot` user.
+- The `tmux` backend requires tmux 3.2 or newer: session creation uses the `-e KEY=VALUE` flag introduced in 3.2. It carries `CLI_PROXY_SESSION_UID` into the pane so native CLI hooks can attribute their events to the bot session.
 - Backend selection is configured only through settings: `tools.<name>.default_execution_backend` has priority for a concrete CLI, and `defaults.default_execution_backend` is the shared fallback.
 - Changing `default_execution_backend` during runtime reload applies to existing sessions when their CLI supports the selected backend; session-level overrides are no longer used, and the UI shows the backend as read-only state.
 - While a tmux request is active, the busy-session menu can send a new text message directly to the current pane or keep it as a separate queue item; when the queue is non-empty, the message can also be merged into its last item.

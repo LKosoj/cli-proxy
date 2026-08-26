@@ -106,7 +106,20 @@ class TmuxDriver:
         except Exception:
             return False
 
-    async def new_session(self, session_name: str, *, workdir: str, command: Iterable[str]) -> None:
+    async def new_session(
+        self,
+        session_name: str,
+        *,
+        workdir: str,
+        command: Iterable[str],
+        env: Optional[dict[str, str]] = None,
+    ) -> None:
+        # -e KEY=VALUE кладёт переменную в окружение tmux-сессии до старта первого
+        # процесса: native-хуки CLI (Claude/Codex), запускаемые как child-процессы
+        # внутри панели, унаследуют её и смогут отдать в событие без резолва по cwd.
+        env_args: list[str] = []
+        for key, value in (env or {}).items():
+            env_args.extend(["-e", f"{key}={value}"])
         await self.run(
             "new-session",
             "-d",
@@ -116,6 +129,7 @@ class TmuxDriver:
             "50",
             "-s",
             session_name,
+            *env_args,
             "-c",
             str(workdir),
             *[str(part) for part in command],
@@ -140,7 +154,12 @@ class TmuxDriver:
         buffer_name: Optional[str] = None,
         delete: bool = False,
     ) -> None:
-        args = ["paste-buffer"]
+        # -p оборачивает вставку в скобочные маркеры. Без них CLI определяет
+        # вставку эвристикой по потоку символов и следующий Enter кладёт в текст
+        # переводом строки вместо отправки: промпт остаётся висеть в поле ввода.
+        # Маркеры tmux подставляет только тем, кто запросил bracketed paste,
+        # поэтому для остальных CLI ничего не меняется.
+        args = ["paste-buffer", "-p"]
         if delete:
             args.append("-d")
         if buffer_name:
@@ -183,11 +202,26 @@ class TmuxDriver:
         raise TmuxDriverError(error or f"tmux session could not be killed: {session_name}")
 
 
+# ESC (\x1b) заменяется на печатный суррогат ␛ (U+241B): paste-buffer -p
+# оборачивает вставку в скобочные маркеры ESC[200~ ... ESC[201~, и встроенный
+# в текст промпта ESC (например, фрагмент вида "\x1b[201~" из вставленного в
+# Telegram лога с ANSI-раскраской) закрыл бы рамку раньше времени — хвост
+# промпта CLI воспримет как нажатия клавиш, а не как вставленный текст.
+# 8-битная форма CSI (одиночный байт 0x9b) сознательно не обрабатывается: в
+# UTF-8 этот символ кодируется парой 0xc2 0x9b, и парсеры TUI в UTF-8-режиме
+# её как CSI не читают — иначе она конфликтовала бы с продолжающими байтами.
+_BRACKETED_PASTE_ESC_SUBSTITUTE = "␛"
+
+
+def _sanitize_for_bracketed_paste(content: str) -> str:
+    return content.replace("\x1b", _BRACKETED_PASTE_ESC_SUBSTITUTE)
+
+
 def write_prompt_temp(runtime_dir: str, content: str, *, owner_user: Optional[str] = None) -> str:
     Path(runtime_dir).mkdir(parents=True, exist_ok=True)
     fd, path = tempfile.mkstemp(prefix="prompt-", suffix=".txt", dir=runtime_dir, text=True)
     try:
-        os.write(fd, content.encode("utf-8"))
+        os.write(fd, _sanitize_for_bracketed_paste(content).encode("utf-8"))
     finally:
         os.close(fd)
     identity = resolve_user_identity(owner_user)

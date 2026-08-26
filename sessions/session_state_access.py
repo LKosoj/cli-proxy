@@ -79,6 +79,14 @@ def set_ssh_remote_enabled(session: Any, value: bool) -> None:
     setattr(session, "ssh_remote_enabled", normalized)
 
 
+def is_session_unread(session: Any, default: bool = False) -> bool:
+    return bool(getattr(session, "unread", default))
+
+
+def set_session_unread(session: Any, value: bool) -> None:
+    setattr(session, "unread", bool(value))
+
+
 def is_remote_control_enabled(session: Any, default: bool = False) -> bool:
     has_modes, modes = _explicit_modes(session)
     if has_modes and modes is not None and hasattr(modes, "remote_control_enabled"):

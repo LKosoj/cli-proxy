@@ -19,6 +19,7 @@ _ADMIN_SESSION_ACTIONS = frozenset(
         "close",
         "reset",
         "ssh",
+        "unread",
         "mode_selector",
         "new_session",
         "list_sessions",
@@ -26,7 +27,7 @@ _ADMIN_SESSION_ACTIONS = frozenset(
     }
 )
 
-_USER_SESSION_ACTIONS = frozenset({"status", "snapshot_report", "reset", "new_session"})
+_USER_SESSION_ACTIONS = frozenset({"status", "snapshot_report", "reset", "new_session", "unread"})
 
 _ADMIN_MODE_ACTIONS = {
     "agent": frozenset(
@@ -180,9 +181,10 @@ def build_mode_menu_visibility(
     user_id: Any = None,
 ) -> ModeMenuVisibility:
     mid = str(mode_id or "").strip()
-    chat_id = getattr(session, "chat_id", None)
-    actor_id = chat_id if user_id is None else user_id
-    is_admin = _safe_is_admin(access_policy=access_policy, chat_id=chat_id) if chat_id is not None else False
+    # Права считаются по тому, кто открыл меню: chat_id сессии в group-режиме -
+    # id общей супергруппы, и по нему кнопки увидели бы все её участники.
+    actor_id = getattr(session, "chat_id", None) if user_id is None else user_id
+    is_admin = _safe_is_admin(access_policy=access_policy, chat_id=actor_id) if actor_id is not None else False
     if is_admin:
         actions = set(_ADMIN_MODE_ACTIONS.get(mid, frozenset({"enable", "disable", "status"})))
         actions = _with_run_operations_policy(
@@ -197,8 +199,8 @@ def build_mode_menu_visibility(
     actions = set(_USER_MODE_ACTIONS.get(mid, frozenset({"enable"})))
     if (
         str(get_active_mode(session, "") or "").strip() == mid
-        and chat_id is not None
-        and _safe_is_direct_cli_allowed(access_policy=access_policy, chat_id=chat_id)
+        and actor_id is not None
+        and _safe_is_direct_cli_allowed(access_policy=access_policy, chat_id=actor_id)
     ):
         actions.add("disable")
     actions = _with_run_operations_policy(

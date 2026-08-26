@@ -21,6 +21,7 @@ from session import (
 )
 from sessions.session_state_access import (
     is_orchestrator_enabled,
+    is_session_unread,
     reset_session_runtime_state,
     set_orchestrator_enabled,
     set_orchestrator_pending_input,
@@ -194,7 +195,8 @@ class SessionUI:
             if not self._can_access_session(chat_id, s):
                 continue
             label = s.name or f"{s.tool.name} @ {s.workdir}"
-            text = self._short_label(f"{sid}: {label}", max_len=60)
+            unread_mark = "🔵 " if is_session_unread(s, False) else ""
+            text = self._short_label(f"{unread_mark}{sid}: {label}", max_len=60)
             rows.append([InlineKeyboardButton(text, callback_data=build_session_overview_callback_data(s))])
         if include_back:
             rows.append([InlineKeyboardButton(back_text or t("common.back", lang), callback_data=back_callback)])

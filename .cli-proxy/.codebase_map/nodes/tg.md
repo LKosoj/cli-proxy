@@ -27,6 +27,7 @@ Instruction node for `tg` area.
 - `tg/callbacks.py`
 - `tg/command_policy.py`
 - `tg/command_registry.py`
+- `tg/handlers.py`
 
 ## Module API
 Детальные интерфейсы модулей этой области:
@@ -73,4 +74,4 @@ Instruction node for `tg` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-15T00:00:00Z
+- 2026-08-25T00:00:00Z

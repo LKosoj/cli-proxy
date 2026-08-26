@@ -16,10 +16,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.services.assistant_preview_service import assistant_preview_enabled
+from session import session_runtime_uid
 from utils.cli import resolve_env_value
 from utils.text import strip_ansi
 
 from .models import ExecutionBackendStatus, ExecutionResult
+from .pane_signals import PaneSignalScanner
+from .pane_title_status import PaneTitleStatus, classify_pane_title
 from .transcript_reader import CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
 from .tmux_parser import TmuxDeltaReader, normalize_terminal_text
@@ -118,6 +121,12 @@ class _PaneAdvance:
     parsed: str
     raw_parsed: Optional[str]
     resume_token: Optional[str]
+    title_status: Optional[PaneTitleStatus] = None
+    # Заголовок был в чанке, даже если classify_pane_title его не опознал:
+    # title_status=None сам по себе не отличает "заголовка не было" от
+    # "был, но не распознан" — а для сброса удержания хода важно именно это.
+    title_seen: bool = False
+    bell_seen: bool = False
 
 
 class _PaneStream:
@@ -138,6 +147,7 @@ class _PaneStream:
         self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self._reader = TmuxDeltaReader()
         self._resume_tail = ""
+        self._signal_scanner = PaneSignalScanner()
 
     def truncate_read_log(self, max_bytes: int) -> bool:
         """Обнуляет pane.log, когда он дорос до предела и уже дочитан.
@@ -174,6 +184,7 @@ class _PaneStream:
         resume_regex: str = "",
         claude_screen_reader: bool = False,
         tui_chrome: bool = False,
+        cli_name: str = "",
     ) -> _PaneAdvance:
         previous_cursor = self._cursor
         chunk_bytes, self._cursor, discontinuous = _read_pane_chunk(
@@ -194,8 +205,18 @@ class _PaneStream:
                     self._log_path,
                 )
         resume_token = None
+        title_status: Optional[PaneTitleStatus] = None
+        title_seen = False
+        bell_seen = False
         chunk = self._decoder.decode(chunk_bytes)
         if chunk:
+            # OSC-заголовок и BEL читаются из того же decoded-чанка, что и
+            # resume-токен: сканер стейтфул и переживает границы вызовов advance().
+            signals = self._signal_scanner.feed(chunk)
+            bell_seen = signals.bell_count > 0
+            if signals.title is not None:
+                title_seen = True
+                title_status = classify_pane_title(signals.title, cli_name=cli_name)
             # Хвост предыдущего куска нужен, чтобы токен, разрезанный границей
             # чтения, всё равно попал под регулярку.
             resume_token = _find_resume_token(self._resume_tail + chunk, resume_regex)
@@ -208,7 +229,14 @@ class _PaneStream:
                 raw_parsed = self._reader.parse(claude_screen_reader=False)
             except Exception:
                 logger.debug("raw pane parse for choice detection failed", exc_info=True)
-        return _PaneAdvance(parsed=parsed, raw_parsed=raw_parsed, resume_token=resume_token)
+        return _PaneAdvance(
+            parsed=parsed,
+            raw_parsed=raw_parsed,
+            resume_token=resume_token,
+            title_status=title_status,
+            title_seen=title_seen,
+            bell_seen=bell_seen,
+        )
 
 
 @dataclass(frozen=True)
@@ -695,13 +723,21 @@ class TmuxExecutionBackend:
         prompt_path = write_prompt_temp(paths["runtime_dir"], prompt, owner_user=getattr(driver, "user", None))
         buffer_loaded = False
         buffer_pasted = False
+        # Пустая вставка экран не меняет, ждать её отклика бессмысленно: без
+        # этой отсечки ожидание всегда выбирало бы весь дедлайн. Обрезаются
+        # только ASCII-пробелы: неразрывный пробел и подобные str.strip()
+        # считает пустотой, но в панели они рисуются и экран меняют.
+        ready_wait = self._uses_ready_wait(session) and bool(prompt.strip(" \t\r\n\v\f"))
         try:
+            # Снимок панели тоже внутри try: между ним и paste_buffer возможна
+            # отмена, и без finally временный файл промпта остался бы на диске.
+            pane_before = await self._capture_pane_text(session, paths) if ready_wait else None
             await driver.load_buffer(prompt_path, buffer_name=buffer_name)
             buffer_loaded = True
             await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
             buffer_pasted = True
-            if self._uses_ready_wait(session):
-                await self._wait_for_pasted_text(session, paths, prompt, max_wait_sec=ready_wait_sec)
+            if ready_wait:
+                await self._wait_for_paste_echo(session, paths, before=pane_before, max_wait_sec=ready_wait_sec)
             await driver.send_enter(paths["pane_target"])
         except asyncio.CancelledError:
             if buffer_pasted:
@@ -762,6 +798,11 @@ class TmuxExecutionBackend:
                 paths["session_name"],
                 workdir=str(getattr(session, "workdir", "") or os.getcwd()),
                 command=_start_command(session, state, force_fresh=force_fresh),
+                # Канонический uid сессии бота, а не _session_uid: события пишет
+                # task_bearing_cli_hook_service через session_runtime_uid, и без
+                # совпадения фолбэков (у desktop-сессий это "s1" против
+                # "desktop:s1") native-хук нельзя связать с нашей сессией.
+                env={"CLI_PROXY_SESSION_UID": session_runtime_uid(session)},
             )
             created_session = True
         if created_session:
@@ -853,44 +894,59 @@ class TmuxExecutionBackend:
         return True
 
     async def _wait_for_interactive_ready(self, session: Any, paths: dict[str, str]) -> None:
-        driver = self._driver(session)
         deadline = time.time() + max(0.1, self.startup_timeout_sec)
         last_pane = ""
         while time.time() < deadline:
-            try:
-                pane = await driver.capture_pane(paths["pane_target"])
+            # Сбойный захват (None) - не свидетельство готовности: для CLI без
+            # своей ветки в _is_interactive_ready пустой экран прошёл бы через
+            # общий "return True" и запустил бы отправку в неготовую панель.
+            pane = await self._capture_pane_text(session, paths)
+            if pane is not None:
                 last_pane = pane
-            except Exception:
-                pane = ""
-            if self._is_interactive_ready(session, pane):
-                return
+                if self._is_interactive_ready(session, pane):
+                    return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
         snippet = (last_pane or "").strip()[-300:]
         raise TmuxDriverError(
             f"{self._interactive_cli_name(session)} interactive prompt did not become ready; last pane: {snippet!r}"
         )
 
-    async def _wait_for_pasted_text(
+    async def _capture_pane_text(self, session: Any, paths: dict[str, str]) -> Optional[str]:
+        # None (а не "") — чтобы сбой захвата нельзя было спутать с пустой
+        # панелью: иначе ожидание отклика приняло бы ошибку tmux за изменение
+        # экрана и отправило Enter до того, как CLI увидел вставку.
+        try:
+            return await self._driver(session).capture_pane(paths["pane_target"])
+        except Exception:
+            logger.debug("pane capture failed pane=%s", paths["pane_target"], exc_info=True)
+            return None
+
+    async def _wait_for_paste_echo(
         self,
         session: Any,
         paths: dict[str, str],
-        text: str,
         *,
+        before: Optional[str],
         max_wait_sec: float = 10.0,
     ) -> None:
-        driver = self._driver(session)
-        needle = "".join(normalize_terminal_text(text).split())[-160:]
-        if not needle:
-            return
+        """Дождаться, пока панель отреагирует на вставку.
+
+        Признак — изменение экрана, а не сам вставленный текст: длинную вставку
+        CLI сворачивает в плейсхолдер вида "[Pasted Content 2927 chars]", и поиск
+        текста не совпал бы ни разу за весь дедлайн. Неудачные захваты (None)
+        пропускаются: сравнивать можно только два реально прочитанных экрана.
+        """
+
         deadline = time.time() + min(max(0.5, self.startup_timeout_sec), max_wait_sec)
+        baseline = before
         while time.time() < deadline:
-            try:
-                pane = await driver.capture_pane(paths["pane_target"])
-            except Exception:
-                pane = ""
-            if needle in "".join(normalize_terminal_text(pane).split()):
-                await asyncio.sleep(min(max(self.poll_interval_sec, 0.1), 0.5))
-                return
+            current = await self._capture_pane_text(session, paths)
+            if current is not None:
+                if baseline is None:
+                    baseline = current
+                elif current != baseline:
+                    await asyncio.sleep(min(max(self.poll_interval_sec, 0.1), 0.5))
+                    return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
 
     @staticmethod
@@ -1171,6 +1227,11 @@ class TmuxExecutionBackend:
         last_change = time.time()
         pane_stream = _PaneStream(log_path, request.request_id, offset=request.offset)
         pane_latest_text = ""
+        # Диагностика: последний статус из OSC-заголовка панели и число
+        # опросов, где встретился настоящий BEL-звонок. На завершение хода не
+        # влияют — авторитетен только транскрипт CLI (см. правило ниже).
+        latest_title_status: Optional[PaneTitleStatus] = None
+        total_bell_count = 0
         transcript_latest_text = ""
         latest_text = ""
         last_reported_text = ""
@@ -1280,10 +1341,17 @@ class TmuxExecutionBackend:
                     resume_regex=_session_resume_regex(session),
                     claude_screen_reader=self._uses_claude_screen_reader(session),
                     tui_chrome=self._uses_tui_chrome(session),
+                    cli_name=_active_cli(session),
                 )
                 if advance.resume_token:
                     _set_resume_token(session, advance.resume_token)
                 pane_latest_text = advance.parsed or pane_latest_text
+                if advance.bell_seen:
+                    total_bell_count += 1
+                if advance.title_seen:
+                    # Новый заголовок обновляет статус, даже нераспознанный:
+                    # нераспознанный = статус неизвестен, удержание снимается.
+                    latest_title_status = advance.title_status
                 if pane_stream.truncate_read_log(_PANE_LOG_MAX_BYTES):
                     last_size = 0
 
@@ -1381,6 +1449,13 @@ class TmuxExecutionBackend:
                         or "or Escape to cancel" in (latest_text or "")
                         or "☐ " in (latest_text or "")
                     )
+                # Статус "ждёт разрешения" из заголовка панели сознательно не
+                # удерживает ход. Удержание имело бы смысл только там, где ход
+                # уже помечен завершённым, а это делает единственный источник -
+                # распознанный транскрипт. Он же авторитетнее заголовка, так что
+                # правило оказалось бы недостижимым, а блокировать им
+                # quiet_timeout нельзя: заголовок может перестать обновляться, и
+                # ход завис бы бессрочно. Статус остаётся в diagnostics.
                 if awaiting_choice:
                     complete = False
                 if latest_text and latest_text != last_reported_text:
@@ -1427,6 +1502,17 @@ class TmuxExecutionBackend:
             }
         )
         self._write_state(paths, state)
+        # Журнал - единственный потребитель сигналов панели: без этой записи
+        # title_status/bell_count вычислялись бы и выбрасывались, а именно по
+        # ним разбирают зависший ход (чем CLI был занят в момент закрытия).
+        logger.info(
+            "tmux request finished session_id=%s request_id=%s completion=%s title_status=%s bells=%d",
+            getattr(session, "id", "?"),
+            request.request_id,
+            completion_source or "none",
+            latest_title_status or "none",
+            total_bell_count,
+        )
         return ExecutionResult(
             text=latest_text.strip(),
             backend=self.name,
@@ -1440,6 +1526,8 @@ class TmuxExecutionBackend:
                 "completion_source": completion_source,
                 "transcript_path": persisted_locator.path if persisted_locator is not None else "",
                 "failure_reason": "" if complete else "tmux_session_missing",
+                "title_status": latest_title_status or "",
+                "bell_count": str(total_bell_count),
             },
         )
 

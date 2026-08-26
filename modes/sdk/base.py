@@ -584,6 +584,7 @@ class BaseMode(ABC):
             session=session,
             mode_id=self.get_mode_id(),
             access_policy=getattr(bot_app, "access_policy_service", None),
+            user_id=getattr(getattr(query, "from_user", None), "id", None),
         )
         text, keyboard = call_mode_build_menu(
             self,

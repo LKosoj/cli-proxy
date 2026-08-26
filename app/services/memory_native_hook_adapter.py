@@ -64,6 +64,7 @@ def build_native_memory_event(
     *,
     source: str = "native_cli",
     event_name: str = "",
+    session_uid_override: str = "",
 ) -> dict[str, Any]:
     hook_name = event_name or _first_text(
         payload,
@@ -82,7 +83,11 @@ def build_native_memory_event(
     tool_use_id = _first_text(payload, "tool_use_id", "toolUseId")
     tool_input = payload.get("tool_input") or payload.get("toolInput")
     tool_response = payload.get("tool_response") or payload.get("toolResponse") or payload.get("response")
-    session_uid = _first_text(payload, "session_id", "sessionId", "session_uid", "sessionUid")
+    native_session_id = _first_text(payload, "session_id", "sessionId", "session_uid", "sessionUid")
+    # Если бот передал свой session_uid через env (см. tmux_backend), он приоритетнее
+    # id, который сгенерировал сам CLI: это позволяет атрибутировать событие хука
+    # к сессии бота. Исходный CLI-шный id при этом не теряется — он уходит в metadata.
+    session_uid = str(session_uid_override or "").strip() or native_session_id
     run_id = _first_text(payload, "run_id", "runId")
     prompt_hash = _sha256_text(prompt)
     metadata = {
@@ -97,6 +102,7 @@ def build_native_memory_event(
         "tool_name": tool_name,
         "tool_input_keys": _mapping_keys(tool_input),
         "tool_response_len": len(str(tool_response or "")),
+        "native_session_id": native_session_id,
     }
     explicit_dedupe = _first_text(payload, "event_id", "eventId", "id", "hook_id", "hookId")
     fallback_dedupe = ""
@@ -122,10 +128,16 @@ def record_native_hook_payload(
     *,
     source: str = "native_cli",
     event_name: str = "",
+    session_uid_override: str = "",
     created_at: float | None = None,
     retention_days: int | None = None,
 ) -> bool:
-    event = build_native_memory_event(payload, source=source, event_name=event_name)
+    event = build_native_memory_event(
+        payload,
+        source=source,
+        event_name=event_name,
+        session_uid_override=session_uid_override,
+    )
     _record, inserted = store.record_event(
         event_type=event["event_type"],
         source=event["source"],
@@ -194,6 +206,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload,
             source=args.source,
             event_name=args.event_name,
+            session_uid_override=os.environ.get("CLI_PROXY_SESSION_UID", ""),
             created_at=time.time(),
             retention_days=retention_days,
         )

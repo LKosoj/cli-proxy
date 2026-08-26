@@ -54,6 +54,7 @@ class CallbackHandler(CallbackActionsMixin):
             (("prefix", "sess_mode_pick:"), self._cb_sess_mode_pick),
             (("prefix", "sess_mode:"), self._cb_sess_mode),
             (("prefix", "sess_ssh_toggle:"), self._cb_sess_ssh_toggle),
+            (("prefix", "sess_unread_toggle:"), self._cb_sess_unread_toggle),
             (("prefix", "sess_snapshot:"), self._cb_sess_snapshot),
             (("prefix", "sess_tmux_reread:"), self._cb_sess_tmux_reread),
             (("eq", "agent_cancel"), self._cb_agent_cancel),
@@ -202,6 +203,10 @@ class CallbackHandler(CallbackActionsMixin):
         router = self._mode_callback_router()
         if router is None:
             return False
+        # Сессия и ответ адресуются чатом сообщения, а права (admlist/whitelist/
+        # user_workdirs) ключуются личным id пользователя: в group-режиме это
+        # разные значения, поэтому владельца запроса передаём отдельно.
+        _reply_chat_id, owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
         return bool(
             await router.handle_mode_action_callback(
                 data=data,
@@ -209,6 +214,7 @@ class CallbackHandler(CallbackActionsMixin):
                 query=query,
                 context=context,
                 bot_app=self.bot_app,
+                owner_chat_id=owner_chat_id,
             )
         )
 
@@ -242,6 +248,14 @@ class CallbackHandler(CallbackActionsMixin):
         if not session:
             self._clear_stale_orchestrator_pending_input(session_token=session_uid, chat_id=chat_id, query=query)
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        # session_uid приходит из callback_data и подделываем, а get_by_uid ищет по
+        # глобальному индексу всех чатов: сверяем видимость сессии для чата, из
+        # которого запрос пришёл на самом деле.
+        _reply_chat_id, request_owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+        if not await self._ensure_session_visible(
+            session, request_owner_chat_id, lang, query, context, "orch_transition"
+        ):
             return True
         pending = get_orchestrator_pending_input(session, None)
         if not isinstance(pending, dict):

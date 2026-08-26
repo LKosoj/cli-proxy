@@ -15,6 +15,10 @@ Generated: 2026-06-17T10:39:27Z
 - `tests/test_admin_autopilot_telegram_format.py`: 1
 
 ## Representative tests
+- `tests/test_pane_signals.py`
+- `tests/test_pane_title_status.py`
+- `tests/test_session_unread.py`
+- `tests/test_cli_session_uid_env.py`
 - `tests/test_admin_monitor.py`
 - `tests/test_input_dispatch_pending_queue.py`
 - `tests/test_memory_store.py`

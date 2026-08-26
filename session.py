@@ -496,6 +496,7 @@ class Session:
     config: AppConfig
     name: Optional[str] = None
     busy: bool = False
+    unread: bool = False
     queue: Deque[Any] = field(default_factory=deque)
     run_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
@@ -1101,6 +1102,12 @@ class Session:
             # но в зависимости от PAM-конфигурации может пробросить — снимаем явно.
             cd_cmd = f"cd {shlex.quote(self.workdir)} && "
             unset_nested = "env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u CLAUDE_CODE_SESSION_ID "
+            # `su -` это login shell и сбрасывает окружение, поэтому uid сессии
+            # приходится ставить внутри самой команды: иначе native-хук CLI
+            # получит только свой внутренний id и не свяжет событие с сессией.
+            runtime_uid = session_runtime_uid(self)
+            if runtime_uid:
+                unset_nested += f"CLI_PROXY_SESSION_UID={shlex.quote(runtime_uid)} "
             full_cmd = cd_cmd + unset_nested + " ".join(shlex.quote(str(x)) for x in cmd)
             cmd = ["su", "-", run_as_user, "-c", full_cmd]
 
@@ -1125,6 +1132,11 @@ class Session:
         if ssh_skill:
             from app.services.ssh_config_loader import load_ssh_secrets as _load_ssh_secrets
             env.update(_load_ssh_secrets(self.workdir))
+        headless_runtime_uid = session_runtime_uid(self)
+        if headless_runtime_uid:
+            env["CLI_PROXY_SESSION_UID"] = headless_runtime_uid
+        else:
+            env.pop("CLI_PROXY_SESSION_UID", None)
         if self.tool.env:
             for k, v in self.tool.env.items():
                 if v is None:
@@ -1738,10 +1750,23 @@ class Session:
         # Для claude используем обёртку через su -c
         if is_claude:
             # Запуск от имени claude-bot с явным указанием рабочей директории
-            full_cmd = f"cd {shlex.quote(self.workdir)} && " + " ".join(shlex.quote(str(x)) for x in cmd_template)
+            # Как и в headless: `su -` сбрасывает окружение, поэтому uid сессии
+            # ставится внутри команды, иначе native-хук CLI его не увидит.
+            runtime_uid = session_runtime_uid(self)
+            env_prefix = f"env CLI_PROXY_SESSION_UID={shlex.quote(runtime_uid)} " if runtime_uid else ""
+            full_cmd = (
+                f"cd {shlex.quote(self.workdir)} && "
+                + env_prefix
+                + " ".join(shlex.quote(str(x)) for x in cmd_template)
+            )
             cmd_template = ["su", "-", "claude-bot", "-c", full_cmd]
 
         env = os.environ.copy()
+        interactive_runtime_uid = session_runtime_uid(self)
+        if interactive_runtime_uid:
+            env["CLI_PROXY_SESSION_UID"] = interactive_runtime_uid
+        else:
+            env.pop("CLI_PROXY_SESSION_UID", None)
         if self.tool.env:
             for k, v in self.tool.env.items():
                 if v is None:
@@ -2894,6 +2919,7 @@ class SessionManager:
         return {
             "workdir": session.workdir,
             "name": session.name,
+            "unread": bool(getattr(session, "unread", False)),
             "scoped_key": session_scoped_key(session),
             "cli": cli_payload,
             "git": git_payload,
@@ -3136,6 +3162,7 @@ class SessionManager:
                                 active_cli = requested_cli
                     session.name = val.get("name") or f"{active_cli}@{workdir}"
                     session.state_summary = val.get("summary")
+                    session.unread = bool(val.get("unread", False))
                     try:
                         session.state_updated_at = float(val.get("updated_at")) if val.get("updated_at") is not None else None
                     except Exception:

@@ -328,6 +328,8 @@ async def test_cb_sess_cli_uses_persistent_switch_that_closes_previous_tmux() ->
     bot_app._available_tools = MagicMock(return_value=["claude", "codex"])
     bot_app.manager.get_by_uid = MagicMock(return_value=session)
     bot_app.handlers.build_sessions_active_overview = MagicMock(return_value=("overview", None))
+    # Контракт резолвера: (reply_chat_id, thread_id, owner_chat_id, session).
+    bot_app.resolve_telegram_callback_scope = MagicMock(return_value=(101, None, 101, session))
 
     mixin = SessionActionsMixin()
     mixin.bot_app = bot_app

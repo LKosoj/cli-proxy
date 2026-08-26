@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import stat
 import time
@@ -20,6 +21,7 @@ from app.services.cli_backends.transcript_reader import TranscriptLocator, Trans
 from app.services.session_transfer.reader_claude import _project_key as _claude_project_key
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
+from session import session_runtime_uid
 
 # Готовый экран Kimi Code 0.34.0: рамка ввода и статус-бар с индикатором контекста.
 KIMI_READY_PANE = "│ > │\n yolo  /work                                        context: 0%"
@@ -153,6 +155,7 @@ class FakeTmuxDriver:
         self.killed = []
         self.kill_result = True
         self.new_session_commands = []
+        self.new_session_envs = []
         self.fail_load = False
         self.autowrite_transcript = True
         self.fallback_session_id = "00000000-0000-4000-8000-000000000001"
@@ -173,9 +176,10 @@ class FakeTmuxDriver:
         self.has_session_calls.append(session_name)
         return session_name in self.sessions
 
-    async def new_session(self, session_name, *, workdir, command):
+    async def new_session(self, session_name, *, workdir, command, env=None):
         self.sessions.add(session_name)
         self.new_session_commands.append((session_name, workdir, list(command)))
+        self.new_session_envs.append(dict(env or {}))
 
     async def pipe_pane(self, pane_target, log_path):
         self.pipe_calls += 1
@@ -366,6 +370,48 @@ async def test_tmux_backend_run_returns_delta_and_state(tmp_path):
     assert last_request["prompt"] == "do work"
     assert last_request["dest"] == {"kind": "telegram", "chat_id": 42, "message_thread_id": 7}
     assert last_request["delivery_state"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_passes_session_identity_env_to_new_session(tmp_path):
+    # T4: без env native-хуки CLI пишут события со своим session_id, который никогда
+    # не совпадает с session_uid бота — связать событие с сессией бота невозможно.
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+
+    await backend.run(
+        session,
+        "do work",
+        request_context={
+            "prompt": "do work",
+            "dest": {"kind": "telegram", "chat_id": 42, "message_thread_id": 7},
+        },
+    )
+
+    assert driver.new_session_envs
+    assert driver.new_session_envs[-1] == {"CLI_PROXY_SESSION_UID": "chat:1:s1"}
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_env_uid_matches_canonical_uid_for_desktop_session(tmp_path):
+    # У desktop-сессии нет scope-токена, и локальный _session_uid дал бы "s1",
+    # тогда как события пишутся под session_runtime_uid == "desktop:s1". Разойдись
+    # они здесь, хук нельзя было бы связать с сессией именно в этом случае.
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session.conversation_scope = None
+
+    await backend.run(
+        session,
+        "do work",
+        request_context={"prompt": "do work", "dest": {"kind": "desktop"}},
+    )
+
+    assert driver.new_session_envs
+    assert driver.new_session_envs[-1] == {"CLI_PROXY_SESSION_UID": session_runtime_uid(session)}
+    assert driver.new_session_envs[-1]["CLI_PROXY_SESSION_UID"] == "desktop:s1"
 
 
 @pytest.mark.asyncio
@@ -886,6 +932,169 @@ async def test_tmux_backend_closes_turn_on_choice_without_preview(tmp_path, monk
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_diagnostics_report_title_status_and_bell(tmp_path, caplog):
+    # Полный прогон backend.run() должен прокидывать OSC-статус и счётчик
+    # звонков в diagnostics: это чисто диагностические поля, ход они не закрывают.
+    driver = FakeTmuxDriver()
+    driver.response_text = "\x1b]0;✳ claude idle\x07\x07assistant answer"
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+
+    with caplog.at_level(logging.INFO, logger=tmux_backend_module.__name__):
+        result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    assert result.diagnostics["title_status"] == "idle"
+    assert result.diagnostics["bell_count"] == "1"
+    # Сигналы обязаны быть наблюдаемы: diagnostics никто не читает, журнал - да.
+    assert "title_status=idle bells=1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_transcript_completion_overrides_permission_title(tmp_path, monkeypatch):
+    # Критическая гарантия консервативного принципа: транскрипт остаётся
+    # единственным авторитетным источником завершения хода. Даже если панель
+    # одновременно показывает "✋", распознанный и завершённый транскрипт
+    # закрывает ход штатно, а не через title-сигнал.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = "\x1b]0;✋ gemini waiting for permission\x07финальный ответ"
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="финальный ответ",
+                available=True,
+                recognized=True,
+                complete=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=5.0,
+    )
+    session = _session(tmp_path)
+    session.cli.active_cli = "gemini"
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    assert result.diagnostics["completion_source"] == "transcript"
+    assert result.text == "финальный ответ"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_diagnostics_ignore_false_positive_title(tmp_path, monkeypatch):
+    # "reworking" в пути — не статус: generic-регулярка с границами слова не
+    # должна сработать на "~/project/reworking".
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = "\x1b]0;~/project/reworking\x07assistant answer"
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=False)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.1,
+    )
+    session = _session(tmp_path)
+    session.cli.active_cli = "codex"
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    assert result.diagnostics["title_status"] == ""
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_permission_title_does_not_block_quiet_timeout(tmp_path, monkeypatch):
+    # Заголовок "ждёт разрешения" не удерживает ход: если транскрипт никогда не
+    # становится recognized (сломанный ридер, неизвестный формат), quiet_timeout
+    # обязан сработать как страховка, а не дать ходу висеть бессрочно.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = "\x1b]0;✋ gemini waiting for permission\x07обычный текст без признаков вопроса"
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=False)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.1,
+    )
+    session = _session(tmp_path)
+    session.cli.active_cli = "gemini"
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    # Ограниченный таймаут сам по себе доказывает отсутствие вечного зависания.
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=3)
+
+    assert result.diagnostics["completion_source"] == "pane-quiet-timeout"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_text_choice_hold_ignores_concurrent_permission_title(tmp_path, monkeypatch):
+    # F1c регрессия: когда awaiting_choice поднят текстовым детектором меню
+    # (а не только title-сигналом), quiet_timeout по-прежнему НЕ закрывает ход
+    # при choice_holds_turn=True — даже если заголовок панели одновременно
+    # показывает "✋". title_permission_hold не должен трогать этот путь.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = (
+        "\x1b]0;✋ gemini waiting for permission\x07"
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No, tell Claude what to do differently"
+    )
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=False)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.1,
+    )
+    session = _session(tmp_path)
+    session.cli.active_cli = "gemini"
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    task = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        await asyncio.sleep(0.3)
+        assert task.done() is False
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
@@ -916,6 +1125,34 @@ async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
     assert state["state"] == "active"
     assert state["active_request_id"] == "request-1"
     assert state["last_activity_at"] > 1.0
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_neutralizes_embedded_esc_in_active_input(tmp_path):
+    # ESC внутри промпта (например, из вставленного в Telegram лога с ANSI-раскраской)
+    # закрыл бы bracketed-paste рамку tmux раньше времени: хвост промпта CLI получил бы
+    # как нажатия клавиш вместо текста.
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": 1.0,
+        },
+    )
+
+    await backend.send_input(session, "лог:\x1b[201~хвост")
+
+    assert driver.sent_prompts[-1] == "лог:␛[201~хвост"
+    assert "\x1b" not in driver.sent_prompts[-1]
 
 
 def _hang_capture_after_paste(driver):
@@ -985,6 +1222,190 @@ async def test_tmux_backend_submits_pasted_input_when_send_input_is_cancelled(tm
         await task
 
     assert driver.sent_prompts == ["да"]
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_does_not_wait_full_deadline_for_collapsed_paste(tmp_path):
+    # Длинную вставку CLI сворачивает в плейсхолдер, самого текста на экране нет:
+    # ожидание должно закрываться по реакции панели, а не выбирать весь дедлайн.
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = ["❯", "› [Pasted Content 2927 chars]"]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=5.0,
+    )
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": time.time(),
+        },
+    )
+
+    started = time.monotonic()
+    await backend.send_input(session, "длинный промпт " * 40)
+    elapsed = time.monotonic() - started
+
+    assert driver.sent_prompts == ["длинный промпт " * 40]
+    assert elapsed < 2.0
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_waits_while_pane_ignores_paste(tmp_path):
+    # Панель не откликнулась на вставку — Enter не уходит раньше дедлайна, иначе
+    # он попадёт в текст переводом строки у CLI без скобочной вставки.
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = ["❯"] * 200
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.6,
+    )
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": time.time(),
+        },
+    )
+
+    started = time.monotonic()
+    await backend.send_input(session, "да")
+    elapsed = time.monotonic() - started
+
+    assert driver.sent_prompts == ["да"]
+    assert elapsed >= 0.6
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_removes_prompt_file_when_cancelled_before_paste(tmp_path):
+    # Отмена возможна и до вставки - на снимке панели. Файл с текстом промпта
+    # чистит только finally, поэтому снимок обязан быть внутри try.
+    driver = FakeTmuxDriver()
+    capturing = asyncio.Event()
+
+    async def capture(pane_target):
+        capturing.set()
+        await asyncio.Future()
+
+    driver.capture_pane = capture
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+
+    task = asyncio.create_task(
+        backend._deliver_prompt(session, paths, "hello", buffer_name="buf", ready_wait_sec=5.0)
+    )
+    await asyncio.wait_for(capturing.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert list(Path(paths["runtime_dir"]).glob("prompt-*.txt")) == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_waits_for_echo_of_non_breaking_space_prompt(tmp_path):
+    # str.strip() считает неразрывный пробел пустотой, но в панели он рисуется:
+    # такую вставку нельзя отправлять Enter'ом без ожидания отклика.
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.3,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+
+    await backend._deliver_prompt(session, paths, "\xa0\xa0", buffer_name="buf", ready_wait_sec=0.3)
+
+    assert "capture_pane" in driver.events
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_skips_echo_wait_for_blank_prompt(tmp_path):
+    # Пустая вставка экран не меняет, поэтому ожидание отклика выбрало бы весь
+    # дедлайн вхолостую - его не должно быть вовсе.
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=5.0,
+    )
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+
+    started = time.monotonic()
+    await backend._deliver_prompt(session, paths, "   ", buffer_name="buf", ready_wait_sec=5.0)
+    elapsed = time.monotonic() - started
+
+    assert "capture_pane" not in driver.events
+    assert elapsed < 1.0
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_does_not_treat_failed_capture_as_pane_reaction(tmp_path):
+    # Сбой capture-pane (гонка с пересозданием сессии, упавший tmux-сервер) - это
+    # отсутствие свидетельства, а не изменение экрана: Enter не должен уходить
+    # раньше дедлайна, иначе он попадёт в текст переводом строки.
+    driver = FakeTmuxDriver()
+    original_capture = driver.capture_pane
+
+    async def capture(pane_target):
+        if "paste_buffer" in driver.events:
+            driver.events.append("capture_pane")
+            raise TmuxDriverError("pane is gone")
+        return await original_capture(pane_target)
+
+    driver.capture_pane = capture
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.6,
+    )
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": time.time(),
+        },
+    )
+
+    started = time.monotonic()
+    await backend.send_input(session, "да")
+    elapsed = time.monotonic() - started
+
+    assert driver.sent_prompts == ["да"]
+    assert elapsed >= 0.6
 
 
 @pytest.mark.asyncio
@@ -2405,6 +2826,22 @@ def test_pane_stream_returns_resume_token_without_touching_session(tmp_path):
 
     assert advance.resume_token == "abcd-1234"
     assert stream.advance(resume_regex=r"session_id:\s*([0-9a-z-]{8,})").resume_token is None
+
+
+def test_pane_stream_advance_reports_title_status_and_bell(tmp_path):
+    log_path = str(tmp_path / "pane.log")
+    request_id = "req-signals"
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write("assistant text\n")
+        handle.write("\x1b]0;✳ claude idle\x07")
+        handle.write("\x07")
+
+    stream = tmux_backend_module._PaneStream(log_path, request_id)
+
+    advance = stream.advance(cli_name="claude")
+
+    assert advance.title_status == "idle"
+    assert advance.bell_seen is True
 
 
 @pytest.mark.asyncio

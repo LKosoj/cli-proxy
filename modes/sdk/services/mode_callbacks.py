@@ -142,26 +142,73 @@ class ModeCallbackRouterService:
             return self.get_session(chat_id)
         return None
 
+    @staticmethod
+    def _is_explicit_session_access_allowed(*, bot_app: Any, chat_id: int, resolved: Any) -> bool:
+        """Ownership gate for sessions resolved by a client-forgeable UID (full-UID/
+        get_session fallback branches of `_resolve_explicit_session`). Chat-scoped
+        short session_id lookups are already chat-scoped and do not call this."""
+        is_admin_fn = getattr(bot_app, "is_admin", None)
+        is_allowed_fn = getattr(bot_app, "is_session_allowed_for_chat", None)
+        try:
+            if callable(is_admin_fn) and bool(is_admin_fn(int(chat_id))):
+                return True
+            if callable(is_allowed_fn):
+                return bool(is_allowed_fn(int(chat_id), resolved))
+            # No access API on bot_app (test doubles): trust a plain chat_id match
+            # only, never the client-supplied UID.
+            return int(getattr(resolved, "chat_id", 0) or 0) == int(chat_id)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "explicit mode callback session ownership check failed chat_id=%s", chat_id,
+            )
+            return False
+
+    def _authorize_explicit_session(
+        self, *, bot_app: Any, chat_id: int, token: str, resolved: Any,
+    ) -> tuple[Any, bool]:
+        if self._is_explicit_session_access_allowed(bot_app=bot_app, chat_id=chat_id, resolved=resolved):
+            return resolved, False
+        logging.getLogger(__name__).warning(
+            "explicit mode callback session access denied chat_id=%s resolved_chat_id=%s session_uid=%s",
+            chat_id, getattr(resolved, "chat_id", None), token,
+        )
+        return None, True
+
     def _resolve_explicit_session(
-        self, *, session_uid: str, bot_app: Any, chat_id: int = 0,
-    ) -> Any:
+        self, *, session_uid: str, bot_app: Any, chat_id: int = 0, access_chat_id: Optional[int] = None,
+    ) -> tuple[Any, bool]:
+        """Resolve a session_uid taken from client-controlled callback_data.
+
+        `chat_id` addresses sessions and replies (the message chat); rights are
+        keyed by the requester's own id, which differs from it in group thread
+        mode - pass it as `access_chat_id`, otherwise `chat_id` is used.
+
+        Returns `(session, access_denied)`. `access_denied` is True only when a
+        session WAS found via the global full-UID/get_session fallback but the
+        requesting chat is not its owner/admin - callers must abort the callback
+        in that case rather than silently falling back to the caller's own
+        session (see `handle_mode_action_callback`).
+        """
+        owner_chat_id = int(access_chat_id) if access_chat_id is not None else int(chat_id)
         token = str(session_uid or "").strip()
         if not token:
-            return None
+            return None, False
         manager = getattr(bot_app, "manager", None)
-        # Short session_id (e.g. "s1"): look up in chat-scoped sessions.
+        # Short session_id (e.g. "s1"): look up in chat-scoped sessions. Already
+        # scoped to chat_id, so no extra ownership check is needed.
         if manager is not None and chat_id and ":" not in token:
             sessions_for_chat = getattr(manager, "sessions_for_chat", None)
             if callable(sessions_for_chat):
                 try:
                     chat_sessions = sessions_for_chat(int(chat_id))
                     if token in (chat_sessions or {}):
-                        return chat_sessions[token]
+                        return chat_sessions[token], False
                 except Exception:
                     logging.getLogger(__name__).exception(
                         "short session_id resolve failed chat_id=%s session_id=%s", chat_id, token,
                     )
-        # Full UID fallback (backward compat with old-format buttons).
+        # Full UID fallback (backward compat with old-format buttons). Searches the
+        # global cross-chat index, so ownership must be verified before returning.
         get_by_uid = getattr(manager, "get_by_uid", None) if manager is not None else None
         if callable(get_by_uid):
             try:
@@ -170,16 +217,23 @@ class ModeCallbackRouterService:
                 logging.getLogger(__name__).exception("explicit mode callback session resolve failed session_uid=%s", token)
                 resolved = None
             if resolved is not None:
-                return resolved
+                return self._authorize_explicit_session(
+                    bot_app=bot_app, chat_id=owner_chat_id, token=token, resolved=resolved,
+                )
         if hasattr(self, "get_session") and callable(self.get_session):
             try:
-                return self.get_session(token)
+                resolved = self.get_session(token)
             except Exception:
                 logging.getLogger(__name__).exception(
                     "explicit mode callback get_session fallback failed session_uid=%s",
                     token,
                 )
-        return None
+                resolved = None
+            if resolved is not None:
+                return self._authorize_explicit_session(
+                    bot_app=bot_app, chat_id=owner_chat_id, token=token, resolved=resolved,
+                )
+        return None, False
 
     def _payload_from_raw(self, payload_raw: str) -> dict:
         if not payload_raw:
@@ -335,16 +389,27 @@ class ModeCallbackRouterService:
         query: Any,
         context: Any,
         bot_app: Any,
+        owner_chat_id: Optional[int] = None,
     ) -> bool:
         message_thread_id = self._extract_message_thread_id(query)
+        # Сессии и ответы адресуются чатом сообщения, а права пользователя
+        # (admlist, whitelist, user_workdirs, user_modes) ключуются его личным
+        # id: в group-режиме это разные чаты, и путать их нельзя ни в одну
+        # сторону - ни отказать владельцу, ни выдать права всей группе.
+        access_chat_id = int(owner_chat_id) if owner_chat_id is not None else int(chat_id)
         scoped_session = self._resolve_callback_session(chat_id=chat_id, message_thread_id=message_thread_id)
         active_mode = self.mode_registry.get_active_mode_id(scoped_session) if scoped_session else ""
         target_mode, action, payload_raw = self._split_mode_action(str(data or ""), active_mode)
         explicit_session_uid = self._extract_session_override(payload_raw)
+        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         session = scoped_session
+        session_access_denied = False
         if explicit_session_uid:
-            resolved_session = self._resolve_explicit_session(
-                session_uid=explicit_session_uid, bot_app=bot_app, chat_id=chat_id,
+            resolved_session, session_access_denied = self._resolve_explicit_session(
+                session_uid=explicit_session_uid,
+                bot_app=bot_app,
+                chat_id=chat_id,
+                access_chat_id=access_chat_id,
             )
             if resolved_session is not None:
                 session = resolved_session
@@ -376,8 +441,16 @@ class ModeCallbackRouterService:
         )
         if not target_mode:
             return False
+        if session_access_denied:
+            if self.send_message:
+                await self.send_message(
+                    transport_context,
+                    text=t("msg.error.session_unavailable", lang),
+                    md2=True,
+                    **self._telegram_reply_kwargs(reply_dest),
+                )
+            return True
         action_token = str(action or "").strip()
-        lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
         busy_for_mode_changes = self._is_session_busy_for_mode_changes(session)
         if action_token in ("enable", "on", "disable", "off") and busy_for_mode_changes:
             if self.send_message:
@@ -401,13 +474,13 @@ class ModeCallbackRouterService:
         if policy is None:
             is_mode_allowed = True
         else:
-            is_mode_allowed = policy.is_mode_allowed_for_chat(chat_id, target_mode)
+            is_mode_allowed = policy.is_mode_allowed_for_chat(access_chat_id, target_mode)
         security = self._build_mode_launch_security(bot_app)
         if action_token in ("enable", "on"):
             if security is None or not hasattr(security, "authorize_mode_launch"):
                 raise RuntimeError("SecurityFacade.authorize_mode_launch is not configured for mode launches")
             decision = await security.authorize_mode_launch(
-                str(chat_id),
+                str(access_chat_id),
                 mode_id=target_mode,
                 is_mode_allowed=bool(is_mode_allowed),
                 action=action_token,
@@ -463,17 +536,17 @@ class ModeCallbackRouterService:
                     )
                 return True
             try:
-                is_admin = bool(policy.is_admin(chat_id))
+                is_admin = bool(policy.is_admin(access_chat_id))
             except Exception:
                 logging.getLogger(__name__).exception(
                     "mode callback run operation policy admin check failed chat_id=%s operation=%s",
-                    chat_id,
+                    access_chat_id,
                     action_token,
                 )
                 is_admin = False
             decision = RunOperationsPolicy().can_run_operation(
                 operation=action_token,
-                user_id=chat_id,
+                user_id=access_chat_id,
                 is_admin=is_admin,
                 session=session,
                 surface="telegram",
@@ -559,7 +632,7 @@ class ModeCallbackRouterService:
                 session=session,
                 run_artifact_store=artifact_store,
                 mode_id=target_mode,
-                actor_chat_id=chat_id,
+                actor_chat_id=access_chat_id,
                 access_policy=policy,
                 context=transport_context,
                 dest=dict(reply_dest),
@@ -626,6 +699,7 @@ class ModeCallbackRouterService:
                     "bot_app": bot_app,
                     "session": session,
                     "chat_id": chat_id,
+                    "access_chat_id": access_chat_id,
                     "context": transport_context,
                     "query": query,
                     "mode_id": target_mode,

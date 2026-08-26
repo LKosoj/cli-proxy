@@ -1356,7 +1356,7 @@ def test_agent_set_project_root_clear_session_cache_error_is_non_fatal(tmp_path)
         mode.mode_dependencies = mode.mode_dependencies.with_overrides(agent_runtime=_FailingRuntime())
     else:
         mode._extra_services["agent_runtime"] = _FailingRuntime()
-    ok, msg = mode._set_project_root(app, session, 1, object(), None)
+    ok, msg = mode._set_project_root(app, session, 1, object(), None, access_chat_id=1)
 
     assert ok is True
     assert msg == "Проект отключен."

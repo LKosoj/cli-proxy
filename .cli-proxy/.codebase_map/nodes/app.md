@@ -8,7 +8,7 @@ Instruction node for `app` area.
 ## Scope
 - Source glob: `app/**`
 - Estimated files: 168
-- Current files: 170 under `app/**` as of last review.
+- Current files: 172 under `app/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -27,6 +27,11 @@ Instruction node for `app` area.
 - `app/bootstrap.py`
 - `app/config_runtime/adapter.py`
 - `app/config_runtime/field_paths.py`
+- `app/services/cli_backends/pane_signals.py`
+- `app/services/cli_backends/pane_title_status.py`
+- `app/services/cli_backends/tmux_backend.py`
+- `app/services/cli_backends/tmux_driver.py`
+- `app/services/memory_native_hook_adapter.py`
 
 ## Module API
 Детальные интерфейсы модулей этой области:
@@ -80,4 +85,4 @@ Instruction node for `app` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-23T00:00:00Z
+- 2026-08-25T00:00:00Z

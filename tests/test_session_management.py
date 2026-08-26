@@ -255,6 +255,17 @@ def test_session_queue_item_preserves_nested_dest_after_persist_restore_boundary
     ]
 
 
+def test_serialize_session_payload_includes_unread_flag() -> None:
+    session = _make_persistable_session([])
+
+    payload_default = SessionManager._serialize_session_payload(session)
+    assert payload_default["unread"] is False
+
+    session.unread = True
+    payload_marked = SessionManager._serialize_session_payload(session)
+    assert payload_marked["unread"] is True
+
+
 @pytest.mark.asyncio
 async def test_run_prompt_drains_two_queued_inputs_with_independent_dest(tmp_path) -> None:
     started: list[dict] = []

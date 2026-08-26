@@ -531,7 +531,9 @@
       "reset": "♻️ Reset",
       "lang": "🌐 Язык",
       "close_menu": "❌ Закрыть меню",
-      "tmux_reread": "🔄 Перечитать tmux"
+      "tmux_reread": "🔄 Перечитать tmux",
+      "mark_unread": "🔵 Отметить непрочитанным",
+      "mark_read": "⚪ Отметить прочитанным"
     },
     "cli": {
       "unavailable": "CLI недоступны"
@@ -635,7 +637,9 @@
       "tmux_reread_started": "Перечитываю вывод tmux…",
       "tmux_reread_not_tmux": "Сессия работает не через tmux",
       "tmux_reread_no_request": "Нет активного запроса tmux для перечитывания",
-      "tmux_reread_failed": "Не удалось перечитать вывод tmux"
+      "tmux_reread_failed": "Не удалось перечитать вывод tmux",
+      "marked_unread": "Сессия отмечена как непрочитанная.",
+      "marked_read": "Отметка «непрочитано» снята."
     },
     "error": {
       "session_not_found": "Сессия не найдена.",

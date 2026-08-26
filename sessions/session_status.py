@@ -5,7 +5,12 @@ from typing import Any, Optional
 
 from app.services.trace_contract import adapt_runtime_event
 from i18n import t
-from sessions.session_state_access import get_active_mode, is_orchestrator_enabled, is_ssh_remote_enabled
+from sessions.session_state_access import (
+    get_active_mode,
+    is_orchestrator_enabled,
+    is_session_unread,
+    is_ssh_remote_enabled,
+)
 from utils.ui import status_dot
 from app.services.ssh_config_loader import load_ssh_config
 
@@ -179,6 +184,8 @@ def build_session_status_text(
         return t("session_status.ago", lang, v=_sec(now - ts))
 
     title = title_prefix if title_prefix is not None else t("session_status.active_session", lang)
+    if is_session_unread(session, False):
+        title = f"🔵 {title}"
     busy_txt = t("session_status.busy", lang) if bool(getattr(session, "busy", False)) else t("session_status.free", lang)
     git_state = getattr(session, "git", None)
     git_busy = bool(getattr(git_state, "busy", getattr(session, "git_busy", False)))

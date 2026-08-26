@@ -12,7 +12,13 @@ from app.services.state_repository import get_state_repository
 from modes.sdk.services.callback_data import (
     build_session_overview_callback_data,
 )
-from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled, set_ssh_remote_enabled
+from sessions.session_state_access import (
+    get_active_mode,
+    is_session_unread,
+    is_ssh_remote_enabled,
+    set_session_unread,
+    set_ssh_remote_enabled,
+)
 from app.services.ssh_config_loader import ssh_remote_available
 from session import set_session_execution_backend
 from tg.handlers import build_lang_menu, format_session_state
@@ -110,6 +116,34 @@ class SessionActionsMixin:
             return int(reply_chat_id or chat_id), int(owner_chat_id or chat_id), session
         return int(chat_id), int(chat_id), None
 
+    async def _ensure_session_visible(
+        self,
+        session,
+        owner_chat_id: int,
+        lang: str,
+        query,
+        context,
+        log_context: str,
+    ) -> bool:
+        """Проверяет видимость сессии для чата owner_chat_id — это чат РЕАЛЬНОГО
+        запроса (из _callback_scope), а не тот, что мог прийти в подделываемом
+        callback_data. При отказе или сбое проверки (fail-closed) сама отправляет
+        пользователю сообщение об отказе и возвращает False."""
+        visibility_checker = getattr(getattr(self.bot_app, "handlers", None), "_is_session_visible_for_chat", None)
+        if not callable(visibility_checker):
+            # В боте handlers создаётся в конструкторе BotApp безусловно, поэтому
+            # ветка недостижима в проде и остаётся мягкой ради тестовых двойников.
+            # Сбой самой проверки (ниже) трактуется строго - fail-closed.
+            return True
+        try:
+            visible = bool(visibility_checker(owner_chat_id, session))
+        except Exception:
+            logging.getLogger(__name__).exception("session visibility check failed context=%s", log_context)
+            visible = False
+        if not visible:
+            await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+        return visible
+
     async def _cb_sess_active(self, *, data: str, chat_id: int, query, context) -> bool:
         _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
         text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
@@ -125,6 +159,13 @@ class SessionActionsMixin:
         session = self.bot_app.manager.get_by_uid(session_uid)
         if not session:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        # session_uid из callback_data подделываем: сверяем видимость сессии
+        # относительно чата, из которого реально пришёл запрос.
+        _reply_chat_id, request_owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+        if not await self._ensure_session_visible(
+            session, request_owner_chat_id, lang, query, context, "sess_active_pick"
+        ):
             return True
         owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
         await self._present_selected_session_after_callback(
@@ -142,6 +183,10 @@ class SessionActionsMixin:
         _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
         session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
         if session is not None:
+            # payload с uid сессии подделываем: сверяем видимость относительно
+            # чата реального запроса, прежде чем показать чужой список проектов.
+            if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "user_project_menu"):
+                return True
             owner_chat_id = int(getattr(session, "chat_id", 0) or owner_chat_id)
         back_callback = build_session_overview_callback_data(session) if session is not None else "sess_active"
         text, keyboard = self.bot_app.handlers.build_user_project_picker(
@@ -190,7 +235,12 @@ class SessionActionsMixin:
             await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
-        if current is None:
+        if current is not None:
+            # current взят из candidate_prefix, то есть из подделываемого payload:
+            # сверяем видимость относительно чата реального запроса.
+            if not await self._ensure_session_visible(current, owner_chat_id, lang, query, context, "user_project_pick"):
+                return True
+        else:
             current = scope_session
         if current is not None:
             owner_chat_id = int(getattr(current, "chat_id", 0) or owner_chat_id)
@@ -282,6 +332,13 @@ class SessionActionsMixin:
             candidate_uid = candidate_uid.strip()
             candidate_session = self.bot_app.manager.get_by_uid(candidate_uid) if candidate_uid else None
             if candidate_session is not None:
+                # candidate_uid из payload подделываем: сверяем видимость сессии
+                # относительно чата реального запроса, прежде чем переключать CLI.
+                _reply_chat_id, request_owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+                if not await self._ensure_session_visible(
+                    candidate_session, request_owner_chat_id, lang, query, context, "sess_cli"
+                ):
+                    return True
                 session = candidate_session
                 owner_chat_id = int(getattr(session, "chat_id", 0) or owner_chat_id)
                 cli = candidate_cli.strip()
@@ -365,10 +422,7 @@ class SessionActionsMixin:
             return True
         _reply_chat_id, callback_owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
         owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
-        access_chat_id = int(callback_owner_chat_id or chat_id)
-        access_checker = getattr(self.bot_app, "is_session_allowed_for_chat", None)
-        if callable(access_checker) and not bool(access_checker(access_chat_id, session)):
-            await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+        if not await self._ensure_session_visible(session, callback_owner_chat_id, lang, query, context, "sess_backend"):
             return True
         result = set_session_execution_backend(session, backend)
         if result.reason:
@@ -403,6 +457,13 @@ class SessionActionsMixin:
         session = self.bot_app.manager.get_by_uid(session_uid) if session_uid else None
         if not session:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        # session_uid из callback_data подделываем: сверяем видимость сессии
+        # относительно чата, из которого реально пришёл запрос.
+        _reply_chat_id, request_owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+        if not await self._ensure_session_visible(
+            session, request_owner_chat_id, lang, query, context, "sess_transfer_yes"
+        ):
             return True
         try:
             from app.services.session_transfer.service import extract_session, write_target_session
@@ -444,7 +505,11 @@ class SessionActionsMixin:
         session_uid = parts[1].strip() if len(parts) > 1 else ""
         session = self.bot_app.manager.get_by_uid(session_uid) if session_uid else None
         if session:
-            owner_chat_id = int(getattr(session, "chat_id", 0) or chat_id)
+            # session_uid из callback_data подделываем: сверяем видимость сессии
+            # относительно чата, из которого реально пришёл запрос.
+            _reply_chat_id, owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+            if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_transfer_no"):
+                return True
             text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
             await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         else:
@@ -589,6 +654,10 @@ class SessionActionsMixin:
         if not session:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
+        # session_uid из callback_data подделываем: сверяем видимость сессии
+        # относительно чата, из которого реально пришёл запрос.
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_mode_pick"):
+            return True
         mode_id = explicit_mode_id or str(get_active_mode(session, "") or "").strip()
         if not mode_id:
             text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
@@ -677,10 +746,15 @@ class SessionActionsMixin:
         lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
         session = self.bot_app.manager.get_by_uid(payload) if payload else None
+        _reply_chat_id, request_owner_chat_id, scope_session = self._callback_scope(chat_id, query)
         if not session:
-            _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
+            session = scope_session
         if not session:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        # payload с uid сессии подделываем: сверяем видимость относительно чата
+        # реального запроса, прежде чем переключать удалённый SSH-доступ.
+        if not await self._ensure_session_visible(session, request_owner_chat_id, lang, query, context, "sess_ssh_toggle"):
             return True
 
         if not ssh_remote_available(session.workdir):
@@ -700,19 +774,48 @@ class SessionActionsMixin:
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         return True
 
+    async def _cb_sess_unread_toggle(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
+        payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
+        _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
+        if session is None:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+
+        # callback_data с payload может указывать на сессию из чужого чата: сверяем
+        # видимость относительно чата, из которого реально пришёл запрос.
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_unread_toggle"):
+            return True
+
+        current = is_session_unread(session)
+        set_session_unread(session, not current)
+
+        session_chat_id = int(getattr(session, "chat_id", 0) or owner_chat_id)
+        await self._persist_session_async(session_chat_id, session.id)
+
+        unread_msg = t("msg.session.marked_unread", lang) if not current else t("msg.session.marked_read", lang)
+        await query.answer(unread_msg)
+
+        text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
+        await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        return True
+
     async def _cb_sess_tmux_reread(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
-        _reply_chat_id, _owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
         session = self.bot_app.manager.get_by_uid(payload) if payload else scope_session
         if session is None:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
 
         # Кнопка показывается только админу, но callback_data приходит от клиента:
-        # право проверяется здесь, а не только при отрисовке меню.
+        # право проверяется здесь, а не только при отрисовке меню. Право админа -
+        # у владельца запроса (в group-режиме это личный id пользователя), а не у
+        # чата, в который уйдёт ответ: там id общей супергруппы на всех участников.
         admin_checker = getattr(getattr(self.bot_app, "handlers", None), "_is_admin", None)
-        if callable(admin_checker) and not bool(admin_checker(int(chat_id))):
+        if callable(admin_checker) and not bool(admin_checker(int(owner_chat_id))):
             await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
             return True
 
@@ -771,16 +874,8 @@ class SessionActionsMixin:
             await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
             return True
 
-        visibility_checker = getattr(getattr(self.bot_app, "handlers", None), "_is_session_visible_for_chat", None)
-        if callable(visibility_checker):
-            try:
-                if not bool(visibility_checker(owner_chat_id, session)):
-                    await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
-                    return True
-            except Exception:
-                logging.getLogger(__name__).exception("session snapshot visibility check failed")
-                await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
-                return True
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_snapshot"):
+            return True
 
         service = getattr(self.bot_app, "session_snapshot_report_service", None)
         if service is None:

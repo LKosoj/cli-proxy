@@ -43,10 +43,10 @@ def test_agent_mode_project_root_is_limited_to_user_workdirs_for_non_admin(tmp_p
     agent = app.mode_registry.get("agent")
     assert agent is not None
 
-    ok, msg = agent._set_project_root(app, session, 1, None, str(other))
+    ok, msg = agent._set_project_root(app, session, 1, None, str(other), access_chat_id=1)
     assert not ok
     assert "недоступен" in msg.lower()
 
-    ok2, _msg2 = agent._set_project_root(app, session, 1, None, str(allowed))
+    ok2, _msg2 = agent._set_project_root(app, session, 1, None, str(allowed), access_chat_id=1)
     assert ok2
     assert os.path.realpath(session.project_root) == os.path.realpath(str(allowed))

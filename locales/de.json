@@ -531,7 +531,9 @@
       "reset": "♻️ Reset",
       "lang": "🌐 Sprache",
       "close_menu": "❌ Menü schließen",
-      "tmux_reread": "🔄 tmux neu lesen"
+      "tmux_reread": "🔄 tmux neu lesen",
+      "mark_unread": "🔵 Als ungelesen markieren",
+      "mark_read": "⚪ Als gelesen markieren"
     },
     "cli": {
       "unavailable": "CLI nicht verfügbar"
@@ -635,7 +637,9 @@
       "tmux_reread_started": "tmux-Ausgabe wird neu gelesen…",
       "tmux_reread_not_tmux": "Diese Sitzung läuft nicht über tmux",
       "tmux_reread_no_request": "Keine aktive tmux-Anfrage zum erneuten Lesen",
-      "tmux_reread_failed": "tmux-Ausgabe konnte nicht neu gelesen werden"
+      "tmux_reread_failed": "tmux-Ausgabe konnte nicht neu gelesen werden",
+      "marked_unread": "Sitzung als ungelesen markiert.",
+      "marked_read": "Ungelesen-Markierung entfernt."
     },
     "error": {
       "session_not_found": "Sitzung nicht gefunden.",

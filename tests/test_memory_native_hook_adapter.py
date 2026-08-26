@@ -36,6 +36,24 @@ def test_native_hook_adapter_builds_metadata_without_raw_prompt_or_paths() -> No
     assert "/srv/git_projects/private-project" not in dumped
 
 
+def test_native_hook_adapter_session_uid_override_wins_and_keeps_native_id() -> None:
+    # T4: без override событие хука пишется с id, который сгенерировал сам CLI —
+    # он никогда не совпадает с session_uid бота, и связать событие с сессией
+    # бота невозможно. override приходит из CLI_PROXY_SESSION_UID (env панели).
+    event = build_native_memory_event(
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "native-cli-session-1",
+            "prompt": "hello",
+        },
+        source="codex",
+        session_uid_override="chat:1:s1",
+    )
+
+    assert event["session_uid"] == "chat:1:s1"
+    assert event["payload"]["native_session_id"] == "native-cli-session-1"
+
+
 def test_native_hook_adapter_records_to_memory_event_store(tmp_path) -> None:
     store = MemoryEventStore(str(tmp_path / "state.json"))
 
@@ -158,6 +176,22 @@ def test_native_hook_adapter_main_is_opt_in_via_env(tmp_path, monkeypatch) -> No
     rows = store.list_events(session_uid="session-1")
     assert len(rows) == 1
     assert rows[0].event_type == "native_cli_userpromptsubmit"
+
+
+def test_native_hook_adapter_main_reads_session_uid_override_from_env(tmp_path, monkeypatch) -> None:
+    state_path = str(tmp_path / "state.json")
+    payload = {"hook_event_name": "UserPromptSubmit", "session_id": "native-cli-session-1", "prompt": "hello"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setenv("CLI_PROXY_MEMORY_STATE_PATH", state_path)
+    monkeypatch.setenv("CLI_PROXY_MEMORY_EVENTS_ENABLED", "1")
+    monkeypatch.setenv("CLI_PROXY_MEMORY_NATIVE_CLI_HOOKS_ENABLED", "1")
+    monkeypatch.setenv("CLI_PROXY_SESSION_UID", "chat:1:s1")
+
+    assert main(["--source", "codex"]) == 0
+    store = MemoryEventStore(state_path)
+    rows = store.list_events(session_uid="chat:1:s1")
+    assert len(rows) == 1
+    assert rows[0].payload["native_session_id"] == "native-cli-session-1"
 
 
 def test_native_hook_adapter_main_respects_config_flags(tmp_path, monkeypatch) -> None:

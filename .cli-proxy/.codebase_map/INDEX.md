@@ -38,12 +38,12 @@ These files are mandatory context and must be considered before major edits.
 - `CONCERNS.md`: Риски, технический долг и зоны повышенного внимания.
 
 ## Nodes
-- [tests](nodes/tests.md) - files: 569, source_glob: `tests/**`
-- [modes](nodes/modes.md) - files: 220, source_glob: `modes/**`
+- [tests](nodes/tests.md) - files: 375, source_glob: `tests/**`
+- [modes](nodes/modes.md) - files: 89, source_glob: `modes/**`
 - [app](nodes/app.md) - files: 172, source_glob: `app/**`
-- [agent](nodes/agent.md) - files: 62, source_glob: `agent/**`
-- [desktop](nodes/desktop.md) - files: 32, source_glob: `desktop/**`
-- [miniapp](nodes/miniapp.md) - files: 120, source_glob: `miniapp/**`
+- [agent](nodes/agent.md) - files: 51, source_glob: `agent/**`
+- [desktop](nodes/desktop.md) - files: 0, source_glob: `desktop/**` (слой удалён коммитом 0a28a2f; узел и `api/desktop/**` остались от прошлой генерации)
+- [miniapp](nodes/miniapp.md) - files: 119, source_glob: `miniapp/**`
 - [tg](nodes/tg.md) - files: 18, source_glob: `tg/**`
 - [sessions](nodes/sessions.md) - files: 10, source_glob: `sessions/**`
 - [utils](nodes/utils.md) - files: 8, source_glob: `utils/**`

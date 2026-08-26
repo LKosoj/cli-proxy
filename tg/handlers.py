@@ -41,7 +41,7 @@ from session import (
     session_scoped_key,
 )
 from app.services.report_history_service import InvalidReportIdError, ReportNotFoundError
-from sessions.session_state_access import get_active_mode, is_ssh_remote_enabled
+from sessions.session_state_access import get_active_mode, is_session_unread, is_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
 from tg.command_registry import build_command_registry
 from tg.markdown import escape_markdown_v2_all
@@ -705,6 +705,13 @@ class BotHandlers:
         callback_data = f"sess_ssh_toggle:{explicit_uid}" if explicit_uid else f"sess_ssh_toggle:{session.id}"
         return InlineKeyboardButton(label, callback_data=callback_data)
 
+    def _unread_toggle_button(self, session: Session, lang: str = "ru") -> InlineKeyboardButton:
+        unread = is_session_unread(session)
+        label = t("btn.session.mark_read", lang) if unread else t("btn.session.mark_unread", lang)
+        explicit_uid = session_runtime_uid(session)
+        callback_data = f"sess_unread_toggle:{explicit_uid}" if explicit_uid else f"sess_unread_toggle:{session.id}"
+        return InlineKeyboardButton(label, callback_data=callback_data)
+
     def build_sessions_active_overview(
         self,
         chat_id: int,
@@ -814,6 +821,9 @@ class BotHandlers:
         ssh_btn = self._ssh_remote_button(s, lang)
         if ssh_btn and visibility.allows("ssh"):
             keyboard_rows.append([ssh_btn])
+
+        if visibility.allows("unread"):
+            keyboard_rows.append([self._unread_toggle_button(s, lang)])
 
         if visibility.allows("mode_selector"):
             keyboard_rows.extend(

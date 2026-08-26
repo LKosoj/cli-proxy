@@ -475,6 +475,10 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context = ctx.get("context")
         query = ctx.get("query")
         chat_id = self._normalize_callback_chat_id(callback.chat_id)
+        # chat_id адресует ответ (в group-режиме это id общей супергруппы), а
+        # права (admlist, user_workdirs) ключуются личным id владельца запроса.
+        raw_access_chat_id = ctx.get("access_chat_id")
+        access_chat_id = int(raw_access_chat_id) if raw_access_chat_id is not None else chat_id
         if not bot_app or not session:
             return ToolResult.fail("missing_context")
         ms = self._messaging(bot_app=bot_app, context=context)
@@ -485,6 +489,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             bot_app=bot_app,
             session=session,
             chat_id=chat_id,
+            access_chat_id=access_chat_id,
             context=context,
             query=query,
             ms=ms,
@@ -502,6 +507,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         bot_app: Any,
         session: Any,
         chat_id: int,
+        access_chat_id: int,
         context: Any,
         query: Any,
         ms: Any,
@@ -545,6 +551,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 bot_app=bot_app,
                 session=session,
                 chat_id=chat_id,
+                access_chat_id=access_chat_id,
                 context=context,
                 query=query,
                 ms=ms,
@@ -555,6 +562,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 bot_app=bot_app,
                 session=session,
                 chat_id=chat_id,
+                access_chat_id=access_chat_id,
                 context=context,
                 query=query,
                 ms=ms,
@@ -565,6 +573,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 bot_app=bot_app,
                 session=session,
                 chat_id=chat_id,
+                access_chat_id=access_chat_id,
                 context=context,
                 query=query,
                 ms=ms,
@@ -581,6 +590,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 bot_app=bot_app,
                 session=session,
                 chat_id=chat_id,
+                access_chat_id=access_chat_id,
                 context=context,
                 query=query,
             ),
@@ -703,6 +713,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         bot_app: Any,
         session: Any,
         chat_id: int,
+        access_chat_id: int,
         context: Any,
         query: Any,
         ms: Any,
@@ -730,8 +741,8 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             return ToolResult.ok()
 
         # Non-admin users can only pick from pre-configured projects.
-        if not bot_app.is_admin(chat_id):
-            projects = list(getattr(bot_app, "user_projects", lambda _cid: [])(chat_id) or [])
+        if not bot_app.is_admin(access_chat_id):
+            projects = list(getattr(bot_app, "user_projects", lambda _cid: [])(access_chat_id) or [])
             if not projects:
                 await ms.send_or_edit(
                     query=query,
@@ -820,6 +831,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         bot_app: Any,
         session: Any,
         chat_id: int,
+        access_chat_id: int,
         context: Any,
         query: Any,
         ms: Any,
@@ -844,7 +856,7 @@ class AgentMode(BaseMode, RunArtifactsMixin):
                 md2=True,
             )
             return ToolResult.ok()
-        projects = list(getattr(bot_app, "user_projects", lambda _cid: [])(chat_id) or [])
+        projects = list(getattr(bot_app, "user_projects", lambda _cid: [])(access_chat_id) or [])
         payload_data = self._extract_project_callback_payload(payload)
         try:
             idx = int(payload_data.get("idx", -1))
@@ -853,7 +865,9 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         if idx < 0 or idx >= len(projects):
             await ms.send_or_edit(query=query, chat_id=chat_id, text=t("agent.msg.pick_unavailable", lang), md2=True)
             return ToolResult.ok()
-        ok, msg = self._set_project_root(bot_app, session, chat_id, context, projects[idx], lang=lang)
+        ok, msg = self._set_project_root(
+            bot_app, session, chat_id, context, projects[idx], lang=lang, access_chat_id=access_chat_id,
+        )
         await self._rerender_menu(
             bot_app,
             session,
@@ -919,11 +933,14 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         bot_app: Any,
         session: Any,
         chat_id: int,
+        access_chat_id: int,
         context: Any,
         query: Any,
     ) -> ToolResult:
         lang = resolve_user_lang(getattr(bot_app, "config", None), chat_id=chat_id)
-        ok, msg = self._set_project_root(bot_app, session, chat_id, context, None, lang=lang)
+        ok, msg = self._set_project_root(
+            bot_app, session, chat_id, context, None, lang=lang, access_chat_id=access_chat_id,
+        )
         await self._rerender_menu(
             bot_app, session, chat_id, context, query,
             note=msg if ok else t("agent.msg.project_disconnect_failed", lang),
@@ -1247,7 +1264,9 @@ class AgentMode(BaseMode, RunArtifactsMixin):
             return ToolResult.ok(t(_AGENT_PROJECT_SELECTION_STALE_KEY, lang))
         if not self._is_agent_active(session):
             return ToolResult.ok(t("agent.msg.agent_inactive_for_session", lang))
-        ok, msg = self._set_project_root(bot_app, session, chat_id, context, selected_path, lang=lang)
+        ok, msg = self._set_project_root(
+            bot_app, session, chat_id, context, selected_path, lang=lang, access_chat_id=chat_id,
+        )
         return ToolResult.ok(msg if ok else t("agent.msg.project_connect_failed", lang))
 
     def build_menu(
@@ -1276,10 +1295,13 @@ class AgentMode(BaseMode, RunArtifactsMixin):
         context: Any,
         project_root: Optional[str],
         lang: str = "ru",
+        *,
+        access_chat_id: int,
     ) -> tuple[bool, str]:
         if project_root:
-            if not bot_app.is_admin(chat_id):
-                allowed = {os.path.realpath(p) for p in (bot_app.user_projects(chat_id) or [])}
+            # Права на каталог - у владельца запроса, а не у чата ответа.
+            if not bot_app.is_admin(access_chat_id):
+                allowed = {os.path.realpath(p) for p in (bot_app.user_projects(access_chat_id) or [])}
                 resolved = os.path.realpath(str(project_root))
                 if resolved not in allowed:
                     return False, t("agent.msg.project_not_allowed", lang)

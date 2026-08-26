@@ -458,7 +458,14 @@ def _tmux_reread_bot_app(
     edits,
     deleted=None,
     delete_ok: bool = True,
+    admin_chat_ids: set[int] | None = None,
+    scope: tuple[int, int] | None = None,
 ):
+    # admin_chat_ids задаётся, когда важно, ПО КАКОМУ чату проверяется право:
+    # в group-режиме reply_chat_id - общая супергруппа, а владелец запроса -
+    # личный id пользователя. scope=(reply_chat_id, owner_chat_id) их разводит.
+    reply_chat_id, owner_chat_id = scope if scope is not None else (101, 101)
+
     class _Manager:
         def get_by_uid(self, token):
             return session if str(token) == session_uid else None
@@ -483,23 +490,27 @@ def _tmux_reread_bot_app(
         ),
         manager=_Manager(),
         handlers=types.SimpleNamespace(
-            _is_admin=lambda _chat_id: is_admin,
+            _is_admin=(
+                (lambda chat_id: int(chat_id) in admin_chat_ids)
+                if admin_chat_ids is not None
+                else (lambda _chat_id: is_admin)
+            ),
             build_sessions_active_overview=lambda _chat_id, session=None: ("overview", None),
         ),
         session_management=types.SimpleNamespace(reread_tmux_output=_reread),
         _edit_message=_edit_message,
         _delete_message=_delete_message,
-        resolve_telegram_callback_scope=lambda _query: (101, None, 101, session),
+        resolve_telegram_callback_scope=lambda _query: (reply_chat_id, None, owner_chat_id, session),
     )
 
 
-def _tmux_reread_query(session_uid: str, answers: list[tuple[str, bool]]):
+def _tmux_reread_query(session_uid: str, answers: list[tuple[str, bool]], chat_id: int = 101):
     async def _answer(text=None, show_alert=False, **_kwargs):
         answers.append((str(text or ""), bool(show_alert)))
 
     return types.SimpleNamespace(
         data=f"sess_tmux_reread:{session_uid}",
-        message=types.SimpleNamespace(chat_id=101, message_id=7),
+        message=types.SimpleNamespace(chat_id=chat_id, message_id=7),
         answer=_answer,
     )
 
@@ -620,6 +631,85 @@ async def test_tmux_reread_callback_rejects_non_admin() -> None:
         data=f"sess_tmux_reread:{session_uid}",
         chat_id=101,
         query=_tmux_reread_query(session_uid, answers),
+        context=object(),
+    )
+
+    assert ok is True
+    assert called == []
+    assert deleted == []
+    assert edits[-1] == "Сессия недоступна."
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_callback_checks_admin_by_owner_not_reply_chat() -> None:
+    """group-режим: ответ уходит в общую супергруппу (500), а право админа есть
+    у личного id пользователя (101). Проверка по чату ответа отказала бы админу
+    в его же кнопке."""
+
+    session_uid = "chat:101:s1"
+    session = types.SimpleNamespace(id="s1", chat_id=101, queue=[])
+    answers: list[tuple[str, bool]] = []
+    edits: list[str] = []
+    deleted: list[tuple[int, int]] = []
+    bot_app = _tmux_reread_bot_app(
+        session,
+        session_uid,
+        is_admin=False,
+        outcome="started",
+        edits=edits,
+        deleted=deleted,
+        admin_chat_ids={101},
+        scope=(500, 101),
+    )
+    handler = CallbackHandler(bot_app)
+
+    ok = await handler._cb_sess_tmux_reread(
+        data=f"sess_tmux_reread:{session_uid}",
+        chat_id=500,
+        query=_tmux_reread_query(session_uid, answers, chat_id=500),
+        context=object(),
+    )
+
+    assert ok is True
+    assert deleted == [(500, 7)]
+    assert edits == []
+    assert answers == [("", False)]
+
+
+@pytest.mark.asyncio
+async def test_tmux_reread_callback_denies_ordinary_member_of_admin_group() -> None:
+    """Обратная сторона того же расхождения: в admlist вписан id супергруппы,
+    и проверка по чату ответа пропустила бы любого её участника к чужой сессии,
+    найденной по подделываемому uid в callback_data."""
+
+    session_uid = "chat:101:s1"
+    session = types.SimpleNamespace(id="s1", chat_id=101, queue=[])
+    answers: list[tuple[str, bool]] = []
+    edits: list[str] = []
+    called: list[str] = []
+    deleted: list[tuple[int, int]] = []
+    bot_app = _tmux_reread_bot_app(
+        session,
+        session_uid,
+        is_admin=False,
+        outcome="started",
+        edits=edits,
+        deleted=deleted,
+        admin_chat_ids={500},
+        scope=(500, 777),
+    )
+
+    async def _forbidden(_session, _context):
+        called.append("reread")
+        return "started"
+
+    bot_app.session_management.reread_tmux_output = _forbidden
+    handler = CallbackHandler(bot_app)
+
+    ok = await handler._cb_sess_tmux_reread(
+        data=f"sess_tmux_reread:{session_uid}",
+        chat_id=500,
+        query=_tmux_reread_query(session_uid, answers, chat_id=500),
         context=object(),
     )
 

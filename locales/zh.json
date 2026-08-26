@@ -531,7 +531,9 @@
       "reset": "♻️ Reset",
       "lang": "🌐 语言",
       "close_menu": "❌ 关闭菜单",
-      "tmux_reread": "🔄 重新读取 tmux"
+      "tmux_reread": "🔄 重新读取 tmux",
+      "mark_unread": "🔵 标记为未读",
+      "mark_read": "⚪ 标记为已读"
     },
     "cli": {
       "unavailable": "CLI 不可用"
@@ -635,7 +637,9 @@
       "tmux_reread_started": "正在重新读取 tmux 输出…",
       "tmux_reread_not_tmux": "该会话未通过 tmux 运行",
       "tmux_reread_no_request": "没有可重新读取的活动 tmux 请求",
-      "tmux_reread_failed": "重新读取 tmux 输出失败"
+      "tmux_reread_failed": "重新读取 tmux 输出失败",
+      "marked_unread": "会话已标记为未读。",
+      "marked_read": "已取消未读标记。"
     },
     "error": {
       "session_not_found": "未找到会话。",

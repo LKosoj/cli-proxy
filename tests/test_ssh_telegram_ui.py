@@ -103,6 +103,8 @@ async def test_cb_sess_ssh_toggle():
     manager = _Manager()
     bot_app.manager = manager
     bot_app.handlers.build_sessions_active_overview.return_value = ("text", MagicMock())
+    # Контракт резолвера: (reply_chat_id, thread_id, owner_chat_id, session).
+    bot_app.resolve_telegram_callback_scope = MagicMock(return_value=(123, None, 123, session))
 
     query = AsyncMock()
     query.data = "sess_ssh_toggle:uid123"

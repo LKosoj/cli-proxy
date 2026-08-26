@@ -195,6 +195,44 @@ def test_miniapp_status_payload_reports_backend_switch_read_only(tmp_path) -> No
         app.shutdown_html_process_pool()
 
 
+def test_miniapp_session_payload_and_option_report_unread_flag(tmp_path) -> None:
+    cfg = _build_config(tmp_path, token="t")
+    app = BotApp(cfg)
+    try:
+        routes = MiniAppRoutes(app)
+        session = SimpleNamespace(
+            id="s1",
+            name="Unread session",
+            chat_id=1,
+            conversation_scope=ConversationScope.from_parts(1),
+            config=cfg,
+            tool=cfg.tools["dummy"],
+            workdir=str(tmp_path),
+            cli=SimpleNamespace(active_cli="dummy", resume_tokens={}),
+            git=SimpleNamespace(busy=False, conflict=False, conflict_files=[]),
+            modes=SimpleNamespace(),
+            queue=[],
+            busy=False,
+            unread=False,
+            current_proc=None,
+            child=None,
+            _active_execution_backend="none",
+        )
+
+        payload_off = routes._build_session_payload(session, session_chat_id=1, is_admin=True)
+        option_off = routes._build_session_option(session_uid="s1", session=session, is_admin=True)
+        assert payload_off["unread"] is False
+        assert option_off["unread"] is False
+
+        session.unread = True
+        payload_on = routes._build_session_payload(session, session_chat_id=1, is_admin=True)
+        option_on = routes._build_session_option(session_uid="s1", session=session, is_admin=True)
+        assert payload_on["unread"] is True
+        assert option_on["unread"] is True
+    finally:
+        app.shutdown_html_process_pool()
+
+
 def test_config_view_redacts_all_secret_values_with_valid_miniapp_auth(tmp_path) -> None:
     async def _run() -> None:
         cfg = _build_config(tmp_path, token="route-secret-telegram-token")

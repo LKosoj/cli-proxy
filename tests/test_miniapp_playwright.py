@@ -509,6 +509,51 @@ def test_status_session_selector_refreshes_when_new_session_is_created_web(tmp_p
     asyncio.run(_run())
 
 
+def test_status_session_selector_shows_unread_marker_web(tmp_path) -> None:
+    async def _run() -> None:
+        cfg = _build_config(tmp_path, token="t")
+        app = BotApp(cfg)
+        workdir = tmp_path / "unread"
+        workdir.mkdir()
+        session = app.manager.create(1, "dummy", str(workdir))
+        session.unread = True
+
+        web_app = web.Application()
+        MiniAppRoutes(app).register(web_app)
+
+        server = TestServer(web_app)
+        await server.start_server()
+        session_name = f"miniapp-status-unread-{uuid.uuid4().hex[:8]}"
+        try:
+            base_url = str(server.make_url("/"))
+            init_data = _build_init_data("t", 1)
+
+            await _run_playwright(session_name, "open", "about:blank", "--browser=chrome")
+            boot = await _playwright_run_code_json(
+                session_name,
+                _miniapp_boot_script(base_url, init_data),
+            )
+            assert boot == {"title": "cli-proxy MiniApp", "hasBody": True}
+
+            options = await _playwright_run_code_json(
+                session_name,
+                _miniapp_status_session_options_script(expected_session_uid=session_runtime_uid(session)),
+            )
+            assert options["found"] is True
+            marked = next(
+                item for item in options["options"] if item["value"] == session_runtime_uid(session)
+            )
+            assert marked["label"].startswith("🔵")
+        finally:
+            try:
+                await _run_playwright(session_name, "close")
+            except AssertionError:
+                pass
+            await server.close()
+
+    asyncio.run(_run())
+
+
 def test_pause_resume_project_scope_web(tmp_path) -> None:
     async def _run() -> None:
         cfg = _build_config(tmp_path, token="t")

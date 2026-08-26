@@ -1756,7 +1756,7 @@
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
-      return `${uid}\u0000${label}`;
+      return `${uid}\u0000${label}\u0000${item.unread ? "1" : "0"}`;
     });
     const nextSignature = `${defaultLabel}\u0002${signatureParts.join("\u0001")}`;
     const shouldRebuild = !select.options.length || state.statusSessionsSignature !== nextSignature;
@@ -1764,7 +1764,7 @@
     const desiredSelected = state.statusSessionUid || fallbackSelected;
     if (shouldRebuild) {
       const options = sessions
-        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${escapeHtml(item.label || item.session_uid)}</option>`)
+        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${item.unread ? "🔵 " : ""}${escapeHtml(item.label || item.session_uid)}</option>`)
         .join("");
       select.innerHTML = `<option value="">${escapeHtml(defaultLabel)}</option>${options}`;
       if (desiredSelected) {
@@ -1786,14 +1786,14 @@
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
-      return `${uid}\u0000${label}`;
+      return `${uid}\u0000${label}\u0000${item.unread ? "1" : "0"}`;
     });
     const nextSignature = `${defaultLabel}\u0002${signatureParts.join("\u0001")}`;
     const fallbackSelected = String(payload?.selected_session_uid || "");
     const desiredSelected = state.filesSessionUid || fallbackSelected;
     if (!select.options.length || state.filesSessionsSignature !== nextSignature) {
       const options = sessions
-        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${escapeHtml(item.label || item.session_uid)}</option>`)
+        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${item.unread ? "🔵 " : ""}${escapeHtml(item.label || item.session_uid)}</option>`)
         .join("");
       select.innerHTML = `<option value="">${escapeHtml(defaultLabel)}</option>${options}`;
       if (desiredSelected) {
@@ -1815,14 +1815,14 @@
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
-      return `${uid}\u0000${label}`;
+      return `${uid}\u0000${label}\u0000${item.unread ? "1" : "0"}`;
     });
     const nextSignature = `${defaultLabel}\u0002${signatureParts.join("\u0001")}`;
     const fallbackSelected = String(payload?.selected_session_uid || "");
     const desiredSelected = state.settingsSessionUid || fallbackSelected;
     if (!select.options.length || state.settingsSessionsSignature !== nextSignature) {
       const options = sessions
-        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${escapeHtml(item.label || item.session_uid)}</option>`)
+        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${item.unread ? "🔵 " : ""}${escapeHtml(item.label || item.session_uid)}</option>`)
         .join("");
       select.innerHTML = `<option value="">${escapeHtml(defaultLabel)}</option>${options}`;
       if (desiredSelected) {
@@ -4437,14 +4437,14 @@
     const signatureParts = sessions.map((item) => {
       const uid = String(item?.session_uid || "");
       const label = String(item?.label || uid);
-      return `${uid} ${label}`;
+      return `${uid} ${label} ${item.unread ? "1" : "0"}`;
     });
     const nextSignature = `${defaultLabel}${signatureParts.join("")}`;
     const fallbackSelected = String(payload?.selected_session_uid || "");
     const desiredSelected = state.reportsSessionUid || fallbackSelected;
     if (!select.options.length || state.reportsSessionsSignature !== nextSignature) {
       const options = sessions
-        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${escapeHtml(item.label || item.session_uid)}</option>`)
+        .map((item) => `<option value="${escapeHtml(item.session_uid)}">${item.unread ? "🔵 " : ""}${escapeHtml(item.label || item.session_uid)}</option>`)
         .join("");
       select.innerHTML = `<option value="">${escapeHtml(defaultLabel)}</option>${options}`;
       if (desiredSelected) {

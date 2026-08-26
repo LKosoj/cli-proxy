@@ -8,7 +8,7 @@ Instruction node for `tests` area.
 ## Scope
 - Source glob: `tests/**`
 - Estimated files: 566
-- Current files: 369 under `tests/**` as of last review.
+- Current files: 375 under `tests/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -27,6 +27,12 @@ Instruction node for `tests` area.
 - `tests/smoke/test_source_artifact_smoke.py`
 - `tests/smoke/test_startup_smoke.py`
 - `tests/test_admin_allowlist.py`
+- `tests/test_pane_signals.py`
+- `tests/test_pane_title_status.py`
+- `tests/test_session_unread.py`
+- `tests/test_cli_session_uid_env.py`
+- `tests/test_mode_callback_access_control.py`
+- `tests/test_session_callback_access_control.py`
 
 ## Module API
 Детальные интерфейсы модулей этой области:
@@ -86,4 +92,4 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-23T00:00:00Z
+- 2026-08-26T00:00:00Z

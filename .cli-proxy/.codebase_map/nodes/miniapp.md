@@ -8,7 +8,7 @@ Instruction node for `miniapp` area.
 ## Scope
 - Source glob: `miniapp/**`
 - Estimated files: 120
-- Current files: 120 under `miniapp/**` as of last review.
+- Current files: 119 under `miniapp/**` as of last review.
 
 ## Instructions for agent
 - Read only files relevant to the active task.
@@ -72,4 +72,4 @@ Instruction node for `miniapp` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-08T00:00:00Z
+- 2026-08-25T00:00:00Z

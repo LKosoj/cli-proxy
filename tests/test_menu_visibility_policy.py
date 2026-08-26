@@ -133,3 +133,24 @@ def test_mode_menu_visibility_keeps_disable_when_direct_cli_is_available() -> No
     )
 
     assert visibility.allows("disable") is True
+
+
+def test_mode_menu_admin_flag_follows_actor_not_session_chat() -> None:
+    """В group-режиме session.chat_id - id общей супергруппы. Если он попал в
+    admlist, кнопки админа не должны показываться каждому её участнику."""
+    group_chat = -100500
+    session = types.SimpleNamespace(chat_id=group_chat, queue=[], modes=types.SimpleNamespace(active_mode="agent"))
+    access_policy = types.SimpleNamespace(
+        is_admin=lambda chat_id, scope="generic": int(chat_id) == group_chat,
+        is_mode_allowed_for_chat=lambda _chat_id, _mode_id: True,
+    )
+
+    member = build_mode_menu_visibility(
+        session=session, mode_id="agent", access_policy=access_policy, user_id=222,
+    )
+    assert member.allows("recover") is False
+    assert member.allows("doctor") is False
+
+    # Без user_id поведение прежнее: считаем по чату сессии.
+    fallback = build_mode_menu_visibility(session=session, mode_id="agent", access_policy=access_policy)
+    assert fallback.allows("recover") is True
