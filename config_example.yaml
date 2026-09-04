@@ -40,8 +40,10 @@ tools:
     enabled: true
     # Для root systemd-service укажите "root", чтобы tmux переживал restart сервиса.
     tmux_user: null
-    interactive_cmd: ["codex", "--no-alt-screen"]
-    interactive_resume_cmd: ["codex", "resume", "--no-alt-screen", "{resume}"]
+    # check_for_update_on_startup=false: иначе при выходе новой версии codex показывает
+    # модалку «Update available» с предвыбранным «Update now» и блокирует поле ввода.
+    interactive_cmd: ["codex", "--no-alt-screen", "-c", "check_for_update_on_startup=false"]
+    interactive_resume_cmd: ["codex", "resume", "--no-alt-screen", "-c", "check_for_update_on_startup=false", "{resume}"]
     execution_backends: ["headless", "tmux"]
     default_execution_backend: "headless"
     resume_cmd: ["codex", "exec", "resume", "{resume}", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "{prompt}"]

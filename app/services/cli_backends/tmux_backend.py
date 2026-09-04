@@ -71,6 +71,7 @@ _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
     "grok": ["--session-id"],
 }
 _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok", "kimi"}
+_CODEX_HEADER_LOADING_RE = re.compile(r"\b(?:model|directory):\s+loading\b")
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
 _TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok", "kimi"}
@@ -860,7 +861,7 @@ class TmuxExecutionBackend:
         return cls._interactive_cli_name(session) in _READY_WAIT_CLI_NAMES
 
     @staticmethod
-    def _is_interactive_ready(session: Any, pane: str) -> bool:
+    def _is_interactive_ready(session: Any, pane: str, *, fresh_start: bool = False) -> bool:
         cli_name = TmuxExecutionBackend._interactive_cli_name(session)
         text = normalize_terminal_text(pane)
         lower = text.lower()
@@ -879,6 +880,20 @@ class TmuxExecutionBackend:
             )
             return "❯" in text or screen_reader_ready
         if cli_name == "codex":
+            # Признаки стартового экрана проверяются только у свежесозданной
+            # панели: в живой панели те же фразы могут оказаться текстом ответа.
+            if fresh_start:
+                # Модалка обновления рисует свой «›» у пункта «1. Update now»,
+                # и Enter в неё запустил бы `npm install -g` вместо отправки.
+                if "update available" in lower and "press enter to continue" in lower:
+                    raise TmuxDriverError(
+                        "codex update prompt is blocking tmux backend; "
+                        "add `-c check_for_update_on_startup=false` to interactive_cmd"
+                    )
+                # Первый кадр codex уже содержит composer с «›», но пока в шапке
+                # «model: loading», Enter игнорируется и вставленный текст виснет.
+                if _CODEX_HEADER_LOADING_RE.search(lower):
+                    return False
             if "starting mcp servers" in lower:
                 return False
             return "›" in text or "❯" in text
@@ -893,7 +908,7 @@ class TmuxExecutionBackend:
             return "context:" in lower
         return True
 
-    async def _wait_for_interactive_ready(self, session: Any, paths: dict[str, str]) -> None:
+    async def _wait_for_interactive_ready(self, session: Any, paths: dict[str, str], *, fresh_start: bool) -> None:
         deadline = time.time() + max(0.1, self.startup_timeout_sec)
         last_pane = ""
         while time.time() < deadline:
@@ -903,7 +918,7 @@ class TmuxExecutionBackend:
             pane = await self._capture_pane_text(session, paths)
             if pane is not None:
                 last_pane = pane
-                if self._is_interactive_ready(session, pane):
+                if self._is_interactive_ready(session, pane, fresh_start=fresh_start):
                     return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
         snippet = (last_pane or "").strip()[-300:]
@@ -1458,11 +1473,20 @@ class TmuxExecutionBackend:
                 # ход завис бы бессрочно. Статус остаётся в diagnostics.
                 if awaiting_choice:
                     complete = False
-                if latest_text and latest_text != last_reported_text:
-                    last_reported_text = latest_text
+                # Превью показывает только ответ агента. Пока распознанный
+                # транскрипт ведёт ход, его текст авторитетен: экран панели в это
+                # время содержит вывод инструментов, и пускать его в превью
+                # нельзя. Панель остаётся источником только для CLI без
+                # распознанного транскрипта и для доставки вопроса с выбором.
+                if awaiting_choice or not transcript_authoritative:
+                    preview_text = latest_text
+                else:
+                    preview_text = transcript_latest_text
+                if preview_text and preview_text != last_reported_text:
+                    last_reported_text = preview_text
                     setattr(session, "last_output_ts", time.time())
                     setattr(session, "last_assistant_text_ts", time.time())
-                    setattr(session, "last_assistant_text_value", latest_text)
+                    setattr(session, "last_assistant_text_value", preview_text)
                 if complete:
                     break
 
@@ -1552,10 +1576,10 @@ class TmuxExecutionBackend:
         paths = self.paths(session)
         if force_fresh:
             await self.close(session)
-        await self._ensure_started(session, paths, force_fresh=force_fresh)
+        fresh_start = await self._ensure_started(session, paths, force_fresh=force_fresh)
         if self._uses_ready_wait(session):
             try:
-                await self._wait_for_interactive_ready(session, paths)
+                await self._wait_for_interactive_ready(session, paths, fresh_start=fresh_start)
             except Exception:
                 failed_at = time.time()
                 state = self._read_state(paths)

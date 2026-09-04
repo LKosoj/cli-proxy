@@ -808,6 +808,68 @@ async def test_tmux_backend_falls_back_to_pane_for_unrecognized_transcript(tmp_p
     assert result.diagnostics["completion_source"] == "pane-quiet-timeout"
 
 
+def _preview_recording_session(tmp_path):
+    """Сессия, запоминающая каждую запись в превью (last_assistant_text_value)."""
+    base = _session(tmp_path)
+    history: list[str] = []
+
+    class _Rec(SimpleNamespace):
+        def __setattr__(self, name, value):
+            object.__setattr__(self, name, value)
+            if name == "last_assistant_text_value" and value:
+                history.append(value)
+
+    session = _Rec(**vars(base))
+    session.preview_history = history
+    return session
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_preview_skips_tool_output_while_transcript_is_authoritative(tmp_path, monkeypatch):
+    # Пока распознанный транскрипт ещё не отдал ответ агента (идёт работа
+    # инструментов), в превью не должен просачиваться экран панели с их выводом.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = (
+        "• Ran ls -la /tmp\n"
+        "  drwxr-xr-x host_bwrap\n"
+        "  -rw-r--r-- secrets.txt"
+    )
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            self._polls = 0
+
+        def poll(self):
+            self._polls += 1
+            if self._polls < 3:
+                # Фаза инструментов: ход распознан, но ответа агента ещё нет.
+                return TranscriptPollResult(assistant_text="", available=True, recognized=True)
+            return TranscriptPollResult(
+                assistant_text="Готово: собрал три файла",
+                complete=True,
+                available=True,
+                recognized=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=1.0,
+    )
+    session = _preview_recording_session(tmp_path)
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    assert result.text == "Готово: собрал три файла"
+    assert result.diagnostics["completion_source"] == "transcript"
+    assert session.last_assistant_text_value == "Готово: собрал три файла"
+    assert session.preview_history == ["Готово: собрал три файла"]
+    assert all("Ran ls" not in value for value in session.preview_history)
+
+
 @pytest.mark.asyncio
 async def test_tmux_backend_keeps_transcript_when_pane_choice_has_no_options(tmp_path, monkeypatch):
     # Экран TUI перерисован так, что варианты не читаются, а транскрипт распознан:
@@ -2115,6 +2177,72 @@ async def test_tmux_backend_fails_fast_on_claude_trust_prompt(tmp_path):
 
     status = await backend.status(session)
     assert status.state == "failed"
+    assert driver.loaded_prompt_path is None
+
+
+CODEX_LOADING_PANE = (
+    "╭───────────────────────────────────────╮\n"
+    "│ >_ OpenAI Codex (v0.153.0)            │\n"
+    "│ model:     loading   /model to change │\n"
+    "│ directory: loading                    │\n"
+    "╰───────────────────────────────────────╯\n"
+    "› Ask Codex to do anything\n"
+    "  ? for shortcuts"
+)
+CODEX_READY_PANE = (
+    "│ model:       gpt-5.6-sol medium   /model to change │\n"
+    "│ directory:   ~                                     │\n"
+    "• Booting MCP server: codex_apps (0s • esc to interrupt)\n"
+    "› Ask Codex to do anything"
+)
+CODEX_UPDATE_PANE = (
+    "  ✨ Update available! 0.153.0 -> 0.153.1\n"
+    "› 1. Update now (runs `npm install -g @openai/codex`)\n"
+    "  2. Skip\n"
+    "  3. Skip until next version\n"
+    "  Press enter to continue"
+)
+
+
+def _codex_session() -> SimpleNamespace:
+    return SimpleNamespace(
+        tool=ToolConfig(name="codex", mode="headless", cmd=["codex"], interactive_cmd=["codex"]),
+        cli=SimpleNamespace(active_cli="codex"),
+    )
+
+
+def test_tmux_backend_codex_first_frame_with_loading_header_is_not_ready() -> None:
+    # Первый кадр codex уже рисует composer с «›», но Enter в фазе loading игнорируется.
+    assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), CODEX_LOADING_PANE, fresh_start=True) is False
+    assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), CODEX_READY_PANE, fresh_start=True) is True
+
+
+def test_tmux_backend_codex_startup_checks_skip_live_pane_with_transcript() -> None:
+    # В живой панели те же фразы — текст ответа агента, а не стартовый экран.
+    loading_in_transcript = "• model: loading weights from ckpt/\n› Ask Codex to do anything"
+    update_in_transcript = CODEX_UPDATE_PANE + "\n› Ask Codex to do anything"
+    assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), loading_in_transcript) is True
+    assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), update_in_transcript) is True
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_fails_fast_on_codex_update_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [CODEX_UPDATE_PANE]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.05,
+    )
+    session = _session(tmp_path)
+    session.tool.name = "codex"
+    session.tool.interactive_cmd = ["codex"]
+    session.cli.active_cli = "codex"
+
+    with pytest.raises(TmuxDriverError, match="update prompt"):
+        await backend.run(session, "do work")
+
     assert driver.loaded_prompt_path is None
 
 
