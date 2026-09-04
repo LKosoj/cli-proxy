@@ -236,6 +236,57 @@ def test_codex_transcript_reader_uses_task_complete(tmp_path):
     assert result.complete is True
 
 
+def test_codex_transcript_reader_uses_assistant_response_item_for_preview(tmp_path):
+    started_at = time.time() - 5
+    session_id = "22222222-2222-4222-8222-222222222222"
+    path = (
+        tmp_path
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "09"
+        / "04"
+        / f"rollout-2026-09-04T09-00-00-{session_id}.jsonl"
+    )
+    _append_jsonl(
+        path,
+        {
+            "timestamp": _iso_utc(started_at - 60),
+            "type": "session_meta",
+            "payload": {"id": session_id, "cwd": "/srv/project", "source": "cli"},
+        },
+        {
+            "timestamp": _iso_utc(started_at + 1),
+            "type": "response_item",
+            "payload": {"type": "custom_tool_call_output", "output": "секретный вывод тула"},
+        },
+        {
+            "timestamp": _iso_utc(started_at + 2),
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Проверяю live-сессию"}],
+                "phase": "commentary",
+            },
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="codex",
+        workdir="/srv/project",
+        started_at=started_at,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.available is True
+    assert result.recognized is True
+    assert result.assistant_text == "Проверяю live-сессию"
+    assert "секретный вывод тула" not in result.assistant_text
+    assert result.complete is False
+
+
 def test_codex_transcript_reader_ignores_rollout_of_other_workdir(tmp_path):
     """Путь rollout рабочую директорию не кодирует, поэтому принадлежность
     проверяется по полю cwd внутри журнала."""

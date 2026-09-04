@@ -407,9 +407,27 @@ class CliTranscriptReader:
             self.complete = True
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
-        if str(record.get("type") or "").strip() != "event_msg":
-            return
+        record_type = str(record.get("type") or "").strip()
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+        if record_type == "response_item":
+            if str(payload.get("type") or "").strip() != "message":
+                return
+            if str(payload.get("role") or "").strip() != "assistant":
+                return
+            text = "\n".join(
+                str(item.get("text") or "").strip()
+                for item in payload.get("content", [])
+                if isinstance(item, dict)
+                and str(item.get("type") or "").strip() == "output_text"
+                and str(item.get("text") or "").strip()
+            )
+            if text:
+                self.recognized = True
+                self.activity_at = _event_timestamp(record.get("timestamp"))
+                self.latest_assistant_text = text
+            return
+        if record_type != "event_msg":
+            return
         event_type = str(payload.get("type") or "").strip()
         if event_type in {"user_message", "agent_message", "task_started", "task_complete", "token_count"}:
             self.recognized = True
