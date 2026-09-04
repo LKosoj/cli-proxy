@@ -163,6 +163,7 @@ def test_native_hook_adapter_main_is_opt_in_via_env(tmp_path, monkeypatch) -> No
     monkeypatch.setenv("CLI_PROXY_MEMORY_STATE_PATH", state_path)
     monkeypatch.delenv("CLI_PROXY_MEMORY_EVENTS_ENABLED", raising=False)
     monkeypatch.delenv("CLI_PROXY_MEMORY_NATIVE_CLI_HOOKS_ENABLED", raising=False)
+    monkeypatch.delenv("CLI_PROXY_SESSION_UID", raising=False)
 
     assert main(["--source", "codex"]) == 0
     assert not (tmp_path / "state.sqlite3").exists()
@@ -195,6 +196,7 @@ def test_native_hook_adapter_main_reads_session_uid_override_from_env(tmp_path, 
 
 
 def test_native_hook_adapter_main_respects_config_flags(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("CLI_PROXY_SESSION_UID", raising=False)
     cfg = AppConfig(
         telegram=TelegramConfig(token="token", whitelist_chat_ids=[1], admlist_chat_ids=[1]),
         tools={"dummy": ToolConfig(name="dummy", mode="headless", cmd=["cat"])},
