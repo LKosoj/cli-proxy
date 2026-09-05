@@ -455,11 +455,11 @@ class GitOps:
         session.git.conflict_kind = None
 
     async def _git_conflict_files(self, session: Session) -> list[str]:
-        code, output = await self._run_git(session, ["diff", "--name-only", "--diff-filter=U"])
+        code, output = await self._run_git(session, ["ls-files", "--unmerged", "--format=%(path)"])
         if code != 0:
             self._git_clear_conflict(session)
             return []
-        files = [line.strip() for line in output.splitlines() if line.strip()]
+        files = list(dict.fromkeys(line.strip() for line in output.splitlines() if line.strip()))
         if files:
             kind = await self._git_in_progress(session)
             self._git_set_conflict(session, files, kind)
@@ -1246,7 +1246,13 @@ class GitOps:
                     )
                 conflicts = await self._git_conflict_files(session)
                 if conflicts:
-                    await self._handle_git_conflict(session, chat_id, context, lang=lang)
+                    await self._handle_git_conflict(
+                        session,
+                        chat_id,
+                        context,
+                        message_thread_id=message_thread_id,
+                        lang=lang,
+                    )
                     return True
                 commit_context = await self._git_commit_context(session)
                 if not commit_context:

@@ -90,3 +90,58 @@ def test_git_branch_menu_state_is_thread_aware() -> None:
 
     assert keyboard_a.inline_keyboard[0][0].text == "origin/main"
     assert keyboard_b.inline_keyboard[0][0].text == "origin/dev"
+
+
+def test_git_conflict_check_does_not_treat_worktree_warning_as_conflict() -> None:
+    async def _run() -> None:
+        ops = _build_git_ops()
+        session = types.SimpleNamespace(
+            git=types.SimpleNamespace(conflict=False, conflict_files=[], conflict_kind=None)
+        )
+
+        async def _run_git(_session, args):
+            if args[0] == "diff":
+                return 0, "warning: LF will be replaced by CRLF"
+            return 0, ""
+
+        ops._run_git = AsyncMock(side_effect=_run_git)
+
+        conflicts = await ops._git_conflict_files(session)
+
+        assert conflicts == []
+        ops._run_git.assert_awaited_once_with(
+            session,
+            ["ls-files", "--unmerged", "--format=%(path)"],
+        )
+
+    asyncio.run(_run())
+
+
+def test_git_commit_conflict_message_stays_in_callback_topic() -> None:
+    async def _run() -> None:
+        ops = _build_git_ops()
+        session = types.SimpleNamespace(id="s7")
+        ops.ensure_git_session = AsyncMock(return_value=session)
+        ops.ensure_git_repo = AsyncMock(return_value=True)
+        ops.ensure_git_not_busy = AsyncMock(return_value=True)
+        ops._git_conflict_files = AsyncMock(return_value=["file.txt"])
+        ops._handle_git_conflict = AsyncMock()
+
+        query = types.SimpleNamespace(
+            data="git_commit",
+            message=types.SimpleNamespace(chat_id=101, message_id=10, message_thread_id=55),
+        )
+        context = types.SimpleNamespace()
+
+        handled = await ops.handle_callback(query, 101, context)
+
+        assert handled is True
+        ops._handle_git_conflict.assert_awaited_once_with(
+            session,
+            101,
+            context,
+            message_thread_id=55,
+            lang="ru",
+        )
+
+    asyncio.run(_run())
