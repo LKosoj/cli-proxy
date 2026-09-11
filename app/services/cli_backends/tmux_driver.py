@@ -175,6 +175,9 @@ class TmuxDriver:
     async def send_enter(self, pane_target: str) -> None:
         await self.run("send-keys", "-t", pane_target, "Enter")
 
+    async def send_keys(self, pane_target: str, *keys: str) -> None:
+        await self.run("send-keys", "-t", pane_target, *keys)
+
     async def send_ctrl_c(self, pane_target: str) -> bool:
         result = await self.run("send-keys", "-t", pane_target, "C-c", check=False)
         return result.returncode == 0

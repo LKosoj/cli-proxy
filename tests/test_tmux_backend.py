@@ -171,6 +171,7 @@ class FakeTmuxDriver:
         self.has_session_calls = []
         self.response_text = "assistant answer"
         self.sent_prompts = []
+        self.sent_key_sequences = []
 
     async def has_session(self, session_name):
         self.has_session_calls.append(session_name)
@@ -215,6 +216,9 @@ class FakeTmuxDriver:
             handle.write(f"{self.response_text}\n")
         if self.autowrite_transcript:
             self.write_transcript()
+
+    async def send_keys(self, pane_target, *keys):
+        self.sent_key_sequences.append((pane_target, keys))
 
     def _workdir(self):
         # runtime_dir = <workdir>/.cli-proxy/runtime/tmux/<key>, pane.log лежит в нём.
@@ -2202,6 +2206,10 @@ CODEX_UPDATE_PANE = (
     "  3. Skip until next version\n"
     "  Press enter to continue"
 )
+CODEX_DUMB_TERM_PANE = (
+    'WARNING: TERM is set to "dumb". Codex\'s interactive TUI may not work in this terminal.\n'
+    "Continue anyway? [y/N]:"
+)
 
 
 def _codex_session() -> SimpleNamespace:
@@ -2223,6 +2231,42 @@ def test_tmux_backend_codex_startup_checks_skip_live_pane_with_transcript() -> N
     update_in_transcript = CODEX_UPDATE_PANE + "\n› Ask Codex to do anything"
     assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), loading_in_transcript) is True
     assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), update_in_transcript) is True
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_confirms_codex_dumb_term_prompt_once_in_existing_session(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [CODEX_DUMB_TERM_PANE, CODEX_DUMB_TERM_PANE, CODEX_READY_PANE]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.5,
+    )
+    session = _session(tmp_path)
+    session.tool.name = "codex"
+    session.tool.interactive_cmd = ["codex"]
+    session.cli.active_cli = "codex"
+    paths = backend.paths(session)
+
+    await backend._wait_for_interactive_ready(session, paths, fresh_start=False)
+
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("y", "Enter"))]
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_does_not_confirm_quoted_codex_dumb_term_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = ["Quoted output:\n" + CODEX_DUMB_TERM_PANE, CODEX_READY_PANE]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, startup_timeout_sec=0.5)
+    session = _session(tmp_path)
+    session.tool.name = "codex"
+    session.tool.interactive_cmd = ["codex"]
+    session.cli.active_cli = "codex"
+
+    await backend._wait_for_interactive_ready(session, backend.paths(session), fresh_start=False)
+
+    assert driver.sent_key_sequences == []
 
 
 @pytest.mark.asyncio

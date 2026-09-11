@@ -72,6 +72,10 @@ _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
 }
 _READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok", "kimi"}
 _CODEX_HEADER_LOADING_RE = re.compile(r"\b(?:model|directory):\s+loading\b")
+_CODEX_DUMB_TERM_PROMPT = (
+    'warning: term is set to "dumb". codex\'s interactive tui may not work in this terminal. '
+    "continue anyway? [y/n]:"
+)
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
 _TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok", "kimi"}
@@ -911,6 +915,7 @@ class TmuxExecutionBackend:
     async def _wait_for_interactive_ready(self, session: Any, paths: dict[str, str], *, fresh_start: bool) -> None:
         deadline = time.time() + max(0.1, self.startup_timeout_sec)
         last_pane = ""
+        dumb_term_confirmed = False
         while time.time() < deadline:
             # Сбойный захват (None) - не свидетельство готовности: для CLI без
             # своей ветки в _is_interactive_ready пустой экран прошёл бы через
@@ -918,6 +923,15 @@ class TmuxExecutionBackend:
             pane = await self._capture_pane_text(session, paths)
             if pane is not None:
                 last_pane = pane
+                normalized = " ".join(normalize_terminal_text(pane).lower().split())
+                if (
+                    not dumb_term_confirmed
+                    and self._interactive_cli_name(session) == "codex"
+                    and normalized == _CODEX_DUMB_TERM_PROMPT
+                ):
+                    await self._driver(session).send_keys(paths["pane_target"], "y", "Enter")
+                    dumb_term_confirmed = True
+                    continue
                 if self._is_interactive_ready(session, pane, fresh_start=fresh_start):
                     return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
@@ -1267,7 +1281,7 @@ class TmuxExecutionBackend:
 
         def _refresh_watched_transcripts() -> bool:
             """Refresh list of watched transcripts. Returns True if any new file appeared."""
-            nonlocal watched_transcript_paths, last_transcript_sizes, last_transcript_size
+            nonlocal watched_transcript_paths, last_transcript_size
             current: list[str] = []
             if transcript_reader is not None:
                 try:
