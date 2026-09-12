@@ -910,7 +910,13 @@ class Session:
         attachments = [value for value in (str(p or "").strip() for p in raw_attachments) if value]
         selected_backend = get_session_execution_backend(self)
         if selected_backend == EXECUTION_BACKEND_TMUX and attachments:
-            raise RuntimeError("tmux backend does not support image requests in v1")
+            refs = " ".join(build_attachment_ref(p, self.workdir) for p in attachments)
+            prompt_to_send = f"{prompt.strip()} {refs}" if prompt.strip() else f"Расскажи о {refs}"
+            return await self._run_tmux(
+                prompt_to_send,
+                force_fresh=force_fresh,
+                request_context=tmux_request_context,
+            )
         if attachments:
             is_gemini = (self.tool.name or "").strip().lower() == "gemini"
             is_qwen = (self.tool.name or "").strip().lower() == "qwen"
@@ -931,6 +937,8 @@ class Session:
                 # CLI с нативным флагом (codex --image) получает пути аргументом.
                 image_arg = ",".join(attachments)
                 cmd_template = cmd_template + self.tool.image_cmd
+                refs = " ".join(build_attachment_ref(p, self.workdir) for p in attachments)
+                prompt_to_send = f"{prompt.strip()} {refs}" if prompt.strip() else f"Расскажи о {refs}"
             elif is_gemini:
                 refs = "\n".join(build_attachment_ref(p) for p in attachments)
                 prompt_to_send = f"{refs}\n{prompt}".strip()

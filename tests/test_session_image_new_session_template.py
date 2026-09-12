@@ -23,6 +23,7 @@ def test_image_run_uses_non_resume_template_when_session_has_no_token(tmp_path, 
         )
         session.resume_token = None
         captured = {}
+        image_path = str(tmp_path / ".cli-proxy" / ".attachments" / "image.png")
 
         async def _fake_run_headless(prompt: str, cmd_template=None, image_path=None, *, force_fresh: bool = False):
             captured["prompt"] = prompt
@@ -33,10 +34,10 @@ def test_image_run_uses_non_resume_template_when_session_has_no_token(tmp_path, 
 
         monkeypatch.setattr(session, "_run_headless", _fake_run_headless)
 
-        out = await session.run_prompt("hello", image_path="/tmp/image.png")
+        out = await session.run_prompt("hello", image_path=image_path)
         assert out == "ok"
-        assert captured["prompt"] == "hello"
-        assert captured["image_path"] == "/tmp/image.png"
+        assert captured["prompt"] == "hello @.cli-proxy/.attachments/image.png"
+        assert captured["image_path"] == image_path
         assert captured["cmd_template"] == ["codex", "exec", "{prompt}", "--image", "{image}"]
 
     asyncio.run(_run())
@@ -63,6 +64,7 @@ def test_image_run_uses_resume_template_when_token_exists(tmp_path, monkeypatch)
         captured = {}
 
         async def _fake_run_headless(prompt: str, cmd_template=None, image_path=None, *, force_fresh: bool = False):
+            captured["prompt"] = prompt
             captured["cmd_template"] = list(cmd_template or [])
             return "ok"
 
@@ -70,6 +72,7 @@ def test_image_run_uses_resume_template_when_token_exists(tmp_path, monkeypatch)
 
         out = await session.run_prompt("hello", image_path="/tmp/image.png")
         assert out == "ok"
+        assert captured["prompt"] == "hello @/tmp/image.png"
         assert captured["cmd_template"] == ["codex", "exec", "resume", "{resume}", "{prompt}", "--image", "{image}"]
 
     asyncio.run(_run())
@@ -287,7 +290,7 @@ def test_qwen_image_run_uses_resume_when_token_exists(tmp_path, monkeypatch) -> 
     asyncio.run(_run())
 
 
-def test_codex_multi_image_run_joins_paths_for_image_flag(tmp_path, monkeypatch) -> None:
+def test_codex_multi_image_run_uses_image_flag_and_prompt_paths(tmp_path, monkeypatch) -> None:
     async def _run() -> None:
         tool = ToolConfig(
             name="codex",
@@ -318,7 +321,7 @@ def test_codex_multi_image_run_joins_paths_for_image_flag(tmp_path, monkeypatch)
             image_paths=["/tmp/img1.png", "/tmp/img2.jpg"],
         )
         assert out == "ok"
-        assert captured["prompt"] == "Сравни диаграммы"
+        assert captured["prompt"] == "Сравни диаграммы @/tmp/img1.png @/tmp/img2.jpg"
         assert captured["cmd_template"] == ["codex", "exec", "{prompt}", "--image", "{image}"]
         assert captured["image_path"] == "/tmp/img1.png,/tmp/img2.jpg"
 

@@ -98,7 +98,10 @@ async def test_run_prompt_uses_tmux_without_headless_fallback(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_run_prompt_rejects_tmux_image_without_headless_fallback(tmp_path, monkeypatch):
+async def test_run_prompt_adds_tmux_image_paths_to_prompt_without_headless_fallback(tmp_path, monkeypatch):
+    import app.services.cli_backends as cli_backends
+
+    monkeypatch.setattr(cli_backends, "TmuxExecutionBackend", FakeTmuxBackend)
     cfg = _cfg(tmp_path)
     cfg.tools["claude"].default_execution_backend = "tmux"
     manager = SessionManager(cfg)
@@ -109,8 +112,23 @@ async def test_run_prompt_rejects_tmux_image_without_headless_fallback(tmp_path,
 
     monkeypatch.setattr(session, "_run_headless", _forbidden_headless)
 
-    with pytest.raises(RuntimeError, match="does not support image"):
-        await session.run_prompt("describe", image_path="/tmp/image.png")
+    single_output = await session.run_prompt(
+        "describe",
+        image_path=str(tmp_path / ".cli-proxy" / ".attachments" / "one.png"),
+    )
+    output = await session.run_prompt(
+        "describe",
+        image_paths=[
+            str(tmp_path / ".cli-proxy" / ".attachments" / "one.png"),
+            str(tmp_path / ".cli-proxy" / ".attachments" / "two.png"),
+        ],
+    )
+
+    assert single_output == "tmux:describe @.cli-proxy/.attachments/one.png"
+    assert output == (
+        "tmux:describe @.cli-proxy/.attachments/one.png "
+        "@.cli-proxy/.attachments/two.png"
+    )
 
 
 def test_interrupt_routes_tmux_without_touching_headless_proc(tmp_path, monkeypatch):
