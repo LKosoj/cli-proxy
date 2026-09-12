@@ -7,6 +7,7 @@ import signal
 import shlex
 import shutil
 import stat
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,20 +58,28 @@ class TmuxDriver:
         if not self.tmux_available():
             raise TmuxDriverError("tmux binary is not available")
         argv = self.command(*args)
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,
-        )
-        try:
-            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec or self.timeout_sec)
-        except asyncio.TimeoutError as exc:
+
+        def execute() -> tuple[subprocess.Popen, bytes, bytes]:
+            proc = subprocess.Popen(
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except (OSError, ProcessLookupError):
-                proc.kill()
-            await proc.communicate()
+                stdout_b, stderr_b = proc.communicate(timeout=timeout_sec or self.timeout_sec)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    proc.kill()
+                proc.communicate()
+                raise
+            return proc, stdout_b, stderr_b
+
+        try:
+            proc, stdout_b, stderr_b = await asyncio.to_thread(execute)
+        except subprocess.TimeoutExpired as exc:
             raise TmuxDriverError(f"tmux command timed out: {' '.join(args)}") from exc
         result = TmuxCommandResult(
             returncode=int(proc.returncode or 0),
@@ -94,8 +103,6 @@ class TmuxDriver:
             return False
         argv = self.command("has-session", "-t", session_name)
         try:
-            import subprocess
-
             result = subprocess.run(
                 argv,
                 stdout=subprocess.DEVNULL,

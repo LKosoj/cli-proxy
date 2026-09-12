@@ -1,5 +1,6 @@
 import os
 import stat
+import subprocess
 
 import pytest
 
@@ -10,6 +11,71 @@ from app.services.cli_backends.tmux_driver import (
     wrap_user_command,
     write_prompt_temp,
 )
+
+
+@pytest.mark.asyncio
+async def test_tmux_driver_run_returns_subprocess_result(monkeypatch) -> None:
+    calls = {}
+
+    class _Process:
+        pid = 123
+        returncode = 0
+
+        def communicate(self, timeout=None):
+            calls["timeout"] = timeout
+            return b"pane output", b""
+
+    def _popen(argv, **kwargs):
+        calls["argv"] = argv
+        calls["kwargs"] = kwargs
+        return _Process()
+
+    monkeypatch.setattr(TmuxDriver, "tmux_available", staticmethod(lambda: True))
+    monkeypatch.setattr("app.services.cli_backends.tmux_driver.subprocess.Popen", _popen)
+
+    result = await TmuxDriver(timeout_sec=1.5).run("capture-pane", "-p")
+
+    assert calls == {
+        "argv": ["tmux", "capture-pane", "-p"],
+        "kwargs": {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "start_new_session": True,
+        },
+        "timeout": 1.5,
+    }
+    assert result == TmuxCommandResult(returncode=0, stdout="pane output", stderr="")
+
+
+@pytest.mark.asyncio
+async def test_tmux_driver_run_reaps_process_after_timeout(monkeypatch) -> None:
+    calls = []
+
+    class _Process:
+        pid = 456
+        returncode = -9
+
+        def communicate(self, timeout=None):
+            calls.append(("communicate", timeout))
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(cmd=["tmux", "capture-pane"], timeout=timeout)
+            return b"", b"killed"
+
+    monkeypatch.setattr(TmuxDriver, "tmux_available", staticmethod(lambda: True))
+    monkeypatch.setattr("app.services.cli_backends.tmux_driver.subprocess.Popen", lambda *_args, **_kwargs: _Process())
+    monkeypatch.setattr(
+        "app.services.cli_backends.tmux_driver.os.killpg",
+        lambda pid, sig: calls.append(("killpg", pid, sig)),
+    )
+
+    with pytest.raises(TmuxDriverError, match="tmux command timed out: capture-pane"):
+        await TmuxDriver(timeout_sec=0.25).run("capture-pane")
+
+    assert calls == [
+        ("communicate", 0.25),
+        ("killpg", 456, 9),
+        ("communicate", None),
+    ]
 
 
 def test_wrap_user_command_uses_su_without_losing_argv_boundaries() -> None:
