@@ -13,17 +13,15 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from app.services.config_service import ConfigProvider, ConfigService
+from app.services.config_service import ConfigProvider
 from app.services.run_doctor_service import RunDoctorReport
-from app.services.session_service import SessionService
-from app.services.task_service import TaskService
 from app.services.telegram_transport import TelegramTransportContext
 from bot import BotApp
 from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, TelegramConfig, ToolConfig
 from miniapp.routes import MiniAppRoutes
 from modes.registry import ModeRegistry
 from modes.sdk import BaseMode, ModeCallbackRouterService, ModeRegistryService, ToolResult
-from session import SessionManager, session_runtime_uid
+from session import session_runtime_uid
 
 
 class _InMemoryConfigProvider(ConfigProvider):
@@ -568,5 +566,3 @@ async def test_miniapp_promote_skills_passes_execution_vector(tmp_path) -> None:
     assert getattr(calls[0]["context"], "transport", "") == "miniapp"
     assert calls[0]["dest"]["kind"] == "miniapp"
     assert calls[0]["dest"]["session_uid"] == session_runtime_uid(session)
-
-

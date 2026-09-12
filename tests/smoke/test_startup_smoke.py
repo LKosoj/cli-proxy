@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import pathlib
-
-import yaml
 
 from bot import BotApp
 from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, TelegramConfig, ToolConfig
@@ -49,5 +46,3 @@ def test_bot_startup_smoke_builds_local_runtime(tmp_path) -> None:
         assert app.shared_http_ingress is not None
     finally:
         app.shutdown_html_process_pool()
-
-

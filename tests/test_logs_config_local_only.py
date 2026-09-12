@@ -5,7 +5,6 @@ import hashlib
 import hmac
 import json
 import time
-from types import SimpleNamespace
 from urllib.parse import quote
 
 import yaml
@@ -214,5 +213,3 @@ def test_settings_allows_logs_remote_mode_false(tmp_path) -> None:
         app_inst.shutdown_html_process_pool()
 
     asyncio.run(_run())
-
-

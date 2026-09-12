@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1098,5 +1097,3 @@ def test_run_boundary_validation_isolates_sequential_runs_with_different_intent(
     assert report_b.status == "error"
     assert report_a.issues == []
     assert any(issue.code == "missing_plan_field" for issue in report_b.issues)
-
-

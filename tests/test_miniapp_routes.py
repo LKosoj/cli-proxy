@@ -400,6 +400,7 @@ def test_miniapp_routes_does_not_register_ssh_endpoints_directly() -> None:
     assert 'app.router.add_post("/api/ssh/secret"' not in source
     assert "register_ssh_routes(app, self.route_context, self.ssh_route_services)" in source
 
+
 def test_malformed_json_400_response(tmp_path) -> None:
     async def _run() -> None:
         cfg = _build_config(tmp_path, token="t")

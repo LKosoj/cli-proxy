@@ -841,8 +841,6 @@ def test_agent_mode_project_pick_invalid_payload_keeps_project_and_reports_stale
     asyncio.run(_run())
 
 
-
-
 def test_agent_mode_double_launch_queues_second_input_while_first_is_running(tmp_path):
     async def _run():
         app = _build_app(tmp_path)

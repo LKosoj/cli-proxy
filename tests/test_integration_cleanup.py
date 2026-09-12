@@ -15,9 +15,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from app.events.bus import SystemEventBus
 from app.services.app_runtime_service import AppRuntimeService
-from app.services.config_service import ConfigProvider, ConfigService
-from app.services.session_service import SessionService
-from app.services.task_service import TaskService
+from app.services.config_service import ConfigProvider
 from bot import BotApp
 from config import (
     AppConfig,
@@ -32,11 +30,7 @@ from config import (
 )
 from miniapp.routes import MiniAppRoutes
 from miniapp.services.config_service import app_config_to_dict, validate_draft
-from modes.registry import ModeRegistry
-from modes.sdk import BaseMode, ToolResult
-from modes.sdk.services.mode_registry import ModeRegistryService
 from session import SessionManager
-from sessions.session_state_access import get_active_mode
 
 
 class _InMemoryConfigProvider(ConfigProvider):

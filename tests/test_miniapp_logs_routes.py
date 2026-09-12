@@ -22,7 +22,6 @@ from miniapp.services.config_service import app_config_to_dict
 from miniapp.services.logs_service import LogAccessDeniedError, LogsService, ParsedLogEntry
 from modes.agent.mode import agent_project_scope_key
 from session import session_runtime_uid, session_scoped_key
-from utils import cli_proxy_artifact_path
 
 
 def _build_init_data(bot_token: str, user_id: int) -> str:

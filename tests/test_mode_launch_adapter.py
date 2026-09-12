@@ -16,7 +16,6 @@ from aiohttp.test_utils import TestClient, TestServer
 from app.security import SecurityFacade
 from app.security.audit import EventBusAuditService
 from app.services.actor_identity import miniapp_actor_id
-from app.services import ConfigService, SessionService, TaskService
 from app.services.config_service import ConfigProvider
 from app.events.bus import (
     MiniAppCommandEvent,

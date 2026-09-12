@@ -1,6 +1,5 @@
 import asyncio
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -211,5 +210,3 @@ def test_input_routing_send_output_fallback_uses_plain_text_helper():
         ]
 
     asyncio.run(_run())
-
-

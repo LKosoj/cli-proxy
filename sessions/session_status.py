@@ -247,7 +247,8 @@ def build_session_status_text(
         runtime_label = active_backend
 
     lines.append(
-        f"Execution backend: {selected_backend} | runtime: {runtime_label} | active flag: {active_backend} | available: {available_backends}"
+        f"Execution backend: {selected_backend} | runtime: {runtime_label} | "
+        f"active flag: {active_backend} | available: {available_backends}"
     )
     if live_tmux:
         from app.services.cli_backends.tmux_backend import build_tmux_attach_command

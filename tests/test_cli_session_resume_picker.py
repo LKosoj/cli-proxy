@@ -9,7 +9,6 @@ import json
 import os
 import sqlite3
 import urllib.parse
-from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -524,5 +523,3 @@ def test_resume_pick_callback_data_fits_telegram_limit(tmp_path, monkeypatch):
 
     asyncio.run(app.session_ui.handle_callback(_Query(data), 1, None))
     assert session.resume_token == long_id
-
-

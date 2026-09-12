@@ -2,13 +2,10 @@ import asyncio
 from pathlib import Path
 import uuid
 
-from agent.plugins.ask_user import AskUserTool
 from agent.plugins.list_directory import ListDirectoryTool
 from agent.plugins.search_text import SearchTextTool
-from app.services import ConfigService, SessionService, TaskService
 from app.services.config_service import ConfigProvider
-from config import AppConfig, DefaultsConfig, MCPConfig, MiniAppConfig, TelegramConfig, ToolConfig
-from session import SessionManager, session_runtime_uid
+from config import AppConfig
 
 
 class _InMemoryConfigProvider(ConfigProvider):
@@ -135,5 +132,3 @@ def test_search_text_keeps_normal_search_behavior_and_output_limit(tmp_path) -> 
     assert lines[0].endswith("001: needle") is False
     assert lines[0].endswith("000: needle")
     assert lines[-1].endswith("199: needle")
-
-
