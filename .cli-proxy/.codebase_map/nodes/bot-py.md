@@ -23,6 +23,9 @@ Instruction node for `bot.py` area.
 
 - [bot.py](../api/bot-py.md)
 
+## Behavior notes
+- `on_unsupported_message` (2026-09-22): заглушка для сообщений без обработчика, только INFO-лог через `message_processor.log_unsupported`; регистрируется последней в группе 0 в `tg/wiring.py`.
+
 ## When to update
 - Any commit touching `bot.py`.
 - Any commit touching `agent/**` because this node has import/call dependency on it.
@@ -54,4 +57,4 @@ Instruction node for `bot.py` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-07-11T06:47:15Z
+- 2026-09-22T13:00:00Z

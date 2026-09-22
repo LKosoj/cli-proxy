@@ -143,6 +143,7 @@ async def test_tg_wiring_command_filter_uses_access_policy_service(monkeypatch) 
         on_photo=(lambda *_args, **_kwargs: None),
         on_document=(lambda *_args, **_kwargs: None),
         on_message=(lambda *_args, **_kwargs: None),
+        on_unsupported_message=(lambda *_args, **_kwargs: None),
         is_allowed=(lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy is_allowed used"))),
     )
 
@@ -208,6 +209,7 @@ def test_tg_wiring_passes_outside_topic_allowlist_to_authorizer(
             on_photo=(lambda *_args, **_kwargs: None),
             on_document=(lambda *_args, **_kwargs: None),
             on_message=(lambda *_args, **_kwargs: None),
+            on_unsupported_message=(lambda *_args, **_kwargs: None),
         )
 
         monkeypatch.setattr(

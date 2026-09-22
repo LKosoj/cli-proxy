@@ -1919,6 +1919,9 @@ class BotApp:
             await self._flush_media_groups_for_chat(chat_id)
         await self.message_processor.process_message(update, context)
 
+    async def on_unsupported_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self.message_processor.log_unsupported(update)
+
     def _has_attachments(self, message: Message) -> bool:
         return any(
             [

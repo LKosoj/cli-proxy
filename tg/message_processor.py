@@ -14,6 +14,7 @@ from app.services.telegram_ui_scope import TelegramUiKey
 from i18n import t
 from modes.sdk import decode_mode_dirs
 from utils.cli import build_attachment_ref
+from tg.rich_message import rich_message_payload, rich_message_text
 from utils.lang import resolve_user_lang
 
 logger = logging.getLogger(__name__)
@@ -64,9 +65,9 @@ class MessageProcessor:
         message = getattr(update, "effective_message", None)
         chat = getattr(update, "effective_chat", None)
         user = getattr(update, "effective_user", None)
-        text = getattr(message, "text", None) or getattr(message, "caption", None) or ""
+        text = getattr(message, "text", None) or getattr(message, "caption", None) or rich_message_text(message) or ""
         logger.info(
-            "inbound %s chat_id=%s thread_id=%s user_id=%s message_id=%s media_group_id=%s text_len=%d",
+            "inbound %s chat_id=%s thread_id=%s user_id=%s message_id=%s media_group_id=%s text_len=%d rich=%s",
             kind,
             getattr(chat, "id", None),
             getattr(message, "message_thread_id", None),
@@ -74,6 +75,26 @@ class MessageProcessor:
             getattr(message, "message_id", None),
             getattr(message, "media_group_id", None),
             len(str(text)),
+            rich_message_payload(message) is not None,
+        )
+
+    def log_unsupported(self, update: Update) -> None:
+        """Сообщение, для которого нет обработчика: только след в логе, без ответа."""
+        message = getattr(update, "effective_message", None)
+        chat = getattr(update, "effective_chat", None)
+        api_kwargs = getattr(message, "api_kwargs", None) or {}
+        content = [
+            name
+            for name in ("voice", "video", "video_note", "sticker", "animation", "audio", "contact", "location", "poll", "story")
+            if getattr(message, name, None)
+        ]
+        logger.info(
+            "inbound unsupported message chat_id=%s thread_id=%s message_id=%s content=%s api_kwargs=%s",
+            getattr(chat, "id", None),
+            getattr(message, "message_thread_id", None),
+            getattr(message, "message_id", None),
+            content,
+            sorted(api_kwargs.keys()) if hasattr(api_kwargs, "keys") else None,
         )
 
     async def _authorize_inbound(self, update: Update, context):
@@ -253,6 +274,16 @@ class MessageProcessor:
         route_session_uid = str(getattr(route, "session_uid", "") or "").strip() or None
         ui_key = self._ui_key(route_ui_chat_id, route_thread_id)
         text = update.message.text if update.message else None
+        if text is None and update.message is not None:
+            text = rich_message_text(update.message)
+            if text is not None and not text.strip():
+                # Rich-сообщение из одних медиа без подписи: пустой промпт в CLI не нужен.
+                logger.info("inbound rich message without text dropped chat_id=%s thread_id=%s", route_ui_chat_id, route_thread_id)
+                return
+            if text is not None and text.lstrip().startswith("/"):
+                # Команды внутри rich-сообщения не имеют entities и минуют CommandHandler'ы.
+                await self.bot_app.on_unknown_command(update, context)
+                return
         self.bot_app.ui_state.context_by_chat[route_ui_chat_id] = context
         self.bot_app.metrics.inc("messages")
         if self._has_attachments(update.message):

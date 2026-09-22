@@ -6,6 +6,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from agent.telegram_wiring import install_plugin_handlers
 from tg.command_policy import OUTSIDE_TOPIC_ALLOWED_COMMANDS
 from tg.command_registry import build_command_registry
+from tg.rich_message import RICH_MESSAGE
 
 
 def _policy_allows_chat(bot_app, chat_id: int) -> bool:
@@ -54,3 +55,10 @@ def register_handlers(*, app: Application, bot_app, config) -> None:
     app.add_handler(MessageHandler(filters.PHOTO, bot_app.on_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, bot_app.on_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_app.on_message))
+    app.add_handler(MessageHandler(RICH_MESSAGE & ~filters.COMMAND, bot_app.on_message))
+    # Последний в группе 0: срабатывает только если выше никто не подошёл
+    # (голосовые, стикеры, новые типы Bot API) — иначе такие апдейты пропадали без следа.
+    # Служебные события (закреп, создание темы и т.п.) и правки сообщений не логируем.
+    app.add_handler(
+        MessageHandler(filters.UpdateType.MESSAGE & ~filters.StatusUpdate.ALL, bot_app.on_unsupported_message)
+    )
