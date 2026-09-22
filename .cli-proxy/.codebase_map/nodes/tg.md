@@ -43,6 +43,9 @@ Instruction node for `tg` area.
 - [tg/file_upload_handler.py](../api/tg/file_upload_handler-py.md)
 - [tg/files_service_adapter.py](../api/tg/files_service_adapter-py.md)
 
+## Behavior notes
+- `tg/message_processor.py::_log_inbound` пишет INFO-строку `inbound message|photo|document chat_id=… thread_id=… user_id=… message_id=… text_len=…` (без текста: он логируется уже после авторизации в `[run_prompt] acquiring run_lock`) на входе в `process_message`/`process_photo`/`process_document`; отказ авторизации и тихий выход «session not resolved» тоже логируются. `tg/callbacks.py::handle_callback` логирует `inbound callback … data=…`. Это единственный след входящего апдейта до запуска CLI — по нему отличают «сообщение не дошло до бота» от «бот проглотил».
+
 ## When to update
 - Any commit touching `tg/**`.
 - Any commit touching `agent/**` because this node has import/call dependency on it.
@@ -74,4 +77,4 @@ Instruction node for `tg` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-08-25T00:00:00Z
+- 2026-09-22T12:30:00Z

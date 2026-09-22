@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -423,3 +424,42 @@ async def test_plugin_awaiting_input_prefers_route_session_uid_over_legacy_fallb
     assert buffer_calls[0]["user_id"] == 9001
     assert uid_calls == ["thread:1001:77", "thread:1001:77"]
     assert cancel_calls == []
+
+
+@pytest.mark.asyncio
+async def test_process_message_logs_inbound_and_rejection(caplog) -> None:
+    class _DenyAccessPolicy:
+        async def ensure_allowed(self, _chat_id, _context) -> bool:
+            return False
+
+    bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
+        access_policy_service=_DenyAccessPolicy(),
+        metrics=_Metrics(),
+        ui_state=ChatUiState(),
+    )
+    processor = MessageProcessor(bot_app)
+    message = _text_message("hello there")
+    message.message_thread_id = 356070
+    message.message_id = 77
+    message.media_group_id = None
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=1001),
+        effective_user=SimpleNamespace(id=9001),
+        effective_message=message,
+        message=message,
+    )
+
+    with caplog.at_level(logging.INFO, logger="tg.message_processor"):
+        await processor.process_message(update, context=object())
+
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any(
+        "inbound message chat_id=1001 thread_id=356070 user_id=9001 message_id=77 media_group_id=None text_len=11" in msg
+        for msg in messages
+    )
+    assert not any("hello there" in msg for msg in messages)
+    assert any("inbound message rejected by route/authorization chat_id=1001" in msg for msg in messages)

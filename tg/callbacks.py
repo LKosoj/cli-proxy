@@ -565,6 +565,14 @@ class CallbackHandler(CallbackActionsMixin):
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
+        _q_message = getattr(query, "message", None)
+        logging.getLogger(__name__).info(
+            "inbound callback chat_id=%s thread_id=%s user_id=%s data=%r",
+            getattr(_q_message, "chat_id", None),
+            getattr(_q_message, "message_thread_id", None),
+            getattr(getattr(query, "from_user", None), "id", None),
+            str(getattr(query, "data", "") or "")[:80],
+        )
         try:
             await query.answer()
         except (TimedOut, NetworkError) as e:

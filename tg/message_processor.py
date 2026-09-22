@@ -16,6 +16,8 @@ from modes.sdk import decode_mode_dirs
 from utils.cli import build_attachment_ref
 from utils.lang import resolve_user_lang
 
+logger = logging.getLogger(__name__)
+
 
 TEXT_DOCUMENT_INLINE_LIMIT_BYTES = 5 * 1024
 
@@ -55,6 +57,23 @@ class MessageProcessor:
                 context,
                 message_thread_id=message_thread_id,
             )
+        )
+
+    @staticmethod
+    def _log_inbound(update: Update, *, kind: str) -> None:
+        message = getattr(update, "effective_message", None)
+        chat = getattr(update, "effective_chat", None)
+        user = getattr(update, "effective_user", None)
+        text = getattr(message, "text", None) or getattr(message, "caption", None) or ""
+        logger.info(
+            "inbound %s chat_id=%s thread_id=%s user_id=%s message_id=%s media_group_id=%s text_len=%d",
+            kind,
+            getattr(chat, "id", None),
+            getattr(message, "message_thread_id", None),
+            getattr(user, "id", None),
+            getattr(message, "message_id", None),
+            getattr(message, "media_group_id", None),
+            len(str(text)),
         )
 
     async def _authorize_inbound(self, update: Update, context):
@@ -222,8 +241,10 @@ class MessageProcessor:
         )
 
     async def process_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self._log_inbound(update, kind="message")
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
+            logger.info("inbound message rejected by route/authorization chat_id=%s", update.effective_chat.id)
             return
         lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
         route_ui_chat_id = int(getattr(route, "reply_chat_id", ui_chat_id) or ui_chat_id)
@@ -583,6 +604,7 @@ class MessageProcessor:
                 auto_create=True,
             )
         if not session:
+            logger.info("inbound message dropped: session not resolved chat_id=%s thread_id=%s", route_ui_chat_id, route_thread_id)
             return
 
         stripped = text.lstrip()
@@ -620,6 +642,7 @@ class MessageProcessor:
         )
 
     async def process_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self._log_inbound(update, kind="document")
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
             return
@@ -661,6 +684,7 @@ class MessageProcessor:
                 auto_create=True,
             )
         if not session:
+            logger.info("inbound document dropped: session not resolved chat_id=%s thread_id=%s", route_ui_chat_id, route_thread_id)
             return
         if lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg") or (doc.mime_type or "").startswith("image/"):
             if doc.file_size and doc.file_size > self.bot_app.config.defaults.image_max_mb * 1024 * 1024:
@@ -755,6 +779,7 @@ class MessageProcessor:
         )
 
     async def process_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self._log_inbound(update, kind="photo")
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
             return
