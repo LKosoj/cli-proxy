@@ -81,8 +81,12 @@ Instruction node for `app` area.
 - `locales` confidence=0.95 via L0
 - `miniapp` confidence=0.95 via L0/L1/L2
 
+## Behavior notes
+- `app/services/artifact_intent_service.py::resolve`: абсолютный `file_pattern` (LLM часто возвращает полный путь) переводится в относительный к `project_root` перед `Path.glob` — иначе `NotImplementedError('Non-relative patterns are unsupported')`; вне корня → ошибка «выходит за пределы проекта».
+- `app/services/message_buffer_service.py::flush_after_delay`: любое исключение `stage_user_input` логируется через `logger.exception` с chat_id/session_id (fire-and-forget задача; раньше терялось как «Task exception was never retrieved»).
+
 ## Owner
 - project-maintainers
 
 ## Last reviewed
-- 2026-09-12T15:34:34Z
+- 2026-09-24T12:00:00Z

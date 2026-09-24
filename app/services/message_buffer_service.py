@@ -1,6 +1,9 @@
 import asyncio
+import logging
 
 from sessions.conversation_scope import ConversationScope
+
+logger = logging.getLogger(__name__)
 
 
 class MessageBufferService:
@@ -82,6 +85,14 @@ class MessageBufferService:
             await self.flush_buffer(chat_id, session, context)
         except asyncio.CancelledError:
             return
+        except Exception:
+            # Фоновая задача: без этого исключение всплывало только при сборке мусора
+            # как «Task exception was never retrieved» с чужим контекстом сессии.
+            logger.exception(
+                "message buffer flush failed chat_id=%s session_id=%s",
+                chat_id,
+                getattr(session, "id", None),
+            )
 
     async def flush_buffer(self, chat_id: int, session, context) -> None:
         buffer_key = self._scope_buffer_key(session, chat_id)

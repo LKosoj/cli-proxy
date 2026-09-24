@@ -209,3 +209,38 @@ def test_resolve_blocked_via_glob(tmp_path: Path) -> None:
     result = svc.resolve(ArtifactIntent("credentials.json", 0.9), str(tmp_path))
     assert result.error is not None
     assert "секрет" in result.error.lower()
+
+
+def test_resolve_absolute_pattern_existing_file(tmp_path: Path) -> None:
+    (tmp_path / "app.apk").write_bytes(b"x")
+    svc = ArtifactIntentService()
+    result = svc.resolve(ArtifactIntent(str(tmp_path / "app.apk"), 1.0), str(tmp_path))
+    assert result.error is None
+    assert result.resolved_path == str(tmp_path / "app.apk")
+
+
+def test_resolve_absolute_pattern_missing_file_reports_not_found(tmp_path: Path) -> None:
+    # Регрессия: Path.glob с абсолютным паттерном бросал NotImplementedError.
+    svc = ArtifactIntentService()
+    missing = tmp_path / "build" / "outputs" / "app-debug.apk"
+    result = svc.resolve(ArtifactIntent(str(missing), 1.0), str(tmp_path))
+    assert result.resolved_path == ""
+    assert result.error is not None
+    assert "не найден" in result.error.lower()
+
+
+def test_resolve_absolute_pattern_outside_root(tmp_path: Path) -> None:
+    svc = ArtifactIntentService()
+    result = svc.resolve(ArtifactIntent("/etc/hostname", 1.0), str(tmp_path))
+    assert result.resolved_path == ""
+    assert result.error is not None
+    assert "пределы проекта" in result.error
+
+
+@pytest.mark.parametrize("pattern_factory", [lambda root: str(root), lambda root: str(root) + "/", lambda _root: "."])
+def test_resolve_project_root_itself_reports_not_found(tmp_path: Path, pattern_factory) -> None:
+    svc = ArtifactIntentService()
+    result = svc.resolve(ArtifactIntent(pattern_factory(tmp_path), 1.0), str(tmp_path))
+    assert result.resolved_path == ""
+    assert result.error is not None
+    assert "не найден" in result.error.lower()

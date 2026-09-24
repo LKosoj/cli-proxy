@@ -135,6 +135,11 @@ class ArtifactIntentService:
                 resolved_path="",
                 error="Запрошенный путь выходит за пределы проекта.",
             )
+        # Абсолютный паттерн (LLM часто возвращает полный путь): Path.glob принимает
+        # только относительные, поэтому переводим его относительно корня проекта.
+        pattern = intent.file_pattern
+        if Path(pattern).is_absolute():
+            pattern = str(candidate.relative_to(root))
 
         # Check blocked patterns.
         basename = candidate.name.lower()
@@ -145,14 +150,21 @@ class ArtifactIntentService:
                     error=f"Файл {candidate.name} содержит секреты и не может быть отправлен.",
                 )
 
+        if candidate == root:
+            # Path.glob(".") падает с IndexError; корень проекта отправить нельзя.
+            return ArtifactResult(
+                resolved_path="",
+                error=f"Файл не найден: {intent.file_pattern}",
+            )
+
         if not candidate.is_file():
             # Try glob in project root.
-            raw_matches = list(itertools.islice(root.glob(intent.file_pattern), _GLOB_MATCHES_LIMIT))
+            raw_matches = list(itertools.islice(root.glob(pattern), _GLOB_MATCHES_LIMIT))
             if len(raw_matches) >= _GLOB_MATCHES_LIMIT:
                 _LOG.warning(
                     "artifact_intent: glob scan truncated at %d matches for pattern %r under %s",
                     _GLOB_MATCHES_LIMIT,
-                    intent.file_pattern,
+                    pattern,
                     root,
                 )
             matches = sorted(m for m in raw_matches if m.is_file())

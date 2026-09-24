@@ -159,3 +159,37 @@ async def test_flush_after_delay_does_not_cancel_its_own_delivery(monkeypatch) -
     assert delivered == ["hello", "done"]
     assert bot_app.message_buffer.get(3) == []
     assert 3 not in bot_app.buffer_tasks
+
+
+@pytest.mark.asyncio
+async def test_flush_after_delay_logs_stage_exception(monkeypatch, caplog) -> None:
+    real_sleep = asyncio.sleep
+
+    async def _fast_sleep(_delay):
+        await real_sleep(0)
+
+    async def _stage_user_input(*_args, **_kwargs):
+        raise NotImplementedError("Non-relative patterns are unsupported")
+
+    monkeypatch.setattr("app.services.message_buffer_service.asyncio.sleep", _fast_sleep)
+
+    bot_app = SimpleNamespace(
+        message_buffer_user_id={},
+        message_buffer={},
+        buffer_tasks={},
+        _stage_user_input=_stage_user_input,
+    )
+    service = MessageBufferService(bot_app)
+    session = SimpleNamespace(id="s40")
+
+    with caplog.at_level("ERROR", logger="app.services.message_buffer_service"):
+        await service.buffer_or_send(session, "пришли файл", chat_id=3, context=object(), user_id=11)
+        task = bot_app.buffer_tasks[3]
+        await task  # исключение не должно всплыть наружу
+
+    assert task.exception() is None
+    record = next(r for r in caplog.records if "message buffer flush failed" in r.getMessage())
+    assert "chat_id=3" in record.getMessage()
+    assert "session_id=s40" in record.getMessage()
+    assert record.exc_info is not None
+    assert "Non-relative patterns" in str(record.exc_info[1])
