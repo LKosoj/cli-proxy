@@ -47,9 +47,9 @@ from utils.text import build_preview, strip_ansi
 
 _SESSION_TASK_MODE_ID = "__session__"
 # Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева.
-_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»>]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(\S.*)$')
+_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(\S.*)$')
 # Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
-_CHOICE_CURSOR_RE = re.compile(r'^\s*[❯▶►▌»>]\s*(?:☐\s*)?[1-9][\.\)]\s', re.M)
+_CHOICE_CURSOR_RE = re.compile(r'^[ \t]*(?:[❯▶►▌»][ \t]*(?:☐[ \t]*)?|☐[ \t]*)[1-9][\.\)][ \t]', re.M)
 _CHOICE_QUESTION_MAX_LINES = 12
 _log = logging.getLogger(__name__)
 
@@ -338,7 +338,7 @@ class SessionRunService:
         # Нумерованный список сам по себе ничего не значит: его печатают и команды
         # (`find -printf '%T@ %p'`, `ls -l`), и сам агент в ответе. Меню TUI
         # отличают курсор выбора или чекбоксы.
-        return bool(_CHOICE_CURSOR_RE.search(text)) or "☐" in text
+        return bool(_CHOICE_CURSOR_RE.search(text))
 
     @staticmethod
     def _tmux_choice_question_id(session_key: str, question: str, options: List[str]) -> str:
@@ -354,9 +354,22 @@ class SessionRunService:
         if not text:
             return "Please choose an option:", []
         lines = text.splitlines()
-        q_lines = []
+        # Если есть курсор/флажок, разбираем его блок, а не предыдущий список
+        # из ответа агента. Символ цитаты ">" курсором меню не считается.
+        start = next((idx for idx, line in enumerate(lines) if _CHOICE_CURSOR_RE.match(line)), None)
+        if start is not None:
+            while start > 0:
+                current = _CHOICE_OPTION_RE.match(lines[start].strip())
+                previous = _CHOICE_OPTION_RE.match(lines[start - 1].strip())
+                if not current or not previous or int(previous.group(1)) != int(current.group(1)) - 1:
+                    break
+                start -= 1
+        else:
+            start = next((idx for idx, line in enumerate(lines)
+                          if (match := _CHOICE_OPTION_RE.match(line.strip())) and match.group(1) == "1"), len(lines))
+        q_lines = lines[:start]
         opts = []
-        for line in lines:
+        for line in lines[start:]:
             s = line.strip()
             # Support plain "1. foo", "1) foo", "☐ 1. foo", "❯ 1. foo"
             m = _CHOICE_OPTION_RE.match(s)
@@ -365,8 +378,7 @@ class SessionRunService:
             if m and int(m.group(1)) == len(opts) + 1:
                 opts.append(f"{m.group(1)}. {m.group(2).strip()}")
             else:
-                if not opts:
-                    q_lines.append(line)
+                break
         # Вопрос стоит прямо над вариантами и отделён от остального вывода пустой
         # строкой: без этого в него попадал весь экран TUI, включая логи команд.
         if opts:

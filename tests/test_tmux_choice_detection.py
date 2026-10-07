@@ -57,6 +57,46 @@ def test_agent_numbered_list_without_menu_cursor_is_not_a_choice_question() -> N
     assert SessionRunService._is_cli_choice_question(text) is False
 
 
+def test_quoted_numbered_questions_are_not_a_menu() -> None:
+    text = (
+        "Пример упражнения:\n"
+        "> 1. Какие варианты вы рассматриваете?\n"
+        "> 2. Что для вас важнее всего?\n"
+        "> 3. Какой шаг поможет проверить вариант?"
+    )
+
+    assert SessionRunService._is_cli_choice_question(text) is False
+    assert SessionRunService._parse_cli_choice_question(text)[1] == []
+
+
+def test_options_do_not_merge_across_separate_lists() -> None:
+    text = "План:\n1. Первый пункт\n2. Второй пункт\n\nДругой список:\n3. Третий пункт"
+
+    assert SessionRunService._parse_cli_choice_question(text)[1] == ["1. Первый пункт", "2. Второй пункт"]
+
+
+def test_menu_after_agent_list_uses_its_own_question_and_options() -> None:
+    text = "План:\n1. Проверить\n2. Исправить\n\nПродолжить?\n  1. Да\n❯ 2. Нет\n\n3. Лишний пункт"
+
+    assert SessionRunService._is_cli_choice_question(text) is True
+    assert SessionRunService._parse_cli_choice_question(text) == ("Продолжить?", ["1. Да", "2. Нет"])
+
+
+def test_checkbox_in_prose_does_not_turn_a_numbered_list_into_a_menu() -> None:
+    text = "Символ ☐ означает флажок.\n\nПлан:\n1. Проверить\n2. Исправить"
+
+    assert SessionRunService._is_cli_choice_question(text) is False
+
+
+def test_numbered_checkbox_menu_is_detected() -> None:
+    text = "Выберите варианты:\n☐ 1. Первый\n☐ 2. Второй"
+
+    assert SessionRunService._is_cli_choice_question(text) is True
+    assert SessionRunService._parse_cli_choice_question(text) == (
+        "Выберите варианты:", ["1. Первый", "2. Второй"],
+    )
+
+
 def test_tui_menu_with_cursor_is_detected() -> None:
     text = "Do you want to proceed?\n❯ 1. Yes\n  2. No, tell Claude what to do differently"
 

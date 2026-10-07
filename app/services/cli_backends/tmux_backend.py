@@ -1465,9 +1465,10 @@ class TmuxExecutionBackend:
                         # Подставляется только блок меню, и только когда варианты
                         # распознаны: иначе распознанный по ошибке экран выбрасывал
                         # текст транскрипта, а в чат уходил буфер TUI целиком.
-                        choice_text = "\n".join([pane_question, *pane_options]).strip()
-                        if pane_options and choice_text:
-                            latest_text = choice_text
+                        if pane_options:
+                            # Превью повторно распознаёт меню перед отправкой кнопок.
+                            # Сохраняем признак меню после нормализации вариантов.
+                            latest_text = "\n".join([pane_question, f"❯ {pane_options[0]}", *pane_options[1:]]).strip()
                         elif not transcript_authoritative:
                             latest_text = pane_raw_for_choice or latest_text
                     awaiting_choice = choice_in_pane or choice_in_transcript

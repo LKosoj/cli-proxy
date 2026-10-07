@@ -829,16 +829,16 @@ def _preview_recording_session(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_tmux_backend_preview_skips_tool_output_while_transcript_is_authoritative(tmp_path, monkeypatch):
+@pytest.mark.parametrize("pane_text", [
+    "• Ran ls -la /tmp\n  drwxr-xr-x host_bwrap\n  -rw-r--r-- secrets.txt",
+    "Пример упражнения:\n> 1. Какие варианты вы рассматриваете?\n> 2. Что для вас важнее всего?",
+])
+async def test_tmux_backend_preview_skips_tool_output_while_transcript_is_authoritative(tmp_path, monkeypatch, pane_text):
     # Пока распознанный транскрипт ещё не отдал ответ агента (идёт работа
     # инструментов), в превью не должен просачиваться экран панели с их выводом.
     driver = FakeTmuxDriver()
     driver.autowrite_transcript = False
-    driver.response_text = (
-        "• Ran ls -la /tmp\n"
-        "  drwxr-xr-x host_bwrap\n"
-        "  -rw-r--r-- secrets.txt"
-    )
+    driver.response_text = pane_text
 
     class FakeTranscriptReader:
         def __init__(self, **kwargs):
@@ -949,8 +949,32 @@ async def test_tmux_backend_reports_only_menu_block_for_real_choice(tmp_path, mo
     task = asyncio.create_task(backend.run(session, "do work"))
     try:
         assert await _wait_for_preview(session) == (
-            "Do you want to proceed?\n1. Yes\n2. No, tell Claude what to do differently"
+            "Do you want to proceed?\n❯ 1. Yes\n2. No, tell Claude what to do differently"
         )
+        from sessions.session_run_service import SessionRunService
+
+        questions = []
+
+        async def send_question(*args, **kwargs):
+            questions.append((args[4], args[5]))
+
+        service = SessionRunService(
+            bot_app=SimpleNamespace(
+                _send_ask_question=send_question,
+                ui_state=SimpleNamespace(pending_questions={}),
+            ),
+            persist_sessions=lambda: None,
+            mode_tasks_list=lambda **kwargs: [],
+            mode_tasks_create=lambda **kwargs: None,
+            log_cli_dialog=lambda *args, **kwargs: None,
+            reset_session_fields_like_sessions_reset=lambda *args, **kwargs: None,
+        )
+        session.tool.execution_backends = ["tmux"]
+        session.tool.default_execution_backend = "tmux"
+        await service._upsert_telegram_assistant_preview(
+            session, {"kind": "telegram", "chat_id": 123}, object(), session.last_assistant_text_value,
+        )
+        assert questions == [("Do you want to proceed?", ["1. Yes", "2. No, tell Claude what to do differently"])]
         # Вопрос уходит в чат из превью, поэтому тишина на экране — это ожидание
         # ответа, а не конец хода: таймаут её не закрывает.
         await asyncio.sleep(0.3)
@@ -992,7 +1016,7 @@ async def test_tmux_backend_closes_turn_on_choice_without_preview(tmp_path, monk
     result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
 
     assert result.text == (
-        "Do you want to proceed?\n1. Yes\n2. No, tell Claude what to do differently"
+        "Do you want to proceed?\n❯ 1. Yes\n2. No, tell Claude what to do differently"
     )
     assert result.diagnostics["completion_source"] == "pane-quiet-timeout"
 
