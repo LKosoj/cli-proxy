@@ -27,7 +27,7 @@ def transport(tmp_path):
         calls.append((endpoint, data))
         return SimpleNamespace(message_id=100 + len(calls))
 
-    context = SimpleNamespace(bot=SimpleNamespace(_post=post, send_message=AsyncMock()))
+    context = SimpleNamespace(bot=SimpleNamespace(_post=post, send_message=AsyncMock(), delete_message=AsyncMock()))
     return service, context, calls
 
 
@@ -46,14 +46,23 @@ def test_webapp_keyboard_is_preserved():
 
 
 @pytest.mark.asyncio
-async def test_menu_reuses_message_after_restart_and_separates_topics(tmp_path):
+async def test_menu_replaces_message_after_restart_and_separates_topics(tmp_path):
     service, context, calls = transport(tmp_path)
     first = await service.send_menu(context, chat_id=1, message_thread_id=11, text="Первый экран", reply_markup=keyboard())
     restarted = TelegramTransportService(service.bot_app)
-    await restarted.send_menu(context, chat_id=1, message_thread_id=11, text="Второй экран", reply_markup=keyboard("sess_list"))
+
+    async def delete_previous(**kwargs):
+        assert len(calls) == 1
+        assert kwargs == {"chat_id": 1, "message_id": first.message_id}
+
+    context.bot.delete_message.side_effect = delete_previous
+    replacement = await restarted.send_menu(
+        context, chat_id=1, message_thread_id=11, text="Второй экран", reply_markup=keyboard("sess_list"),
+    )
     await restarted.send_menu(context, chat_id=1, message_thread_id=12, text="Другая тема", reply_markup=keyboard())
-    assert [endpoint for endpoint, _ in calls] == ["sendRichMessage", "editMessageText", "sendRichMessage"]
-    assert calls[1][1]["message_id"] == first.message_id
+    assert [endpoint for endpoint, _ in calls] == ["sendRichMessage"] * 3
+    context.bot.delete_message.assert_awaited_once_with(chat_id=1, message_id=first.message_id)
+    assert replacement.message_id != first.message_id
     assert calls[2][1]["message_thread_id"] == 12
     assert restarted.menu_panel(TelegramUiKey(1, 11))["callbacks"] == ["sess_list"]
 
@@ -62,20 +71,50 @@ async def test_menu_reuses_message_after_restart_and_separates_topics(tmp_path):
 async def test_deleted_menu_is_replaced_and_close_reopens_new_panel(tmp_path):
     service, context, calls = transport(tmp_path)
     first = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
-    original = context.bot._post
-
-    async def post(endpoint, *, data):
-        if endpoint == "editMessageText":
-            raise BadRequest("Message to edit not found")
-        return await original(endpoint, data=data)
-
-    context.bot._post = post
+    context.bot.delete_message.side_effect = BadRequest("Message to delete not found")
     replacement = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
     assert replacement.message_id != first.message_id
     service.remember_menu_edit(1, replacement.message_id, None)
     reopened = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
     assert reopened.message_id != replacement.message_id
     assert len(calls) == 3
+    assert all(endpoint == "sendRichMessage" for endpoint, _ in calls)
+
+
+@pytest.mark.asyncio
+async def test_old_menu_is_closed_when_telegram_refuses_deletion(tmp_path):
+    service, context, calls = transport(tmp_path)
+    first = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
+    context.bot.delete_message.side_effect = BadRequest("Message can't be deleted")
+    replacement = await service.send_menu(context, chat_id=1, text="Новое меню", reply_markup=keyboard("sess_list"))
+    assert [endpoint for endpoint, _ in calls] == ["sendRichMessage", "editMessageText", "sendRichMessage"]
+    assert calls[1][1]["message_id"] == first.message_id
+    assert "<tg-button" not in calls[1][1]["rich_message"]["markdown"]
+    assert "Меню закрыто" in calls[1][1]["rich_message"]["markdown"]
+    assert service.menu_panel(TelegramUiKey(1, None))["message_id"] == replacement.message_id
+
+
+@pytest.mark.asyncio
+async def test_navigation_edits_current_menu_without_replacing_it(tmp_path):
+    service, context, calls = transport(tmp_path)
+    first = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
+    markup = keyboard("sess_list")
+    await service.edit_message_outcome(context, 1, first.message_id, "Список сессий", reply_markup=markup)
+    service.remember_menu_edit(1, first.message_id, markup)
+    context.bot.delete_message.assert_not_awaited()
+    assert [endpoint for endpoint, _ in calls] == ["sendRichMessage", "editMessageText"]
+    assert service.menu_panel(TelegramUiKey(1, None))["message_id"] == first.message_id
+    assert service.menu_panel(TelegramUiKey(1, None))["callbacks"] == ["sess_list"]
+
+
+@pytest.mark.asyncio
+async def test_closed_menu_stays_inactive_when_new_message_fails(tmp_path):
+    service, context, _calls = transport(tmp_path)
+    first = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
+    service.bot_app._send_message = AsyncMock(return_value=None)
+    assert await service.send_menu(context, chat_id=1, text="Новое меню", reply_markup=keyboard()) is None
+    context.bot.delete_message.assert_awaited_once_with(chat_id=1, message_id=first.message_id)
+    assert service.menu_panel(TelegramUiKey(1, None))["callbacks"] == []
 
 
 @pytest.mark.asyncio

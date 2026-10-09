@@ -92,4 +92,4 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09 — restored direct session controls and detailed status; button icons restored.
+- 2026-10-09 — menu replacement, closing when deletion is refused, topic isolation and in-place navigation covered.

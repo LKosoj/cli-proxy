@@ -8,6 +8,7 @@ from typing import Optional
 from telegram import InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 
+from i18n import resolve_language, t
 from sessions.conversation_scope import ConversationScope
 from app.services.telegram_ui_scope import TelegramUiKey
 from tg.markdown import (
@@ -833,25 +834,23 @@ class TelegramTransportService:
             self._remember_menu(ui_key, message_id, reply_markup)
 
     async def send_menu(self, context, **kwargs):
-        """Reuse the persisted menu message in this chat/topic."""
-        _raw_context, resolved = self._prepare_send_kwargs(context, kwargs, operation="send_menu")
+        """Close the previous menu and send a new one in this chat/topic."""
+        raw_context, resolved = self._prepare_send_kwargs(context, kwargs, operation="send_menu")
         if resolved is None:
             return None
         ui_key = TelegramUiKey.from_parts(resolved["chat_id"], resolved.get("message_thread_id"))
         async with self._menu_locks.setdefault(ui_key, asyncio.Lock()):
             panel = self.menu_panel(ui_key)
             message_id = panel.get("message_id")
-            if message_id is not None and panel.get("callbacks"):
-                outcome = await self.edit_message_outcome(
-                    context, ui_key.chat_id, message_id, resolved["text"],
-                    reply_markup=resolved.get("reply_markup"),
-                )
-                if outcome == TelegramEditOutcome.UPDATED:
-                    self._remember_menu(ui_key, message_id, resolved.get("reply_markup"))
-                    return SimpleNamespace(message_id=message_id)
-                if outcome != TelegramEditOutcome.REPLACE:
-                    return None
-                logging.getLogger(__name__).info("menu message unavailable; replacing chat_id=%s", ui_key.chat_id)
+            if message_id is not None:
+                try:
+                    await raw_context.bot.delete_message(chat_id=ui_key.chat_id, message_id=message_id)
+                except BadRequest as exc:
+                    logging.getLogger(__name__).warning("cannot delete previous menu: %s", exc)
+                    if "message to delete not found" not in str(exc).lower():
+                        lang = resolve_language(ui_key.chat_id, None, getattr(self.bot_app, "config", None))
+                        await self.edit_message_outcome(context, ui_key.chat_id, message_id, t("msg.session.menu_closed", lang))
+                self._remember_menu(ui_key, message_id, None)
             message = await self.bot_app._send_message(context, embed_buttons=True, **resolved)
             if message is not None:
                 self._remember_menu(ui_key, message.message_id, resolved.get("reply_markup"))

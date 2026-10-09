@@ -11,7 +11,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Ki
 - Summary/preview for long HTML output is sent as a separate message when summary delivery is enabled.
 - Prompt and resume token autodetection, saved in `state.json`.
 - Session and thread/scope mapping restore after restart.
-- Rich menus with buttons inside the message: navigation updates one panel per chat topic.
+- Rich menus with buttons inside the message: commands close the previous panel and send a new one; button navigation updates the current panel.
 - "Use this directory" button in the directory picker.
 - "git clone" button to clone a repo into the chosen directory.
 - Inline Git menu (status/fetch/pull ff-only/merge/rebase/diff/log/stash/commit/push) for the current context session.
@@ -526,7 +526,7 @@ GitHub PAT for HTTPS git:
 
 ## Bot commands
 ### Visible in Telegram menu
-- `/sessions` - detailed status above the buttons and session controls on one screen: tool and mode selection, renaming, history, queue, saved state, report, session list and creation. Clearing the queue, resetting and closing a session require confirmation; “Close menu” only closes the panel. Reopening updates it; leaving a form cancels its pending input.
+- `/sessions` - detailed status above the buttons and session controls on one screen: tool and mode selection, renaming, history, queue, saved state, report, session list and creation. Clearing the queue, resetting and closing a session require confirmation; “Close menu” only closes the panel. Reopening closes the previous menu and sends a new one; leaving a form cancels its pending input.
 - `/interrupt` - interrupt generation
 - `/git` - Git actions for the current context session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/files` - file management in the working directory (send/save/rename/delete)

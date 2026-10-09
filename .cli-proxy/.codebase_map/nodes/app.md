@@ -89,4 +89,4 @@ Instruction node for `app` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09
+- 2026-10-09 — menu opening closes the previous panel and sends a new message; button navigation still edits the current panel.
