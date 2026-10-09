@@ -338,6 +338,7 @@ def test_thread_command_sessions_replies_in_same_topic(tmp_path) -> None:
     async def _run() -> None:
         app, fake_bot, _session_one, _session_two = await _build_threaded_app(tmp_path, intent="sessions")
         try:
+            _session_two.queue.append("Ожидающий запрос")
             await app.handlers.cmd_sessions(
                 _make_update(chat_id=-100777000111, message_thread_id=202, text="/sessions"),
                 SimpleNamespace(args=[], bot=fake_bot),
@@ -347,7 +348,13 @@ def test_thread_command_sessions_replies_in_same_topic(tmp_path) -> None:
             last = fake_bot.sent_messages[-1]
             assert last["chat_id"] == -100777000111
             assert last["message_thread_id"] == 202
-            assert "Текущая сессия" in str(last["text"])
+            assert "Активная сессия" in str(last["text"])
+            assert "Последний вывод:" in str(last["text"])
+            callbacks = [button.callback_data for row in last["reply_markup"].inline_keyboard for button in row]
+            for action in ("status", "rename", "resume", "queue", "clearqueue", "state", "close", "reset"):
+                assert f"sess_{action}:{_session_two.id}" in callbacks
+            assert any(str(data).startswith("sess_cli:") for data in callbacks)
+            assert not any(str(data).startswith("sess_manage:") for data in callbacks)
         finally:
             app.shutdown_html_process_pool()
 
@@ -477,12 +484,16 @@ def test_private_mode_user_sessions_command_with_existing_session_opens_active_o
             last = fake_bot.sent_messages[-1]
             assert last["chat_id"] == 2
             assert last["message_thread_id"] == 555
-            assert "Текущая сессия ·" in str(last["text"])
+            assert "Активная сессия:" in str(last["text"])
+            assert "Последний вывод:" in str(last["text"])
+            assert "Последний тик:" in str(last["text"])
+            assert "Execution backend:" in str(last["text"])
+            assert "Resume:" in str(last["text"])
             keyboard = last["reply_markup"]
             callbacks = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
-            assert any(str(item).startswith("sess_manage:") for item in callbacks)
-            assert f"sess_status:{session.id}" not in callbacks
-            assert f"sess_reset:{session.id}" not in callbacks
+            assert not any(str(item).startswith("sess_manage:") for item in callbacks)
+            assert f"sess_status:{session.id}" in callbacks
+            assert f"sess_reset:{session.id}" in callbacks
             _, management = app.handlers.build_sessions_management(2, session=session)
             management_callbacks = [btn.callback_data for row in management.inline_keyboard for btn in row]
             assert f"sess_status:{session.id}" in management_callbacks

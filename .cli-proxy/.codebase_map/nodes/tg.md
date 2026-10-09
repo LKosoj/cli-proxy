@@ -79,4 +79,4 @@ Instruction node for `tg` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09
+- 2026-10-09 — restored direct session controls and detailed status; button icons restored.

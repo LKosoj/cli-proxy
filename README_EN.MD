@@ -20,7 +20,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Ki
 - Manage files in the working directory via `/files` (send, save, rename, delete).
 - Current-session reports are available in Telegram via `/reports`; `/reports snapshot` and the "Session report" button in `/sessions` create a human-readable HTML session report in the user's language from run artifacts, saved report history, and the available CLI transcript.
 - Task templates (hidden `/preset` command).
-- **Agent mode** (via `/sessions` -> `Choose work mode` -> `Agent`) - auxiliary AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.).
+- **Agent mode** (via `/sessions` -> `Agent`) - auxiliary AI agent (ReAct) with a toolset (read/write files, search, run commands, web search, etc.).
 - MiniApp is the companion web panel next to the bot: session status, files, logs, config, and scheduler.
 
 ## Quick start
@@ -205,7 +205,7 @@ After that, the main bot can continue running as root: `claude` commands are lau
    - Resume tokens are saved and can be restored automatically.
 
 6. **Agent mode**
-   - Enable via `/sessions` -> `Choose work mode` -> `Agent` - an auxiliary AI agent (ReAct) with tools (files, search, commands).
+   - Enable via `/sessions` -> `Agent` - an auxiliary AI agent (ReAct) with tools (files, search, commands).
 
 7. **Git**
    - Git operations are available via `/git` (status, pull, diff, commit, summary, etc.).
@@ -526,7 +526,7 @@ GitHub PAT for HTTPS git:
 
 ## Bot commands
 ### Visible in Telegram menu
-- `/sessions` - current session overview: work mode, queue, report, session list and creation. “Manage session” opens model selection, renaming, history, detailed status and maintenance actions. Clearing the queue, resetting and closing a session require confirmation; “Close menu” only closes the panel. Reopening updates it; leaving a form cancels its pending input.
+- `/sessions` - detailed status above the buttons and session controls on one screen: tool and mode selection, renaming, history, queue, saved state, report, session list and creation. Clearing the queue, resetting and closing a session require confirmation; “Close menu” only closes the panel. Reopening updates it; leaving a form cancels its pending input.
 - `/interrupt` - interrupt generation
 - `/git` - Git actions for the current context session (inline menu: status/fetch/pull/merge/rebase/diff/log/stash/commit/push/summary/help)
 - `/files` - file management in the working directory (send/save/rename/delete)
