@@ -155,6 +155,7 @@ async def test_destructive_actions_require_confirmation(tmp_path, action):
     assert "Рабочая сессия" in edit.call_args.kwargs["text"]
     query.data = confirmation.callback_data
     await ui.handle_callback(query, 1, object())
+    assert edit.call_args.kwargs["reply_markup"] is None
     if action == "clearqueue":
         assert session.queue == []
     elif action == "reset":
@@ -174,3 +175,50 @@ async def test_regular_prompts_keep_removable_inline_buttons(tmp_path):
     await service.edit_message_outcome(context, 1, 101, "Подтвердите ввод", reply_markup=markup)
     assert calls[1][1]["reply_markup"] is markup
     assert "<tg-button" not in calls[1][1]["rich_message"]["markdown"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("owner", ["session", "common", "git"])
+@pytest.mark.parametrize("keep_buttons", [False, True])
+async def test_callback_result_closes_rich_menu_unless_keyboard_is_explicit(tmp_path, owner, keep_buttons):
+    from bot import BotApp
+    from app.services.git_ops_service import GitOps
+    from tg.callbacks import CallbackHandler
+
+    service, context, calls = transport(tmp_path)
+    app = service.bot_app
+    app.transport_service = service
+
+    async def edit(*args, **kwargs):
+        return await BotApp._edit_message(app, *args, **kwargs)
+
+    app._edit_message = edit
+    message = await service.send_menu(context, chat_id=1, text="Меню", reply_markup=keyboard())
+    data = {"session": "sess_status:s1", "common": "file_pick:0", "git": "git_status"}[owner]
+    query = SimpleNamespace(data=data, message=SimpleNamespace(chat_id=1, message_id=message.message_id))
+    markup = keyboard("sess_list") if keep_buttons else None
+    if owner == "common":
+        await CallbackHandler._edit_msg(SimpleNamespace(bot_app=app), context, query, "Результат", reply_markup=markup)
+    else:
+        cls = SessionUI if owner == "session" else GitOps
+        await cls._edit_msg(SimpleNamespace(_edit_message=edit), context, query, "Результат", reply_markup=markup)
+    assert calls[-1][0] == "editMessageText"
+    markdown = calls[-1][1]["rich_message"]["markdown"]
+    assert ("<tg-button" in markdown) is keep_buttons
+    assert service.menu_panel(TelegramUiKey(1, None))["callbacks"] == (["sess_list"] if keep_buttons else [])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queue", [[], ["Запрос"]])
+async def test_queue_result_closes_menu(tmp_path, queue):
+    session = SimpleNamespace(id="s1", queue=queue)
+    manager = SimpleNamespace(get=lambda *_args: session)
+    config = SimpleNamespace(
+        telegram=TelegramConfig(token="t", whitelist_chat_ids=[1]),
+        defaults=DefaultsConfig(workdir=str(tmp_path), state_path=str(tmp_path / "state.db")),
+    )
+    edit = AsyncMock(return_value=True)
+    ui = SessionUI(config, manager, AsyncMock(), edit, str, str)
+    query = SimpleNamespace(data="sess_queue:s1", message=SimpleNamespace(chat_id=1, message_id=10))
+    await ui.handle_callback(query, 1, object())
+    assert edit.call_args.kwargs["reply_markup"] is None

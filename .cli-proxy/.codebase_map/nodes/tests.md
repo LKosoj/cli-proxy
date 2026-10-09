@@ -92,4 +92,4 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09 — /miniapp reply routing covered for enabled, disabled and missing-URL cases in topics and ordinary chats.
+- 2026-10-10 — restored pre-redesign menu completion behavior.

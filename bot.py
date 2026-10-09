@@ -268,7 +268,7 @@ class BotApp:
         self.session_ui = SessionUI(
             self.config,
             self.manager,
-            self._send_menu,
+            self._send_message,
             self._edit_message,
             self._format_ts,
             self._short_label,

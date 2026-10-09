@@ -737,11 +737,7 @@ class SessionActionsMixin:
             await self._edit_msg(context, query, t("msg.session.state_not_found", lang))
             return True
         text = format_session_state(st, self.bot_app._format_ts(st.updated_at), lang)
-        page = self.bot_app.ui_state.state_menu_page.get(ui_key, 0)
-        await self._edit_msg(context, query, text, reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(t("btn.session.back", lang), callback_data=f"state_page:{page}")],
-            [InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")],
-        ]))
+        await self._edit_msg(context, query, text)
         return True
 
     async def _cb_state_page(self, *, data: str, chat_id: int, query, context) -> bool:

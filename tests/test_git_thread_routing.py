@@ -94,6 +94,8 @@ def test_git_branch_menu_state_is_thread_aware() -> None:
 
     assert keyboard_a.inline_keyboard[0][0].text == "origin/main"
     assert keyboard_b.inline_keyboard[0][0].text == "origin/dev"
+    assert keyboard_a.inline_keyboard[-1][0].callback_data == "git_cancel"
+    assert keyboard_b.inline_keyboard[-1][0].callback_data == "git_cancel"
 
 
 def test_git_conflict_check_does_not_treat_worktree_warning_as_conflict() -> None:

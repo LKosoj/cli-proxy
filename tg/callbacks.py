@@ -5,7 +5,7 @@ Module containing callback handling functionality for the Telegram bot.
 import asyncio
 import logging
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.error import NetworkError, TimedOut
 from telegram.ext import ContextTypes
 
@@ -319,15 +319,6 @@ class CallbackHandler(CallbackActionsMixin):
     async def _edit_msg(self, context, query, text, *, reply_markup=None, md2: bool = True) -> bool:
         """Shortcut: edit the callback query message with given text."""
         if query.message:
-            data = str(getattr(query, "data", "") or "")
-            if reply_markup is None and data.startswith((
-                "sess_", "state_", "file_", "dir_", "user_project_", "new_tool:",
-            )) and data not in (
-                "sess_close_menu", "file_nav:cancel", "sess_tmux_reread",
-            ) and not data.startswith("sess_tmux_reread:"):
-                lang = lang_from_query(query, self.bot_app.config)
-                back = "file_nav:refresh" if data.startswith("file_") else "sess_active"
-                reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.back", lang), callback_data=back)]])
             return await self.bot_app._edit_message(
                 context,
                 chat_id=query.message.chat_id,

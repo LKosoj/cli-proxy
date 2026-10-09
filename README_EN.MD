@@ -11,7 +11,7 @@ Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Ki
 - Summary/preview for long HTML output is sent as a separate message when summary delivery is enabled.
 - Prompt and resume token autodetection, saved in `state.json`.
 - Session and thread/scope mapping restore after restart.
-- Rich menus with buttons inside the message: commands close the previous panel and send a new one; button navigation updates the current panel.
+- Rich menus with buttons inside the message: commands close the previous panel and send a new one; button navigation updates the current panel. Actions that previously finished a menu remove its buttons again; a Back button is not added automatically.
 - "Use this directory" button in the directory picker.
 - "git clone" button to clone a repo into the chosen directory.
 - Inline Git menu (status/fetch/pull ff-only/merge/rebase/diff/log/stash/commit/push) for the current context session.

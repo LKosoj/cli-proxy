@@ -72,4 +72,4 @@ Instruction node for `sessions` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09
+- 2026-10-10 — restored pre-redesign menu completion behavior.

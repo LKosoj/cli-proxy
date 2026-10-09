@@ -111,12 +111,6 @@ class SessionUI:
     async def _edit_msg(self, context: ContextTypes.DEFAULT_TYPE, query, text: str, *, reply_markup=None) -> bool:
         if not query.message:
             return False
-        if reply_markup is None and str(getattr(query, "data", "") or "") != "sess_close_menu":
-            lang = resolve_user_lang(self.config, chat_id=self._resolve_owner_chat_id(query.message.chat_id, query))
-            data = str(getattr(query, "data", "") or "")
-            session_id = data.split(":")[1] if ":" in data else ""
-            back = f"sess_manage:{session_id}" if session_id and not data.startswith("sess_close:") else "sess_active"
-            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.back", lang), callback_data=back)]])
         return await self._edit_message(
             context,
             chat_id=query.message.chat_id,
@@ -210,10 +204,6 @@ class SessionUI:
             rows.append([InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")])
         return InlineKeyboardMarkup(rows)
 
-    async def _send_input_result(self, context, ui_key: TelegramUiKey, text: str, lang: str) -> None:
-        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.back", lang), callback_data="sess_active")]])
-        await self._send_message(context, text=text, reply_markup=keyboard, **ui_key.reply_kwargs())
-
     async def handle_pending_message(
         self,
         chat_id: int,
@@ -230,13 +220,13 @@ class SessionUI:
             session = self.manager.get(owner_chat_id, session_id)
             name = text.strip()
             if name in ("-", "отмена", "Отмена"):
-                await self._send_input_result(context, ui_key, t("msg.session.rename_cancelled", lang), lang)
+                await self._send_message(context, text=t("msg.session.rename_cancelled", lang), **ui_key.reply_kwargs())
                 return True
             if not name:
-                await self._send_input_result(context, ui_key, t("msg.session.rename_empty", lang), lang)
+                await self._send_message(context, text=t("msg.session.rename_empty", lang), **ui_key.reply_kwargs())
                 return True
             if not session:
-                await self._send_input_result(context, ui_key, t("msg.error.session_not_found", lang), lang)
+                await self._send_message(context, text=t("msg.error.session_not_found", lang), **ui_key.reply_kwargs())
                 return True
             session.name = name
             self._persist_session(owner_chat_id, session.id)
@@ -254,7 +244,7 @@ class SessionUI:
                         chat_id,
                         session.id,
                     )
-            await self._send_input_result(context, ui_key, t("msg.session.renamed", lang), lang)
+            await self._send_message(context, text=t("msg.session.renamed", lang), **ui_key.reply_kwargs())
             return True
         if ui_key in self.pending_session_resume:
             pending = self.pending_session_resume.pop(ui_key)
@@ -264,14 +254,14 @@ class SessionUI:
             session = self.manager.get(owner_chat_id, session_id)
             token = text.strip()
             if token in ("-", "отмена", "Отмена"):
-                await self._send_input_result(context, ui_key, t("msg.session.resume_token_cancelled", lang), lang)
+                await self._send_message(context, text=t("msg.session.resume_token_cancelled", lang), **ui_key.reply_kwargs())
                 return True
             if not session:
-                await self._send_input_result(context, ui_key, t("msg.error.session_not_found", lang), lang)
+                await self._send_message(context, text=t("msg.error.session_not_found", lang), **ui_key.reply_kwargs())
                 return True
             session.resume_token = token
             self._persist_session(owner_chat_id, session.id)
-            await self._send_input_result(context, ui_key, t("msg.session.resume_token_updated", lang), lang)
+            await self._send_message(context, text=t("msg.session.resume_token_updated", lang), **ui_key.reply_kwargs())
             return True
         return False
 
@@ -333,10 +323,7 @@ class SessionUI:
                 "owner_chat_id": owner_chat_id,
                 "session_id": session_id,
             }
-            await self._edit_msg(context, query, t("msg.session.rename_prompt", lang, session_id=session.id),
-                                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
-                                     t("btn.session.cancel_input", lang), callback_data=f"sess_manage:{session.id}",
-                                 )]]))
+            await self._edit_msg(context, query, t("msg.session.rename_prompt", lang, session_id=session.id))
             return True
         if data.startswith("sess_resume:"):
             session_id = data.split(":", 1)[1]
@@ -389,10 +376,7 @@ class SessionUI:
                 "owner_chat_id": owner_chat_id,
                 "session_id": session_id,
             }
-            await self._edit_msg(context, query, t("msg.session.resume_prompt", lang, current=current),
-                                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
-                                     t("btn.session.cancel_input", lang), callback_data=f"sess_manage:{session.id}",
-                                 )]]))
+            await self._edit_msg(context, query, t("msg.session.resume_prompt", lang, current=current))
             return True
         if data.startswith("sess_cli:"):
             # This callback is typically handled in callbacks.py (BotApp has better context),
@@ -503,12 +487,8 @@ class SessionUI:
             if not self._can_access_session(owner_chat_id, session):
                 await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
-            rows = []
-            if session.queue:
-                rows.append([InlineKeyboardButton(t("btn.session.clearqueue", lang), callback_data=f"sess_clearqueue:{session.id}")])
-            rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data=build_session_overview_callback_data(session))])
             text = t("msg.session.queue_count", lang, n=len(session.queue)) if session.queue else t("msg.session.queue_empty", lang)
-            await self._edit_msg(context, query, text, reply_markup=InlineKeyboardMarkup(rows))
+            await self._edit_msg(context, query, text)
             return True
         if data.startswith("sess_clearqueue:"):
             session_id = data.split(":")[1]

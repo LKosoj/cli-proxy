@@ -57,4 +57,4 @@ Instruction node for `bot.py` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09 — /miniapp launch button and error replies preserve the invoking topic.
+- 2026-10-10 — restored pre-redesign menu completion behavior.

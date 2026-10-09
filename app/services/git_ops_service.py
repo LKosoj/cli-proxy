@@ -69,9 +69,6 @@ class GitOps:
     async def _edit_msg(self, context: ContextTypes.DEFAULT_TYPE, query, text: str, *, reply_markup=None) -> bool:
         if not query.message:
             return False
-        if reply_markup is None and str(query.data or "") != "git_cancel":
-            lang = resolve_user_lang(self.config, chat_id=query.message.chat_id)
-            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.back", lang), callback_data="git_home")]])
         return await self._edit_message(
             context,
             chat_id=query.message.chat_id,
@@ -143,7 +140,7 @@ class GitOps:
             rows.append(
                 [InlineKeyboardButton(self._short_label(ref), callback_data=f"git_{action}_pick:{i}")]
             )
-        rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data="git_home")])
+        rows.append([InlineKeyboardButton(t("msg.git.btn_cancel", lang), callback_data="git_cancel")])
         return InlineKeyboardMarkup(rows)
 
     def _build_git_pull_keyboard(self, ref: str, lang: str = "ru") -> InlineKeyboardMarkup:
