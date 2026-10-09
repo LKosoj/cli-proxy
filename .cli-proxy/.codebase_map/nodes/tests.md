@@ -92,4 +92,4 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-09 — menu replacement, closing when deletion is refused, topic isolation and in-place navigation covered.
+- 2026-10-09 — /miniapp reply routing covered for enabled, disabled and missing-URL cases in topics and ordinary chats.

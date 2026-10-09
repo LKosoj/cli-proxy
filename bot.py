@@ -2581,15 +2581,15 @@ class BotApp:
         chat_id = int(route.reply_chat_id)
         _ma_lang = resolve_user_lang(self.config, chat_id=chat_id)
         if not bool(getattr(self.config.miniapp, "enabled", False)):
-            await self._send_message(context, chat_id=chat_id, text=t("bot.miniapp_disabled", _ma_lang))
+            await self._send_message(context, text=t("bot.miniapp_disabled", _ma_lang), **route.reply_kwargs())
             return
         url = self._build_miniapp_webapp_url()
         if not url:
             await self._send_message(
                 context,
-                chat_id=chat_id,
                 text=t("bot.miniapp_url_not_set", _ma_lang),
                 md2=True,
+                **route.reply_kwargs(),
             )
             return
         kb = InlineKeyboardMarkup(
@@ -2597,10 +2597,10 @@ class BotApp:
         )
         await self._send_message(
             context,
-            chat_id=chat_id,
             text=t("bot.miniapp_open_text", _ma_lang),
             reply_markup=kb,
             md2=True,
+            **route.reply_kwargs(),
         )
 
     def _build_miniapp_webapp_url(self) -> Optional[str]:

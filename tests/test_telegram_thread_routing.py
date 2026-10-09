@@ -334,6 +334,33 @@ async def test_thread_interrupt_stops_only_current_topic_and_clears_auto_continu
         app.shutdown_html_process_pool()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["enabled", "disabled", "missing_url"])
+@pytest.mark.parametrize("in_topic", [True, False])
+async def test_miniapp_command_replies_in_invoking_chat_and_topic(tmp_path, state, in_topic) -> None:
+    app, fake_bot, _session_one, _session_two = await _build_threaded_app(tmp_path, intent="miniapp")
+    app.config.miniapp.enabled = state != "disabled"
+    app.config.miniapp.public_url = "https://example.test" if state == "enabled" else ""
+    app.config.thread_mode.enabled = in_topic
+    chat_id = -100777000111 if in_topic else 1
+    thread_id = 202 if in_topic else None
+    try:
+        await app.cmd_miniapp(
+            _make_update(chat_id=chat_id, message_thread_id=thread_id, text="/miniapp"),
+            SimpleNamespace(args=[], bot=fake_bot),
+        )
+        last = fake_bot.sent_messages[-1]
+        assert last["chat_id"] == chat_id
+        assert last.get("message_thread_id") == thread_id
+        if state == "enabled":
+            assert last["reply_markup"].inline_keyboard[0][0].web_app.url.startswith("https://example.test/cli-proxy/")
+        else:
+            assert last.get("reply_markup") is None
+    finally:
+        await app.notification_queue_service.shutdown()
+        app.shutdown_html_process_pool()
+
+
 def test_thread_command_sessions_replies_in_same_topic(tmp_path) -> None:
     async def _run() -> None:
         app, fake_bot, _session_one, _session_two = await _build_threaded_app(tmp_path, intent="sessions")
