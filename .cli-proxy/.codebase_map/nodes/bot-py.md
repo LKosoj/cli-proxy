@@ -57,4 +57,4 @@ Instruction node for `bot.py` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-09-22T13:00:00Z
+- 2026-10-09

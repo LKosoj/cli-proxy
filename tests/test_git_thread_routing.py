@@ -1,6 +1,6 @@
 import asyncio
 import types
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from app.services.git_ops_service import GitOps
 from tg.handlers import BotHandlers
@@ -28,11 +28,14 @@ def test_cmd_git_passes_thread_id_and_replies_in_same_topic() -> None:
         git = types.SimpleNamespace(
             ensure_git_session=AsyncMock(return_value=types.SimpleNamespace(id="s1")),
             ensure_git_repo=AsyncMock(return_value=True),
-            build_git_keyboard=lambda: "git-keyboard",
+            build_git_keyboard=lambda _lang: "git-keyboard",
         )
         bot_app = types.SimpleNamespace(
             git=git,
             _send_message=AsyncMock(),
+            _send_menu=AsyncMock(),
+            _cancel_menu_input=MagicMock(),
+            telegram_ui_key_from_route=lambda *_args, **_kwargs: (101, 55),
             resolve_telegram_inbound_route=lambda _update: types.SimpleNamespace(
                 reply_chat_id=101,
                 message_thread_id=55,
@@ -56,7 +59,8 @@ def test_cmd_git_passes_thread_id_and_replies_in_same_topic() -> None:
             context,
             message_thread_id=55,
         )
-        send_kwargs = bot_app._send_message.await_args.kwargs
+        bot_app._cancel_menu_input.assert_called_once_with((101, 55))
+        send_kwargs = bot_app._send_menu.await_args.kwargs
         assert send_kwargs["chat_id"] == 101
         assert send_kwargs["message_thread_id"] == 55
         assert send_kwargs["reply_markup"] == "git-keyboard"

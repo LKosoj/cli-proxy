@@ -142,3 +142,17 @@ def test_file_delete_confirmation_keeps_callback_data_and_uses_recursive_service
         assert len(app.menus) == 1
 
     asyncio.run(_run())
+
+
+def test_file_refresh_keeps_directory_and_page(tmp_path):
+    async def run():
+        app, ui_key = _build_app(tmp_path)
+        app.ui_state.files_dir[ui_key] = str(tmp_path / "subdir")
+        app.ui_state.files_page[ui_key] = 2
+        query = _FakeQuery()
+        handler = _FileCallbackHarness(app)
+        await handler._cb_file_nav(data="file_nav:refresh", chat_id=1, query=query, context=SimpleNamespace())
+        assert app.ui_state.files_dir[ui_key] == str(tmp_path / "subdir")
+        assert app.ui_state.files_page[ui_key] == 2
+        assert app.menus[0]["edit_message"] is query
+    asyncio.run(run())

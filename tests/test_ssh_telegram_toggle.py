@@ -105,7 +105,7 @@ def test_message_updates_after_ssh_toggle(tmp_path):
     session = app.manager.create(1, "dummy", workdir)
 
     # Before toggle: SSH off
-    text_off, kb_off = app.handlers.build_sessions_active_overview(1, session=session)
+    text_off, kb_off = app.handlers.build_sessions_management(1, session=session)
     assert "SSH: выкл" in text_off or any(
         "SSH: выкл" in btn.text
         for row in (kb_off.inline_keyboard if kb_off else [])
@@ -116,7 +116,7 @@ def test_message_updates_after_ssh_toggle(tmp_path):
     set_ssh_remote_enabled(session, True)
 
     # After toggle: SSH on
-    text_on, kb_on = app.handlers.build_sessions_active_overview(1, session=session)
+    text_on, kb_on = app.handlers.build_sessions_management(1, session=session)
     ssh_on_found = "SSH: вкл" in text_on or any(
         "SSH: вкл" in btn.text
         for row in (kb_on.inline_keyboard if kb_on else [])

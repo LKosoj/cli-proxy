@@ -133,6 +133,11 @@ class FileActionsMixin:
             self.bot_app._stop_files_rename_wait(chat_id, message_thread_id=ui_key.message_thread_id)
             await self._edit_msg(context, query, t('msg.files.operation_cancelled', lang))
             return True
+        if action == "refresh":
+            await self.bot_app._send_files_menu(
+                chat_id, session, context, edit_message=query, message_thread_id=ui_key.message_thread_id,
+            )
+            return True
         if action.startswith("open:"):
             idx = int(action.split(":", 1)[1])
             entries = self.bot_app.ui_state.files_entries.get(ui_key, [])

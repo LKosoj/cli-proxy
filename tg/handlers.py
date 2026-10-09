@@ -641,7 +641,7 @@ class BotHandlers:
     ) -> tuple[str, InlineKeyboardMarkup]:
         projects = self.bot_app.user_projects(owner_chat_id)
         if not projects:
-            rows = [[InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")]]
+            rows = [[InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")]]
             return t("msg.session.no_projects", lang), InlineKeyboardMarkup(rows)
 
         callback_prefix = "user_project_pick_new" if force_new else "user_project_pick"
@@ -667,7 +667,7 @@ class BotHandlers:
             for idx, path in enumerate(projects)
         ]
         if include_cancel:
-            rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")])
+            rows.append([InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")])
         elif back_callback:
             rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data=back_callback)])
         if tool:
@@ -713,6 +713,55 @@ class BotHandlers:
         return InlineKeyboardButton(label, callback_data=callback_data)
 
     def build_sessions_active_overview(
+        self, chat_id: int, *, session: Optional[Session] = None,
+        session_uid: Optional[str] = None, lang: Optional[str] = None,
+    ) -> tuple[str, InlineKeyboardMarkup]:
+        lang = lang or resolve_user_lang(self.bot_app.config, chat_id=chat_id)
+        fallback = self.build_sessions_management(chat_id, session=session, session_uid=session_uid, lang=lang)
+        s = self._resolve_overview_session(chat_id, session=session, session_uid=session_uid)
+        if (not s or not self._visible_sessions_for_chat(chat_id)
+                or (not self._is_admin(chat_id) and
+                    (not self.bot_app.user_projects(chat_id) or not self._is_session_visible_for_chat(chat_id, s)))):
+            return fallback
+        token = session_runtime_uid(s) or s.id
+        modes = self._registered_modes(chat_id=chat_id)
+        visibility = build_session_overview_visibility(
+            session=s, chat_id=chat_id, access_policy=getattr(self.bot_app, "access_policy_service", None),
+            available_tool_count=len(self.bot_app._available_tools()), registered_mode_count=len(modes),
+            visible_session_count=len(self._visible_sessions_for_chat(chat_id)),
+            tmux_backend_active=get_session_execution_backend(s) == "tmux",
+        )
+        rows = []
+        if visibility.allows("mode_selector"):
+            rows.append([InlineKeyboardButton(t("btn.session.mode", lang), callback_data=f"sess_modes:{token}")])
+        actions = []
+        if visibility.allows("queue"):
+            actions.append(InlineKeyboardButton(t("btn.session.queue", lang), callback_data=f"sess_queue:{s.id}"))
+        if visibility.allows("snapshot_report"):
+            actions.append(InlineKeyboardButton(t("btn.session.snapshot_report", lang), callback_data=f"sess_snapshot:{token}"))
+        if actions:
+            rows.append(actions)
+        rows.append([InlineKeyboardButton(t("btn.session.manage", lang), callback_data=f"sess_manage:{token}")])
+        navigation = []
+        for action, callback in (("list_sessions", "sess_list"), ("new_session", "sess_new")):
+            if visibility.allows(action):
+                key = "list" if action == "list_sessions" else "new"
+                navigation.append(InlineKeyboardButton(t(f"btn.session.{key}", lang), callback_data=callback))
+        if navigation:
+            rows.append(navigation)
+        rows.append([InlineKeyboardButton(t("btn.session.lang", lang), callback_data="lang_menu"),
+                     InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")])
+        mode_id = str(get_active_mode(s, "") or "")
+        text = t(
+            "msg.session.overview", lang, name=s.name or s.id,
+            project=getattr(s, "project_root", None) or s.workdir,
+            tool=getattr(s, "active_cli", None) or s.tool.name,
+            mode=dict(modes).get(mode_id, mode_id or "—"),
+            status=t("session_status.busy" if s.busy else "session_status.free", lang), n=len(s.queue),
+        )
+        return text, InlineKeyboardMarkup(rows)
+
+    def build_sessions_management(
         self,
         chat_id: int,
         *,
@@ -727,7 +776,7 @@ class BotHandlers:
                 lang = "ru"
         is_admin = self._is_admin(chat_id)
         if not is_admin and not self.bot_app.user_projects(chat_id):
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")]])
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")]])
             return t("msg.session.no_projects", lang), keyboard
 
         sessions = self._visible_sessions_for_chat(chat_id)
@@ -735,7 +784,7 @@ class BotHandlers:
             keyboard = InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton(t("btn.session.new", lang), callback_data="sess_new")],
-                    [InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")],
+                    [InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")],
                 ]
             )
             return t("msg.session.no_active", lang), keyboard
@@ -747,7 +796,7 @@ class BotHandlers:
                 [
                     [InlineKeyboardButton(t("btn.session.list", lang), callback_data="sess_list")],
                     [InlineKeyboardButton(t("btn.session.new", lang), callback_data="sess_new")],
-                    [InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")],
+                    [InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")],
                 ]
             )
             return t("msg.session.no_scope", lang), keyboard
@@ -790,9 +839,6 @@ class BotHandlers:
             overview_buttons.append(InlineKeyboardButton(t("btn.session.rename", lang), callback_data=f"sess_rename:{s.id}"))
         if visibility.allows("resume"):
             overview_buttons.append(InlineKeyboardButton(t("btn.session.resume", lang), callback_data=f"sess_resume:{s.id}"))
-        if visibility.allows("queue"):
-            overview_buttons.append(InlineKeyboardButton(t("btn.session.queue", lang), callback_data=f"sess_queue:{s.id}"))
-            overview_buttons.append(InlineKeyboardButton(t("btn.session.clearqueue", lang), callback_data=f"sess_clearqueue:{s.id}"))
         if visibility.allows("state"):
             overview_buttons.append(InlineKeyboardButton(t("btn.session.state", lang), callback_data=f"sess_state:{s.id}"))
         if visibility.allows("snapshot_report"):
@@ -809,10 +855,6 @@ class BotHandlers:
                     callback_data=f"sess_tmux_reread:{explicit_session_uid or s.id}",
                 )
             )
-        if visibility.allows("close"):
-            overview_buttons.append(InlineKeyboardButton(t("btn.session.close", lang), callback_data=f"sess_close:{s.id}"))
-        if visibility.allows("reset"):
-            overview_buttons.append(InlineKeyboardButton(t("btn.session.reset", lang), callback_data=f"sess_reset:{s.id}"))
 
         keyboard_rows = list(cli_rows)
         for idx in range(0, len(overview_buttons), 2):
@@ -825,26 +867,14 @@ class BotHandlers:
         if visibility.allows("unread"):
             keyboard_rows.append([self._unread_toggle_button(s, lang)])
 
-        if visibility.allows("mode_selector"):
-            keyboard_rows.extend(
-                self._build_mode_buttons_rows(
-                    chat_id=chat_id,
-                    session=s,
-                    active_mode=str(get_active_mode(s, "") or "").strip(),
-                )
-            )
-        footer_buttons: list[InlineKeyboardButton] = []
-        if visibility.allows("new_session"):
-            footer_buttons.append(InlineKeyboardButton(t("btn.session.new", lang), callback_data="sess_new"))
-        if visibility.allows("list_sessions"):
-            footer_buttons.append(InlineKeyboardButton(t("btn.session.list", lang), callback_data="sess_list"))
-        if footer_buttons:
-            keyboard_rows.append(footer_buttons)
-        keyboard_rows.append([InlineKeyboardButton(t("btn.session.lang", lang), callback_data="lang_menu")])
-        keyboard_rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="sess_close_menu")])
+        for action in ("reset", "close"):
+            if visibility.allows(action):
+                keyboard_rows.append([InlineKeyboardButton(t(f"btn.session.{action}", lang), callback_data=f"sess_{action}:{s.id}")])
+        keyboard_rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data=build_session_overview_callback_data(s))])
+        keyboard_rows.append([InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")])
 
         keyboard = InlineKeyboardMarkup(keyboard_rows)
-        return self._active_session_status_text(s, chat_id=chat_id, lang=lang), keyboard
+        return t("msg.session.manage_title", lang, name=s.name or s.id), keyboard
 
     async def show_new_session_menu(
         self,
@@ -893,7 +923,7 @@ class BotHandlers:
                     reply_markup=keyboard,
                 )
         else:
-            await self.bot_app._send_message(
+            await self.bot_app._send_menu(
                 context,
                 text=menu_text,
                 reply_markup=keyboard,
@@ -932,6 +962,10 @@ class BotHandlers:
             lang = "ru"
         args = context.args
         if len(args) < 2:
+            cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+            if callable(cancel_input):
+                route = self.bot_app.resolve_telegram_inbound_route(update)
+                cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=ui_chat_id))
             await self.show_new_session_menu(ui_chat_id, context, reply_kwargs=self._reply_kwargs(update))
             return
         tool, path = args[0], " ".join(args[1:])
@@ -1012,12 +1046,13 @@ class BotHandlers:
         if route is None:
             return
         owner_chat_id = int(route.owner_chat_id)
+        self.bot_app._cancel_menu_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=owner_chat_id))
         text, keyboard = self.build_sessions_active_overview(
             owner_chat_id,
             session=route.session,
             session_uid=route.session_uid,
         )
-        await self.bot_app._send_message(context, text=text, reply_markup=keyboard, **route.reply_kwargs())
+        await self.bot_app._send_menu(context, text=text, reply_markup=keyboard, **route.reply_kwargs())
 
     async def cmd_close(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1031,6 +1066,9 @@ class BotHandlers:
         except Exception:
             lang = "ru"
         route = self.bot_app.resolve_telegram_inbound_route(update)
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id))
         ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
         if not context.args:
             items = list(self.bot_app.manager.sessions_for_chat(owner_chat_id).keys())
@@ -1044,7 +1082,7 @@ class BotHandlers:
             ]
             rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="agent_cancel")])
             keyboard = InlineKeyboardMarkup(rows)
-            await self.bot_app._send_message(
+            await self.bot_app._send_menu(
                 context,
                 text=t("msg.session.choose_close", lang),
                 reply_markup=keyboard,
@@ -1367,6 +1405,9 @@ class BotHandlers:
         plugin = svc.get(mode_id) if svc else None
         policy = getattr(self.bot_app, "access_policy_service", None)
         route = self.bot_app.resolve_telegram_inbound_route(update)
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id))
         policy_chat_id = int(route.owner_chat_id)
         is_mode_allowed = policy.is_mode_allowed_for_chat(policy_chat_id, mode_id) if policy else True
         if not is_mode_allowed:
@@ -1392,7 +1433,7 @@ class BotHandlers:
             back_text=back_text,
             menu_visibility=menu_visibility,
         )
-        await self.bot_app._send_message(context, text=text, reply_markup=keyboard, **reply_kwargs)
+        await self.bot_app._send_menu(context, text=text, reply_markup=keyboard, **reply_kwargs)
 
     async def cmd_interrupt(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1529,6 +1570,9 @@ class BotHandlers:
             await self.bot_app._send_message(context, text=t("msg.error.dir_not_found", lang), **self._reply_kwargs(update))
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id))
         await self.bot_app.dirs_service.start_flow(
             chat_id,
             context,
@@ -1594,6 +1638,9 @@ class BotHandlers:
         if not await self._require_admin(chat_id, context, scope="git", update=update):
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id))
         session = await self.bot_app.git.ensure_git_session(
             chat_id,
             context,
@@ -1613,10 +1660,10 @@ class BotHandlers:
         except Exception:
             lang = "ru"
         reply_kwargs = self._reply_kwargs(update)
-        await self.bot_app._send_message(
+        await self.bot_app._send_menu(
             context,
             text=t("msg.git.operations_menu", lang),
-            reply_markup=self.bot_app.git.build_git_keyboard(),
+            reply_markup=self.bot_app.git.build_git_keyboard(lang),
             **reply_kwargs,
         )
 
@@ -1899,6 +1946,9 @@ class BotHandlers:
         if not await self._ensure_allowed(chat_id, context, update=update):
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id))
         owner_chat_id = int(route.owner_chat_id)
         try:
             lang = resolve_user_lang(self.bot_app.config, chat_id=owner_chat_id)
@@ -1974,11 +2024,10 @@ class BotHandlers:
         self.bot_app.ui_state.state_menu[ui_key] = keys
         self.bot_app.ui_state.state_menu_page[ui_key] = 0
         keyboard = self.bot_app._build_state_keyboard(ui_key)
-        await self.bot_app._send_message(context,
-                                         text=t("msg.session.state_choose", lang),
-                                         reply_markup=keyboard,
-                                         **self._reply_kwargs(update, s),
-                                         )
+        await self.bot_app._send_menu(
+            context, text=t("msg.session.state_choose", lang),
+            reply_markup=keyboard, **self._reply_kwargs(update, s),
+        )
 
     async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -2088,6 +2137,9 @@ class BotHandlers:
             return
         route = self.bot_app.resolve_telegram_inbound_route(update)
         ui_key = self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=chat_id)
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(ui_key)
         self.bot_app.ui_state.files_dir[ui_key] = base
         self.bot_app.ui_state.files_page[ui_key] = 0
         await self.bot_app._send_files_menu(
@@ -2186,7 +2238,7 @@ class BotHandlers:
             entries.append(entry)
         self.bot_app.ui_state.files_entries[ui_key] = entries
         page = max(0, self.bot_app.ui_state.files_page.get(ui_key, 0))
-        page_size = 20
+        page_size = 6
         start = page * page_size
         end = start + page_size
         page_entries = entries[start:end]
@@ -2208,22 +2260,27 @@ class BotHandlers:
             rows.append(
                 [
                     InlineKeyboardButton(self.bot_app._short_label(label, 60), callback_data=open_cb),
-                    InlineKeyboardButton("✏️", callback_data=f"file_rename:{idx}"),
-                    InlineKeyboardButton("🗑", callback_data=f"file_del:{idx}"),
+                ]
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(t("btn.files.rename", lang), callback_data=f"file_rename:{idx}"),
+                    InlineKeyboardButton(t("btn.files.delete", lang), callback_data=f"file_del:{idx}"),
                 ]
             )
         nav_row = []
         nav_row.append(InlineKeyboardButton(t("btn.files.up", lang), callback_data="file_nav:up"))
         if page > 0:
-            nav_row.append(InlineKeyboardButton("◀️", callback_data="file_nav:prev"))
+            nav_row.append(InlineKeyboardButton(t("btn.files.prev", lang), callback_data="file_nav:prev"))
         if page < total_pages - 1:
-            nav_row.append(InlineKeyboardButton("▶️", callback_data="file_nav:next"))
+            nav_row.append(InlineKeyboardButton(t("btn.files.next", lang), callback_data="file_nav:next"))
         if nav_row:
             rows.append(nav_row)
         if current_rel_path not in ("", "."):
             rows.append([InlineKeyboardButton(t("btn.files.delete_dir", lang), callback_data="file_del_current")])
         rows.append([InlineKeyboardButton(t("btn.files.save_here", lang), callback_data="file_save_here")])
-        rows.append([InlineKeyboardButton(t("btn.session.cancel", lang), callback_data="file_nav:cancel")])
+        rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data="sess_active"),
+                     InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="file_nav:cancel")])
         text = t("msg.files.dir_page", lang, base=base, page=page + 1, total=total_pages)
         pending_upload = self.bot_app.ui_state.files_pending_upload.get(ui_key)
         if pending_upload:
@@ -2246,7 +2303,7 @@ class BotHandlers:
                     reply_markup=keyboard,
                 )
         else:
-            await self.bot_app._send_message(
+            await self.bot_app._send_menu(
                 context,
                 text=text,
                 reply_markup=keyboard,

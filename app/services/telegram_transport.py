@@ -9,12 +9,13 @@ from telegram import InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 
 from sessions.conversation_scope import ConversationScope
+from app.services.telegram_ui_scope import TelegramUiKey
 from tg.markdown import (
     escape_markdown_v2_all,
     split_telegram_entities,
     to_telegram_entities,
 )
-from tg.rich import build_input_rich_message, is_rich_markdown_eligible
+from tg.rich import build_input_rich_message, build_rich_message_payload, is_rich_markdown_eligible
 
 
 _RAW_API_UNAVAILABLE = object()
@@ -64,6 +65,7 @@ class TelegramTransportService:
 
     def __init__(self, bot_app):
         self.bot_app = bot_app
+        self._menu_locks = {}
 
     @staticmethod
     def _unwrap_context(context):
@@ -265,6 +267,7 @@ class TelegramTransportService:
         raw_text: str,
         md2: bool,
         prefer_rich: bool,
+        embed_buttons: bool,
         route_log: dict,
         reason: Exception,
     ) -> object | None:
@@ -308,6 +311,7 @@ class TelegramTransportService:
                     fallback_kwargs,
                     fallback_route_log,
                     prefer_rich=prefer_rich,
+                    embed_buttons=embed_buttons,
                 )
                 if message is None:
                     logging.getLogger(__name__).warning(
@@ -507,11 +511,16 @@ class TelegramTransportService:
             last_message = await send_func(**chunk_kwargs)
         return last_message
 
-    async def _send_raw_rich_chunks(self, context, raw: str, base_kwargs: dict, route_log: dict):
+    async def _send_raw_rich_chunks(self, context, raw: str, base_kwargs: dict, route_log: dict, *, embed_buttons=False):
         if not is_rich_markdown_eligible(str(raw or "")):
             return None, None, ""
         payload = self._filter_payload_kwargs(base_kwargs, self._RICH_SEND_KEYS)
-        payload["rich_message"] = build_input_rich_message(str(raw or ""))
+        if embed_buttons:
+            payload.update(build_rich_message_payload(str(raw or ""), payload.get("reply_markup")))
+        else:
+            payload["rich_message"] = build_input_rich_message(str(raw or ""))
+        if not is_rich_markdown_eligible(payload["rich_message"]["markdown"]):
+            return None, None, ""
         try:
             result = await self._call_raw_bot_api(
                 context,
@@ -551,6 +560,7 @@ class TelegramTransportService:
         route_log: dict,
         *,
         prefer_rich: bool = True,
+        embed_buttons: bool = False,
     ):
         rich_exc = None
         if prefer_rich:
@@ -559,6 +569,7 @@ class TelegramTransportService:
                 raw,
                 base_kwargs,
                 route_log,
+                embed_buttons=embed_buttons,
             )
             if message is not None:
                 return message, rich_exc, used_variant
@@ -638,6 +649,7 @@ class TelegramTransportService:
             current_kwargs = dict(kwargs or {})
             md2 = True
             prefer_rich = True
+            embed_buttons = False
             raw_text = None
             try:
                 # Never mutate caller kwargs across retries.
@@ -650,6 +662,7 @@ class TelegramTransportService:
                     return
                 md2 = bool(current_kwargs.pop("md2", True))
                 prefer_rich = bool(current_kwargs.pop("prefer_rich", True))
+                embed_buttons = bool(current_kwargs.pop("embed_buttons", False))
                 raw_text = current_kwargs.get("text")
 
                 if "text" in current_kwargs and (raw_text is None or str(raw_text).strip() == ""):
@@ -686,6 +699,7 @@ class TelegramTransportService:
                     base_kwargs,
                     route_log,
                     prefer_rich=prefer_rich,
+                    embed_buttons=embed_buttons,
                 )
 
                 if message is None:
@@ -701,6 +715,7 @@ class TelegramTransportService:
                                 raw_text=raw,
                                 md2=md2,
                                 prefer_rich=prefer_rich,
+                                embed_buttons=embed_buttons,
                                 route_log=route_log,
                                 reason=last_exc,
                             )
@@ -741,6 +756,7 @@ class TelegramTransportService:
                         raw_text=str(raw_text or ""),
                         md2=md2,
                         prefer_rich=prefer_rich,
+                        embed_buttons=embed_buttons,
                         route_log=route_log,
                         reason=exc,
                     )
@@ -777,6 +793,69 @@ class TelegramTransportService:
             operation="send_message",
             factory=lambda: self._send_message_now(context, **kwargs),
         )
+
+    def menu_panel(self, ui_key: TelegramUiKey) -> dict:
+        key = f"{ui_key.chat_id}:{ui_key.message_thread_id or 0}"
+        return self.bot_app.state_repository.read_namespace("telegram_menu_panels").get(key, {})
+
+    def _remember_menu(self, ui_key: TelegramUiKey, message_id: int, reply_markup) -> None:
+        callbacks = [
+            button.callback_data for row in getattr(reply_markup, "inline_keyboard", ())
+            for button in row if button.callback_data is not None
+        ]
+        key = f"{ui_key.chat_id}:{ui_key.message_thread_id or 0}"
+
+        def update(panels):
+            previous = panels.get(key, {})
+            retired = list(previous.get("retired_message_ids", ()))
+            previous_id = previous.get("message_id")
+            if previous_id is not None and previous_id != message_id:
+                retired.append(previous_id)
+            record = {"message_id": message_id, "callbacks": callbacks, "retired_message_ids": retired}
+            return {**panels, key: record}
+
+        self.bot_app.state_repository.update_namespace("telegram_menu_panels", update)
+
+    def menu_scope_for_message(self, chat_id: int, message_id: int) -> TelegramUiKey | None:
+        repository = getattr(self.bot_app, "state_repository", None)
+        if repository is None:
+            return None
+        panels = repository.read_namespace("telegram_menu_panels")
+        for key, record in panels.items():
+            chat, thread = key.split(":", 1)
+            if int(chat) == int(chat_id) and record.get("message_id") == message_id:
+                return TelegramUiKey.from_parts(chat, thread)
+        return None
+
+    def remember_menu_edit(self, chat_id: int, message_id: int, reply_markup) -> None:
+        ui_key = self.menu_scope_for_message(chat_id, message_id)
+        if ui_key is not None:
+            self._remember_menu(ui_key, message_id, reply_markup)
+
+    async def send_menu(self, context, **kwargs):
+        """Reuse the persisted menu message in this chat/topic."""
+        _raw_context, resolved = self._prepare_send_kwargs(context, kwargs, operation="send_menu")
+        if resolved is None:
+            return None
+        ui_key = TelegramUiKey.from_parts(resolved["chat_id"], resolved.get("message_thread_id"))
+        async with self._menu_locks.setdefault(ui_key, asyncio.Lock()):
+            panel = self.menu_panel(ui_key)
+            message_id = panel.get("message_id")
+            if message_id is not None and panel.get("callbacks"):
+                outcome = await self.edit_message_outcome(
+                    context, ui_key.chat_id, message_id, resolved["text"],
+                    reply_markup=resolved.get("reply_markup"),
+                )
+                if outcome == TelegramEditOutcome.UPDATED:
+                    self._remember_menu(ui_key, message_id, resolved.get("reply_markup"))
+                    return SimpleNamespace(message_id=message_id)
+                if outcome != TelegramEditOutcome.REPLACE:
+                    return None
+                logging.getLogger(__name__).info("menu message unavailable; replacing chat_id=%s", ui_key.chat_id)
+            message = await self.bot_app._send_message(context, embed_buttons=True, **resolved)
+            if message is not None:
+                self._remember_menu(ui_key, message.message_id, resolved.get("reply_markup"))
+            return message
 
     async def send_rich_message_draft(self, context, *, draft_id: int, rich_message: dict, **kwargs) -> bool:
         current_kwargs = dict(kwargs or {})
@@ -949,7 +1028,10 @@ class TelegramTransportService:
                     },
                     self._RICH_EDIT_KEYS,
                 )
-                payload["rich_message"] = build_input_rich_message(raw)
+                if self.menu_scope_for_message(chat_id, message_id) is not None:
+                    payload.update(build_rich_message_payload(raw, reply_markup))
+                else:
+                    payload["rich_message"] = build_input_rich_message(raw)
                 try:
                     result = await self._call_raw_bot_api(
                         context,

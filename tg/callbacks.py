@@ -5,7 +5,7 @@ Module containing callback handling functionality for the Telegram bot.
 import asyncio
 import logging
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import NetworkError, TimedOut
 from telegram.ext import ContextTypes
 
@@ -40,6 +40,8 @@ class CallbackHandler(CallbackActionsMixin):
         ]
         self._session_ui_handlers = [
             (("eq", "sess_active"), self._cb_sess_active),
+            (("prefix", "sess_manage:"), self._cb_sess_manage),
+            (("prefix", "sess_modes:"), self._cb_sess_modes),
             (("prefix", "sess_active_pick:"), self._cb_sess_active_pick),
             (("eq", "user_project_menu"), self._cb_user_project_menu),
             (("prefix", "user_project_menu:"), self._cb_user_project_menu),
@@ -317,6 +319,15 @@ class CallbackHandler(CallbackActionsMixin):
     async def _edit_msg(self, context, query, text, *, reply_markup=None, md2: bool = True) -> bool:
         """Shortcut: edit the callback query message with given text."""
         if query.message:
+            data = str(getattr(query, "data", "") or "")
+            if reply_markup is None and data.startswith((
+                "sess_", "state_", "file_", "dir_", "user_project_", "new_tool:",
+            )) and data not in (
+                "sess_close_menu", "file_nav:cancel", "sess_tmux_reread",
+            ) and not data.startswith("sess_tmux_reread:"):
+                lang = lang_from_query(query, self.bot_app.config)
+                back = "file_nav:refresh" if data.startswith("file_") else "sess_active"
+                reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.back", lang), callback_data=back)]])
             return await self.bot_app._edit_message(
                 context,
                 chat_id=query.message.chat_id,
@@ -600,6 +611,26 @@ class CallbackHandler(CallbackActionsMixin):
         try:
             if not await self.bot_app.access_policy_service.ensure_allowed(policy_chat_id, context):
                 return
+            data = str(query.data or "")
+            transport = getattr(self.bot_app, "transport_service", None)
+            panel = transport.menu_panel(ui_key) if transport is not None else {}
+            is_mode_panel = data.startswith(("ma:", "mode_action:")) and query.message.message_id in (
+                panel.get("message_id"), *panel.get("retired_message_ids", ()),
+            )
+            if transport is not None and (is_mode_panel or data.startswith((
+                "sess_", "lang_", "user_project_", "new_tool:", "dir_", "file_", "state_", "git_", "close_pick:",
+            ))):
+                if panel and (panel.get("message_id") != query.message.message_id or data not in panel.get("callbacks", ())):
+                    await query.answer(t("msg.session.menu_stale", lang), show_alert=True)
+                    return
+            if data in (
+                "sess_active", "sess_list", "sess_new", "sess_close_menu", "file_nav:cancel", "git_cancel", "git_home",
+            ) or data.startswith((
+                "sess_manage:", "sess_modes:", "sess_active_pick:",
+            )):
+                cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+                if callable(cancel_input):
+                    cancel_input(ui_key)
             ui_state = getattr(self.bot_app, "ui_state", None)
             context_by_chat = getattr(ui_state, "context_by_chat", None) if ui_state is not None else None
             if not isinstance(context_by_chat, dict):

@@ -375,3 +375,59 @@ async def test_denies_when_visibility_check_raises(env):
     assert res is True
     assert env.edits[-1] == DENIED_TEXT
     builder.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data", ["sess_reset:s1:confirm", "ma:agent:clean_all", "mode_action:agent:clean_all"])
+async def test_menu_rejects_buttons_from_previous_screen(env, data):
+    ui_key = env.app.telegram_ui_key(OWNER_CHAT)
+    env.app.transport_service._remember_menu(ui_key, 10, None)
+    query = _query(chat_id=OWNER_CHAT, message_id=10)
+    query.data = data
+    update = types.SimpleNamespace(callback_query=query)
+    dispatch = AsyncMock()
+    env.handler._dispatch_callback_protocol = dispatch
+    await env.handler.handle_callback(update, types.SimpleNamespace())
+    query.answer.assert_awaited_with("Это меню устарело. Откройте актуальное через /sessions.", show_alert=True)
+    dispatch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message_id, blocked", [(10, True), (30, False)])
+async def test_replaced_menu_rejects_old_mode_button_but_keeps_separate_dialog(env, message_id, blocked):
+    ui_key = env.app.telegram_ui_key(OWNER_CHAT)
+    env.app.transport_service._remember_menu(ui_key, 10, None)
+    env.app.transport_service._remember_menu(ui_key, 20, None)
+    query = _query(chat_id=OWNER_CHAT, message_id=message_id)
+    query.data = "ma:agent:clean_all"
+    dispatch = AsyncMock(return_value=True)
+    env.handler._dispatch_callback_protocol = dispatch
+    await env.handler.handle_callback(types.SimpleNamespace(callback_query=query), types.SimpleNamespace())
+    if blocked:
+        dispatch.assert_not_awaited()
+        assert query.answer.await_args.kwargs["show_alert"] is True
+    else:
+        dispatch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", ["new", "close", "dirs", "state", "files"])
+async def test_menu_command_leaving_rename_cancels_pending_text(env, command):
+    from datetime import datetime, timezone
+    from telegram import Chat, Message, Update, User
+
+    ui_key = env.app.telegram_ui_key(OWNER_CHAT)
+    env.app.session_ui.pending_session_rename[ui_key] = {
+        "owner_chat_id": OWNER_CHAT, "session_id": env.session.id,
+    }
+    env.app.handlers._ensure_allowed = AsyncMock(return_value=True)
+    env.app.handlers._require_admin = AsyncMock(return_value=True)
+    env.app._send_menu = AsyncMock()
+    update = Update(1, message=Message(
+        1, datetime.now(timezone.utc), Chat(OWNER_CHAT, "private"),
+        from_user=User(1, "User", False), text=f"/{command}",
+    ))
+    context = types.SimpleNamespace(args=[], bot=None)
+    await getattr(env.app.handlers, f"cmd_{command}")(update, context)
+    assert ui_key not in env.app.session_ui.pending_session_rename
+    assert await env.app.session_ui.handle_pending_message(OWNER_CHAT, "Случайный текст", context) is False

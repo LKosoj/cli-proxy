@@ -569,7 +569,7 @@ async def test_tmux_reread_callback_falls_back_to_text_when_delete_fails() -> No
     )
 
     assert ok is True
-    assert edits == ["Меню закрыто."]
+    assert edits == ["Меню закрыто. Открыть снова: /sessions"]
     assert answers == [("", False)]
 
 
@@ -1089,6 +1089,7 @@ def test_show_mode_menu_applies_simple_user_visibility_policy() -> None:
             build_telegram_transport_context=lambda _context, **kwargs: {"dest": kwargs.get("dest")},
             build_telegram_reply_dest=lambda *_args, **_kwargs: {"kind": "telegram"},
             _send_message=AsyncMock(),
+            _send_menu=AsyncMock(),
         )
         handlers = BotHandlers(bot_app)
         handlers._ensure_allowed = AsyncMock(return_value=True)  # type: ignore[method-assign]

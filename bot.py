@@ -268,7 +268,7 @@ class BotApp:
         self.session_ui = SessionUI(
             self.config,
             self.manager,
-            self._send_message,
+            self._send_menu,
             self._edit_message,
             self._format_ts,
             self._short_label,
@@ -289,6 +289,7 @@ class BotApp:
             self._send_document,
             self._short_label,
             self._handle_cli_input,
+            send_menu=self._send_menu,
         )
         _remote_shell = RemoteShellService(self.ssh_service)
         self.remote_git = RemoteGitService(_remote_shell)
@@ -1267,6 +1268,19 @@ class BotApp:
     async def _send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
         return await self.transport_service.send_message(context, **kwargs)
 
+    def _cancel_menu_input(self, ui_key: TelegramUiKey) -> None:
+        self.session_ui.pending_session_rename.pop(ui_key, None)
+        self.session_ui.pending_session_resume.pop(ui_key, None)
+        self.ui_state.pending_dir_input.pop(ui_key, None)
+        self.ui_state.pending_dir_create.pop(ui_key, None)
+        self.ui_state.pending_git_clone.pop(ui_key, None)
+        self._stop_files_rename_wait(ui_key.chat_id, message_thread_id=ui_key.message_thread_id)
+        self._stop_files_upload_wait(ui_key.chat_id, message_thread_id=ui_key.message_thread_id)
+        self.git.pending_git_commit.pop((ui_key.chat_id, ui_key.message_thread_id), None)
+
+    async def _send_menu(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
+        return await self.transport_service.send_menu(context, **kwargs)
+
     async def send_message(self, context: ContextTypes.DEFAULT_TYPE, **kwargs):
         """Public wrapper over the internal Telegram send so callers outside BotApp
         do not depend on the private `_send_message`."""
@@ -1551,14 +1565,17 @@ class BotApp:
         return str(self._pending_custom_input_status_by_chat.pop(ui_key, "") or "")
 
     async def _delete_message(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int) -> bool:
-        return await self.transport_service.delete_message(context, chat_id, message_id)
+        deleted = await self.transport_service.delete_message(context, chat_id, message_id)
+        if deleted:
+            self.transport_service.remember_menu_edit(chat_id, message_id, None)
+        return deleted
 
     async def _edit_message(
         self, context: ContextTypes.DEFAULT_TYPE, chat_id: int,
         message_id: int, text: str, *, md2: bool = True, reply_markup: Optional[InlineKeyboardMarkup] = None,
         prefer_rich: bool = True,
     ) -> bool:
-        return await self.transport_service.edit_message(
+        updated = await self.transport_service.edit_message(
             context,
             chat_id=chat_id,
             message_id=message_id,
@@ -1567,6 +1584,9 @@ class BotApp:
             prefer_rich=prefer_rich,
             reply_markup=reply_markup,
         )
+        if updated:
+            self.transport_service.remember_menu_edit(chat_id, message_id, reply_markup)
+        return updated
 
     async def _edit_message_outcome(
         self, context: ContextTypes.DEFAULT_TYPE, chat_id: int,
@@ -1676,7 +1696,7 @@ class BotApp:
             nav.append(InlineKeyboardButton(t("msg.dirs.btn_next", _sk_lang), callback_data=f"state_page:{page+1}"))
         if nav:
             rows.append(nav)
-        rows.append([InlineKeyboardButton(t("btn.session.cancel", _sk_lang), callback_data="agent_cancel")])
+        rows.append([InlineKeyboardButton(t("btn.session.close_menu", _sk_lang), callback_data="sess_close_menu")])
         return InlineKeyboardMarkup(rows)
 
     async def send_output(

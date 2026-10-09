@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from types import SimpleNamespace
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -79,7 +80,7 @@ class SessionActionsMixin:
         if self._same_reply_scope(current_kwargs, target_kwargs):
             await self._edit_msg(context, query, text=text, reply_markup=keyboard)
             return
-        await self.bot_app._send_message(
+        await self.bot_app._send_menu(
             context,
             text=text,
             md2=True,
@@ -148,6 +149,37 @@ class SessionActionsMixin:
         _reply_chat_id, owner_chat_id, session = self._callback_scope(chat_id, query)
         text, keyboard = self.bot_app.handlers.build_sessions_active_overview(owner_chat_id, session=session)
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
+        return True
+
+    async def _cb_sess_manage(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
+        _reply_chat_id, owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+        token = data.split(":", 1)[1]
+        session = self.bot_app.manager.get_by_uid(token) or self.bot_app.manager.get(owner_chat_id, token)
+        if session is None:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_manage"):
+            return True
+        text, keyboard = self.bot_app.handlers.build_sessions_management(owner_chat_id, session=session, lang=lang)
+        await self._edit_msg(context, query, text, reply_markup=keyboard)
+        return True
+
+    async def _cb_sess_modes(self, *, data: str, chat_id: int, query, context) -> bool:
+        lang = lang_from_query(query, self.bot_app.config)
+        _reply_chat_id, owner_chat_id, _scope_session = self._callback_scope(chat_id, query)
+        token = data.split(":", 1)[1]
+        session = self.bot_app.manager.get_by_uid(token) or self.bot_app.manager.get(owner_chat_id, token)
+        if session is None:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_modes"):
+            return True
+        rows = self.bot_app.handlers._build_mode_buttons_rows(
+            chat_id=owner_chat_id, session=session, active_mode=str(get_active_mode(session, "") or ""),
+        )
+        rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data=build_session_overview_callback_data(session))])
+        await self._edit_msg(context, query, t("btn.session.mode", lang), reply_markup=InlineKeyboardMarkup(rows))
         return True
 
     async def _cb_sess_active_pick(self, *, data: str, chat_id: int, query, context) -> bool:
@@ -705,7 +737,11 @@ class SessionActionsMixin:
             await self._edit_msg(context, query, t("msg.session.state_not_found", lang))
             return True
         text = format_session_state(st, self.bot_app._format_ts(st.updated_at), lang)
-        await self._edit_msg(context, query, text)
+        page = self.bot_app.ui_state.state_menu_page.get(ui_key, 0)
+        await self._edit_msg(context, query, text, reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(t("btn.session.back", lang), callback_data=f"state_page:{page}")],
+            [InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")],
+        ]))
         return True
 
     async def _cb_state_page(self, *, data: str, chat_id: int, query, context) -> bool:
@@ -734,13 +770,8 @@ class SessionActionsMixin:
         if idx < 0 or idx >= len(items):
             await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
-        sid = items[idx]
-        ok = await self.bot_app.close_session_with_cleanup(sid, owner_chat_id, context)
-        if ok:
-            await self._edit_msg(context, query, t("msg.session.closed", lang))
-        else:
-            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
-        return True
+        close_query = SimpleNamespace(data=f"sess_close:{items[idx]}", message=query.message, from_user=query.from_user)
+        return await self.bot_app.session_ui.handle_callback(close_query, chat_id, context)
 
     async def _cb_sess_ssh_toggle(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)

@@ -383,7 +383,7 @@ def test_build_sessions_overview_en_buttons() -> None:
     # Should have English lang button
     assert any("Language" in b for b in btns)
     # Should have English cancel
-    assert any("Cancel" in b for b in btns)
+    assert any("Close menu" in b for b in btns)
 
 
 def test_build_sessions_overview_resolves_lang_from_chat_when_not_passed() -> None:
@@ -416,7 +416,7 @@ def test_build_sessions_overview_resolves_lang_from_chat_when_not_passed() -> No
 
     btns = _extract_all_button_texts(keyboard)
     assert any("Language" in b for b in btns)
-    assert any("Cancel" in b for b in btns)
+    assert any("Close menu" in b for b in btns)
 
 
 def test_build_sessions_overview_lang_button_present() -> None:

@@ -352,14 +352,14 @@ def test_sessions_active_overview_shows_unread_toggle(tmp_path):
         session = app.manager.create(1, "dummy", workdir)
         expected_data = f"sess_unread_toggle:{session_runtime_uid(session) or session.id}"
 
-        _, keyboard = app.handlers.build_sessions_active_overview(1, session=session, lang="ru")
+        _, keyboard = app.handlers.build_sessions_management(1, session=session, lang="ru")
         btn = _find_unread_button(keyboard)
         assert btn is not None
         assert btn.callback_data == expected_data
         assert btn.text == "🔵 Отметить непрочитанным"
 
         session.unread = True
-        _, keyboard_unread = app.handlers.build_sessions_active_overview(1, session=session, lang="ru")
+        _, keyboard_unread = app.handlers.build_sessions_management(1, session=session, lang="ru")
         btn_unread = _find_unread_button(keyboard_unread)
         assert btn_unread is not None
         assert btn_unread.callback_data == expected_data
@@ -378,7 +378,7 @@ def test_sessions_active_overview_shows_unread_toggle_for_non_admin(tmp_path):
         assert app.is_admin(2) is False
         session = app.manager.create(2, "dummy", workdir)
 
-        _, keyboard = app.handlers.build_sessions_active_overview(2, session=session, lang="ru")
+        _, keyboard = app.handlers.build_sessions_management(2, session=session, lang="ru")
         btn = _find_unread_button(keyboard)
         assert btn is not None
         assert btn.text == "🔵 Отметить непрочитанным"

@@ -117,7 +117,7 @@ class DirsService:
             0,
             lang=lang,
         )
-        await self.bot_app._send_message(
+        await self.bot_app._send_menu(
             context,
             text=t("msg.dirs.choose_file_or_dir", lang) if include_files else t("msg.dirs.choose_dir", lang),
             reply_markup=keyboard,

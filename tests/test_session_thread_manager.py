@@ -395,6 +395,12 @@ def test_private_mode_non_admin_handle_callback_close_deletes_user_topic(tmp_pat
             )
 
             assert query.answered is True
+            assert app.manager.get(1, session.id) is session
+            assert "Закрыть сессию" in edited[-1]["text"]
+            confirmed = _FakeCallbackQuery(
+                f"sess_close:{session.id}:confirm", chat_id=1, message_thread_id=929,
+            )
+            await handler.handle_callback(SimpleNamespace(callback_query=confirmed), SimpleNamespace(bot=fake_bot))
             assert edited[-1]["text"] == "Сессия закрыта и удалена из состояния."
             assert app.manager.get(1, session.id) is None
             assert fake_bot.deleted_topics == [
@@ -1039,7 +1045,7 @@ def test_group_mode_outside_topic_callback_flow_can_create_first_session(
             assert edited[-1]["text"] == "Сессия s1 создана и привязана к новому topic. Продолжайте там."
             assert fake_bot.sent_messages[-1]["chat_id"] == -100777000111
             assert fake_bot.sent_messages[-1]["message_thread_id"] == 444
-            assert "Активная сессия:" in str(fake_bot.sent_messages[-1]["text"])
+            assert "Текущая сессия ·" in str(fake_bot.sent_messages[-1]["text"])
         finally:
             app.shutdown_html_process_pool()
 
@@ -1120,7 +1126,7 @@ def test_group_mode_new_session_from_existing_topic_redirects_to_new_topic(tmp_p
             assert edited[-1]["text"] == f"Сессия {new_session.id} создана и привязана к новому topic. Продолжайте там."
             assert fake_bot.sent_messages[-1]["chat_id"] == -100777000111
             assert fake_bot.sent_messages[-1]["message_thread_id"] == 444
-            assert "Активная сессия:" in str(fake_bot.sent_messages[-1]["text"])
+            assert "Текущая сессия ·" in str(fake_bot.sent_messages[-1]["text"])
         finally:
             app.shutdown_html_process_pool()
 
@@ -1407,7 +1413,7 @@ def test_group_mode_user_project_pick_from_existing_topic_redirects_to_new_topic
             assert edited[-1]["text"] == f"Сессия {new_session.id} создана и привязана к новому topic. Продолжайте там."
             assert fake_bot.sent_messages[-1]["chat_id"] == -100777000111
             assert fake_bot.sent_messages[-1]["message_thread_id"] == 444
-            assert "Активная сессия:" in str(fake_bot.sent_messages[-1]["text"])
+            assert "Текущая сессия ·" in str(fake_bot.sent_messages[-1]["text"])
         finally:
             app.shutdown_html_process_pool()
 
@@ -1478,7 +1484,7 @@ def test_group_mode_user_project_pick_new_creates_fresh_session_for_same_project
             assert edited[-1]["text"] == f"Сессия {new_session.id} создана и привязана к новому topic. Продолжайте там."
             assert fake_bot.sent_messages[-1]["chat_id"] == -100777000111
             assert fake_bot.sent_messages[-1]["message_thread_id"] == 444
-            assert "Активная сессия:" in str(fake_bot.sent_messages[-1]["text"])
+            assert "Текущая сессия ·" in str(fake_bot.sent_messages[-1]["text"])
         finally:
             app.shutdown_html_process_pool()
 
@@ -1538,7 +1544,7 @@ def test_group_mode_user_project_pick_new_with_tool_token_creates_session(tmp_pa
             assert edited[-1]["text"] == "Сессия s1 создана и привязана к новому topic. Продолжайте там."
             assert fake_bot.sent_messages[-1]["chat_id"] == -100777000111
             assert fake_bot.sent_messages[-1]["message_thread_id"] == 444
-            assert "Активная сессия:" in str(fake_bot.sent_messages[-1]["text"])
+            assert "Текущая сессия ·" in str(fake_bot.sent_messages[-1]["text"])
         finally:
             app.shutdown_html_process_pool()
 

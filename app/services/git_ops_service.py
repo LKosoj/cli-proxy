@@ -24,10 +24,12 @@ class GitOps:
         send_document,
         short_label,
         handle_cli_input,
+        send_menu=None,
     ) -> None:
         self.config = config
         self.manager = manager
         self._send_message = send_message
+        self._send_menu = send_menu or send_message
         self._edit_message = edit_message
         self._send_document = send_document
         self._short_label = short_label
@@ -67,6 +69,9 @@ class GitOps:
     async def _edit_msg(self, context: ContextTypes.DEFAULT_TYPE, query, text: str, *, reply_markup=None) -> bool:
         if not query.message:
             return False
+        if reply_markup is None and str(query.data or "") != "git_cancel":
+            lang = resolve_user_lang(self.config, chat_id=query.message.chat_id)
+            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(t("btn.session.back", lang), callback_data="git_home")]])
         return await self._edit_message(
             context,
             chat_id=query.message.chat_id,
@@ -112,36 +117,16 @@ class GitOps:
 
     def build_git_keyboard(self, lang: str = "ru") -> InlineKeyboardMarkup:
         rows = [
-            [
-                InlineKeyboardButton("📋 Status", callback_data="git_status"),
-                InlineKeyboardButton("📡 Fetch", callback_data="git_fetch"),
-            ],
-            [
-                InlineKeyboardButton("⬇️ Pull", callback_data="git_pull"),
-                InlineKeyboardButton("🔀 Merge", callback_data="git_merge_menu"),
-            ],
-            [
-                InlineKeyboardButton("🔀 Rebase", callback_data="git_rebase_menu"),
-                InlineKeyboardButton("📝 Diff", callback_data="git_diff"),
-            ],
-            [
-                InlineKeyboardButton("📜 Log", callback_data="git_log"),
-                InlineKeyboardButton("📦 Stash", callback_data="git_stash"),
-            ],
-            [
-                InlineKeyboardButton("💾 Commit", callback_data="git_commit"),
-                InlineKeyboardButton("⬆️ Push", callback_data="git_push"),
-            ],
-            [
-                InlineKeyboardButton("📊 Summary", callback_data="git_summary"),
-            ],
-            [
-                InlineKeyboardButton("❓ Help", callback_data="git_help"),
-            ],
-            [
-                InlineKeyboardButton(t("msg.git.btn_close", lang), callback_data="git_cancel"),
-            ],
+            [InlineKeyboardButton(t(f"msg.git.btn_{action}", lang), callback_data=f"git_{action}") for action in group]
+            for group in (("status", "diff"), ("log", "summary"), ("fetch", "pull"))
         ]
+        rows.append([InlineKeyboardButton(t("msg.git.btn_merge", lang), callback_data="git_merge_menu"),
+                     InlineKeyboardButton(t("msg.git.btn_rebase", lang), callback_data="git_rebase_menu")])
+        for action in ("stash", "commit", "push"):
+            rows.append([InlineKeyboardButton(t(f"msg.git.btn_{action}", lang), callback_data=f"git_{action}")])
+        rows.append([InlineKeyboardButton(t("msg.git.btn_help", lang), callback_data="git_help")])
+        rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data="sess_active"),
+                     InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="git_cancel")])
         return InlineKeyboardMarkup(rows)
 
     def _build_git_branches_keyboard(
@@ -158,7 +143,7 @@ class GitOps:
             rows.append(
                 [InlineKeyboardButton(self._short_label(ref), callback_data=f"git_{action}_pick:{i}")]
             )
-        rows.append([InlineKeyboardButton(t("msg.git.btn_cancel", lang), callback_data="git_cancel")])
+        rows.append([InlineKeyboardButton(t("btn.session.back", lang), callback_data="git_home")])
         return InlineKeyboardMarkup(rows)
 
     def _build_git_pull_keyboard(self, ref: str, lang: str = "ru") -> InlineKeyboardMarkup:
@@ -185,7 +170,7 @@ class GitOps:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("📝 Diff", callback_data="git_conflict_diff"),
+                    InlineKeyboardButton(t("msg.git.btn_diff", lang), callback_data="git_conflict_diff"),
                     InlineKeyboardButton(t("msg.git.btn_abort", lang), callback_data="git_conflict_abort"),
                 ],
                 [
@@ -729,7 +714,7 @@ class GitOps:
         files_text = ", ".join(files[:10]) if files else t("msg.git.no_files_label", lang)
         text = t("msg.git.conflict_detected", lang, files=files_text)
         prefix = self._session_label(session, lang)
-        await self._send_message(
+        await self._send_menu(
             context,
             text=f"{prefix}\n{text}",
             reply_markup=self._build_git_conflict_keyboard(lang),
@@ -867,6 +852,10 @@ class GitOps:
         state_key = self._state_key(chat_id, message_thread_id)
         lang = resolve_user_lang(self.config, chat_id=chat_id)
         try:
+            if data == "git_home":
+                self.pending_git_commit.pop(state_key, None)
+                await self._edit_msg(context, query, t("msg.git.operations_menu", lang), reply_markup=self.build_git_keyboard(lang))
+                return True
             if data == "git_cancel":
                 await self._edit_msg(context, query, t("msg.git.op_cancelled", lang))
                 self.git_pending_ref.pop(state_key, None)
@@ -1027,7 +1016,7 @@ class GitOps:
                         return True
                     self.git_pull_target[state_key] = upstream
                     prefix = self._session_label(session, lang)
-                    await self._send_message(
+                    await self._send_menu(
                         context,
                         text=f"{prefix}\n{t('msg.git.ff_impossible', lang, ahead=ahead, behind=behind, upstream=upstream)}",
                         reply_markup=self._build_git_pull_keyboard(upstream, lang),
