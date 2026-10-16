@@ -1151,11 +1151,15 @@ class CliLimitsService:
         last_payload: Optional[dict[str, Any]] = None
         try:
             with open(jsonl_path, "r", encoding="utf-8") as handle:
-                for raw_line in handle:
+                for line_number, raw_line in enumerate(handle, 1):
                     line = raw_line.strip()
                     if not line:
                         continue
-                    record = loads_safe(line)
+                    try:
+                        record = loads_safe(line)
+                    except json.JSONDecodeError:
+                        logger.exception("invalid codex session record path=%s line=%s", jsonl_path, line_number)
+                        continue
                     if str(record.get("type") or "") != "event_msg":
                         continue
                     payload = record.get("payload")

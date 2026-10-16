@@ -92,4 +92,4 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-10 — restored pre-redesign menu completion behavior.
+- 2026-10-16 — Codex limits regression covers malformed records before and after token counts.

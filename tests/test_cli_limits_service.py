@@ -28,9 +28,11 @@ def _session(cli_name: str, workdir: Path) -> SimpleNamespace:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("corrupt_at", [None, 1, 2])
 async def test_describe_for_sessions_reads_codex_limits_from_matching_project(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    corrupt_at: int | None,
 ) -> None:
     project_dir = tmp_path / "repo-codex"
     project_dir.mkdir()
@@ -64,7 +66,10 @@ async def test_describe_for_sessions_reads_codex_limits_from_matching_project(
             },
         },
     ]
-    transcript.write_text("\n".join(json.dumps(item) for item in records) + "\n", encoding="utf-8")
+    lines = [json.dumps(item) for item in records]
+    if corrupt_at is not None:
+        lines.insert(corrupt_at, '{"type":"response_item","payload":{"text":"broken')
+    transcript.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     service = CliLimitsService(
         codex_sessions_roots=[tmp_path / "codex" / "sessions"],
