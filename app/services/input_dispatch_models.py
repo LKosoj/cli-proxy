@@ -11,6 +11,9 @@ PENDING_ACTION_TMUX_QUEUE_CONFIRM = "tmux_queue_confirm"
 PENDING_ACTION_TMUX_QUEUE_CHOICE = "tmux_queue_choice"
 PENDING_ACTION_ORCHESTRATOR_TRANSITION = "orchestrator_transition"
 
+# Флаг в dest: ввод отправлен напрямую в живой tmux, подбор скиллов не нужен.
+DIRECT_TMUX_DEST_KEY = "direct_tmux"
+
 
 @dataclass
 class PendingInput:

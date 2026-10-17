@@ -4,6 +4,10 @@ When a user explicitly asks to receive a project file via Telegram
 (e.g. "пришли мне config.yaml", "скинь package.json"), this service
 detects the intent and resolves the file path — so the bot can send
 the document directly without launching a full CLI agent session.
+
+If ``defaults.openai_decision_model`` is configured, a cheap Decisions API
+call answers "is this a file request?" first; the chat LLM is called only
+to extract the file path for positive answers.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from modes.sdk.runtime.json_normalizer import loads_safe
+from modes.sdk.runtime.openai_client import decision_noul, decisions, get_decision_model
 
 _LOG = logging.getLogger(__name__)
 
@@ -22,9 +27,21 @@ _GLOB_MATCHES_LIMIT = 5_000
 
 _MIN_CONFIDENCE = 0.7
 
+# Порог вероятности «да» от decision-модели, ниже которого chat LLM не вызывается.
+_DECISION_GATE_THRESHOLD = 0.5
+
+_DECISION_QUESTION = {
+    "type": "noul",
+    "instructions": (
+        "Does the user explicitly ask to send/forward/give them a specific file (project or /tmp) "
+        "(e.g. 'пришли', 'скинь', 'отправь файл', 'скачать')? "
+        "Requests to view, open, read, show contents or edit a file are NOT file requests."
+    ),
+}
+
 _SYSTEM_PROMPT = (
     "Ты классификатор намерений пользователя. "
-    "Определи, просит ли пользователь ЯВНО отправить/прислать/скинуть ему конкретный файл из проекта. "
+    "Определи, просит ли пользователь ЯВНО отправить/прислать/скинуть ему конкретный файл из проекта или из /tmp. "
     "Верни JSON: {\"is_artifact_request\": bool, \"file_pattern\": string, \"confidence\": number 0..1}.\n\n"
     "Правила:\n"
     "- is_artifact_request=true ТОЛЬКО если пользователь явно просит ПРИСЛАТЬ/ОТПРАВИТЬ/СКИНУТЬ файл.\n"
@@ -50,6 +67,9 @@ _BLOCKED_PATTERNS = {
 }
 
 TELEGRAM_FILE_SIZE_LIMIT = 50 * 1024 * 1024  # 50 MB
+
+# Кроме project_root файлы разрешено отправлять из этого каталога (временные артефакты CLI).
+_EXTRA_ALLOWED_ROOT = Path("/tmp")
 
 
 @dataclass(frozen=True)
@@ -77,6 +97,9 @@ class ArtifactIntentService:
     ) -> Optional[ArtifactIntent]:
         """Return ArtifactIntent if user explicitly asks to receive a file, else None."""
         if not text or not text.strip():
+            return None
+
+        if not await self._decision_allows(text, app_config=app_config):
             return None
 
         try:
@@ -112,6 +135,28 @@ class ArtifactIntentService:
 
         return ArtifactIntent(file_pattern=file_pattern, confidence=confidence)
 
+    @staticmethod
+    async def _decision_allows(text: str, *, app_config: Any) -> bool:
+        """False only when the decision model is configured and answers «no»."""
+        model = get_decision_model(app_config)
+        if model is None:
+            return True
+        try:
+            answers = await decisions(
+                app_config,
+                model=model,
+                state=text,
+                questions={"file_request": _DECISION_QUESTION},
+            )
+        except Exception:
+            _LOG.exception("artifact intent decision call failed; falling back to chat classifier")
+            return True
+        probability = decision_noul(answers, "file_request")
+        if probability is None:
+            _LOG.warning("artifact intent decision answer is malformed; falling back to chat classifier")
+            return True
+        return probability >= _DECISION_GATE_THRESHOLD
+
     def resolve(
         self,
         intent: ArtifactIntent,
@@ -121,16 +166,15 @@ class ArtifactIntentService:
         if not project_root:
             return ArtifactResult(resolved_path="", error="Не задан project_root сессии.")
 
-        root = Path(project_root).resolve()
-        if not root.is_dir():
-            return ArtifactResult(resolved_path="", error=f"Директория проекта не найдена: {root}")
+        project = Path(project_root).resolve()
+        if not project.is_dir():
+            return ArtifactResult(resolved_path="", error=f"Директория проекта не найдена: {project}")
 
-        candidate = (root / intent.file_pattern).resolve()
+        candidate = (project / intent.file_pattern).resolve()
 
-        # Safety: must be inside project_root.
-        try:
-            candidate.relative_to(root)
-        except ValueError:
+        # Safety: must be inside project_root or the extra allowed root (/tmp).
+        root = _allowed_root(candidate, project)
+        if root is None:
             return ArtifactResult(
                 resolved_path="",
                 error="Запрошенный путь выходит за пределы проекта.",
@@ -180,11 +224,9 @@ class ArtifactIntentService:
                     resolved_path="",
                     error=f"Найдено несколько файлов:\n{listing}{suffix}\nУточните, какой именно.",
                 )
-            candidate = matches[0]
-            # Re-check safety for glob result.
-            try:
-                candidate.relative_to(root)
-            except ValueError:
+            # Glob не раскрывает симлинки: проверяем настоящий путь файла.
+            candidate = matches[0].resolve()
+            if _allowed_root(candidate, project) is None:
                 return ArtifactResult(
                     resolved_path="",
                     error="Результат поиска выходит за пределы проекта.",
@@ -211,3 +253,11 @@ class ArtifactIntentService:
             )
 
         return ArtifactResult(resolved_path=str(candidate))
+
+
+def _allowed_root(path: Path, project: Path) -> Optional[Path]:
+    """Return the allowed root (project or /tmp) containing a resolved path, else None."""
+    for root in (project, _EXTRA_ALLOWED_ROOT.resolve()):
+        if path.is_relative_to(root):
+            return root
+    return None

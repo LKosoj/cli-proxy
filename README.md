@@ -319,7 +319,7 @@ presets: []
 ### Env overrides для typed config
 - Порядок наложения: `config.yaml` -> legacy env aliases из `.env`/process env -> `CLI_PROXY__*` overrides. Внутри env-слоя process env побеждает `.env` для одной и той же переменной.
 - Общий префикс override: `CLI_PROXY__`. Путь собирается через `__`, регистр не важен, значения парсятся через YAML (`true`, `30`, `[]`, `{}` и т.д.).
-- Для `defaults.*` также поддерживаются legacy env-имена: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BIG_MODEL`, `OPENAI_BASE_URL`, `ZAI_API_KEY`, `TAVILY_API_KEY`, `JINA_API_KEY`, `GITHUB_TOKEN`. Они тоже override-ят значения из YAML, но остаются менее явным механизмом, чем `CLI_PROXY__DEFAULTS__...`.
+- Для `defaults.*` также поддерживаются legacy env-имена: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BIG_MODEL`, `OPENAI_DECISION_MODEL`, `OPENAI_BASE_URL`, `ZAI_API_KEY`, `TAVILY_API_KEY`, `JINA_API_KEY`, `GITHUB_TOKEN`. Они тоже override-ят значения из YAML, но остаются менее явным механизмом, чем `CLI_PROXY__DEFAULTS__...`.
 - Примеры для новых секций:
 ```bash
 export CLI_PROXY__THREAD_MODE__ENABLED=true

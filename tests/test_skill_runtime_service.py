@@ -1655,3 +1655,92 @@ async def test_run_process_terminates_npx_subprocess_on_cancellation(tmp_path, m
     assert spawn_kwargs.get("start_new_session") is True
     assert killpg_calls == [(4242, signal.SIGTERM)]
     assert process.wait_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_skill_runtime_decision_model_selects_skills_by_probability(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent="decision_selector")
+    cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id="decision_selector")
+    global_root = Path(cfg.defaults.workdir) / ".cli-proxy" / "skills"
+    for skill_id in ("generic-a", "generic-b", "generic-c"):
+        _write_skill(global_root, skill_id, title=skill_id, description="generic helper for code review")
+    captured: dict[str, object] = {}
+    noul_by_skill = {"generic-a": 0.6, "generic-b": 0.2, "generic-c": 0.9}
+
+    async def fake_decisions(_config, *, model, state, questions):
+        captured.update(model=model, state=state)
+        answers = {}
+        for key, question in questions.items():
+            skill_id = next(s for s in noul_by_skill if f'"skill_id": "{s}"' in question["instructions"])
+            answers[key] = {"type": "noul", "noul": noul_by_skill[skill_id]}
+        return answers
+
+    client = FakeOpenAIClient('{"selected_skill_ids":["generic-b"]}')
+    monkeypatch.setattr(skill_runtime_module, "decisions", fake_decisions)
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: client,
+    )
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="Сделай code review изменений.",
+        discovery_mode="suggest",
+    )
+
+    assert [item.skill_id for item in result.selected_skills] == ["generic-c", "generic-a"]
+    assert result.model_used == "llmgateway/decision"
+    assert captured["model"] == "llmgateway/decision"
+    assert captured["state"]["task_text"] == "Сделай code review изменений."
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decision_outcome",
+    [RuntimeError("gateway down"), {}, {"skill_0": {"type": "noul", "noul": "bad"}}],
+    ids=["error", "empty_answers", "invalid_answer"],
+)
+async def test_skill_runtime_decision_failure_falls_back_to_chat_selector(
+    tmp_path, monkeypatch, decision_outcome
+) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent="decision_fallback")
+    cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id="decision_fallback")
+    global_root = Path(cfg.defaults.workdir) / ".cli-proxy" / "skills"
+    _write_skill(global_root, "generic-a", title="generic-a", description="generic helper for code review")
+
+    async def fake_decisions(*_args, **_kw):
+        if isinstance(decision_outcome, Exception):
+            raise decision_outcome
+        return decision_outcome
+
+    client = FakeOpenAIClient('{"selected_skill_ids":["generic-a"]}')
+    monkeypatch.setattr(skill_runtime_module, "decisions", fake_decisions)
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: client,
+    )
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="Сделай code review изменений.",
+        discovery_mode="suggest",
+    )
+
+    assert [item.skill_id for item in result.selected_skills] == ["generic-a"]
+    assert result.model_used == "big-model"
+    assert len(client.calls) == 1

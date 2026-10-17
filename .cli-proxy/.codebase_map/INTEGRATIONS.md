@@ -66,6 +66,7 @@
 ## LLM And Web Services
 - **OpenAI-compatible chat completions** — default and per-call models: `modes/sdk/runtime/openai_client.py`.
 - **Summary model** — `defaults.openai_big_model` / env fallback: `summary.py`.
+- **Decisions API** (`POST /decisions`, optional `defaults.openai_decision_model`) — file-request gate and skill selection: `modes/sdk/runtime/openai_client.py::decisions`.
 - **Provider/API keys** — OpenAI, Z.ai, Tavily, Jina, GitHub keys live in `defaults.*`: `config.py`, `app/config_runtime/models.py`.
 - **Web/content extraction** — `duckduckgo-search`, `trafilatura`, `beautifulsoup4`, `pdfminer.six`, `youtube-transcript-api`: `requirements.txt`, `agent/plugins/*`.
 

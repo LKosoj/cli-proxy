@@ -145,6 +145,7 @@ class DefaultsConfigModel(ConfigModel):
     openai_api_key: Optional[NonEmptyStr] = None
     openai_model: Optional[NonEmptyStr] = None
     openai_big_model: Optional[NonEmptyStr] = None
+    openai_decision_model: Optional[NonEmptyStr] = None
     openai_base_url: Optional[NonEmptyStr] = None
     zai_api_key: Optional[NonEmptyStr] = None
     tavily_api_key: Optional[NonEmptyStr] = None

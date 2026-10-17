@@ -20,6 +20,7 @@ LEGACY_ENV_ALIASES: dict[str, tuple[str | int, ...]] = {
     "OPENAI_API_KEY": ("defaults", "openai_api_key"),
     "OPENAI_MODEL": ("defaults", "openai_model"),
     "OPENAI_BIG_MODEL": ("defaults", "openai_big_model"),
+    "OPENAI_DECISION_MODEL": ("defaults", "openai_decision_model"),
     "OPENAI_BASE_URL": ("defaults", "openai_base_url"),
     "ZAI_API_KEY": ("defaults", "zai_api_key"),
     "TAVILY_API_KEY": ("defaults", "tavily_api_key"),

@@ -30,6 +30,9 @@ _CLI_SUBRUN_SOURCES = {
     "use_cli_plugin",
 }
 
+# Короткий запрос без «/» уходит в CLI без подбора скиллов.
+_SHORT_PROMPT_MAX_LEN = 12
+
 _TECHNICAL_COMMAND_PREFIXES = (
     "git ",
     "pytest",
@@ -545,6 +548,9 @@ class TaskBearingCliHookService:
     ) -> Optional[str]:
         if not task_bearing:
             return "non_task_bearing"
+        cleaned = str(prompt or "").strip()
+        if len(cleaned) < _SHORT_PROMPT_MAX_LEN and "/" not in cleaned:
+            return "short_prompt"
         if technical_command is True:
             return "technical_command"
         if technical_command is False:

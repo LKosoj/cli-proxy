@@ -163,6 +163,9 @@ defaults:
   openai_api_key: null
   openai_model: null
   openai_big_model: null
+  # Модель Decisions API (POST /decisions), например llmgateway/decision.
+  # Если не задана — классификация запросов файлов и выбор скиллов идут через chat-модель.
+  openai_decision_model: null
   openai_base_url: "https://api.openai.com"
   zai_api_key: null
   tavily_api_key: null

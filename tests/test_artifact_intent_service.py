@@ -172,7 +172,9 @@ def test_resolve_blocked_env(tmp_path: Path) -> None:
 
 def test_resolve_path_traversal(tmp_path: Path) -> None:
     svc = ArtifactIntentService()
-    result = svc.resolve(ArtifactIntent("../../etc/passwd", 0.9), str(tmp_path))
+    # tmp_path лежит внутри /tmp, поэтому выходим до корня ФС, мимо разрешённого /tmp.
+    traversal = "../" * len(tmp_path.parts) + "etc/passwd"
+    result = svc.resolve(ArtifactIntent(traversal, 0.9), str(tmp_path))
     assert result.error is not None
     assert "за пределы" in result.error.lower() or "пределы" in result.error
 
@@ -244,3 +246,145 @@ def test_resolve_project_root_itself_reports_not_found(tmp_path: Path, pattern_f
     assert result.resolved_path == ""
     assert result.error is not None
     assert "не найден" in result.error.lower()
+
+
+@pytest.fixture
+def allowed_tmp(tmp_path: Path, monkeypatch) -> Path:
+    from app.services import artifact_intent_service as module
+
+    allowed = tmp_path / "tmp"
+    allowed.mkdir()
+    monkeypatch.setattr(module, "_EXTRA_ALLOWED_ROOT", allowed)
+    return allowed
+
+
+def test_resolve_absolute_path_in_tmp_is_allowed(tmp_path: Path, allowed_tmp: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (allowed_tmp / "report.html").write_text("ok")
+    result = ArtifactIntentService().resolve(ArtifactIntent(str(allowed_tmp / "report.html"), 1.0), str(project))
+    assert result.error is None
+    assert result.resolved_path == str(allowed_tmp / "report.html")
+
+
+def test_resolve_tmp_glob_and_blocked_names(tmp_path: Path, allowed_tmp: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (allowed_tmp / "out.log").write_text("log")
+    (allowed_tmp / ".env").write_text("SECRET=1")
+    svc = ArtifactIntentService()
+    glob_result = svc.resolve(ArtifactIntent(str(allowed_tmp / "*.log"), 1.0), str(project))
+    assert glob_result.resolved_path == str(allowed_tmp / "out.log")
+    blocked = svc.resolve(ArtifactIntent(str(allowed_tmp / ".env"), 1.0), str(project))
+    assert blocked.error is not None
+    assert "секрет" in blocked.error.lower()
+
+
+def test_resolve_tmp_symlink_outside_is_rejected(tmp_path: Path, allowed_tmp: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret")
+    (allowed_tmp / "link.txt").symlink_to(outside)
+    result = ArtifactIntentService().resolve(ArtifactIntent(str(allowed_tmp / "link.txt"), 1.0), str(project))
+    assert result.resolved_path == ""
+    assert "пределы проекта" in (result.error or "")
+
+
+@pytest.mark.parametrize("in_tmp", [True, False], ids=["tmp", "project"])
+def test_resolve_glob_symlink_outside_is_rejected(tmp_path: Path, allowed_tmp: Path, in_tmp: bool) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret")
+    base = allowed_tmp if in_tmp else project
+    (base / "link.txt").symlink_to(outside)
+    result = ArtifactIntentService().resolve(ArtifactIntent(str(base / "lin*.txt"), 1.0), str(project))
+    assert result.resolved_path == ""
+    assert "пределы проекта" in (result.error or "")
+
+
+def test_resolve_glob_symlink_to_secret_is_blocked(tmp_path: Path, allowed_tmp: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (allowed_tmp / "id_ed25519").write_text("key")
+    (allowed_tmp / "key.txt").symlink_to(allowed_tmp / "id_ed25519")
+    result = ArtifactIntentService().resolve(ArtifactIntent(str(allowed_tmp / "key.tx?"), 1.0), str(project))
+    assert result.resolved_path == ""
+    assert "секрет" in (result.error or "").lower()
+
+
+# ---------------------------------------------------------------------------
+# classify() with decision model
+# ---------------------------------------------------------------------------
+
+
+def _decision_config() -> SimpleNamespace:
+    return SimpleNamespace(defaults=SimpleNamespace(openai_decision_model="llmgateway/decision"))
+
+
+@pytest.mark.asyncio
+async def test_classify_decision_no_skips_llm(monkeypatch) -> None:
+    from app.services import artifact_intent_service as module
+
+    captured = {}
+
+    async def fake_decisions(_config, *, model, state, questions):
+        captured.update(model=model, state=state, questions=questions)
+        return {"file_request": {"type": "noul", "noul": 0.03}}
+
+    async def llm_fn(*_args, **_kw):
+        raise AssertionError("chat LLM must not be called after decision «no»")
+
+    monkeypatch.setattr(module, "decisions", fake_decisions)
+    intent = await ArtifactIntentService().classify(
+        "посмотри файл app/main.py",
+        app_config=_decision_config(),
+        llm_fn=llm_fn,
+    )
+
+    assert intent is None
+    assert captured["model"] == "llmgateway/decision"
+    assert captured["state"] == "посмотри файл app/main.py"
+    assert captured["questions"]["file_request"]["type"] == "noul"
+
+
+@pytest.mark.asyncio
+async def test_classify_decision_yes_uses_llm_for_path(monkeypatch) -> None:
+    from app.services import artifact_intent_service as module
+
+    async def fake_decisions(*_args, **_kw):
+        return {"file_request": {"type": "noul", "noul": 0.94}}
+
+    async def llm_fn(*_args, **_kw):
+        return '{"is_artifact_request": true, "file_pattern": "src/config.yaml", "confidence": 0.9}'
+
+    monkeypatch.setattr(module, "decisions", fake_decisions)
+    intent = await ArtifactIntentService().classify(
+        "скинь мне src/config.yaml",
+        app_config=_decision_config(),
+        llm_fn=llm_fn,
+    )
+
+    assert intent == ArtifactIntent(file_pattern="src/config.yaml", confidence=0.9)
+
+
+@pytest.mark.asyncio
+async def test_classify_decision_failure_falls_back_to_llm(monkeypatch) -> None:
+    from app.services import artifact_intent_service as module
+
+    async def fake_decisions(*_args, **_kw):
+        raise RuntimeError("gateway down")
+
+    async def llm_fn(*_args, **_kw):
+        return '{"is_artifact_request": true, "file_pattern": "a/b.txt", "confidence": 0.9}'
+
+    monkeypatch.setattr(module, "decisions", fake_decisions)
+    intent = await ArtifactIntentService().classify(
+        "пришли a/b.txt",
+        app_config=_decision_config(),
+        llm_fn=llm_fn,
+    )
+
+    assert intent is not None
+    assert intent.file_pattern == "a/b.txt"

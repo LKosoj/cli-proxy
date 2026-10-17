@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 from typing import Any, Callable, Optional, Tuple
 
+import httpx
 from openai import AsyncOpenAI
 
 from config import AppConfig
@@ -14,6 +16,7 @@ from .json_normalizer import loads_safe
 OPENAI_SDK_MAX_RETRIES = 4
 CHAT_COMPLETION_ATTEMPTS = 3
 OPENAI_EXTRA_HEADERS = {"X-Title": "cli-proxy"}
+DECISIONS_TIMEOUT_SEC = 30.0
 
 logger = logging.getLogger(__name__)
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL | re.IGNORECASE)
@@ -247,3 +250,51 @@ async def chat_completion(
 
 
 chat_completion._supports_strict_json_contract = True
+
+
+def get_decision_model(config: Any) -> Optional[str]:
+    """Return configured Decisions API model or None when the feature is off."""
+    defaults = getattr(config, "defaults", None)
+    model = str(getattr(defaults, "openai_decision_model", None) or "").strip()
+    return model or None
+
+
+async def decisions(
+    config: Any,
+    *,
+    model: str,
+    state: Any,
+    questions: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Call OpenAI-compatible ``POST /decisions`` and return the ``answers`` mapping.
+
+    Raises on transport/HTTP errors or a malformed response; callers fall back to chat.
+    """
+    defaults = getattr(config, "defaults", None)
+    api_key = getattr(defaults, "openai_api_key", None) if defaults else None
+    base_url = (getattr(defaults, "openai_base_url", None) if defaults else None) or "https://api.openai.com"
+    if not api_key:
+        raise RuntimeError("openai_api_key is not configured")
+    headers = {"Authorization": f"Bearer {api_key}", **OPENAI_EXTRA_HEADERS}
+    payload = {"model": model, "state": state, "questions": questions}
+    async with httpx.AsyncClient(timeout=DECISIONS_TIMEOUT_SEC) as client:
+        resp = await client.post(f"{base_url.rstrip('/')}/decisions", json=payload, headers=headers)
+    resp.raise_for_status()
+    answers = resp.json().get("answers")
+    if not isinstance(answers, dict):
+        raise ValueError("decisions response has no answers object")
+    return answers
+
+
+def decision_noul(answers: dict[str, Any], key: str) -> Optional[float]:
+    """Return probability of «yes» for a ``noul`` answer, or None if missing/invalid."""
+    answer = answers.get(key)
+    if not isinstance(answer, dict):
+        return None
+    try:
+        value = float(answer.get("noul"))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return max(0.0, min(1.0, value))

@@ -318,14 +318,14 @@ async def test_programmatic_technical_commands_bypass_selector_and_keep_prompt_v
 
         session.run_prompt = _fake_run_prompt
         out = await app.run_prompt_raw(
-            "git status",
+            "git status --short",
             session_id=session.id,
             chat_id=1,
             technical_command=True,
         )
 
         assert out == "OUT:raw"
-        assert captured["prompt"] == "git status"
+        assert captured["prompt"] == "git status --short"
         assert client.calls == []
 
         run = RunArtifactStore(cfg).latest_run(session=session, mode_id="cli")
@@ -336,6 +336,43 @@ async def test_programmatic_technical_commands_bypass_selector_and_keep_prompt_v
             and item.get("bypass_reason") == "technical_command"
             for item in events
         )
+    finally:
+        app.shutdown_html_process_pool()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt", "expected_bypass"),
+    [("сделай тест", "short_prompt"), ("cat a/b.py", None), ("напиши тесты к модулю", None)],
+)
+async def test_short_prompt_without_slash_bypasses_selector(tmp_path, monkeypatch, prompt, expected_bypass) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_bot_config(tmp_path, intent="short_prompt")
+    global_skills = Path(cfg.defaults.workdir) / ".cli-proxy" / "skills"
+    _write_skill(global_skills, "playwright-cli", title="Playwright CLI", description="browser testing skill")
+
+    app = BotApp(cfg)
+    try:
+        client = FakeOpenAIClient('{"selected_skill_ids":[]}')
+        _bind_shared_skill_runtime(cfg, client)
+        project_dir = tmp_path / "project_short"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        session = app.manager.create(1, "dummy", str(project_dir))
+
+        async def _fake_run_prompt(prompt: str, **_kwargs):
+            return "OUT"
+
+        session.run_prompt = _fake_run_prompt
+        await app.run_prompt_raw(prompt, session_id=session.id, chat_id=1, technical_command=False)
+
+        assert (client.calls == []) is (expected_bypass is not None)
+        run = RunArtifactStore(cfg).latest_run(session=session, mode_id="cli")
+        assert run is not None
+        start = next(
+            item for item in _read_events(run.events_path) if item.get("event_type") == "cli_execution_start"
+        )
+        assert start.get("bypass_reason") == expected_bypass
     finally:
         app.shutdown_html_process_pool()
 

@@ -17,6 +17,7 @@ from app.services.assistant_preview_service import (
     watch_session_assistant_preview,
 )
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
+from app.services.input_dispatch_models import DIRECT_TMUX_DEST_KEY
 from app.services.logging_service import bind_session_log_context
 
 from app.services.runtime_progress_service import clear_runtime_progress, emit_runtime_progress
@@ -865,7 +866,7 @@ class SessionRunService:
                             prompt=prompt,
                             source=source,
                             phase="execute",
-                            task_bearing=True,
+                            task_bearing=not bool(dest.get(DIRECT_TMUX_DEST_KEY)),
                         )
                         prompt_for_cli = prepared.prompt_for_cli
                     if self._telegram_assistant_preview_enabled(session, dest):

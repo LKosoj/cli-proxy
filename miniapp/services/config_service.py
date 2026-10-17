@@ -268,6 +268,11 @@ def config_schema() -> Dict[str, Any]:
                         "required": False,
                         "description": "Large-model override for summaries.",
                     },
+                    "openai_decision_model": {
+                        "type": "string",
+                        "required": False,
+                        "description": "Decisions API model for file-request and skill-selection checks.",
+                    },
                     "openai_base_url": {
                         "type": "string",
                         "required": False,

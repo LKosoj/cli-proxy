@@ -88,6 +88,7 @@ def adapt_validated_settings(settings: ValidatedSettings, *, path: str) -> "AppC
         openai_api_key=settings.defaults.openai_api_key,
         openai_model=settings.defaults.openai_model,
         openai_big_model=settings.defaults.openai_big_model,
+        openai_decision_model=settings.defaults.openai_decision_model,
         openai_base_url=settings.defaults.openai_base_url,
         zai_api_key=settings.defaults.zai_api_key,
         tavily_api_key=settings.defaults.tavily_api_key,

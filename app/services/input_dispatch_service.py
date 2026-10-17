@@ -8,6 +8,7 @@ from collections import deque
 from typing import Any, Optional
 
 from app.services.input_dispatch_models import (
+    DIRECT_TMUX_DEST_KEY,
     PENDING_ACTION_CONFIRM as MODEL_PENDING_ACTION_CONFIRM,
     PENDING_ACTION_ORCHESTRATOR_TRANSITION as MODEL_PENDING_ACTION_ORCHESTRATOR_TRANSITION,
     PENDING_ACTION_QUEUE_CHOICE as MODEL_PENDING_ACTION_QUEUE_CHOICE,
@@ -20,7 +21,7 @@ from app.services.input_dispatch_models import (
 from i18n import t
 from utils.cli import build_attachment_ref
 from utils.lang import resolve_user_lang
-from session import session_runtime_uid
+from session import get_session_execution_backend, has_live_tmux, session_runtime_uid
 from app.services.telegram_ui_scope import TelegramUiKey
 from sessions.queue_item import append_session_queue_item, normalize_queue_item_payload
 from sessions.session_state_access import (
@@ -849,6 +850,16 @@ class InputDispatchService:
             )
             return
 
+        if await self._live_tmux_direct_available(session):
+            await self._send_to_live_tmux(
+                session=session,
+                text=str(getattr(pending_input, "text", "") or ""),
+                chat_id=chat_id,
+                context=context,
+                dest=dict(getattr(pending_input, "dest", {}) or {}),
+            )
+            return
+
         await self._handle_user_input_impl(
             session=session,
             text=str(getattr(pending_input, "text", "") or ""),
@@ -856,6 +867,43 @@ class InputDispatchService:
             context=context,
             dest=dict(getattr(pending_input, "dest", {}) or {}),
             allow_orchestration=True,
+        )
+
+    @staticmethod
+    async def _live_tmux_direct_available(session) -> bool:
+        """Простаивающая tmux-сессия без активного режима с уже запущенной панелью."""
+        if str(get_active_mode(session, "") or "").strip():
+            return False
+        if get_session_execution_backend(session) != "tmux":
+            return False
+        # has_live_tmux синхронно дёргает tmux has-session — не блокируем event loop.
+        return await asyncio.to_thread(has_live_tmux, session)
+
+    async def _send_to_live_tmux(self, *, session, text: str, chat_id: Any, context, dest: dict) -> None:
+        """Ввод сразу в живой tmux: без оркестратора и подбора скиллов.
+
+        Проверка «пришли файл» остаётся (без пути в тексте она не зовёт LLM).
+        Вложения лежат в dest["image_paths"], session.run_prompt допишет их в запрос как @-ссылки.
+        """
+        if str(dest.get("kind", "")).strip().lower() != "desktop":
+            handled = await self._try_artifact_intent(
+                session=session,
+                text=text,
+                chat_id=chat_id,
+                context=context,
+                dest=dest,
+            )
+            if handled:
+                return
+        dest[DIRECT_TMUX_DEST_KEY] = True
+        user_id = dest.get("user_id")
+        await self._route_mode_or_cli(
+            session=session,
+            text=text,
+            chat_id=chat_id,
+            context=context,
+            dest=dest,
+            user_id=int(user_id) if user_id is not None else None,
         )
 
     async def handle_cli_input(

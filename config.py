@@ -80,6 +80,7 @@ class DefaultsConfig:
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
     openai_big_model: Optional[str] = None
+    openai_decision_model: Optional[str] = None
     openai_base_url: Optional[str] = None
     zai_api_key: Optional[str] = None
     tavily_api_key: Optional[str] = None

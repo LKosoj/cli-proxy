@@ -265,3 +265,33 @@ async def test_cli_switch_failure_resets_busy_and_keeps_queue() -> None:
     assert list(session.queue) == [queue_item]
     session.run_prompt.assert_not_awaited()
     svc.bot_app._send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("direct_tmux", "task_bearing"), [(True, False), (False, True)])
+async def test_direct_tmux_dest_disables_skill_selection(direct_tmux: bool, task_bearing: bool) -> None:
+    session = _make_session()
+    session.config = object()
+    svc = _make_service()
+    hook = MagicMock()
+    hook.prepare_prompt = AsyncMock(return_value=SimpleNamespace(prompt_for_cli="prompt"))
+    dest = {"kind": "telegram", "chat_id": 42, "direct_tmux": direct_tmux}
+
+    with (
+        patch("sessions.session_run_service.get_task_bearing_cli_hook_service", return_value=hook),
+        patch("sessions.session_run_service.switch_session_active_cli_if_needed", return_value=SimpleNamespace(switched=False)),
+        patch("sessions.session_run_service.consume_session_cli_switch_notice_text", return_value=None),
+        patch("sessions.session_run_service.clear_session_ticks"),
+        patch("sessions.session_run_service.clear_runtime_progress"),
+        patch("sessions.session_run_service.assistant_preview_enabled", return_value=False),
+        patch("sessions.session_run_service.assistant_preview_supported_dest", return_value=False),
+        patch("sessions.session_run_service.bind_session_log_context") as mock_ctx,
+    ):
+        mock_ctx.return_value.__enter__ = MagicMock(return_value=None)
+        mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        session.run_prompt = AsyncMock(return_value="done output")  # type: ignore[attr-defined]
+        svc.bot_app.send_output = AsyncMock()
+
+        await svc.run_prompt(session, "prompt", dest, context=object())
+
+    assert hook.prepare_prompt.await_args.kwargs["task_bearing"] is task_bearing
