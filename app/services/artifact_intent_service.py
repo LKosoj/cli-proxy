@@ -179,11 +179,9 @@ class ArtifactIntentService:
                 resolved_path="",
                 error="Запрошенный путь выходит за пределы проекта.",
             )
-        # Абсолютный паттерн (LLM часто возвращает полный путь): Path.glob принимает
-        # только относительные, поэтому переводим его относительно корня проекта.
-        pattern = intent.file_pattern
-        if Path(pattern).is_absolute():
-            pattern = str(candidate.relative_to(root))
+        # Path.glob принимает только относительные паттерны, а абсолютный путь или «..»
+        # могут увести в другой корень (/tmp): ищем всегда от выбранного корня.
+        pattern = str(candidate.relative_to(root))
 
         # Check blocked patterns.
         basename = candidate.name.lower()
@@ -211,33 +209,33 @@ class ArtifactIntentService:
                     pattern,
                     root,
                 )
-            matches = sorted(m for m in raw_matches if m.is_file())
+            # Glob не раскрывает симлинки: до подсчёта и показа имён отсекаем совпадения,
+            # чей настоящий путь вне разрешённых корней или ведёт на файл с секретами.
+            matches: list[tuple[Path, Path]] = []
+            rejected_error: Optional[str] = None
+            for match in sorted(m for m in raw_matches if m.is_file()):
+                real = match.resolve()
+                if _allowed_root(real, project) is None:
+                    rejected_error = rejected_error or "Результат поиска выходит за пределы проекта."
+                elif _is_blocked_name(match.name) or _is_blocked_name(real.name):
+                    rejected_error = rejected_error or (
+                        f"Файл {match.name} содержит секреты и не может быть отправлен."
+                    )
+                else:
+                    matches.append((match, real))
             if not matches:
                 return ArtifactResult(
                     resolved_path="",
-                    error=f"Файл не найден: {intent.file_pattern}",
+                    error=rejected_error or f"Файл не найден: {intent.file_pattern}",
                 )
             if len(matches) > 1:
-                listing = "\n".join(f"• {m.relative_to(root)}" for m in matches[:10])
+                listing = "\n".join(f"• {m.relative_to(root)}" for m, _real in matches[:10])
                 suffix = f"\n…и ещё {len(matches) - 10}" if len(matches) > 10 else ""
                 return ArtifactResult(
                     resolved_path="",
                     error=f"Найдено несколько файлов:\n{listing}{suffix}\nУточните, какой именно.",
                 )
-            # Glob не раскрывает симлинки: проверяем настоящий путь файла.
-            candidate = matches[0].resolve()
-            if _allowed_root(candidate, project) is None:
-                return ArtifactResult(
-                    resolved_path="",
-                    error="Результат поиска выходит за пределы проекта.",
-                )
-            basename = candidate.name.lower()
-            for blocked in _BLOCKED_PATTERNS:
-                if basename == blocked.lower():
-                    return ArtifactResult(
-                        resolved_path="",
-                        error=f"Файл {candidate.name} содержит секреты и не может быть отправлен.",
-                    )
+            candidate = matches[0][1]
 
         # Size check.
         try:
@@ -261,3 +259,8 @@ def _allowed_root(path: Path, project: Path) -> Optional[Path]:
         if path.is_relative_to(root):
             return root
     return None
+
+
+def _is_blocked_name(name: str) -> bool:
+    lowered = name.lower()
+    return any(lowered == blocked.lower() for blocked in _BLOCKED_PATTERNS)

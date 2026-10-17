@@ -314,6 +314,38 @@ def test_resolve_glob_symlink_to_secret_is_blocked(tmp_path: Path, allowed_tmp: 
     assert "секрет" in (result.error or "").lower()
 
 
+def test_resolve_glob_hides_outside_names_and_picks_safe_match(tmp_path: Path, allowed_tmp: Path) -> None:
+    project = tmp_path / "project"
+    (project / "keys").mkdir(parents=True)
+    (project / "keys" / "app.key").write_text("ok")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret_a.key").write_text("a")
+    (outside / "secret_b.key").write_text("b")
+    (project / "ext").symlink_to(outside)
+
+    result = ArtifactIntentService().resolve(ArtifactIntent("*/*.key", 1.0), str(project))
+
+    assert result.error is None
+    assert result.resolved_path == str(project / "keys" / "app.key")
+
+
+def test_resolve_relative_glob_with_parent_dir_into_tmp(tmp_path: Path, monkeypatch) -> None:
+    from app.services import artifact_intent_service as module
+
+    monkeypatch.setattr(module, "_EXTRA_ALLOWED_ROOT", tmp_path)
+    project = tmp_path / "x" / "proj"
+    project.mkdir(parents=True)
+    other = tmp_path / "x" / "other"
+    other.mkdir()
+    (other / "a.txt").write_text("a")
+
+    result = ArtifactIntentService().resolve(ArtifactIntent("../other/*.txt", 1.0), str(project))
+
+    assert result.error is None
+    assert result.resolved_path == str(other / "a.txt")
+
+
 # ---------------------------------------------------------------------------
 # classify() with decision model
 # ---------------------------------------------------------------------------

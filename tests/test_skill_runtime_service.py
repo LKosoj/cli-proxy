@@ -781,6 +781,7 @@ async def test_skill_runtime_auto_discovers_filters_and_installs_github_skill_lo
 
     client = FakeOpenAIClient(
         [
+            '{"needs_skills":true}',
             '{"selected_skill_id":"github-ui-skill","confidence":96}',
             (
                 '{"summary":"GitHub UI browser automation guide.",'
@@ -820,8 +821,9 @@ async def test_skill_runtime_auto_discovers_filters_and_installs_github_skill_lo
     assert "github ui browser automation skill" in installed_manifest.read_text(encoding="utf-8")
     assert len(discovery_calls) == 1
     assert repo_calls == [{"ref": "acme/skills@github-ui-skill", "session_id": session.id}]
-    system_prompt = str(client.calls[0]["messages"][0]["content"])
-    selector_payload = str(client.calls[0]["messages"][1]["content"])
+    assert '"needs_skills"' in str(client.calls[0]["messages"][0]["content"])
+    system_prompt = str(client.calls[1]["messages"][0]["content"])
+    selector_payload = str(client.calls[1]["messages"][1]["content"])
     assert "generic engineering tools may be selected with a plausible task and project match" in system_prompt
     assert '"project_fingerprint"' in selector_payload
     assert '"github-ui-skill"' in selector_payload
@@ -874,6 +876,7 @@ async def test_skill_runtime_auto_installed_skill_is_available_without_restart(t
 
     client = FakeOpenAIClient(
         [
+            '{"needs_skills":true}',
             '{"selected_skill_id":"github-ui-skill","confidence":96}',
             (
                 '{"summary":"GitHub UI browser automation guide.",'
@@ -978,6 +981,7 @@ async def test_skill_runtime_logs_selection_auto_discovery_install_and_final_cho
 
     client = FakeOpenAIClient(
         [
+            '{"needs_skills":true}',
             '{"selected_skill_id":"github-ui-skill","confidence":96}',
             (
                 '{"summary":"GitHub UI browser automation guide.",'
@@ -1263,6 +1267,7 @@ async def test_skill_runtime_admin_approve_halts_and_registers_pending_transacti
     policy_service = SkillPolicyService(cfg)
     client = FakeOpenAIClient(
         [
+            '{"needs_skills":true}',
             '{"selected_skill_id":"github-ui-skill","confidence":96}',
             (
                 '{"summary":"GitHub UI browser automation guide.",'
@@ -1350,6 +1355,7 @@ async def test_skill_runtime_approve_pending_install_clears_ledger_and_installs_
     policy_service = SkillPolicyService(cfg)
     client = FakeOpenAIClient(
         [
+            '{"needs_skills":true}',
             '{"selected_skill_id":"github-ui-skill","confidence":96}',
             (
                 '{"summary":"GitHub UI browser automation guide.",'
@@ -1672,8 +1678,10 @@ async def test_skill_runtime_decision_model_selects_skills_by_probability(tmp_pa
 
     async def fake_decisions(_config, *, model, state, questions):
         captured.update(model=model, state=state)
-        answers = {}
+        answers = {"needs_skills": {"type": "noul", "noul": 0.9}}
         for key, question in questions.items():
+            if key == "needs_skills":
+                continue
             skill_id = next(s for s in noul_by_skill if f'"skill_id": "{s}"' in question["instructions"])
             answers[key] = {"type": "noul", "noul": noul_by_skill[skill_id]}
         return answers
@@ -1744,3 +1752,237 @@ async def test_skill_runtime_decision_failure_falls_back_to_chat_selector(
     assert [item.skill_id for item in result.selected_skills] == ["generic-a"]
     assert result.model_used == "big-model"
     assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("discovery_mode", ["suggest", "auto"])
+async def test_skill_runtime_decision_clarification_skips_skills(tmp_path, monkeypatch, discovery_mode) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent=f"decision_clarification_{discovery_mode}")
+    cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id=f"decision_clarification_{discovery_mode}")
+    global_root = Path(cfg.defaults.workdir) / ".cli-proxy" / "skills"
+    _write_skill(global_root, "generic-a", title="generic-a", description="generic helper for code review")
+    asked: list[str] = []
+
+    async def fake_decisions(_config, *, model, state, questions):
+        asked.extend(questions)
+        return {key: {"type": "noul", "noul": 0.1 if key == "needs_skills" else 0.95} for key in questions}
+
+    async def forbidden_discovery(**_kwargs):
+        raise AssertionError("auto-discovery must not run for a clarification")
+
+    client = FakeOpenAIClient('{"selected_skill_ids":["generic-a"]}')
+    monkeypatch.setattr(skill_runtime_module, "decisions", fake_decisions)
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: client,
+    )
+    monkeypatch.setattr(service, "_maybe_auto_discover_and_install", forbidden_discovery)
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="да, делай второй вариант",
+        discovery_mode=discovery_mode,
+    )
+
+    assert "needs_skills" in asked
+    assert result.selected_skills == []
+    assert result.model_used == "skills_not_needed"
+    assert result.composed_task_text == "да, делай второй вариант"
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_skill_runtime_decision_missing_needs_skills_answer_keeps_selection(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent="decision_missing_needs")
+    cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id="decision_missing_needs")
+    global_root = Path(cfg.defaults.workdir) / ".cli-proxy" / "skills"
+    _write_skill(global_root, "generic-a", title="generic-a", description="generic helper for code review")
+
+    async def fake_decisions(_config, *, model, state, questions):
+        return {key: {"type": "noul", "noul": 0.9} for key in questions if key != "needs_skills"}
+
+    monkeypatch.setattr(skill_runtime_module, "decisions", fake_decisions)
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: FakeOpenAIClient('{"selected_skill_ids":[]}'),
+    )
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="Сделай code review изменений.",
+        discovery_mode="suggest",
+    )
+
+    assert [item.skill_id for item in result.selected_skills] == ["generic-a"]
+    assert result.model_used == "llmgateway/decision"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("needs_noul", "discovery_expected"), [(0.1, False), (0.9, True)])
+async def test_skill_runtime_auto_without_local_skills_asks_needs_skills_before_discovery(
+    tmp_path, monkeypatch, needs_noul, discovery_expected
+) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent=f"decision_no_local_{needs_noul}")
+    cfg.defaults.skill_install_policy = "allowlisted_auto"
+    cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id=f"decision_no_local_{needs_noul}")
+    discovery_calls: list[str] = []
+
+    async def fake_decisions(_config, *, model, state, questions):
+        assert list(questions) == ["needs_skills"]
+        return {"needs_skills": {"type": "noul", "noul": needs_noul}}
+
+    monkeypatch.setattr(skill_runtime_module, "decisions", fake_decisions)
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: FakeOpenAIClient('{"selected_skill_ids":[]}'),
+    )
+
+    async def fake_discovery(**kwargs):
+        discovery_calls.append(kwargs["task_text"])
+        return service._empty_auto_discovery_audit()
+
+    monkeypatch.setattr(service, "_maybe_auto_discover_and_install", fake_discovery)
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="да, делай второй вариант",
+        discovery_mode="auto",
+    )
+
+    assert result.selected_skills == []
+    assert bool(discovery_calls) is discovery_expected
+    assert result.model_used == ("no_available_skills" if discovery_expected else "skills_not_needed")
+
+
+@pytest.mark.asyncio
+async def test_skill_runtime_chat_selector_needs_skills_false_skips_skills_and_discovery(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent="chat_needs_skills_false")
+    session = _session(tmp_path, case_id="chat_needs_skills_false")
+    global_root = Path(cfg.defaults.workdir) / ".cli-proxy" / "skills"
+    _write_skill(global_root, "generic-a", title="generic-a", description="generic helper for code review")
+    client = FakeOpenAIClient('{"needs_skills":false,"selected_skill_ids":["generic-a"]}')
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: client,
+    )
+
+    async def forbidden_discovery(**_kwargs):
+        raise AssertionError("auto-discovery must not run for a clarification")
+
+    monkeypatch.setattr(service, "_maybe_auto_discover_and_install", forbidden_discovery)
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="да, делай второй вариант",
+        discovery_mode="auto",
+    )
+
+    assert result.selected_skills == []
+    assert result.model_used == "skills_not_needed"
+    assert len(client.calls) == 1
+    assert "needs_skills" in str(client.calls[0]["messages"][0]["content"])
+    assert client.calls[0]["max_tokens"] == 16384
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("decision_configured", [False, True], ids=["no_decision_model", "decision_failed"])
+async def test_skill_runtime_auto_without_local_skills_uses_chat_for_needs_skills(
+    tmp_path, monkeypatch, decision_configured
+) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent=f"chat_no_local_{decision_configured}")
+    cfg.defaults.skill_install_policy = "allowlisted_auto"
+    if decision_configured:
+        cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id=f"chat_no_local_{decision_configured}")
+
+    async def failing_decisions(*_args, **_kwargs):
+        raise RuntimeError("gateway down")
+
+    monkeypatch.setattr(skill_runtime_module, "decisions", failing_decisions)
+    client = FakeOpenAIClient('{"needs_skills":false}')
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: client,
+    )
+
+    async def forbidden_discovery(**_kwargs):
+        raise AssertionError("auto-discovery must not run for a clarification")
+
+    monkeypatch.setattr(service, "_maybe_auto_discover_and_install", forbidden_discovery)
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="ок, продолжай",
+        discovery_mode="auto",
+    )
+
+    assert result.selected_skills == []
+    assert result.model_used == "skills_not_needed"
+    assert len(client.calls) == 1
+    assert client.calls[0]["max_tokens"] == 16384
+
+
+@pytest.mark.asyncio
+async def test_skill_runtime_auto_without_local_skills_manual_policy_skips_needs_skills(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_BIG_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    cfg = _build_config(tmp_path, intent="manual_no_local")
+    cfg.defaults.openai_decision_model = "llmgateway/decision"
+    session = _session(tmp_path, case_id="manual_no_local")
+
+    async def forbidden_decisions(*_args, **_kwargs):
+        raise AssertionError("needs_skills must not be asked when nothing can be installed")
+
+    monkeypatch.setattr(skill_runtime_module, "decisions", forbidden_decisions)
+    client = FakeOpenAIClient('{"needs_skills":false}')
+    service = SkillRuntimeService(
+        cfg,
+        registry_service=SkillRegistryService(cfg),
+        policy_service=SkillPolicyService(cfg),
+        client_factory=lambda: client,
+    )
+
+    result = await service.resolve_for_task(
+        session=session,
+        mode_id="agent",
+        phase="execute",
+        task_text="сделай рефакторинг модуля",
+        discovery_mode="auto",
+    )
+
+    assert result.selected_skills == []
+    assert result.model_used == "no_available_skills"
+    assert client.calls == []

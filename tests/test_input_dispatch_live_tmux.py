@@ -101,3 +101,39 @@ async def test_regular_flow_when_live_tmux_not_applicable(monkeypatch, backend, 
 
     assert calls["impl"] == ["сделай рефакторинг"]
     assert calls["cli"] == []
+
+
+@pytest.mark.asyncio
+async def test_live_tmux_dest_reaches_cli_through_real_router(monkeypatch) -> None:
+    received: list[dict] = []
+
+    class _Router:
+        mode_registry = None
+
+        async def route_mode_or_cli(self, **kwargs):
+            await kwargs["cli_fallback"](kwargs["session"], kwargs["text"], kwargs["chat_id"], kwargs["context"])
+
+    async def handle_cli_input(_session, text, _chat_id, _context, *, dest=None):
+        received.append({"text": text, "dest": dest})
+
+    bot_app = SimpleNamespace(
+        config=SimpleNamespace(defaults=SimpleNamespace(pending_input_confirmation_enabled=False)),
+        build_telegram_reply_dest=lambda _s, chat_id, **_kw: {"kind": "telegram", "chat_id": chat_id, "user_id": 7},
+        mode_input_router=_Router(),
+        _handle_cli_input=handle_cli_input,
+    )
+    service = InputDispatchService(bot_app)
+
+    async def no_artifact(**_kw):
+        return False
+
+    monkeypatch.setattr(service, "_try_artifact_intent", no_artifact)
+    monkeypatch.setattr(service, "_is_session_busy", lambda *_a, **_kw: False)
+    monkeypatch.setattr(module, "get_session_execution_backend", lambda _s: "tmux")
+    monkeypatch.setattr(module, "has_live_tmux", lambda _s: True)
+
+    await service.stage_user_input(_session(), "", 1, object(), image_paths=["/proj/.attachments/a.png"])
+
+    assert len(received) == 1
+    assert received[0]["dest"][DIRECT_TMUX_DEST_KEY] is True
+    assert received[0]["dest"]["image_paths"] == ["/proj/.attachments/a.png"]

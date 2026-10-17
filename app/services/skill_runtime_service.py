@@ -43,6 +43,29 @@ logger = logging.getLogger(__name__)
 _MAX_SKILLS_IN_PROMPT = 4
 # Минимальная вероятность «скилл подходит» от decision-модели.
 _DECISION_SKILL_THRESHOLD = 0.5
+# Ниже этой вероятности «это новая задача» ввод считается уточнением и идёт в CLI без скиллов.
+_DECISION_NEEDS_SKILLS_THRESHOLD = 0.5
+# model_used, когда decision-модель решила, что скиллы не нужны (без автопоиска новых).
+_SKILLS_NOT_NEEDED = "skills_not_needed"
+# Ответ — короткий JSON, но рассуждающие модели тратят токены на скрытое «размышление»;
+# 16384 — с запасом и ниже потолка вывода всех моделей цепочки llmgateway/light_model.
+_SELECTOR_MAX_TOKENS = 16384
+# Политики, при которых auto-discovery может установить скилл.
+_AUTO_INSTALL_POLICIES = frozenset({"allowlisted_auto", "admin_approve"})
+# Один критерий «нужны ли скиллы» для decision-модели и для chat-селектора.
+_NEEDS_SKILLS_RULE = (
+    "Does task_text start a new substantive task where specialized skills could help? "
+    "Answer no if it is a clarification, an answer to the assistant's previous question, "
+    "a confirmation, a choice between offered options, a short follow-up or small talk."
+)
+_NEEDS_SKILLS_QUESTION = {"type": "noul", "instructions": _NEEDS_SKILLS_RULE}
+_NEEDS_SKILLS_SYSTEM_PROMPT = "\n".join(
+    [
+        "You classify user input for a coding CLI assistant.",
+        _NEEDS_SKILLS_RULE,
+        'Return strict JSON object {"needs_skills": true|false}.',
+    ]
+)
 _SELECTOR_METADATA_VERSION = 1
 _SELECTOR_METADATA_FILENAME = "selector.json"
 _DISCOVERY_CANDIDATE_MAX_SELECTIONS = 1
@@ -314,6 +337,18 @@ class SkillRuntimeService:
         if effective_mode == "off" or not available:
             selected_ids = []
             model_used = "disabled" if effective_mode == "off" else "no_available_skills"
+            # Спрашиваем только если автопоиск реально может что-то установить.
+            if (
+                effective_mode == "auto"
+                and session is not None
+                and install_policy in _AUTO_INSTALL_POLICIES
+                and not await self._input_needs_skills(
+                    task_text=task_text_clean,
+                    mode_id=mode_id,
+                    phase=phase,
+                )
+            ):
+                model_used = _SKILLS_NOT_NEEDED
         else:
             selected_ids, model_used = await self._select_skill_ids(
                 task_text=task_text_clean,
@@ -324,7 +359,7 @@ class SkillRuntimeService:
             )
 
         auto_discovery = self._empty_auto_discovery_audit()
-        if effective_mode == "auto" and not selected_ids:
+        if effective_mode == "auto" and not selected_ids and model_used != _SKILLS_NOT_NEEDED:
             auto_discovery = await self._maybe_auto_discover_and_install(
                 session=session,
                 mode_id=mode_id,
@@ -719,7 +754,7 @@ class SkillRuntimeService:
         audit["attempted"] = True
         install_policy = self._resolve_install_policy(session=session)
         audit["install_policy"] = install_policy
-        if install_policy not in {"allowlisted_auto", "admin_approve"}:
+        if install_policy not in _AUTO_INSTALL_POLICIES:
             audit["reason"] = f"install_policy:{install_policy}"
             return audit
         if session is None:
@@ -892,6 +927,8 @@ class SkillRuntimeService:
                     available_manifests=available_manifests,
                     model=decision_model,
                 )
+                if selected_ids is None:
+                    return [], _SKILLS_NOT_NEEDED
                 selected_ids = self._apply_selector_relevance_gate(
                     task_text=task_text,
                     skill_ids=selected_ids,
@@ -922,10 +959,12 @@ class SkillRuntimeService:
                 response_format={"type": "json_object"},
                 model=model,
                 temperature=0.1,
-                max_tokens=8196,
+                max_tokens=_SELECTOR_MAX_TOKENS,
                 client_factory=self._client_factory,
             )
             parsed = loads_safe(raw or "{}", strict_first=False)
+            if isinstance(parsed, dict) and parsed.get("needs_skills") is False:
+                return [], _SKILLS_NOT_NEEDED
             selected_ids = self._filter_selected_ids(
                 parsed.get("selected_skill_ids") if isinstance(parsed, dict) else [],
                 available_manifests,
@@ -949,13 +988,18 @@ class SkillRuntimeService:
         phase: str,
         available_manifests: Dict[str, SkillManifest],
         model: str,
-    ) -> list[str]:
-        """Select skills via Decisions API: one ``noul`` question per available skill."""
+    ) -> list[str] | None:
+        """Select skills via Decisions API: one ``noul`` question per available skill.
+
+        In the same call asks whether the input needs skills at all; None means
+        it is a clarification/follow-up and should go to CLI as is.
+        """
         skills = [self._selector_skill_payload(manifest) for _skill_id, manifest in sorted(available_manifests.items())]
         if not skills:
             return []
-        questions = {
-            f"skill_{index}": {
+        questions: Dict[str, Dict[str, Any]] = {"needs_skills": _NEEDS_SKILLS_QUESTION}
+        for index, skill in enumerate(skills):
+            questions[f"skill_{index}"] = {
                 "type": "noul",
                 "instructions": (
                     "Is this skill directly relevant and materially useful for the coding task in state? "
@@ -964,18 +1008,15 @@ class SkillRuntimeService:
                     "instructions: " + json.dumps(skill, ensure_ascii=False)
                 ),
             }
-            for index, skill in enumerate(skills)
-        }
         answers = await decisions(
             self.config,
             model=model,
-            state={
-                "mode_id": str(mode_id or "").strip(),
-                "phase": str(phase or "").strip(),
-                "task_text": str(task_text or "").strip(),
-            },
+            state=self._decision_state(task_text=task_text, mode_id=mode_id, phase=phase),
             questions=questions,
         )
+        needs_skills = decision_noul(answers, "needs_skills")
+        if needs_skills is not None and needs_skills < _DECISION_NEEDS_SKILLS_THRESHOLD:
+            return None
         probabilities = [decision_noul(answers, f"skill_{index}") for index in range(len(skills))]
         if all(probability is None for probability in probabilities):
             raise ValueError("decisions response has no valid skill answers")
@@ -986,6 +1027,55 @@ class SkillRuntimeService:
         ]
         scored.sort(key=lambda item: item[0], reverse=True)
         return [skill_id for _probability, skill_id in scored[:_MAX_SKILLS_IN_PROMPT]]
+
+    async def _input_needs_skills(self, *, task_text: str, mode_id: str, phase: str) -> bool:
+        """Ask only ``needs_skills`` (before auto-discovery with no local skills); True unless decided «no».
+
+        Decision model first; without it or on its failure — the chat model.
+        """
+        state = self._decision_state(task_text=task_text, mode_id=mode_id, phase=phase)
+        decision_model = get_decision_model(self.config)
+        if decision_model is not None:
+            try:
+                answers = await decisions(
+                    self.config,
+                    model=decision_model,
+                    state=state,
+                    questions={"needs_skills": _NEEDS_SKILLS_QUESTION},
+                )
+                needs_skills = decision_noul(answers, "needs_skills")
+                if needs_skills is not None:
+                    return needs_skills >= _DECISION_NEEDS_SKILLS_THRESHOLD
+            except Exception:
+                self._logger.exception(
+                    "skill runtime: needs_skills decision failed, falling back to chat mode=%s phase=%s",
+                    mode_id,
+                    phase,
+                )
+        try:
+            raw = await chat_completion(
+                self.config,
+                _NEEDS_SKILLS_SYSTEM_PROMPT,
+                json.dumps(state, ensure_ascii=False),
+                response_format={"type": "json_object"},
+                model=self._get_model(big=True),
+                temperature=0.1,
+                max_tokens=_SELECTOR_MAX_TOKENS,
+                client_factory=self._client_factory,
+            )
+            parsed = loads_safe(raw or "{}", strict_first=False)
+        except Exception:
+            self._logger.exception("skill runtime: needs_skills chat call failed mode=%s phase=%s", mode_id, phase)
+            return True
+        return not (isinstance(parsed, dict) and parsed.get("needs_skills") is False)
+
+    @staticmethod
+    def _decision_state(*, task_text: str, mode_id: str, phase: str) -> Dict[str, str]:
+        return {
+            "mode_id": str(mode_id or "").strip(),
+            "phase": str(phase or "").strip(),
+            "task_text": str(task_text or "").strip(),
+        }
 
     def _resolve_discovery_mode(self, *, session: Any | None, requested_mode: str | None) -> str:
         if requested_mode:
@@ -1043,7 +1133,8 @@ class SkillRuntimeService:
         return "\n".join(
             [
                 "You are a strict skill selector for coding tasks.",
-                "Return strict JSON object with key selected_skill_ids.",
+                "Return strict JSON object with keys needs_skills (boolean) and selected_skill_ids.",
+                "needs_skills: " + _NEEDS_SKILLS_RULE + " If needs_skills is false, selected_skill_ids must be [].",
                 "Only select skill ids from the provided available_skills list.",
                 "Returning an empty list is correct and preferred when relevance is weak, indirect, or ambiguous.",
                 f"Return at most {_MAX_SKILLS_IN_PROMPT} skill ids.",
