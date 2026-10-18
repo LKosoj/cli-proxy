@@ -75,7 +75,6 @@ def _build_records(
             records.append({
                 **base,
                 "type": "assistant",
-                "model": "coder-model",
                 "message": {"role": "model", "parts": [{"text": msg.content}]},
             })
         parent_uuid = msg_uuid

@@ -102,7 +102,6 @@ def _build_records(
                 "version": "2.1.116",
                 "gitBranch": "main",
                 "message": {
-                    "model": "claude-opus-4-7",
                     "role": "assistant",
                     "content": [{"type": "text", "text": msg.content}],
                     "stop_reason": "end_turn",
