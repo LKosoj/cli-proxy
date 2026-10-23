@@ -1,6 +1,8 @@
 import asyncio
 import types
 
+import pytest
+
 from bot import BotApp
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
 
@@ -245,5 +247,60 @@ def test_on_document_media_group_large_text_document_uses_attachment_path(tmp_pa
         assert "Группа" in payload
         assert "===== Вложение: large.log =====" in payload
         _assert_payload_uses_saved_attachment(payload, tmp_path, "GROUP-LARGE-CONTENT", large_data)
+
+    asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+    "kind,filename,mime_type",
+    [
+        ("audio", "recording.mp3", "audio/mpeg"),
+        ("audio", None, "audio/wav"),
+        ("voice", None, "audio/ogg"),
+        ("voice", None, None),
+        ("document", "recording.MP3", "application/octet-stream"),
+        ("document", "recording.bin", "audio/flac"),
+        ("document", "report.pdf", "application/pdf"),
+        ("document", "schedule.xml", "application/xml"),
+        ("document", "page.html", "text/html"),
+        ("document", "page.htm", "text/html"),
+        ("document", "slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        ("document", "schedule.mpp", "application/vnd.ms-project"),
+        ("document", "schedule.mppx", "application/octet-stream"),
+        ("document", "data.custom", "application/octet-stream"),
+    ],
+)
+@pytest.mark.parametrize("media_group_id", ["", "audio-album"])
+def test_file_saves_bytes_and_passes_caption_and_path(tmp_path, kind, filename, mime_type, media_group_id):
+    async def _run():
+        app = _build_app(tmp_path)
+        session = types.SimpleNamespace(id="s1", workdir=str(tmp_path))
+        _install_authorized_route(app, session)
+        app.manager.get = lambda _chat_id, _sid: session
+        captured = _capture_staged_input(app)
+        data = b"AUDIO-BINARY-CONTENT\x00\xff"
+        media = types.SimpleNamespace(file_id="a1", file_size=len(data), mime_type=mime_type)
+        if kind != "voice":
+            media.file_name = filename
+        update = _document_update(None, caption="Разбери запись", media_group_id=media_group_id)
+        setattr(update.message, kind, media)
+        ctx = _document_context(data)
+
+        await app.on_document(update, ctx)
+        if media_group_id:
+            assert captured["calls"] == []
+            await app._flush_media_groups_for_chat(1)
+            await asyncio.sleep(0)
+
+        assert len(captured["calls"]) == 1
+        payload = captured["calls"][0]["payload"]
+        assert "Разбери запись" in payload
+        _assert_payload_uses_saved_attachment(payload, tmp_path, "AUDIO-BINARY-CONTENT", data)
+        if filename:
+            assert filename in payload
+        elif mime_type == "audio/wav":
+            assert ".wav" in payload
+        elif kind == "voice":
+            assert ".ogg" in payload or ".oga" in payload
 
     asyncio.run(_run())

@@ -109,6 +109,9 @@ def test_register_handlers_routes_rich_messages_and_unsupported_ones(monkeypatch
     async def _on_unsupported(*_args, **_kwargs):
         return None
 
+    async def _on_document(*_args, **_kwargs):
+        return None
+
     bot_app = SimpleNamespace(
         access_policy_service=SimpleNamespace(is_allowed=lambda _chat_id: True),
         metrics=SimpleNamespace(inc=lambda _name: None),
@@ -116,7 +119,7 @@ def test_register_handlers_routes_rich_messages_and_unsupported_ones(monkeypatch
         on_callback=_on_message,
         on_unknown_command=_on_message,
         on_photo=_on_message,
-        on_document=_on_message,
+        on_document=_on_document,
         on_message=_on_message,
         on_unsupported_message=_on_unsupported,
     )
@@ -144,7 +147,21 @@ def test_register_handlers_routes_rich_messages_and_unsupported_ones(monkeypatch
         bot=None,
     )
     matched = [handler for handler in group0 if handler.check_update(voice)]
-    assert matched and matched[0].callback is _on_unsupported
+    assert matched and matched[0].callback is _on_document
+    audio = Update.de_json(
+        {
+            "update_id": 5,
+            "message": {
+                "message_id": 9,
+                "date": 1790000000,
+                "chat": {"id": 1, "type": "private"},
+                "audio": {"file_id": "f", "file_unique_id": "u", "duration": 1},
+            },
+        },
+        bot=None,
+    )
+    matched = [handler for handler in group0 if handler.check_update(audio)]
+    assert matched and matched[0].callback is _on_document
     # Последний обработчик группы 0 — заглушка; правки и служебные события она не ловит.
     assert group0[-1].callback is _on_unsupported
     edited = Update.de_json(

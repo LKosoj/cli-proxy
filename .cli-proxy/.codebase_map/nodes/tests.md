@@ -92,4 +92,4 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-16 — Codex limits regression covers malformed records before and after token counts.
+- 2026-10-24 — проверены сохранение документов любого формата и аудио, пути в CLI, подписи, альбомы и маршрутизация голосовых.

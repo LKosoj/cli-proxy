@@ -4,6 +4,7 @@ Module containing message processing functionality for the Telegram bot.
 
 import asyncio
 import logging
+import mimetypes
 import os
 import time
 
@@ -673,7 +674,8 @@ class MessageProcessor:
         )
 
     async def process_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        self._log_inbound(update, kind="document")
+        audio = getattr(update.message, "audio", None) or getattr(update.message, "voice", None)
+        self._log_inbound(update, kind="audio" if audio else "document")
         ok, route, ui_chat_id, owner_chat_id, reply_kwargs = await self._authorize_inbound(update, context)
         if not ok:
             return
@@ -683,10 +685,16 @@ class MessageProcessor:
         route_direct_topic_id = getattr(route, "direct_messages_topic_id", None) if route is not None else None
         route_session_uid = str(getattr(route, "session_uid", "") or "").strip() or None
         self.bot_app.metrics.inc("messages")
-        doc = update.message.document
+        doc = update.message.document or audio
         if not doc:
             return
-        filename = doc.file_name or ""
+        filename = getattr(doc, "file_name", None) or ""
+        if audio and not filename:
+            mime_type = "audio/x-wav" if doc.mime_type == "audio/wav" else doc.mime_type
+            extension = mimetypes.guess_extension(mime_type or "") or (
+                ".ogg" if getattr(update.message, "voice", None) else ".mp3"
+            )
+            filename = f"audio{extension}"
         lower = filename.lower()
         try:
             file_obj = await context.bot.get_file(doc.file_id)
@@ -695,7 +703,7 @@ class MessageProcessor:
             logging.exception(f"tool failed {str(e)}")
             await self.bot_app._send_message(context, text=t("msg.files.download_failed", lang, e=e), **reply_kwargs)
             return
-        if await self.bot_app._maybe_save_pending_uploaded_file(
+        if update.message.document and await self.bot_app._maybe_save_pending_uploaded_file(
             route_ui_chat_id,
             doc,
             data,
@@ -746,25 +754,12 @@ class MessageProcessor:
             await self.bot_app._flush_buffer(route_ui_chat_id, session, context)
             await self.bot_app._handle_image_bytes(session, data, filename or "image.jpg", caption, route_ui_chat_id, context)
             return
-        if not (
-            lower.endswith(".txt")
-            or lower.endswith(".md")
-            or lower.endswith(".rst")
-            or lower.endswith(".log")
-            or lower.endswith(".html")
-            or lower.endswith(".htm")
-        ):
-            await self.bot_app._send_message(
-                context,
-                text=t("msg.files.unsupported_doc_type", lang),
-                **reply_kwargs,
-            )
-            return
         actual_size = len(data)
         caption = (update.message.caption or "").strip()
         media_group_id = str(getattr(update.message, "media_group_id", "") or "").strip()
         display_name = filename or "attachment.txt"
-        if actual_size > TEXT_DOCUMENT_INLINE_LIMIT_BYTES:
+        inline_text = not audio and lower.endswith((".txt", ".md", ".rst", ".log"))
+        if not inline_text or actual_size > TEXT_DOCUMENT_INLINE_LIMIT_BYTES:
             attachment_path = await self.bot_app._store_attachment_bytes(
                 session,
                 data,

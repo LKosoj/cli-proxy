@@ -185,7 +185,7 @@ After that, the main bot can continue running as root: `claude` commands are lau
    - Send a normal message - it goes to the current topic/context session.
    - If the message starts with `/`, use `/send /command` or `> /command`.
    - Long messages are buffered for 2 seconds; short ones (<3000) are sent immediately.
-- `.txt`, `.md`, `.rst`, `.log`, `.html`, `.htm` attachments (up to 500 KB) are sent immediately and merged with the caption.
+- Small `.txt`, `.md`, `.rst`, `.log` attachments (up to 5 KB) are merged with the caption; other documents are passed to the CLI as saved file paths.
 
 3. **Control execution**
    - If the session is busy, the bot offers: cancel, queue, or discard input.
@@ -519,7 +519,8 @@ GitHub PAT for HTTPS git:
 - `defaults.github_token` in `config.yaml` (used for clone/fetch/pull/push without interactive prompts)
 
 ## Attachments
-- Text files: `.txt`, `.md`, `.rst`, `.log`, `.html`, `.htm` (up to 500 KB). Bot combines caption + file contents and sends to CLI.
+- Documents of any format (PDF, XML, HTML, PPTX, MPP/MPPX and others), audio files and voice messages are saved under `.cli-proxy/.attachments/` in the session working directory. The caption and `@.cli-proxy/.attachments/…` path are passed to the CLI. Reading each format depends on the selected CLI's tools.
+- Text files `.txt`, `.md`, `.rst`, `.log` up to 5 KB: the bot combines the caption and file contents and sends them to the CLI. Larger files are passed as paths.
 - Images: `.png`, `.jpg`, `.jpeg` (photo/document). Requires `image_cmd` for the selected CLI.
   If current tool lacks `image_cmd`, bot reports that images are unsupported.
   Caption is used as the prompt text.

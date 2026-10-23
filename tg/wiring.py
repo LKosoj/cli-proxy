@@ -53,11 +53,16 @@ def register_handlers(*, app: Application, bot_app, config) -> None:
     app.add_handler(CallbackQueryHandler(bot_app.on_callback))
     app.add_handler(MessageHandler(filters.COMMAND, bot_app.on_unknown_command))
     app.add_handler(MessageHandler(filters.PHOTO, bot_app.on_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, bot_app.on_document))
+    app.add_handler(
+        MessageHandler(
+            filters.Document.ALL | (filters.UpdateType.MESSAGE & (filters.AUDIO | filters.VOICE)),
+            bot_app.on_document,
+        )
+    )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_app.on_message))
     app.add_handler(MessageHandler(RICH_MESSAGE & ~filters.COMMAND, bot_app.on_message))
     # Последний в группе 0: срабатывает только если выше никто не подошёл
-    # (голосовые, стикеры, новые типы Bot API) — иначе такие апдейты пропадали без следа.
+    # (стикеры, новые типы Bot API) — иначе такие апдейты пропадали без следа.
     # Служебные события (закреп, создание темы и т.п.) и правки сообщений не логируем.
     app.add_handler(
         MessageHandler(filters.UpdateType.MESSAGE & ~filters.StatusUpdate.ALL, bot_app.on_unsupported_message)
