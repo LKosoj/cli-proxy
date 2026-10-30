@@ -828,6 +828,95 @@ class SessionActionsMixin:
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         return True
 
+    def _cli_retry_prompt(self, session) -> str:
+        prompt = str(getattr(session, "pending_cli_retry_prompt", "") or "").strip()
+        if prompt:
+            return prompt
+        try:
+            from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, tmux_runtime_paths
+
+            payload = TmuxExecutionBackend._read_last_request(tmux_runtime_paths(session))
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "failed to read cli retry prompt session_id=%s",
+                getattr(session, "id", None),
+            )
+            return ""
+        return str(payload.get("retry_prompt") or "").strip()
+
+    def _cli_retry_dest(self, session, reply_chat_id: int) -> dict:
+        dest = {"kind": "telegram", "chat_id": int(reply_chat_id)}
+        try:
+            from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, tmux_runtime_paths
+
+            payload = TmuxExecutionBackend._read_last_request(tmux_runtime_paths(session))
+            stored = payload.get("dest")
+            if isinstance(stored, dict) and stored.get("chat_id") is not None:
+                dest = dict(stored)
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "cli retry dest fallback session_id=%s",
+                getattr(session, "id", None),
+                exc_info=True,
+            )
+        if dest.get("chat_id") is None:
+            dest["chat_id"] = int(reply_chat_id)
+        # Тред темы не всегда лежит в last_request: если файл уже перезаписан,
+        # берём его из сессии, иначе повтор уйдёт в общий чат, а не в тему.
+        scope = getattr(session, "conversation_scope", None)
+        if (
+            dest.get("message_thread_id") is None
+            and getattr(scope, "message_thread_id", None) is not None
+            and int(getattr(scope, "chat_id", dest["chat_id"]) or dest["chat_id"]) == int(dest["chat_id"])
+        ):
+            dest["message_thread_id"] = int(scope.message_thread_id)
+        return dest
+
+    async def _cb_cli_retry(self, *, data: str, chat_id: int, query, context) -> bool:
+        """Кнопка «Повторить» после ошибки «модель перегружена»."""
+
+        lang = lang_from_query(query, self.bot_app.config)
+        payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""
+        reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        manager = getattr(self.bot_app, "manager", None)
+        session = None
+        if payload and manager is not None and hasattr(manager, "get_by_uid"):
+            session = manager.get_by_uid(payload)
+        if session is None:
+            session = scope_session
+        if session is None:
+            await query.answer(t("msg.cli.retry_missing", lang), show_alert=True)
+            return True
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "cli_retry"):
+            return True
+        if bool(getattr(session, "busy", False)):
+            await query.answer(t("msg.cli.retry_busy", lang), show_alert=True)
+            return True
+        prompt = self._cli_retry_prompt(session)
+        if not prompt:
+            await query.answer(t("msg.cli.retry_missing", lang), show_alert=True)
+            return True
+
+        message = getattr(query, "message", None)
+        clear_markup = getattr(self.bot_app, "_clear_message_reply_markup", None)
+        if callable(clear_markup) and message is not None:
+            try:
+                await clear_markup(context, int(message.chat_id), int(message.message_id))
+            except Exception:
+                logging.getLogger(__name__).debug("failed to clear cli retry button", exc_info=True)
+
+        dest = self._cli_retry_dest(session, reply_chat_id)
+        starter = getattr(getattr(self.bot_app, "session_management", None), "start_prompt_task", None)
+        started = False
+        if callable(starter):
+            started = bool(starter(session, prompt, dest, context, task_name="cli_retry"))
+        if started:
+            session.pending_cli_retry_prompt = ""
+            await query.answer(t("msg.cli.retry_started", lang))
+            return True
+        await query.answer(t("msg.cli.retry_failed", lang), show_alert=True)
+        return True
+
     async def _cb_sess_tmux_reread(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)
         payload = str(data or "").split(":", 1)[1].strip() if ":" in str(data or "") else ""

@@ -540,7 +540,8 @@
       "mark_read": "⚪ Als gelesen markieren"
     },
     "cli": {
-      "unavailable": "CLI nicht verfügbar"
+      "unavailable": "CLI nicht verfügbar",
+      "retry": "Wiederholen"
     },
     "transfer": {
       "yes": "Ja, übertragen",
@@ -654,6 +655,12 @@
       "tmux_reread_failed": "tmux-Ausgabe konnte nicht neu gelesen werden",
       "marked_unread": "Sitzung als ungelesen markiert.",
       "marked_read": "Ungelesen-Markierung entfernt."
+    },
+    "cli": {
+      "retry_started": "Anfrage wird wiederholt.",
+      "retry_failed": "Die Anfrage konnte nicht wiederholt werden.",
+      "retry_missing": "Nichts zu wiederholen: die Anfrage wurde nicht gespeichert.",
+      "retry_busy": "Die Sitzung ist noch beschäftigt. Warten Sie und drücken Sie erneut."
     },
     "error": {
       "session_not_found": "Sitzung nicht gefunden.",

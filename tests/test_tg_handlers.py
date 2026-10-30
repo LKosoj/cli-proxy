@@ -546,6 +546,55 @@ async def test_tmux_reread_callback_closes_menu_without_messages() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cli_retry_callback_resends_saved_prompt() -> None:
+    session_uid = "thread:142987535:356068"
+    session = types.SimpleNamespace(
+        id="s5",
+        chat_id=142987535,
+        busy=False,
+        pending_cli_retry_prompt="Какой статус?",
+        conversation_scope=types.SimpleNamespace(session_uid=session_uid, chat_id=142987535, message_thread_id=356068),
+    )
+    answers: list[tuple[str, bool]] = []
+    started: list[tuple] = []
+
+    def _start(_session, prompt, dest, _context, task_name="run_prompt"):
+        started.append((prompt, dict(dest), task_name))
+        return True
+
+    bot_app = _tmux_reread_bot_app(
+        session,
+        session_uid,
+        is_admin=True,
+        outcome="started",
+        edits=[],
+        scope=(142987535, 142987535),
+    )
+    bot_app.session_management = types.SimpleNamespace(start_prompt_task=_start)
+    handler = CallbackHandler(bot_app)
+    query = _tmux_reread_query(session_uid, answers, chat_id=142987535)
+    query.data = f"cli_retry:{session_uid}"
+
+    ok = await handler._cb_cli_retry(
+        data=f"cli_retry:{session_uid}",
+        chat_id=142987535,
+        query=query,
+        context=object(),
+    )
+
+    assert ok is True
+    assert started == [
+        (
+            "Какой статус?",
+            {"kind": "telegram", "chat_id": 142987535, "message_thread_id": 356068},
+            "cli_retry",
+        )
+    ]
+    assert session.pending_cli_retry_prompt == ""
+    assert answers == [("Повторяю запрос.", False)]
+
+
+@pytest.mark.asyncio
 async def test_tmux_reread_callback_falls_back_to_text_when_delete_fails() -> None:
     session_uid = "chat:101:s1"
     session = types.SimpleNamespace(id="s1", chat_id=101, queue=[])

@@ -894,6 +894,11 @@ class Session:
         except Exception:
             return ""
 
+    def _remember_tmux_terminal_error(self, result: Any) -> None:
+        diagnostics = getattr(result, "diagnostics", None) or {}
+        self.last_cli_terminal_error = str(diagnostics.get("terminal_error") or "")
+        self.last_cli_retry_prompt = str(diagnostics.get("retry_prompt") or "")
+
     async def run_prompt(
         self,
         prompt: str,
@@ -903,6 +908,9 @@ class Session:
         force_fresh: bool = False,
         tmux_request_context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        # Ошибка прошлого хода не должна прилипнуть к новому запросу.
+        self.last_cli_terminal_error = ""
+        self.last_cli_retry_prompt = ""
         directive = self._cli_language_directive()
         if directive:
             prompt = f"{directive}\n\n{prompt}"
@@ -992,6 +1000,7 @@ class Session:
             paths = backend.paths(self)
             self.last_cli_raw_stream_path = paths.get("pane_log")
             self.last_cli_normalized_stream_path = str(result.diagnostics.get("transcript_path") or "") or None
+            self._remember_tmux_terminal_error(result)
             if result.abnormal_stop:
                 self.headless_forced_stop = str(result.diagnostics.get("failure_reason") or "tmux_request_failed")
             return result.text
@@ -1003,6 +1012,8 @@ class Session:
         from app.services.cli_backends import TmuxExecutionBackend
 
         self._active_execution_backend = EXECUTION_BACKEND_TMUX
+        self.last_cli_terminal_error = ""
+        self.last_cli_retry_prompt = ""
         try:
             backend = TmuxExecutionBackend()
             result = await backend.recover(self, request)
@@ -1010,6 +1021,7 @@ class Session:
             paths = backend.paths(self)
             self.last_cli_raw_stream_path = paths.get("pane_log")
             self.last_cli_normalized_stream_path = str(result.diagnostics.get("transcript_path") or "") or None
+            self._remember_tmux_terminal_error(result)
             if result.abnormal_stop:
                 self.headless_forced_stop = str(result.diagnostics.get("failure_reason") or "tmux_request_failed")
             return result.text

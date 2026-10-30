@@ -37,6 +37,7 @@ class CallbackHandler(CallbackActionsMixin):
             ("approve_cmd:", self._cb_approve_cmd),
             ("deny_cmd:", self._cb_deny_cmd),
             ("ask:", self._cb_ask),
+            ("cli_retry:", self._cb_cli_retry),
         ]
         self._session_ui_handlers = [
             (("eq", "sess_active"), self._cb_sess_active),

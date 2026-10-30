@@ -217,6 +217,57 @@ async def test_observed_tmux_silence_is_not_reported_to_chat(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_model_capacity_error_is_shown_with_retry_button(monkeypatch):
+    events: list[tuple] = []
+    sent: list[dict] = []
+    service = _run_service(events)
+    session = _recovery_session()
+    error = "Selected model is at capacity. Please try a different model."
+
+    async def _recover(_request):
+        session.last_cli_terminal_error = error
+        session.last_cli_retry_prompt = "Какой статус?"
+        return error
+
+    async def _send_message(_context, **kwargs):
+        sent.append(kwargs)
+
+    session.recover_tmux_request = _recover
+    service.bot_app._send_message = _send_message
+    recovery = TmuxRecoveryRequest(
+        request_id="observe-codex",
+        started_at=10.0,
+        offset=0,
+        prompt="старый запрос",
+        dest={"kind": "telegram", "chat_id": 42, "message_thread_id": 9},
+        observe=True,
+    )
+    delivered: list[str] = []
+    monkeypatch.setattr(
+        TmuxExecutionBackend,
+        "mark_request_delivered",
+        lambda _session, request_id: delivered.append(str(request_id)) or True,
+    )
+    service.start_prompt_task = lambda *_args, **_kwargs: True
+
+    await service.run_prompt(
+        session,
+        recovery.prompt,
+        recovery.dest,
+        context=object(),
+        recovery_request=recovery,
+    )
+
+    assert [event for event in events if event[0] == "output"] == []
+    assert sent and sent[0]["text"] == error
+    button = sent[0]["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "Повторить"
+    assert button.callback_data == "cli_retry:desktop:s1"
+    assert session.pending_cli_retry_prompt == "Какой статус?"
+    assert delivered == ["observe-codex"]
+
+
+@pytest.mark.asyncio
 async def test_recovery_run_is_marked_as_such_in_log(monkeypatch, caplog):
     events: list[tuple] = []
     service = _run_service(events)

@@ -605,6 +605,64 @@ async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monk
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_observe_returns_model_capacity_error_immediately(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    error = "Selected model is at capacity. Please try a different model."
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text=error,
+                complete=True,
+                available=True,
+                recognized=True,
+                terminal_error=error,
+                retry_prompt="Какой статус?",
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=30.0,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("⚠ 1 warning · f2 to view\n")
+    backend._write_last_request(
+        paths,
+        {
+            "request_id": "req-1",
+            "prompt": "старый запрос",
+            "dest": {"kind": "telegram", "chat_id": 42},
+        },
+    )
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="req-1",
+        started_at=time.time(),
+        offset=0,
+        prompt="старый запрос",
+        dest={"kind": "telegram", "chat_id": 42},
+        observe=True,
+    )
+
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
+
+    assert result.text == error
+    assert result.diagnostics["completion_source"] == "transcript-error"
+    assert result.diagnostics["retry_prompt"] == "Какой статус?"
+    stored = backend._read_last_request(paths)
+    assert stored["retry_prompt"] == "Какой статус?"
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_observe_request_starts_from_current_tail(tmp_path):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)

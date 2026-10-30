@@ -1016,6 +1016,23 @@ class TmuxExecutionBackend:
             return {}
 
     @classmethod
+    def _remember_retry_prompt(cls, paths: dict[str, str], request_id: str, prompt: str) -> None:
+        """Запоминает текст, который кнопка «Повторить» отправит ещё раз.
+
+        Пишется в тот же last_request.json, что и сам запрос: после перезапуска
+        бота кнопке есть откуда взять фразу, даже если память процесса пустая.
+        """
+
+        text = str(prompt or "").strip()
+        if not text:
+            return
+        payload = cls._read_last_request(paths)
+        if str(payload.get("request_id") or "").strip() != str(request_id or "").strip():
+            return
+        payload["retry_prompt"] = text
+        cls._write_last_request(paths, payload)
+
+    @classmethod
     def mark_request_delivered(cls, session: Any, request_id: str) -> bool:
         paths = tmux_runtime_paths(session)
         payload = cls._read_last_request(paths)
@@ -1267,6 +1284,9 @@ class TmuxExecutionBackend:
         last_progress_text = ""
         complete = False
         completion_source = ""
+        # Ошибка, которой Codex закрыл ход. Пустая, пока в журнале её нет.
+        terminal_error = ""
+        retry_prompt = ""
         transcript_authoritative = False
         transcript_reader = None
         persisted_locator = request.transcript_locator
@@ -1406,7 +1426,13 @@ class TmuxExecutionBackend:
                     transcript_authoritative = transcript_authoritative or (
                         transcript_update.available and transcript_update.recognized
                     )
-                    if transcript_update.assistant_text:
+                    if transcript_update.terminal_error:
+                        # Ход умер на ошибке модели. Текст ошибки важнее прошлого
+                        # комментария агента и важнее экрана, где его прячет TUI.
+                        terminal_error = transcript_update.terminal_error
+                        retry_prompt = str(transcript_update.retry_prompt or request.prompt or "").strip()
+                        transcript_latest_text = terminal_error
+                    elif transcript_update.assistant_text:
                         transcript_latest_text = transcript_update.assistant_text
                     if transcript_update.progress_text and transcript_update.progress_text != last_progress_text:
                         last_progress_text = transcript_update.progress_text
@@ -1497,6 +1523,14 @@ class TmuxExecutionBackend:
                     preview_text = latest_text
                 else:
                     preview_text = transcript_latest_text
+                if terminal_error:
+                    # Наблюдение обычно не закрывает ход по журналу: оно ждёт,
+                    # пока экран затихнет. Ошибка перегрузки так не дожидается —
+                    # таймер TUI может тикать, а в чат уходит пусто.
+                    latest_text = terminal_error
+                    preview_text = terminal_error
+                    complete = True
+                    completion_source = "transcript-error"
                 if preview_text and preview_text != last_reported_text:
                     last_reported_text = preview_text
                     setattr(session, "last_output_ts", time.time())
@@ -1544,6 +1578,8 @@ class TmuxExecutionBackend:
         # Журнал - единственный потребитель сигналов панели: без этой записи
         # title_status/bell_count вычислялись бы и выбрасывались, а именно по
         # ним разбирают зависший ход (чем CLI был занят в момент закрытия).
+        if terminal_error:
+            self._remember_retry_prompt(paths, request.request_id, retry_prompt)
         logger.info(
             "tmux request finished session_id=%s request_id=%s completion=%s title_status=%s bells=%d",
             getattr(session, "id", "?"),
@@ -1567,6 +1603,8 @@ class TmuxExecutionBackend:
                 "failure_reason": "" if complete else "tmux_session_missing",
                 "title_status": latest_title_status or "",
                 "bell_count": str(total_bell_count),
+                "terminal_error": terminal_error,
+                "retry_prompt": retry_prompt if terminal_error else "",
             },
         )
 

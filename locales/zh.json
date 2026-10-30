@@ -540,7 +540,8 @@
       "mark_read": "⚪ 标记为已读"
     },
     "cli": {
-      "unavailable": "CLI 不可用"
+      "unavailable": "CLI 不可用",
+      "retry": "重试"
     },
     "transfer": {
       "yes": "是，迁移",
@@ -654,6 +655,12 @@
       "tmux_reread_failed": "重新读取 tmux 输出失败",
       "marked_unread": "会话已标记为未读。",
       "marked_read": "已取消未读标记。"
+    },
+    "cli": {
+      "retry_started": "正在重试请求。",
+      "retry_failed": "无法重试请求。",
+      "retry_missing": "无法重试：请求未保存。",
+      "retry_busy": "会话仍在忙。请稍候再按。"
     },
     "error": {
       "session_not_found": "未找到会话。",

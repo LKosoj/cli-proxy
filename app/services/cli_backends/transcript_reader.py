@@ -43,6 +43,10 @@ class TranscriptPollResult:
     activity_at: Optional[float] = None
     session_id: str = ""
     locator: Optional[TranscriptLocator] = None
+    # Текст ошибки, которой Codex закрыл ход (last_agent_message при этом пустой).
+    terminal_error: str = ""
+    # Запрос пользователя, на котором ход оборвался. Нужен кнопке «Повторить».
+    retry_prompt: str = ""
 
 
 def _parse_timestamp(raw: Any) -> Optional[float]:
@@ -68,6 +72,39 @@ def _kimi_activity(raw: Any) -> float:
     if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw > 0:
         return float(raw) / 1000.0
     return time.time()
+
+
+def _codex_error_message(payload: dict[str, Any]) -> str:
+    """Текст из task_complete.error. У успешного хода этого поля нет."""
+
+    error = payload.get("error")
+    if isinstance(error, dict):
+        return str(error.get("message") or "").strip()
+    if isinstance(error, str):
+        return error.strip()
+    return ""
+
+
+def _codex_message_text(content: Any) -> str:
+    """Текст реплики Codex: и ответ модели, и сообщение пользователя."""
+
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, dict):
+        return str(content.get("text") or "").strip()
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("type") or "").strip()
+        if kind not in {"text", "input_text", "output_text"}:
+            continue
+        text = str(item.get("text") or "").strip()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
 
 
 def _content_text(content: Any, *, strip: bool = True) -> str:
@@ -126,6 +163,10 @@ class CliTranscriptReader:
         self._grok_stream_chunks: list[str] = []
         self._kimi_step_parts: list[str] = []
         self._gemini_turn_end: tuple[str, str] = ("", "")
+        self.terminal_error = ""
+        self.retry_prompt = ""
+        # Реплика пользователя текущего хода. task_started начинает ход заново.
+        self._turn_user_text = ""
         if locator is not None:
             self._restore_locator(locator)
 
@@ -410,9 +451,14 @@ class CliTranscriptReader:
         record_type = str(record.get("type") or "").strip()
         payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
         if record_type == "response_item":
-            if str(payload.get("type") or "").strip() != "message":
+            item_type = str(payload.get("type") or "").strip()
+            role = str(payload.get("role") or "").strip()
+            if item_type == "message" and role == "user":
+                text = _codex_message_text(payload.get("content"))
+                if text:
+                    self._turn_user_text = text
                 return
-            if str(payload.get("role") or "").strip() != "assistant":
+            if item_type != "message" or role != "assistant":
                 return
             text = "\n".join(
                 str(item.get("text") or "").strip()
@@ -432,14 +478,38 @@ class CliTranscriptReader:
         if event_type in {"user_message", "agent_message", "task_started", "task_complete", "token_count"}:
             self.recognized = True
         self.activity_at = _event_timestamp(record.get("timestamp"))
-        if event_type == "agent_message":
+        if event_type == "task_started":
+            self._turn_user_text = ""
+        elif event_type == "user_message":
+            text = str(payload.get("message") or "").strip()
+            if text:
+                self._turn_user_text = text
+        elif event_type == "item_completed":
+            item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+            if str(item.get("type") or "").strip() == "UserMessage":
+                text = _codex_message_text(item.get("content"))
+                if text:
+                    self._turn_user_text = text
+        elif event_type == "agent_message":
             text = str(payload.get("message") or "").strip()
             if text:
                 self.latest_assistant_text = text
         elif event_type == "task_complete":
+            # Перегрузка модели приходит сюда: last_agent_message пустой, а текст
+            # лежит в error.message. Раньше ход закрывался прошлым комментарием,
+            # и эта строка до бота не доходила.
+            error_message = _codex_error_message(payload)
             text = str(payload.get("last_agent_message") or "").strip()
-            if text:
-                self.latest_assistant_text = text
+            if error_message:
+                self.latest_assistant_text = error_message
+                self.terminal_error = error_message
+                self.retry_prompt = str(self._turn_user_text or "").strip()
+            else:
+                self.terminal_error = ""
+                self.retry_prompt = ""
+                if text:
+                    self.latest_assistant_text = text
+            self._turn_user_text = ""
             self.complete = True
 
     def _handle_grok(self, record: dict[str, Any]) -> None:
@@ -719,4 +789,6 @@ class CliTranscriptReader:
             activity_at=self.activity_at,
             session_id=self.session_id if self.locator is not None else "",
             locator=self.locator,
+            terminal_error=self.terminal_error,
+            retry_prompt=self.retry_prompt,
         )

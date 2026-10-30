@@ -53,6 +53,23 @@ _CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\
 _CHOICE_CURSOR_RE = re.compile(r'^[ \t]*(?:[❯▶►▌»][ \t]*(?:☐[ \t]*)?|☐[ \t]*)[1-9][\.\)][ \t]', re.M)
 _CHOICE_QUESTION_MAX_LINES = 12
 _log = logging.getLogger(__name__)
+# Telegram принимает callback_data не длиннее 64 байт.
+_CLI_RETRY_CALLBACK_LIMIT = 64
+# Ошибки, после которых тот же запрос имеет смысл отправить ещё раз.
+_CLI_RETRYABLE_ERROR_PARTS = (
+    "at capacity",
+    "try a different model",
+    "try again later",
+    "capacity unavailable",
+    "flex capacity",
+)
+
+
+def cli_terminal_error_is_retryable(message: str) -> bool:
+    """Перегрузка модели и похожие временные отказы Codex."""
+
+    lowered = str(message or "").lower()
+    return any(part in lowered for part in _CLI_RETRYABLE_ERROR_PARTS)
 
 
 class SessionRunService:
@@ -397,6 +414,44 @@ class SessionRunService:
     @classmethod
     def _is_tmux_choice_preview(cls, session, text: str) -> bool:
         return get_session_execution_backend(session) == "tmux" and cls._is_cli_choice_question(text)
+
+    async def _send_cli_terminal_error(
+        self,
+        session,
+        dest: dict,
+        context,
+        message: str,
+        retry_prompt: str,
+    ) -> bool:
+        """Показать ошибку хода Codex и, если она временная, кнопку «Повторить»."""
+
+        if dest.get("chat_id") is None:
+            return False
+        lang = self._dest_lang(dest)
+        reply_markup = None
+        prompt = str(retry_prompt or "").strip()
+        if prompt and cli_terminal_error_is_retryable(message):
+            uid = session_runtime_uid(session)
+            callback_data = f"cli_retry:{uid}"
+            if uid and len(callback_data.encode("utf-8")) <= _CLI_RETRY_CALLBACK_LIMIT:
+                session.pending_cli_retry_prompt = prompt
+                reply_markup = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(t("btn.cli.retry", lang), callback_data=callback_data)]]
+                )
+        try:
+            await self.bot_app._send_message(
+                context,
+                text=message,
+                reply_markup=reply_markup,
+                **self._telegram_reply_kwargs(dest, session=session),
+            )
+        except Exception:
+            logging.getLogger("bot.send_output").exception(
+                "failed to send cli terminal error session=%s",
+                getattr(session, "id", "?"),
+            )
+            return False
+        return True
 
     async def _send_output_task(self, session, dest: dict, output: str, context) -> bool:
         sent = False
@@ -927,7 +982,34 @@ class SessionRunService:
                     observed_silence = bool(
                         getattr(recovery_request, "observe", False) and not str(output or "").strip()
                     )
-                    if tmux_request_id and observed_silence:
+                    terminal_error = str(getattr(session, "last_cli_terminal_error", "") or "").strip()
+                    retry_prompt = str(getattr(session, "last_cli_retry_prompt", "") or "").strip()
+                    if terminal_error:
+                        session.last_cli_terminal_error = ""
+                        session.last_cli_retry_prompt = ""
+                    if tmux_request_id and terminal_error:
+                        # Обычная доставка превратила бы короткую ошибку в большой
+                        # отчёт. Здесь нужно само сообщение и кнопка повтора.
+                        send_output_scheduled = True
+                        delivered = await self._send_cli_terminal_error(
+                            session,
+                            dest,
+                            context,
+                            terminal_error,
+                            retry_prompt,
+                        )
+                        if delivered:
+                            queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(
+                                session,
+                                tmux_request_id,
+                            )
+                            if not queue_drain_allowed:
+                                _log.error(
+                                    "tmux delivery marker was not persisted session=%s request_id=%s",
+                                    session.id,
+                                    tmux_request_id,
+                                )
+                    elif tmux_request_id and observed_silence:
                         # Чтение живого pane закончилось тишиной: заголовок с пустым
                         # отчётом в чат слать не за чем.
                         queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(

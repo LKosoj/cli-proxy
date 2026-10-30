@@ -234,6 +234,76 @@ def test_codex_transcript_reader_uses_task_complete(tmp_path):
 
     assert result.assistant_text == "Codex готов"
     assert result.complete is True
+    assert result.terminal_error == ""
+
+
+def test_codex_transcript_reader_surfaces_model_capacity_error(tmp_path):
+    """Перегрузка модели закрывает ход без текста ответа.
+
+    В журнале это task_complete с пустым last_agent_message и error.message.
+    Раньше читатель оставлял предыдущий комментарий, и ошибка до бота не доходила.
+    """
+    started_at = time.time() - 5
+    session_id = "22222222-2222-4222-8222-222222222222"
+    path = (
+        tmp_path
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "10"
+        / "30"
+        / f"rollout-2026-10-30T02-27-01-{session_id}.jsonl"
+    )
+    error = "Selected model is at capacity. Please try a different model."
+    prompt = "Какой статус? Продолжай до завершения генерации итогового видео"
+    _append_jsonl(
+        path,
+        {
+            "timestamp": _iso_utc(started_at + 1),
+            "type": "event_msg",
+            "payload": {"type": "agent_message", "message": "Ещё работаю над видео"},
+        },
+        {
+            "timestamp": _iso_utc(started_at + 2),
+            "type": "event_msg",
+            "payload": {"type": "task_started"},
+        },
+        {
+            "timestamp": _iso_utc(started_at + 3),
+            "type": "event_msg",
+            "payload": {
+                "type": "item_completed",
+                "item": {
+                    "type": "UserMessage",
+                    "content": [{"type": "text", "text": prompt}],
+                },
+            },
+        },
+        {
+            "timestamp": _iso_utc(started_at + 4),
+            "type": "event_msg",
+            "payload": {
+                "type": "task_complete",
+                "last_agent_message": None,
+                "error": {"message": error, "codex_error_info": "server_overloaded"},
+            },
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="codex",
+        workdir="/srv/project",
+        started_at=started_at,
+        home_dir=tmp_path,
+        session_id=session_id,
+    )
+
+    result = reader.poll()
+
+    assert result.complete is True
+    assert result.assistant_text == error
+    assert result.terminal_error == error
+    assert result.retry_prompt == prompt
+    assert "Ещё работаю" not in result.assistant_text
 
 
 def test_codex_transcript_reader_uses_assistant_response_item_for_preview(tmp_path):
