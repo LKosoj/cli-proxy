@@ -2266,6 +2266,63 @@ async def test_tmux_backend_fails_fast_on_claude_trust_prompt(tmp_path):
     assert driver.loaded_prompt_path is None
 
 
+CLAUDE_FOLDER_TRUST_PANE = (
+    "Quick safety check: Is this a project you created or one you trust?\n"
+    "Claude Code'll be able to read, edit, and execute files here.\n"
+    "warning: This folder pre-approves 13 tool permissions in .claude/settings.local.json:\n"
+    "These will apply without asking. Only proceed if you trust this configuration.\n"
+    "y. Yes, I trust this folder\n"
+    "n. No, exit\n"
+    "Enter y/n:\n"
+    "Enter to confirm · Esc to cancel"
+)
+
+
+def test_tmux_backend_recognizes_claude_folder_trust_prompt() -> None:
+    assert TmuxExecutionBackend._is_claude_folder_trust_prompt(CLAUDE_FOLDER_TRUST_PANE) is True
+    # Тот же текст в уже открытом поле ввода — цитата, а не вопрос.
+    assert TmuxExecutionBackend._is_claude_folder_trust_prompt(CLAUDE_FOLDER_TRUST_PANE + "\n❯") is False
+    assert TmuxExecutionBackend._is_claude_folder_trust_prompt("❯") is False
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_confirms_claude_folder_trust_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [CLAUDE_FOLDER_TRUST_PANE, "❯"]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=2.0,
+    )
+    session = _session(tmp_path)
+
+    result = await backend.run(session, "do work")
+
+    assert result.abnormal_stop is False
+    paths = backend.paths(session)
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("y", "Enter"))]
+    assert driver.loaded_prompt_path is not None
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_does_not_confirm_quoted_claude_folder_trust_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [CLAUDE_FOLDER_TRUST_PANE + "\n❯"]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.5,
+    )
+    session = _session(tmp_path)
+
+    result = await backend.run(session, "do work")
+
+    assert result.abnormal_stop is False
+    assert driver.sent_key_sequences == []
+
+
 CODEX_LOADING_PANE = (
     "╭───────────────────────────────────────╮\n"
     "│ >_ OpenAI Codex (v0.153.0)            │\n"

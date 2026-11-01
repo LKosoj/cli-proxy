@@ -76,6 +76,8 @@ _CODEX_DUMB_TERM_PROMPT = (
     'warning: term is set to "dumb". codex\'s interactive tui may not work in this terminal. '
     "continue anyway? [y/n]:"
 )
+# Claude около 150 мс после открытия диалога доверия глотает нажатия.
+_CLAUDE_TRUST_INPUT_GRACE_SEC = 0.2
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
 _TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok", "kimi"}
@@ -865,6 +867,19 @@ class TmuxExecutionBackend:
         return cls._interactive_cli_name(session) in _READY_WAIT_CLI_NAMES
 
     @staticmethod
+    def _is_claude_folder_trust_prompt(pane: str) -> bool:
+        """Экран «Quick safety check»: Claude ждёт y/n, обычного поля ввода ещё нет."""
+
+        text = normalize_terminal_text(pane)
+        # «❯» — уже поле ввода. Текст диалога тогда просто цитата в переписке.
+        if "❯" in text:
+            return False
+        lower = text.lower()
+        if "enter y/n" not in lower:
+            return False
+        return "trust this folder" in lower
+
+    @staticmethod
     def _is_interactive_ready(session: Any, pane: str, *, fresh_start: bool = False) -> bool:
         cli_name = TmuxExecutionBackend._interactive_cli_name(session)
         text = normalize_terminal_text(pane)
@@ -916,6 +931,7 @@ class TmuxExecutionBackend:
         deadline = time.time() + max(0.1, self.startup_timeout_sec)
         last_pane = ""
         dumb_term_confirmed = False
+        trust_confirmed = False
         while time.time() < deadline:
             # Сбойный захват (None) - не свидетельство готовности: для CLI без
             # своей ветки в _is_interactive_ready пустой экран прошёл бы через
@@ -931,6 +947,20 @@ class TmuxExecutionBackend:
                 ):
                     await self._driver(session).send_keys(paths["pane_target"], "y", "Enter")
                     dumb_term_confirmed = True
+                    continue
+                if (
+                    not trust_confirmed
+                    and self._interactive_cli_name(session) == "claude"
+                    and self._is_claude_folder_trust_prompt(pane)
+                ):
+                    trust_confirmed = True
+                    logger.info(
+                        "confirming claude workspace trust prompt pane=%s",
+                        paths["pane_target"],
+                    )
+                    await asyncio.sleep(_CLAUDE_TRUST_INPUT_GRACE_SEC)
+                    # y выбирает «Yes, I trust this folder», Enter подтверждает.
+                    await self._driver(session).send_keys(paths["pane_target"], "y", "Enter")
                     continue
                 if self._is_interactive_ready(session, pane, fresh_start=fresh_start):
                     return
