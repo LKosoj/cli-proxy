@@ -890,6 +890,9 @@ class CliLimitsService:
                     "--minimal",
                     "--no-memory",
                     "--no-subagents",
+                    # Свежая папка пробы иначе останавливается на вопросе о доверии,
+                    # и приглашения ❯, с которого читается /usage show, не появляется.
+                    "--trust",
                 )
                 pane_pid = self._read_grok_pane_pid(tmux_prefix, probe_env)
                 while time.monotonic() < deadline:

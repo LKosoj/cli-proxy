@@ -385,6 +385,7 @@ def test_read_grok_direct_usage_uses_isolated_tmux(
     assert "--leader-socket" in new_session_call
     assert "--no-memory" in new_session_call
     assert "--no-subagents" in new_session_call
+    assert "--trust" in new_session_call
     assert any("kill-server" in call for call in calls)
     assert call_environments[0]["GROK_AUTH_PATH"] == str(auth_path)
     assert Path(call_environments[0]["GROK_HOME"]).name == "grok-home"
