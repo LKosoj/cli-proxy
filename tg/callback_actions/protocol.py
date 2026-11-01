@@ -117,6 +117,9 @@ class ProtocolActionsMixin:
             await self._edit_msg(context, query, t("msg.ask.wrong_thread", lang))
             return True
         pending_session_id = str(pending.get("session_id") or "").strip()
+        # Сессия, которую проверка уже нашла. Ответ в tmux уходит в неё,
+        # а не во второй поиск по chat_id кнопки: у темы чата владелец другой.
+        resolved_session = None
         if pending_session_id:
             session_exists = True
             resolver = getattr(self.bot_app, "resolve_telegram_callback_scope", None)
@@ -125,7 +128,8 @@ class ProtocolActionsMixin:
                 manager = getattr(self.bot_app, "manager", None)
                 getter = getattr(manager, "get", None) if manager is not None else None
                 if callable(getter):
-                    session_exists = getter(int(owner_chat_id), pending_session_id) is not None
+                    resolved_session = getter(int(owner_chat_id), pending_session_id)
+                    session_exists = resolved_session is not None
             else:
                 checker = getattr(self.bot_app, "_session_exists_for_chat", None)
                 if callable(checker):
@@ -134,7 +138,8 @@ class ProtocolActionsMixin:
                     manager = getattr(self.bot_app, "manager", None)
                     getter = getattr(manager, "get", None) if manager is not None else None
                     if callable(getter):
-                        session_exists = getter(int(chat_id), pending_session_id) is not None
+                        resolved_session = getter(int(chat_id), pending_session_id)
+                        session_exists = resolved_session is not None
             if not session_exists:
                 self.bot_app._clear_pending_question(question_id)
                 await self._edit_msg(context, query, t("msg.input.question_stale", lang))
@@ -155,22 +160,40 @@ class ProtocolActionsMixin:
             await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
             return True
         answer = options[idx]
-        # Handle tmux CLI choice questions by feeding the selection back to the tmux pane
+        # Вопрос из меню tmux: цифра уходит в панель и на этом ответ закончен.
+        # resolve_question для такого id всегда False — это не вопрос плагина,
+        # и писать «ответ уже получен» здесь нельзя: клик тогда выглядит пустым,
+        # а следующий кадр снова спрашивает то же меню.
         pending_meta = self.bot_app.ui_state.pending_questions.get(question_id) or {}
         if pending_meta.get("tmux_feed"):
+            fed = False
             try:
-                tmux_sid = pending_meta.get("session_id")
-                if tmux_sid and self.bot_app.manager:
-                    tmux_sess = self.bot_app.manager.get(chat_id, tmux_sid)
-                    if tmux_sess:
-                        choice = "1"
-                        m = re.match(r'^(\d+)', answer or "")
-                        if m:
-                            choice = m.group(1)
-                        from app.services.cli_backends import TmuxExecutionBackend
-                        await TmuxExecutionBackend().send_input(tmux_sess, choice)
+                tmux_sess = resolved_session
+                if tmux_sess is None and pending_session_id:
+                    manager = getattr(self.bot_app, "manager", None)
+                    getter = getattr(manager, "get", None) if manager is not None else None
+                    if callable(getter):
+                        tmux_sess = getter(int(chat_id), pending_session_id)
+                if tmux_sess is not None:
+                    choice = "1"
+                    m = re.match(r"^(\d+)", answer or "")
+                    if m:
+                        choice = m.group(1)
+                    from app.services.cli_backends import TmuxExecutionBackend
+                    from sessions.session_run_service import SessionRunService
+
+                    await TmuxExecutionBackend().send_input(tmux_sess, choice)
+                    SessionRunService.remember_answered_tmux_choice(tmux_sess, question_id)
+                    fed = True
             except Exception:
                 logging.getLogger("bot.ask").exception("failed to feed tmux choice from ask")
+            if not fed:
+                # Карточка остаётся: повторный клик ещё может дойти до панели.
+                await self._edit_msg(context, query, t("msg.error.tmux_current_send_failed", lang))
+                return True
+            self.bot_app._clear_pending_question(question_id)
+            await self._edit_msg(context, query, t("msg.ask.choice_selected", lang, answer=answer))
+            return True
         runtime = None
         getter = getattr(self.bot_app, "get_runtime_by_capability", None)
         if callable(getter):

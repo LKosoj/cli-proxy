@@ -303,10 +303,21 @@ class TerminalScreen:
 
     def display_lines(self) -> List[str]:
         lines = list(self._scrollback)
-        lines.extend("".join(row).rstrip() for row in self._screen)
+        lines.extend(self.viewport_lines())
         while lines and not lines[-1]:
             lines.pop()
         return lines
+
+    def viewport_lines(self) -> List[str]:
+        """Только текущий экран, без строк, которые уже уехали в историю прокрутки."""
+
+        lines = ["".join(row).rstrip() for row in self._screen]
+        while lines and not lines[-1]:
+            lines.pop()
+        return lines
+
+    def viewport_text(self) -> str:
+        return "\n".join(self.viewport_lines())
 
     def to_text(self) -> str:
         return "\n".join(self.display_lines())

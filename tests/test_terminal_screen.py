@@ -44,6 +44,31 @@ def test_scrolled_lines_are_preserved_in_scrollback() -> None:
     assert screen.display_lines()[:3] == ["строка1", "строка2", "строка3"]
 
 
+def test_viewport_hides_menu_that_scrolled_away() -> None:
+    # Меню уехало вверх: в истории оно есть, на текущем экране его уже нет.
+    screen = TerminalScreen(width=40, height=3)
+    screen.feed(
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "2. No\n"
+        "working line 1\n"
+        "working line 2\n"
+        "working line 3\n"
+    )
+
+    assert "1. Yes" in screen.to_text()
+    assert "1. Yes" not in screen.viewport_text()
+    assert "working line 3" in screen.viewport_text()
+
+
+def test_viewport_keeps_menu_still_on_screen() -> None:
+    screen = TerminalScreen(width=40, height=6)
+    screen.feed("Do you want to proceed?\n❯ 1. Yes\n2. No\n")
+
+    assert "Do you want to proceed?" in screen.viewport_text()
+    assert "1. Yes" in screen.viewport_text()
+
+
 def test_scroll_region_does_not_lose_output() -> None:
     # Приложение задаёт регион прокрутки, чтобы не трогать нижнюю панель.
     screen = TerminalScreen(width=20, height=4)

@@ -111,6 +111,7 @@ class TmuxDeltaReader:
         self._pending = ""
         self._cache: dict[tuple[bool, bool], str] = {}
         self._rendered: Optional[str] = None
+        self._viewport: Optional[str] = None
 
     def feed(self, chunk: str) -> None:
         text = self._pending + str(chunk or "")
@@ -119,7 +120,15 @@ class TmuxDeltaReader:
             return
         self._cache.clear()
         self._rendered = None
+        self._viewport = None
         self._screen.feed(text)
+
+    def viewport_text(self) -> str:
+        """Видимый экран без истории прокрутки. Меню, которое уже уехало вверх, здесь нет."""
+
+        if self._viewport is None:
+            self._viewport = _clean_rendered_text(self._screen.viewport_text())
+        return self._viewport
 
     def parse(self, *, claude_screen_reader: bool = False, tui_chrome: bool = False) -> str:
         key = (bool(claude_screen_reader), bool(tui_chrome))

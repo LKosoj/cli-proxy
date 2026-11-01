@@ -1044,6 +1044,138 @@ async def test_tmux_backend_reports_only_menu_block_for_real_choice(tmp_path, mo
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_does_not_revive_choice_scrolled_off_screen(tmp_path, monkeypatch):
+    # Меню осталось в истории прокрутки, на экране уже другая работа.
+    # Его нельзя подменять блоком кнопок и нельзя спрашивать заново.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = (
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No\n"
+        + "\n".join(f"working {index}" for index in range(80))
+    )
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=False)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=0.1,
+    )
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    assert "working 79" in result.text
+    assert result.text != "Do you want to proceed?\n❯ 1. Yes\n2. No"
+    assert result.diagnostics["completion_source"] == "pane-quiet-timeout"
+
+    questions = []
+
+    async def send_question(*args, **kwargs):
+        questions.append((args, kwargs))
+
+    async def send_preview(_context, *, text, **kwargs):
+        return SimpleNamespace(message_id=43)
+
+    from sessions.session_run_service import SessionRunService
+
+    service = SessionRunService(
+        bot_app=SimpleNamespace(
+            _send_ask_question=send_question,
+            _send_message=send_preview,
+            ui_state=SimpleNamespace(pending_questions={}),
+        ),
+        persist_sessions=lambda: None,
+        mode_tasks_list=lambda **kwargs: [],
+        mode_tasks_create=lambda **kwargs: None,
+        log_cli_dialog=lambda *args, **kwargs: None,
+        reset_session_fields_like_sessions_reset=lambda *args, **kwargs: None,
+    )
+    session.tool.execution_backends = ["tmux"]
+    session.tool.default_execution_backend = "tmux"
+    session.send_lock = asyncio.Lock()
+    session.assistant_preview_message_id = None
+    session.assistant_preview_last_value = None
+    session.assistant_preview_creation_attempted = False
+    await service._upsert_telegram_assistant_preview(
+        session,
+        {"kind": "telegram", "chat_id": 123},
+        object(),
+        result.text,
+    )
+    assert questions == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_shows_later_reply_when_old_menu_left_the_screen(tmp_path, monkeypatch):
+    # Старое меню осталось в истории прокрутки. Новые реплики Claude лежат в журнале
+    # и должны сменять превью. Раньше меню забирало превью себе, и первая реплика замирала.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = (
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No\n"
+        + "\n".join(f"working {index}" for index in range(80))
+    )
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            self._polls = 0
+
+        def poll(self):
+            self._polls += 1
+            if self._polls < 3:
+                return TranscriptPollResult(
+                    assistant_text="Три агента планирования запущены.",
+                    available=True,
+                    recognized=True,
+                )
+            return TranscriptPollResult(
+                assistant_text="Правки ядра готовы: 13 069 проверок, 0 ошибок.",
+                available=True,
+                recognized=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=5.0,
+    )
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    task = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        deadline = time.monotonic() + 5
+        last = ""
+        while time.monotonic() < deadline:
+            last = str(getattr(session, "last_assistant_text_value", "") or "")
+            if "Правки ядра готовы" in last:
+                break
+            await asyncio.sleep(0.01)
+        assert "Правки ядра готовы" in last
+        assert "Do you want to proceed?" not in last
+        assert task.done() is False
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_closes_turn_on_choice_without_preview(tmp_path, monkeypatch):
     # Без превью вопрос кнопками не уходит, отвечать на него некому: ход
     # закрывается по тишине, а меню попадает в чат обычным текстом.

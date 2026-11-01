@@ -76,6 +76,44 @@ def test_send_ask_question_deduplicates_custom_option(tmp_path):
     asyncio.run(_run())
 
 
+def test_send_ask_question_keeps_tmux_feed_flag(tmp_path):
+    async def _run() -> None:
+        app = _build_app(tmp_path)
+
+        async def _fake_send_message(_context, **_kwargs):
+            return None
+
+        app._send_message = _fake_send_message
+        app.ui_state.pending_questions["q1"] = {"tmux_feed": True, "question": "old"}
+
+        await app._send_ask_question(
+            context=object(),
+            chat_id=1,
+            session_id="s1",
+            question_id="q1",
+            question="Do you want to proceed?",
+            options=["1. Yes", "2. No"],
+            allow_custom=False,
+            system_options=False,
+        )
+        await app._send_ask_question(
+            context=object(),
+            chat_id=1,
+            session_id="s1",
+            question_id="q2",
+            question="Обычный вопрос?",
+            options=["A", "B"],
+            allow_custom=False,
+            system_options=False,
+        )
+
+        assert app.ui_state.pending_questions["q1"]["tmux_feed"] is True
+        assert app.ui_state.pending_questions["q1"]["options"] == ["1. Yes", "2. No"]
+        assert "tmux_feed" not in app.ui_state.pending_questions["q2"]
+
+    asyncio.run(_run())
+
+
 def test_resolve_pending_custom_answer_prefers_active_question(tmp_path):
     async def _run() -> None:
         app = _build_app(tmp_path)

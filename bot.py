@@ -1311,7 +1311,12 @@ class BotApp:
             chat_id,
             message_thread_id if message_thread_id is not None else getattr(context, "message_thread_id", None),
         )
-        self.ui_state.pending_questions[question_id] = {
+        # Вызывающий код может пометить вопрос до отправки, например tmux_feed.
+        # Новая запись не должна терять эту пометку: без неё ответ остаётся в чате
+        # и не впечатывается в панель.
+        previous = self.ui_state.pending_questions.get(question_id)
+        tmux_feed = bool(previous.get("tmux_feed")) if isinstance(previous, dict) else False
+        record = {
             "question": str(question or ""),
             "options": options,
             "chat_id": int(ui_key.chat_id),
@@ -1321,6 +1326,9 @@ class BotApp:
             "allow_custom": allow_custom,
             "created_at": time.time(),
         }
+        if tmux_feed:
+            record["tmux_feed"] = True
+        self.ui_state.pending_questions[question_id] = record
         rows = [[InlineKeyboardButton(opt, callback_data=f"ask:{question_id}:{idx}")] for idx, opt in enumerate(options)]
         if allow_custom:
             rows.append([InlineKeyboardButton(t("bot.ask_custom_btn", _ask_q_lang), callback_data=f"ask:{question_id}:custom")])

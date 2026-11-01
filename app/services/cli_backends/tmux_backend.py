@@ -128,6 +128,9 @@ class _PaneAdvance:
     parsed: str
     raw_parsed: Optional[str]
     resume_token: Optional[str]
+    # Текущий экран без истории прокрутки. Вопрос с кнопками ищется только здесь:
+    # старое меню в scrollback уже не ждёт ответа.
+    viewport: str = ""
     title_status: Optional[PaneTitleStatus] = None
     # Заголовок был в чанке, даже если classify_pane_title его не опознал:
     # title_status=None сам по себе не отличает "заголовка не было" от
@@ -240,6 +243,7 @@ class _PaneStream:
             parsed=parsed,
             raw_parsed=raw_parsed,
             resume_token=resume_token,
+            viewport=self._reader.viewport_text(),
             title_status=title_status,
             title_seen=title_seen,
             bell_seen=bell_seen,
@@ -1434,12 +1438,10 @@ class TmuxExecutionBackend:
                 if pane_stream.truncate_read_log(_PANE_LOG_MAX_BYTES):
                     last_size = 0
 
-                # Claude-specific: the choice question TUI (Enter selection, ☐ lists, esc prompts) lives in the
-                # raw pane output. claude_screen_reader extraction + transcript preference can mask it.
-                # Compute raw pane text (no claude extraction) for reliable choice detection.
-                pane_raw_for_choice = pane_latest_text
-                if advance.raw_parsed is not None:
-                    pane_raw_for_choice = advance.raw_parsed or pane_latest_text
+                # Меню TUI живёт на текущем экране и не попадает в события транскрипта.
+                # История прокрутки его не содержит как живой вопрос: иначе старый
+                # «Yes/No» снова и снова уходит в чат, хотя CLI уже ушёл дальше.
+                pane_for_choice = advance.viewport
 
                 transcript_update = None
                 if transcript_reader is not None:
@@ -1504,20 +1506,17 @@ class TmuxExecutionBackend:
                         completion_source = "transcript"
 
                 latest_text = transcript_latest_text or pane_latest_text
-                # Choice question detection (for Claude and other CLIs):
-                # - Raw pane (pre screen-reader extract) is checked because Claude TUI choice prompts
-                #   (selection menus, esc prompts) are not inside "claude:" transcript events.
-                # - If detected in pane, prefer that text for latest_text so preview + final send_output
-                #   route the prompt to _is_cli... -> _send_ask_question (Telegram buttons).
-                # - Force complete=False so monitoring continues until user feeds the choice via send_input.
+                # Меню ищется на текущем экране: в события транскрипта его нет,
+                # а копия в истории прокрутки уже не ждёт ответа.
+                # Найденный блок становится текстом превью, ход при этом не закрывается.
                 awaiting_choice = False
                 try:
                     # Local import avoids any potential circular at module load time.
                     from sessions.session_run_service import SessionRunService as _SRS
-                    choice_in_pane = _SRS._is_cli_choice_question(pane_raw_for_choice)
+                    choice_in_pane = _SRS._is_cli_choice_question(pane_for_choice)
                     choice_in_transcript = _SRS._is_cli_choice_question(transcript_latest_text or "")
                     if choice_in_pane:
-                        pane_question, pane_options = _SRS._parse_cli_choice_question(pane_raw_for_choice)
+                        pane_question, pane_options = _SRS._parse_cli_choice_question(pane_for_choice)
                         # Подставляется только блок меню, и только когда варианты
                         # распознаны: иначе распознанный по ошибке экран выбрасывал
                         # текст транскрипта, а в чат уходил буфер TUI целиком.
@@ -1526,7 +1525,7 @@ class TmuxExecutionBackend:
                             # Сохраняем признак меню после нормализации вариантов.
                             latest_text = "\n".join([pane_question, f"❯ {pane_options[0]}", *pane_options[1:]]).strip()
                         elif not transcript_authoritative:
-                            latest_text = pane_raw_for_choice or latest_text
+                            latest_text = pane_for_choice or latest_text
                     awaiting_choice = choice_in_pane or choice_in_transcript
                 except Exception:
                     # Fallback to legacy string check if import/func unavailable

@@ -16,6 +16,7 @@ from app.services.assistant_preview_service import (
     assistant_preview_supported_dest,
     watch_session_assistant_preview,
 )
+from app.services.cli_backends.terminal_screen import DEFAULT_HEIGHT
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
 from app.services.input_dispatch_models import DIRECT_TMUX_DEST_KEY
 from app.services.logging_service import bind_session_log_context
@@ -415,6 +416,31 @@ class SessionRunService:
     def _is_tmux_choice_preview(cls, session, text: str) -> bool:
         return get_session_execution_backend(session) == "tmux" and cls._is_cli_choice_question(text)
 
+    @staticmethod
+    def _visible_choice_text(text: str) -> str:
+        """Хвост кадра размером с экран. Меню выше этой зоны уже прокручено и не спрашивается."""
+
+        return "\n".join(str(text or "").splitlines()[-DEFAULT_HEIGHT:])
+
+    @staticmethod
+    def remember_answered_tmux_choice(session, question_id: str) -> None:
+        """Тот же кадр меню больше не спрашивать, пока он остаётся на экране."""
+
+        qid = str(question_id or "").strip()
+        if session is None or not qid:
+            return
+        answered = getattr(session, "_answered_tmux_choice_ids", None)
+        if not isinstance(answered, set):
+            answered = set()
+            setattr(session, "_answered_tmux_choice_ids", answered)
+        answered.add(qid)
+
+    @staticmethod
+    def _drop_answered_tmux_choices(session) -> None:
+        answered = getattr(session, "_answered_tmux_choice_ids", None)
+        if isinstance(answered, set):
+            answered.clear()
+
     async def _send_cli_terminal_error(
         self,
         session,
@@ -558,10 +584,16 @@ class SessionRunService:
     ) -> None:
         if not text:
             return
-        if self._is_tmux_choice_preview(session, text):
-            question, options = self._parse_cli_choice_question(text)
+        visible_choice_text = self._visible_choice_text(text)
+        if self._is_tmux_choice_preview(session, visible_choice_text):
+            question, options = self._parse_cli_choice_question(visible_choice_text)
             if options:
                 qid = self._tmux_choice_question_id(str(getattr(session, "id", "x")), question, options)
+                answered = getattr(session, "_answered_tmux_choice_ids", None)
+                if isinstance(answered, set) and qid in answered:
+                    return  # ответ на этот кадр уже ушёл в tmux
+                if isinstance(answered, set) and answered:
+                    answered.clear()
                 if qid in self.bot_app.ui_state.pending_questions:
                     return  # этот вопрос уже отправлен, повтор кадра игнорируем
                 meta = {
@@ -589,6 +621,7 @@ class SessionRunService:
                 except Exception:
                     logging.getLogger("bot.preview").exception("failed to send tmux choice as ask from preview")
                 return  # do not show plain preview for the choice question
+        self._drop_answered_tmux_choices(session)
         send_message = getattr(self.bot_app, "_send_message", None)
         edit_message = getattr(self.bot_app, "_edit_message", None)
         edit_message_outcome = getattr(self.bot_app, "_edit_message_outcome", None)

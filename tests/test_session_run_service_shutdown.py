@@ -573,3 +573,116 @@ def test_session_run_service_logs_framework_output_policy_fallback(caplog) -> No
 
     assert "legacy_fallback: failed to resolve framework output policy session=s-policy" in caplog.text
     assert "mode=agent" in caplog.text
+
+
+def _choice_preview_app(questions: list, previews: list):
+    async def _send_message(_context, *, text, **_kwargs):
+        previews.append(text)
+        return SimpleNamespace(message_id=43)
+
+    async def _send_ask_question(*_args, **kwargs):
+        questions.append(dict(kwargs))
+
+    return SimpleNamespace(
+        _send_message=_send_message,
+        _send_ask_question=_send_ask_question,
+        ui_state=SimpleNamespace(pending_questions={}),
+    )
+
+
+def test_session_run_service_does_not_reask_answered_tmux_choice() -> None:
+    async def _run() -> None:
+        questions: list[dict[str, object]] = []
+        previews: list[str] = []
+        bot_app = _choice_preview_app(questions, previews)
+        service = _build_service(bot_app)
+        session = _preview_session(backend="tmux")
+        text = _tui_menu_text()
+        question, options = service._parse_cli_choice_question(text)
+        qid = service._tmux_choice_question_id(session.id, question, options)
+        SessionRunService.remember_answered_tmux_choice(session, qid)
+
+        await service._upsert_telegram_assistant_preview(
+            session,
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+
+        assert questions == []
+        assert previews == []
+        assert bot_app.ui_state.pending_questions == {}
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_asks_tmux_choice_again_after_screen_moves_on() -> None:
+    async def _run() -> None:
+        questions: list[dict[str, object]] = []
+        previews: list[str] = []
+        bot_app = _choice_preview_app(questions, previews)
+        service = _build_service(bot_app)
+        session = _preview_session(backend="tmux")
+        text = _tui_menu_text()
+        question, options = service._parse_cli_choice_question(text)
+        qid = service._tmux_choice_question_id(session.id, question, options)
+        SessionRunService.remember_answered_tmux_choice(session, qid)
+        dest = {"kind": "telegram", "chat_id": 123}
+
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "Brewing…")
+
+        assert questions == []
+        assert previews == ["Brewing…"]
+        assert session._answered_tmux_choice_ids == set()
+
+        await service._upsert_telegram_assistant_preview(session, dest, object(), text)
+
+        assert len(questions) == 1
+        assert bot_app.ui_state.pending_questions[qid]["tmux_feed"] is True
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_ignores_tmux_choice_above_visible_tail() -> None:
+    async def _run() -> None:
+        questions: list[dict[str, object]] = []
+        previews: list[str] = []
+        bot_app = _choice_preview_app(questions, previews)
+        service = _build_service(bot_app)
+        buried = _tui_menu_text() + "\n" + "\n".join(f"working {index}" for index in range(60))
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            buried,
+        )
+
+        assert questions == []
+        assert previews == [buried]
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_asks_tmux_choice_inside_visible_tail() -> None:
+    async def _run() -> None:
+        questions: list[dict[str, object]] = []
+        previews: list[str] = []
+        bot_app = _choice_preview_app(questions, previews)
+        service = _build_service(bot_app)
+        head = "\n".join(f"old {index}" for index in range(45))
+        tail = "\n".join(f"tail {index}" for index in range(5))
+        text = head + "\n" + _tui_menu_text() + "\n" + tail
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+
+        assert previews == []
+        assert len(questions) == 1
+        assert len(bot_app.ui_state.pending_questions) == 1
+
+    asyncio.run(_run())
