@@ -1313,6 +1313,7 @@ class TmuxExecutionBackend:
         latest_title_status: Optional[PaneTitleStatus] = None
         total_bell_count = 0
         transcript_latest_text = ""
+        transcript_thinking_text = ""
         latest_text = ""
         last_reported_text = ""
         last_progress_text = ""
@@ -1466,6 +1467,7 @@ class TmuxExecutionBackend:
                         transcript_latest_text = terminal_error
                     elif transcript_update.assistant_text:
                         transcript_latest_text = transcript_update.assistant_text
+                    transcript_thinking_text = str(transcript_update.thinking_text or "")
                     if transcript_update.progress_text and transcript_update.progress_text != last_progress_text:
                         last_progress_text = transcript_update.progress_text
                         update_activity = getattr(session, "_update_activity", None)
@@ -1543,15 +1545,19 @@ class TmuxExecutionBackend:
                 # ход завис бы бессрочно. Статус остаётся в diagnostics.
                 if awaiting_choice:
                     complete = False
-                # Превью показывает только ответ агента. Пока распознанный
-                # транскрипт ведёт ход, его текст авторитетен: экран панели в это
-                # время содержит вывод инструментов, и пускать его в превью
-                # нельзя. Панель остаётся источником только для CLI без
-                # распознанного транскрипта и для доставки вопроса с выбором.
+                # Превью показывает ответ агента и его заметки (thinking).
+                # Пока распознанный транскрипт ведёт ход, этот текст авторитетен:
+                # экран панели в это время содержит вывод инструментов, и пускать
+                # его в превью нельзя. Панель остаётся источником только для CLI
+                # без распознанного транскрипта и для доставки вопроса с выбором.
+                # В итоговый ответ заметки не входят: latest_text остаётся репликой.
                 if awaiting_choice or not transcript_authoritative:
                     preview_text = latest_text
                 else:
                     preview_text = transcript_latest_text
+                    thinking = transcript_thinking_text.strip()
+                    if thinking:
+                        preview_text = f"{preview_text}\n\n{thinking}" if preview_text else thinking
                 if terminal_error:
                     # Наблюдение обычно не закрывает ход по журналу: оно ждёт,
                     # пока экран затихнет. Ошибка перегрузки так не дожидается —

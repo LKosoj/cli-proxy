@@ -47,6 +47,8 @@ class TranscriptPollResult:
     terminal_error: str = ""
     # Запрос пользователя, на котором ход оборвался. Нужен кнопке «Повторить».
     retry_prompt: str = ""
+    # Заметки модели (thinking). Превью их показывает, итоговый ответ — нет.
+    thinking_text: str = ""
 
 
 def _parse_timestamp(raw: Any) -> Optional[float]:
@@ -134,6 +136,20 @@ def _content_text(content: Any, *, strip: bool = True) -> str:
     return "\n".join(parts)
 
 
+def _content_thinking(content: Any) -> str:
+    """Заметки модели. В превью они видны, в итоговый ответ не входят."""
+
+    items = [content] if isinstance(content, dict) else content if isinstance(content, list) else []
+    parts: list[str] = []
+    for item in items:
+        if not isinstance(item, dict) or str(item.get("type") or "").strip() != "thinking":
+            continue
+        text = str(item.get("thinking") or item.get("text") or "").strip()
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts)
+
+
 class CliTranscriptReader:
     def __init__(
         self,
@@ -155,6 +171,7 @@ class CliTranscriptReader:
         self.locator: Optional[TranscriptLocator] = None
         self.cursor = 0
         self.latest_assistant_text = ""
+        self.latest_thinking_text = ""
         self.latest_progress_text = ""
         self.complete = False
         self.recognized = False
@@ -435,8 +452,14 @@ class CliTranscriptReader:
             message = record.get("message") if isinstance(record.get("message"), dict) else {}
             content = message.get("content")
             text = _content_text(content)
+            thinking = _content_thinking(content)
             if text:
                 self.latest_assistant_text = text
+            if thinking:
+                self.latest_thinking_text = thinking
+            elif text:
+                # Новая реплика без заметок: старые заметки к ней уже не относятся.
+                self.latest_thinking_text = ""
             if isinstance(content, list):
                 for item in content:
                     if not isinstance(item, dict) or str(item.get("type") or "").strip() != "tool_use":
@@ -791,4 +814,5 @@ class CliTranscriptReader:
             locator=self.locator,
             terminal_error=self.terminal_error,
             retry_prompt=self.retry_prompt,
+            thinking_text=self.latest_thinking_text,
         )

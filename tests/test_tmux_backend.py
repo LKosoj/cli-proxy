@@ -1176,6 +1176,43 @@ async def test_tmux_backend_shows_later_reply_when_old_menu_left_the_screen(tmp_
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_preview_includes_thinking_and_final_answer_does_not(tmp_path, monkeypatch):
+    # Заметки видны в превью рядом с репликой. В итоговый ответ они не входят.
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = "working"
+
+    class FakeTranscriptReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Задача E готова.",
+                thinking_text="Замечания по H устранены.",
+                complete=True,
+                available=True,
+                recognized=True,
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FakeTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=5.0,
+    )
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
+
+    assert result.text == "Задача E готова."
+    assert session.last_assistant_text_value == "Задача E готова.\n\nЗамечания по H устранены."
+    assert result.diagnostics["completion_source"] == "transcript"
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_closes_turn_on_choice_without_preview(tmp_path, monkeypatch):
     # Без превью вопрос кнопками не уходит, отвечать на него некому: ход
     # закрывается по тишине, а меню попадает в чат обычным текстом.

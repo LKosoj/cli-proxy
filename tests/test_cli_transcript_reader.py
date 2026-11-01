@@ -66,6 +66,7 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
     assert first.progress_text == "Bash"
     assert first.complete is False
     assert "private thought" not in first.assistant_text
+    assert first.thinking_text == "private thought"
 
     _append_jsonl(
         path,
@@ -90,9 +91,78 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
     final = reader.poll()
 
     assert final.assistant_text == "Финальный ответ"
+    assert final.thinking_text == ""
     assert final.complete is True
     assert final.locator is not None
     assert final.locator.path == str(path.resolve())
+
+
+def test_claude_transcript_reader_keeps_thinking_until_next_reply(tmp_path):
+    """Заметки без поля text не затирают реплику и сами сменяются следующей репликой."""
+    started_at = time.time() - 5
+    session_id = "22222222-2222-4222-8222-222222222222"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 1),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "Задача E готова."}]},
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="claude",
+        workdir="/srv/project",
+        started_at=started_at,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    assert reader.poll().assistant_text == "Задача E готова."
+
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 2),
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "thinking", "thinking": "Замечания по H устранены."}],
+            },
+        },
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 3),
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "pytest"}}],
+            },
+        },
+    )
+
+    noted = reader.poll()
+
+    assert noted.assistant_text == "Задача E готова."
+    assert noted.thinking_text == "Замечания по H устранены."
+    assert noted.progress_text == "Bash"
+
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 4),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "Задача F готова."}]},
+        },
+    )
+
+    done = reader.poll()
+
+    assert done.assistant_text == "Задача F готова."
+    assert done.thinking_text == ""
 
 
 def test_claude_transcript_reader_completes_with_background_agents(tmp_path):
