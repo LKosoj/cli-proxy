@@ -320,17 +320,29 @@ def _conclusion(pace: QuotaPace, lang: str, now: float) -> str:
         return t("msg.error.limits_stats.flat", lang)
     if pace.basis not in ("hour", "day", "window"):
         return ""
-    prefix = "hour" if pace.basis == "hour" else ("day" if pace.basis == "day" else "window")
+    prefix, extra = _conclusion_basis(pace, lang)
     if pace.remaining_at_reset is not None:
         return t(
             f"msg.error.limits_stats.left_{prefix}",
             lang,
             left=_percent(pace.remaining_at_reset, lang),
+            **extra,
         )
     if pace.seconds_to_exhaust is None:
         return ""
     when = _format_when(now + pace.seconds_to_exhaust, lang, now)
-    return t(f"msg.error.limits_stats.hit_{prefix}", lang, when=when)
+    return t(f"msg.error.limits_stats.hit_{prefix}", lang, when=when, **extra)
+
+
+def _conclusion_basis(pace: QuotaPace, lang: str) -> tuple[str, dict[str, str]]:
+    """Имя скорости в прогнозе. «За 3ч» нельзя называть окном: окно — весь период до сброса."""
+    if pace.basis == "hour":
+        return "hour", {}
+    if pace.basis == "day":
+        return "day", {}
+    if pace.longer_kind == "span" and pace.longer_span_sec:
+        return "span", {"span": _format_span(pace.longer_span_sec, lang)}
+    return "window", {}
 
 
 def _format_when(ts: float, lang: str, now: float) -> str:

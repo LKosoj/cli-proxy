@@ -1014,7 +1014,7 @@ def test_quota_line_reads_recorded_hour_pace(
     assert second is not None
     assert "за час 10%/ч" in second
     assert "с начала окна 10%/ч" in second
-    assert "по часу к сбросу ~60%" in second
+    assert "к сбросу останется ~60%, если тратить как за час" in second
     assert service._trends.load_points("claude:five_hour", reset, clock["now"]) == [[1_700_000_000.0, 10.0]]
 
 

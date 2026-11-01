@@ -103,6 +103,20 @@ def test_short_window_second_rate_starts_at_the_oldest_sample() -> None:
     assert pace.basis == "hour"
 
 
+def test_span_forecast_names_the_measured_stretch_not_the_whole_window() -> None:
+    now = 10_000.0
+    reset = now + 2 * 3600.0
+    points = [[now - 3 * 3600.0, 10.0]]
+    pace = compute_pace(points, 40.0, now, long_window=True, quantum=0.05, reset_ts=reset)
+
+    text = render_quota_block("полоска", pace, reset_ts=reset, long_window=True, lang="ru", now=now)
+
+    assert pace.longer_kind == "span"
+    assert "к сбросу останется ~40%, если тратить как за 3ч" in text
+    assert "по окну" not in text
+    assert "с начала окна" not in text
+
+
 def test_render_quota_block_translates_the_stats_line() -> None:
     now = 100_000.0
     reset = now + 6 * 3600.0
@@ -116,7 +130,7 @@ def test_render_quota_block_translates_the_stats_line() -> None:
 
     assert "за час 0%/ч" in russian
     assert "за сутки 0,04%/ч" in russian
-    assert "по суткам к сбросу" in russian
+    assert "к сбросу останется ~94,8%, если тратить как за сутки" in russian
     assert "last hour 0%/h" in english
     assert "last day" in english
     assert "letzte Stunde 0%/h" in german
