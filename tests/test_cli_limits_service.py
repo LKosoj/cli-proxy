@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services.cli_limits_pace import parse_grok_reset, reset_phrase
 from app.services.cli_limits_service import CliLimitsService, CliLimitsSnapshot, CliProjectRef
 from app.services.cli_limits_trend import UsageTrendTracker
 from app.services.model_pricing import ModelPricing
@@ -331,7 +332,11 @@ async def test_describe_for_sessions_reads_grok_local_usage(
     assert "90%" in text
     assert "неделя" in text
     assert "75% осталось" in text
-    assert "↻July 11, 17:03 PT" in text
+    now = time.time()
+    reset = parse_grok_reset("July 11, 17:03 PT", now)
+    assert reset is not None
+    assert reset_phrase(reset, "ru", now) in text
+    assert "↻" not in text
     assert "📊 context 50K / 500K" in text
     assert "turns 4 · tools 7 · messages 4/4" in text
     assert "quota: недоступно" not in text
@@ -529,8 +534,11 @@ def test_parse_grok_direct_usage_supports_monthly_limit() -> None:
         "used_percent": 40.0,
         "resets_at": "August 1, 00:00 PT",
     }
-    assert CliLimitsService._format_grok_direct_quota_line(usage) == (
-        "🟡 месяц ██████░░░░ 60% осталось ↻August 1, 00:00 PT"
+    now = time.time()
+    reset = parse_grok_reset("August 1, 00:00 PT", now)
+    assert reset is not None
+    assert CliLimitsService()._present_grok_quota(usage) == (
+        "🟡 месяц ██████░░░░ 60% осталось · " + reset_phrase(reset, "ru", now)
     )
 
 
@@ -976,21 +984,38 @@ def test_local_usage_lines_show_estimated_cost(tmp_path: Path) -> None:
     assert lines[0] == "📊 1.5M total · 💵 ≈$3.50"
 
 
-def test_quota_line_gains_burn_rate_on_second_measurement(
+def test_quota_line_reads_recorded_hour_pace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    clock = {"now": 1_700_000_000.0}
+    monkeypatch.setattr("app.services.cli_limits_trend.time.time", lambda: clock["now"])
+    monkeypatch.setattr("app.services.cli_limits_service.time.time", lambda: clock["now"])
     service = CliLimitsService(trend_tracker=UsageTrendTracker(JsonStateRepository(tmp_path / "state.json")))
-    monkeypatch.setattr("app.services.cli_limits_trend.time.time", lambda: 1_000.0)
+    reset = clock["now"] + 3 * 3600.0
 
-    first = service._format_claude_quota_window("5ч", {"utilization": 10}, trend_key="claude:five_hour")
-    monkeypatch.setattr("app.services.cli_limits_trend.time.time", lambda: 1_000.0 + 3600.0)
-    second = service._format_claude_quota_window("5ч", {"utilization": 20}, trend_key="claude:five_hour")
+    first = service._format_claude_quota_window(
+        "5ч",
+        {"utilization": 20.0, "resets_at": reset},
+        trend_key="claude:five_hour",
+    )
+    service._trends.record("claude:five_hour", 10.0, window_marker=reset)
+    clock["now"] += 3600.0
+    second = service._format_claude_quota_window(
+        "5ч",
+        {"utilization": 20.0, "resets_at": reset},
+        trend_key="claude:five_hour",
+    )
 
-    assert first is not None and "⚡" not in first
+    assert first is not None
+    assert "за час ещё нет" in first
+    assert "⚡" not in first
+    assert "⏳" not in first
     assert second is not None
-    assert "⚡10%/ч" in second
-    assert "⏳~8ч" in second
+    assert "за час 10%/ч" in second
+    assert "с начала окна 10%/ч" in second
+    assert "по часу к сбросу ~60%" in second
+    assert service._trends.load_points("claude:five_hour", reset, clock["now"]) == [[1_700_000_000.0, 10.0]]
 
 
 @pytest.mark.asyncio
@@ -1040,3 +1065,110 @@ async def test_describe_for_sessions_prefers_single_project_context_for_gemini(
     assert "gemini-2.5-pro" in text
     assert "67%" in text
     assert "12%" not in text
+
+
+@pytest.mark.asyncio
+async def test_describe_for_sessions_does_not_store_a_sample(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir = tmp_path / "repo-grok"
+    project_dir.mkdir()
+    service = CliLimitsService(
+        trend_tracker=UsageTrendTracker(JsonStateRepository(tmp_path / "state.json")),
+        grok_sessions_roots=[tmp_path / "grok" / "sessions"],
+        codex_sessions_roots=[tmp_path / "codex" / "sessions"],
+        claude_projects_roots=[tmp_path / "claude" / "projects"],
+    )
+    monkeypatch.setattr(
+        service,
+        "_read_grok_direct_usage",
+        lambda: {"window": "weekly", "used_percent": 4.0, "resets_at": "November 8, 03:03"},
+    )
+
+    await service.describe_for_sessions([_session("grok", project_dir)])
+
+    assert service._trends._repository.read_namespace(UsageTrendTracker.NAMESPACE) == {}
+
+
+@pytest.mark.asyncio
+async def test_describe_for_sessions_translates_grok_quota(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir = tmp_path / "repo-grok"
+    project_dir.mkdir()
+    service = CliLimitsService(
+        grok_sessions_roots=[tmp_path / "grok" / "sessions"],
+        codex_sessions_roots=[tmp_path / "codex" / "sessions"],
+        claude_projects_roots=[tmp_path / "claude" / "projects"],
+    )
+    monkeypatch.setattr(
+        service,
+        "_read_grok_direct_usage",
+        lambda: {"window": "weekly", "used_percent": 4.0, "resets_at": "November 8, 03:03"},
+    )
+
+    text = await service.describe_for_sessions([_session("grok", project_dir)], lang="en")
+
+    assert "week" in text
+    assert "left" in text
+    assert "resets" in text
+    assert "неделя" not in text
+
+
+def test_sample_sync_records_each_cli_and_skips_a_failed_one(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = {"now": 1_700_000_000.0}
+    monkeypatch.setattr("app.services.cli_limits_trend.time.time", lambda: clock["now"])
+    monkeypatch.setattr("app.services.cli_limits_service.time.time", lambda: clock["now"])
+    service = CliLimitsService(trend_tracker=UsageTrendTracker(JsonStateRepository(tmp_path / "state.json")))
+    reset = clock["now"] + 5 * 3600.0
+    monkeypatch.setattr(
+        service,
+        "_read_claude_direct_usage",
+        lambda: (_ for _ in ()).throw(RuntimeError("claude down")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_read_codex_rpc_usage",
+        lambda: {
+            "primary_window": {
+                "used_percent": 33,
+                "reset_at": int(reset),
+                "limit_window_seconds": 18000,
+            }
+        },
+    )
+    monkeypatch.setattr(service, "_read_codex_direct_usage", lambda: None)
+    monkeypatch.setattr(
+        service,
+        "_read_grok_direct_usage",
+        lambda: {"window": "weekly", "used_percent": 4.0, "resets_at": "November 8, 03:03"},
+    )
+    seen: list[str] = []
+
+    def gemini(workdir: str) -> dict[str, object]:
+        seen.append(workdir)
+        return {
+            "project_id": "proj",
+            "models": [
+                {
+                    "model_id": "gemini-2.5-pro",
+                    "remaining_fraction": 0.5,
+                    "reset_time": "2026-11-02T00:00:00Z",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(service, "_read_gemini_usage_for_workdir", gemini)
+
+    service._sample_sync(["/tmp/one", "/tmp/one"])
+
+    assert service._trends.load_points("claude:five_hour", reset, clock["now"]) == []
+    assert service._trends.load_points("codex:primary", int(reset), clock["now"]) == [[clock["now"], 33.0]]
+    assert service._trends.load_points("grok:weekly", "", clock["now"]) == [[clock["now"], 4.0]]
+    assert service._trends.load_points("gemini:proj:gemini-2.5-pro", "", clock["now"]) == [[clock["now"], 50.0]]
+    assert seen == [os.path.realpath("/tmp/one")]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import heapq
 import json
 import logging
@@ -22,18 +23,48 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Callable, Iterable, Optional, Sequence
 
+from app.services.cli_limits_pace import compute_pace, parse_grok_reset, render_quota_block
 from app.services.cli_limits_trend import UsageTrendTracker
 from app.services.model_pricing import ModelPricing, build_model_pricing
 from app.services.state_repository import get_state_repository
+from i18n import t
 from modes.sdk.runtime.json_normalizer import loads_safe
 from session import session_active_cli_name
 
 
 logger = logging.getLogger(__name__)
 
+
+def sample_workdirs(bot_app: Any) -> list[str]:
+    """Каталоги открытых сессий: по ним снимается квота Gemini."""
+    manager = getattr(bot_app, "manager", None)
+    buckets = getattr(manager, "sessions_by_chat", None) or {}
+    found: list[str] = []
+    seen: set[str] = set()
+    if not isinstance(buckets, dict):
+        return found
+    for sessions in buckets.values():
+        if not isinstance(sessions, dict):
+            continue
+        for session in sessions.values():
+            workdir = str(getattr(session, "workdir", "") or "").strip()
+            if not workdir:
+                continue
+            real = os.path.realpath(workdir)
+            if real in seen:
+                continue
+            seen.add(real)
+            found.append(real)
+            if len(found) >= _SAMPLE_WORKDIR_LIMIT:
+                return found
+    return found
+
 _RGLOB_ROLLOUT_LIMIT = 10_000
+_LIMITS_LANG: contextvars.ContextVar[str] = contextvars.ContextVar("cli_limits_lang", default="ru")
+_SAMPLE_WORKDIR_LIMIT = 20
+_SAMPLE_INTERVAL_SEC = 30 * 60
 
 
 @dataclass(frozen=True)
@@ -104,6 +135,8 @@ class CliLimitsService:
         except Exception:
             timeout_value = 5.0
         self._network_timeout_sec = max(0.1, timeout_value)
+        self._sampler_stop: Optional[asyncio.Event] = None
+        self._sampler_task: Optional[asyncio.Task[None]] = None
 
     def set_gemini_oauth_client_secret(self, value: Optional[str]) -> None:
         self._gemini_oauth_client_secret = str(value or "").strip()
@@ -116,24 +149,174 @@ class CliLimitsService:
         except Exception:
             logger.exception("failed to bind cli limits usage state path=%s", state_path)
 
+    def start_sampler(self, workdirs_provider: Callable[[], Sequence[str]]) -> None:
+        """Раз в полчаса снимает квоты для статистики. Повторный запуск ничего не делает."""
+        if self._sampler_task is not None and not self._sampler_task.done():
+            return
+        self._sampler_stop = asyncio.Event()
+        self._sampler_task = asyncio.create_task(
+            self._sampler_loop(workdirs_provider),
+            name="cli-limits-sampler",
+        )
+
+    async def stop_sampler(self) -> None:
+        task = self._sampler_task
+        if task is None:
+            return
+        if self._sampler_stop is not None:
+            self._sampler_stop.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self._sampler_task = None
+
+    async def _sampler_loop(self, workdirs_provider: Callable[[], Sequence[str]]) -> None:
+        while self._sampler_stop is None or not self._sampler_stop.is_set():
+            try:
+                workdirs = [str(item) for item in (workdirs_provider() or []) if str(item or "").strip()]
+            except Exception:
+                logger.exception("cli limits sampler failed to list workdirs")
+                workdirs = []
+            try:
+                await asyncio.to_thread(self._sample_sync, workdirs)
+            except Exception:
+                logger.exception("cli limits sampler failed")
+            if self._sampler_stop is None:
+                return
+            try:
+                await asyncio.wait_for(self._sampler_stop.wait(), timeout=_SAMPLE_INTERVAL_SEC)
+            except asyncio.TimeoutError:
+                continue
+            return
+
+    def _sample_sync(self, workdirs: Sequence[str]) -> None:
+        for sample in (self._sample_claude, self._sample_codex, self._sample_grok):
+            try:
+                sample()
+            except Exception:
+                logger.exception("cli limits sample failed")
+        seen: set[str] = set()
+        for workdir in workdirs:
+            real = os.path.realpath(workdir)
+            if not real or real in seen:
+                continue
+            seen.add(real)
+            if len(seen) > _SAMPLE_WORKDIR_LIMIT:
+                break
+            try:
+                self._sample_gemini(real)
+            except Exception:
+                logger.exception("cli limits gemini sample failed workdir=%s", real)
+
+    def _sample_claude(self) -> None:
+        usage = self._read_claude_direct_usage()
+        if not isinstance(usage, dict):
+            return
+        for window_key in ("five_hour", "seven_day"):
+            payload = usage.get(window_key)
+            if not isinstance(payload, dict) or payload.get("utilization") is None:
+                continue
+            try:
+                used = float(payload.get("utilization"))
+            except (TypeError, ValueError):
+                continue
+            self._trends.record(
+                f"claude:{window_key}",
+                used,
+                window_marker=self._reset_timestamp(payload.get("resets_at")) or "",
+            )
+
+    def _sample_codex(self) -> None:
+        usage = self._read_codex_rpc_usage() or self._read_codex_direct_usage()
+        if not isinstance(usage, dict):
+            return
+        windows = (
+            ("", usage.get("primary_window"), usage.get("secondary_window")),
+        )
+        extra = usage.get("extra_limits")
+        if isinstance(extra, list):
+            for limit in extra:
+                if not isinstance(limit, dict):
+                    continue
+                windows = (
+                    *windows,
+                    (
+                        str(limit.get("label") or "").strip(),
+                        limit.get("primary_window"),
+                        limit.get("secondary_window"),
+                    ),
+                )
+        for label, primary, secondary in windows:
+            for window_key, payload in (("primary", primary), ("secondary", secondary)):
+                if not isinstance(payload, dict) or payload.get("used_percent") is None:
+                    continue
+                try:
+                    used = float(payload.get("used_percent"))
+                except (TypeError, ValueError):
+                    continue
+                key = f"codex:{label}:{window_key}" if label else f"codex:{window_key}"
+                self._trends.record(key, used, window_marker=self._codex_reset_epoch(payload) or "")
+
+    def _sample_grok(self) -> None:
+        usage = self._read_grok_direct_usage()
+        if not isinstance(usage, dict) or usage.get("used_percent") is None:
+            return
+        window = str(usage.get("window") or "weekly").strip().lower() or "weekly"
+        self._trends.record(
+            f"grok:{window}",
+            usage.get("used_percent"),
+            window_marker=self._reset_timestamp(usage.get("resets_at")) or str(usage.get("resets_at") or ""),
+        )
+
+    def _sample_gemini(self, workdir: str) -> None:
+        usage = self._read_gemini_usage_for_workdir(workdir)
+        if not isinstance(usage, dict):
+            return
+        project_id = str(usage.get("project_id") or "").strip()
+        models = usage.get("models")
+        if not project_id or not isinstance(models, list):
+            return
+        for item in models:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("model_id") or "").strip()
+            if not model_id or item.get("remaining_fraction") is None:
+                continue
+            try:
+                remaining = max(0.0, min(100.0, float(item.get("remaining_fraction")) * 100.0))
+            except (TypeError, ValueError):
+                continue
+            self._trends.record(
+                f"gemini:{project_id}:{model_id}",
+                100.0 - remaining,
+                window_marker=self._reset_timestamp(item.get("reset_time")) or "",
+            )
+
     async def describe_for_sessions(
         self,
         sessions: Iterable[Any],
         *,
         available_clis: Optional[Sequence[str]] = None,
         preferred_workdir: Optional[str] = None,
+        lang: str = "ru",
     ) -> str:
-        refs_by_cli = self._collect_active_refs(sessions)
-        snapshots = await self.collect_for_sessions(
-            sessions,
-            available_clis=available_clis,
-            preferred_workdir=preferred_workdir,
-        )
-        return self.format_snapshots(
-            snapshots,
-            active_clis=sorted(refs_by_cli.keys()),
-            available_clis=available_clis,
-        )
+        token = _LIMITS_LANG.set(str(lang or "ru"))
+        try:
+            refs_by_cli = self._collect_active_refs(sessions)
+            snapshots = await self.collect_for_sessions(
+                sessions,
+                available_clis=available_clis,
+                preferred_workdir=preferred_workdir,
+            )
+            return self.format_snapshots(
+                snapshots,
+                active_clis=sorted(refs_by_cli.keys()),
+                available_clis=available_clis,
+            )
+        finally:
+            _LIMITS_LANG.reset(token)
 
     async def collect_for_sessions(
         self,
@@ -487,13 +670,7 @@ class CliLimitsService:
 
     def _collect_grok_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
         direct_usage = self._read_grok_direct_usage()
-        quota_line = self._format_grok_direct_quota_line(direct_usage)
-        if quota_line and isinstance(direct_usage, dict):
-            quota_line += self._trend_suffix(
-                f"grok:{str(direct_usage.get('window') or 'weekly')}",
-                direct_usage.get("used_percent"),
-                window=direct_usage.get("resets_at"),
-            )
+        quota_line = self._present_grok_quota(direct_usage)
         target_workdirs = {os.path.realpath(ref.workdir) for ref in refs}
         session_candidates = self._iter_matching_grok_session_dirs(target_workdirs)
         if not session_candidates:
@@ -1022,10 +1199,11 @@ class CliLimitsService:
         bar = CliLimitsService._progress_bar(remaining_percent)
         pct = CliLimitsService._format_percent(remaining_percent)
         window = str(usage.get("window") or "weekly").strip().lower()
-        label = "месяц" if window == "monthly" else "неделя"
-        reset_text = str(usage.get("resets_at") or "").strip()
-        reset_suffix = f" ↻{reset_text}" if reset_text else ""
-        return f"{indicator} {label} {bar} {pct} осталось{reset_suffix}"
+        label_key = "msg.error.limits_stats.month" if window == "monthly" else "msg.error.limits_stats.week"
+        lang = _LIMITS_LANG.get()
+        label = t(label_key, lang)
+        left = t("msg.error.limits_stats.left", lang)
+        return f"{indicator} {label} {bar} {pct} {left}"
 
     @staticmethod
     def _read_gemini_active_model() -> Optional[str]:
@@ -1416,30 +1594,72 @@ class CliLimitsService:
         indicator = self._status_indicator(remaining)
         bar = self._progress_bar(remaining)
         pct = self._format_percent(remaining)
-        reset_text = ""
-        reset_raw = str(payload.get("resets_at") or "").strip()
-        if reset_raw:
-            reset_text = f" ↻{self._format_datetime(reset_raw)}"
-        trend_text = self._trend_suffix(trend_key, used, window=reset_raw)
-        return f"{indicator} {label} {bar} {pct}{reset_text}{trend_text}"
+        return self._finish_quota_line(
+            f"{indicator} {label} {bar} {pct}",
+            key=trend_key,
+            used=used,
+            reset=payload.get("resets_at"),
+            long=trend_key.endswith("seven_day"),
+        )
 
-    def _trend_suffix(self, key: str, used_percent: Any, *, window: Any = None) -> str:
-        reset_ts = self._reset_timestamp(window)
-        marker: Any = reset_ts if reset_ts is not None else str(window or "")
-        trend = self._trends.record(key, used_percent, window_marker=marker)
-        if trend is None:
-            return ""
-        parts = [f"⚡{self._format_percent(trend.percent_per_hour)}/ч"]
-        seconds = trend.seconds_to_exhaust
-        if seconds is not None and (reset_ts is None or time.time() + seconds < reset_ts):
-            parts.append(f"⏳~{self._format_duration(int(seconds))}")
-        return " " + " ".join(parts)
+    def _present_grok_quota(self, usage: Optional[dict[str, Any]]) -> Optional[str]:
+        base = self._format_grok_direct_quota_line(usage)
+        if not base or not isinstance(usage, dict):
+            return base
+        window = str(usage.get("window") or "weekly").strip().lower() or "weekly"
+        return self._finish_quota_line(
+            base,
+            key=f"grok:{window}",
+            used=usage.get("used_percent"),
+            reset=usage.get("resets_at"),
+            long=True,
+            quantum=1.0,
+        )
+
+    def _finish_quota_line(
+        self,
+        base: str,
+        *,
+        key: str,
+        used: Any,
+        reset: Any,
+        long: bool,
+        quantum: float = 0.05,
+    ) -> str:
+        try:
+            used_percent = float(used)
+        except (TypeError, ValueError):
+            return base
+        reset_ts = self._reset_timestamp(reset)
+        marker: Any = reset_ts if reset_ts is not None else str(reset or "")
+        now = time.time()
+        pace = None
+        if self._trends._repository is not None:
+            pace = compute_pace(
+                self._trends.load_points(key, marker, now),
+                used_percent,
+                now,
+                long_window=long,
+                quantum=quantum,
+                reset_ts=reset_ts,
+            )
+        return render_quota_block(
+            base,
+            pace,
+            reset_ts=reset_ts,
+            long_window=long,
+            lang=_LIMITS_LANG.get(),
+            now=now,
+        )
 
     @staticmethod
     def _reset_timestamp(value: Any) -> Optional[float]:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value) if value > 0 else None
-        return CliLimitsService._parse_timestamp(value)
+        parsed = CliLimitsService._parse_timestamp(value)
+        if parsed is not None:
+            return parsed
+        return parse_grok_reset(str(value or ""), time.time())
 
     def _read_codex_rpc_usage(self) -> Optional[dict[str, Any]]:
         """Забирает квоты из `codex app-server` — официального RPC самого CLI."""
@@ -1641,7 +1861,6 @@ class CliLimitsService:
         lines = self._format_codex_combined_quota_lines(
             usage.get("primary_window"),
             usage.get("secondary_window"),
-            direct_api=True,
         )
         extra_limits = usage.get("extra_limits")
         if isinstance(extra_limits, list):
@@ -1652,7 +1871,6 @@ class CliLimitsService:
                     self._format_codex_combined_quota_lines(
                         limit.get("primary_window"),
                         limit.get("secondary_window"),
-                        direct_api=True,
                         label_prefix=str(limit.get("label") or "").strip(),
                     )
                 )
@@ -1664,7 +1882,6 @@ class CliLimitsService:
         return self._format_codex_combined_quota_lines(
             rate_limits.get("primary"),
             rate_limits.get("secondary"),
-            direct_api=False,
         )
 
     def _format_codex_combined_quota_lines(
@@ -1672,7 +1889,6 @@ class CliLimitsService:
         primary_payload: Any,
         secondary_payload: Any,
         *,
-        direct_api: bool,
         label_prefix: str = "",
     ) -> list[str]:
         lines: list[str] = []
@@ -1681,7 +1897,6 @@ class CliLimitsService:
             line = self._format_codex_window_summary(
                 label,
                 payload,
-                direct_api=direct_api,
                 trend_key=f"codex:{label_prefix}:{window_key}" if label_prefix else f"codex:{window_key}",
             )
             if line:
@@ -1693,7 +1908,6 @@ class CliLimitsService:
         label: str,
         payload: Any,
         *,
-        direct_api: bool,
         trend_key: str,
     ) -> Optional[str]:
         if not isinstance(payload, dict):
@@ -1710,30 +1924,36 @@ class CliLimitsService:
         remaining = max(0.0, 100.0 - used)
         bar = self._progress_bar(remaining)
         pct = self._format_percent(remaining)
-        reset_text = ""
-        reset_epoch = 0
-        if direct_api:
-            reset_at = self._safe_int(payload.get("reset_at"))
-            reset_after_seconds = self._safe_int(payload.get("reset_after_seconds"))
-            window_seconds = self._safe_int(payload.get("limit_window_seconds"))
-            if reset_at > 0:
-                reset_epoch = reset_at
-                reset_text = f" ↻{self._format_epoch(reset_at)}"
-            elif reset_after_seconds > 0:
-                reset_epoch = int(time.time()) + reset_after_seconds
-                reset_text = f" ↻через {self._format_duration(reset_after_seconds)}"
-            elif window_seconds > 0:
-                reset_text = f" окно {self._format_duration(window_seconds)}"
-        else:
-            resets_at = self._safe_int(payload.get("resets_at"))
-            window_minutes = self._safe_int(payload.get("window_minutes"))
-            if resets_at > 0:
-                reset_epoch = resets_at
-                reset_text = f" ↻{self._format_epoch(resets_at)}"
-            elif window_minutes > 0:
-                reset_text = f" окно {window_minutes} мин"
-        trend_text = self._trend_suffix(trend_key, used, window=reset_epoch or None)
-        return f"💎 {label} {bar} {pct}{reset_text}{trend_text}"
+        reset_epoch = self._codex_reset_epoch(payload)
+        duration = self._codex_window_seconds(payload)
+        if duration <= 0 and reset_epoch > time.time():
+            duration = int(reset_epoch - time.time())
+        return self._finish_quota_line(
+            f"💎 {label} {bar} {pct}",
+            key=trend_key,
+            used=used,
+            reset=reset_epoch or None,
+            long=duration >= 24 * 3600,
+        )
+
+    @staticmethod
+    def _codex_reset_epoch(payload: dict[str, Any]) -> int:
+        reset_at = CliLimitsService._safe_int(payload.get("reset_at"))
+        if reset_at <= 0:
+            reset_at = CliLimitsService._safe_int(payload.get("resets_at"))
+        if reset_at > 0:
+            return reset_at
+        reset_after_seconds = CliLimitsService._safe_int(payload.get("reset_after_seconds"))
+        if reset_after_seconds > 0:
+            return int(time.time()) + reset_after_seconds
+        return 0
+
+    @staticmethod
+    def _codex_window_seconds(payload: dict[str, Any]) -> int:
+        window_seconds = CliLimitsService._safe_int(payload.get("limit_window_seconds"))
+        if window_seconds > 0:
+            return window_seconds
+        return CliLimitsService._safe_int(payload.get("window_minutes")) * 60
 
     def _read_gemini_usage_for_workdir(self, workdir: str) -> Optional[dict[str, Any]]:
         project_id = self._find_gemini_project_id(workdir)
@@ -1908,16 +2128,16 @@ class CliLimitsService:
         indicator = self._status_indicator(remaining_percent)
         bar = self._progress_bar(remaining_percent)
         pct = self._format_percent(remaining_percent)
-        reset_text = ""
         reset_time = str(item.get("reset_time") or "").strip()
-        if reset_time:
-            reset_text = f" ↻{self._format_datetime(reset_time)}"
-        trend_text = self._trend_suffix(
-            f"gemini:{project_id}:{model_id}",
-            100.0 - remaining_percent,
-            window=reset_time,
+        reset_ts = self._reset_timestamp(reset_time)
+        long = bool(reset_ts is not None and reset_ts - time.time() >= 24 * 3600)
+        return self._finish_quota_line(
+            f"{indicator} {model_id} {bar} {pct}",
+            key=f"gemini:{project_id}:{model_id}",
+            used=100.0 - remaining_percent,
+            reset=reset_time,
+            long=long,
         )
-        return f"{indicator} {model_id} {bar} {pct}{reset_text}{trend_text}"
 
     def _format_grok_usage_lines(self, summary: dict[str, Any], signals: dict[str, Any]) -> list[str]:
         lines: list[str] = []

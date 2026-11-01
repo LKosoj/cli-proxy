@@ -1340,6 +1340,7 @@ class BotHandlers:
                 sessions,
                 available_clis=available_clis,
                 preferred_workdir=preferred_workdir,
+                lang=lang,
             )
         except Exception:
             logging.getLogger(__name__).exception("limits command failed owner_chat_id=%s", route.owner_chat_id)

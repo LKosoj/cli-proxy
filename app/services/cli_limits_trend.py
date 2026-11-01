@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.services.state_repository import JsonStateRepository
@@ -10,66 +9,86 @@ from app.services.state_repository import JsonStateRepository
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class UsageTrend:
-    """Скорость расхода квоты и прогноз её исчерпания."""
-
-    percent_per_hour: float
-    seconds_to_exhaust: Optional[float]
-
-
 class UsageTrendTracker:
-    """Копит замеры расхода квот в durable-сторе и оценивает скорость выгорания."""
+    """Хранит получасовые замеры квот. Скорость считает cli_limits_pace."""
 
     NAMESPACE = "_cli_limits_trend"
-    MAX_POINTS = 12
-    MAX_AGE_SEC = 24 * 3600
-    MIN_INTERVAL_SEC = 60.0
-    # По двум близким замерам скорость получается случайной: один процент за минуту
-    # экстраполируется в 60%/ч, поэтому прогноз ждёт хотя бы десятиминутную историю.
-    MIN_FORECAST_SPAN_SEC = 600.0
-    # Ниже этой скорости прогноз бессмысленен: это шум округления процентов.
-    MIN_RATE_PERCENT_PER_HOUR = 0.05
+    # Сутки с запасом: точка «около 24 часов назад» не должна выпадать из-за джиттера.
+    MAX_POINTS = 64
+    MAX_AGE_SEC = 30 * 3600
+    # Съём идёт раз в полчаса. Повтор внутри того же захода не пишется.
+    MIN_INTERVAL_SEC = 25 * 60
 
     def __init__(self, repository: Optional[JsonStateRepository]) -> None:
         self._repository = repository
 
-    def record(self, key: str, used_percent: Any, *, window_marker: Any = "") -> Optional[UsageTrend]:
-        """Сохраняет замер и возвращает тренд, когда истории хватает для оценки."""
+    def record(self, key: str, used_percent: Any, *, window_marker: Any = "") -> None:
+        """Сохраняет замер. Команда /limits сюда не заходит."""
         if self._repository is None:
-            return None
+            return
         item_key = str(key or "").strip()
         if not item_key:
-            return None
+            return
         try:
             used = float(used_percent)
         except (TypeError, ValueError):
-            return None
+            return
         now = time.time()
-        marker = window_marker if isinstance(window_marker, (int, float)) else str(window_marker or "")
-        result: dict[str, Optional[UsageTrend]] = {"trend": None}
+        marker = _normalize_marker(window_marker)
 
         def _update(bucket: dict[str, Any]) -> dict[str, Any]:
             entry = bucket.get(item_key)
             points = _normalize_points(entry.get("points") if isinstance(entry, dict) else None)
-            if isinstance(entry, dict) and _window_changed(entry.get("window"), marker, now):
+            stored_window = entry.get("window") if isinstance(entry, dict) else None
+            if isinstance(entry, dict) and _window_changed(stored_window, marker, now):
                 points = []
             points = [point for point in points if 0 <= now - point[0] <= self.MAX_AGE_SEC]
-            if points and used + 1e-9 < points[-1][1]:
-                # Квота сброшена внутри того же окна — прежние замеры больше не сравнимы.
+            if points and used + 1e-9 < points[-1][1] and not _reset_still_ahead(marker, now):
+                # Квота сбросилась без нового маркера — старые точки больше не сравнимы.
                 points = []
-            result["trend"] = _forecast(points, used, now, self.MIN_RATE_PERCENT_PER_HOUR, self.MIN_FORECAST_SPAN_SEC)
             if not points or now - points[-1][0] >= self.MIN_INTERVAL_SEC:
                 points.append([now, used])
-            bucket[item_key] = {"window": marker, "points": points[-self.MAX_POINTS:]}
+            bucket[item_key] = {"window": marker, "points": points[-self.MAX_POINTS :]}
             return bucket
 
         try:
             self._repository.update_namespace(self.NAMESPACE, _update)
         except Exception:
             logger.debug("usage trend update failed key=%s", item_key, exc_info=True)
-            return None
-        return result["trend"]
+
+    def load_points(self, key: str, window_marker: Any, now: float) -> list[list[float]]:
+        """Возвращает точки текущего окна. После сброса — пустой список, без записи."""
+        if self._repository is None:
+            return []
+        item_key = str(key or "").strip()
+        if not item_key:
+            return []
+        try:
+            bucket = self._repository.read_namespace(self.NAMESPACE)
+        except Exception:
+            logger.debug("usage trend read failed key=%s", item_key, exc_info=True)
+            return []
+        entry = bucket.get(item_key) if isinstance(bucket, dict) else None
+        if not isinstance(entry, dict):
+            return []
+        marker = _normalize_marker(window_marker)
+        if _window_changed(entry.get("window"), marker, now):
+            return []
+        points = _normalize_points(entry.get("points"))
+        return [point for point in points if 0 <= now - point[0] <= self.MAX_AGE_SEC]
+
+
+def _normalize_marker(marker: Any) -> Any:
+    if isinstance(marker, bool):
+        return str(marker)
+    if isinstance(marker, (int, float)):
+        return float(marker)
+    return str(marker or "")
+
+
+def _reset_still_ahead(marker: Any, now: float) -> bool:
+    """У скользящего окна Claude процент может чуть упасть, пока сброс ещё впереди."""
+    return isinstance(marker, (int, float)) and not isinstance(marker, bool) and now < float(marker)
 
 
 def _window_changed(stored: Any, marker: Any, now: float) -> bool:
@@ -95,23 +114,3 @@ def _normalize_points(raw: Any) -> list[list[float]]:
             continue
     points.sort(key=lambda point: point[0])
     return points
-
-
-def _forecast(
-    points: list[list[float]],
-    used: float,
-    now: float,
-    min_rate: float,
-    min_span: float,
-) -> Optional[UsageTrend]:
-    if not points:
-        return None
-    first_ts, first_used = points[0]
-    elapsed = now - first_ts
-    if elapsed < min_span:
-        return None
-    rate = (used - first_used) / elapsed * 3600.0
-    if rate < min_rate:
-        return None
-    remaining = max(0.0, 100.0 - used)
-    return UsageTrend(percent_per_hour=rate, seconds_to_exhaust=remaining / rate * 3600.0)

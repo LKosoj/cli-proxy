@@ -7,6 +7,7 @@ from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import Application, ContextTypes
 
 from agent.plugins.task_management import run_task_deadline_checker
+from app.services.cli_limits_service import sample_workdirs
 from app.services.loop_lag_monitor import LoopLagMonitor
 from app.services.thread_mode_capability_checker import ThreadModeCapabilityChecker
 
@@ -59,6 +60,12 @@ def build_post_init(bot_app) -> Callable[[Application], asyncio.Future]:
                 run_task_deadline_checker(application, bot_app.is_allowed),
                 name="task_deadline_checker",
             )
+        limits_service = getattr(bot_app, "cli_limits_service", None)
+        if limits_service is not None and hasattr(limits_service, "start_sampler"):
+            try:
+                limits_service.start_sampler(lambda: sample_workdirs(bot_app))
+            except Exception:
+                logging.getLogger(__name__).exception("cli limits sampler start failed")
 
     return _post_init
 
@@ -68,6 +75,12 @@ def build_post_shutdown(bot_app) -> Callable[[Application], asyncio.Future]:
         if bot_app._task_deadline_checker_task:
             bot_app._task_deadline_checker_task.cancel()
             bot_app._task_deadline_checker_task = None
+        limits_service = getattr(bot_app, "cli_limits_service", None)
+        if limits_service is not None and hasattr(limits_service, "stop_sampler"):
+            try:
+                await limits_service.stop_sampler()
+            except Exception:
+                logging.getLogger(__name__).exception("cli limits sampler stop failed")
         try:
             session_thread_manager = getattr(bot_app, "session_thread_manager", None)
             if session_thread_manager is not None:
