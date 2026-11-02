@@ -182,7 +182,7 @@ class ProtocolActionsMixin:
                     from app.services.cli_backends import TmuxExecutionBackend
                     from sessions.session_run_service import SessionRunService
 
-                    await TmuxExecutionBackend().send_input(tmux_sess, choice)
+                    await TmuxExecutionBackend().send_choice(tmux_sess, choice)
                     SessionRunService.remember_answered_tmux_choice(tmux_sess, question_id)
                     fed = True
             except Exception:

@@ -794,6 +794,25 @@ class TmuxExecutionBackend:
                 state["last_activity_at"] = time.time()
                 self._write_state(paths, state)
 
+    async def send_choice(self, session: Any, choice: str) -> None:
+        """Send a numeric TUI choice as key events, not as pasted text."""
+        value = str(choice or "").strip()
+        if not value.isdigit():
+            raise TmuxDriverError("tmux choice must contain only digits")
+
+        paths = self.paths(session)
+        async with self._pane_lock(session):
+            if not await self.can_accept_input(session):
+                raise TmuxDriverError("active tmux session is unavailable")
+
+            await self._driver(session).send_keys(paths["pane_target"], *value)
+            await self._driver(session).send_enter(paths["pane_target"])
+
+            state = self._read_state(paths)
+            if self._has_active_runtime_state(session, state):
+                state["last_activity_at"] = time.time()
+                self._write_state(paths, state)
+
     async def _ensure_started(self, session: Any, paths: dict[str, str], *, force_fresh: bool = False) -> bool:
         driver = self._driver(session)
         Path(paths["runtime_dir"]).mkdir(parents=True, exist_ok=True)

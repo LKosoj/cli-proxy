@@ -1445,6 +1445,33 @@ async def test_tmux_backend_sends_plain_input_to_active_session(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_sends_choice_as_key_events(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": 1.0,
+        },
+    )
+    driver.loaded_prompt_path = str(tmp_path / "choice.txt")
+    (tmp_path / "choice.txt").write_text("1", encoding="utf-8")
+
+    await backend.send_choice(session, "1")
+
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("1",))]
+    assert driver.events[-1] == "send_enter"
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_neutralizes_embedded_esc_in_active_input(tmp_path):
     # ESC внутри промпта (например, из вставленного в Telegram лога с ANSI-раскраской)
     # закрыл бы bracketed-paste рамку tmux раньше времени: хвост промпта CLI получил бы

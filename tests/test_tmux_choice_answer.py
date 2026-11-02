@@ -63,7 +63,7 @@ async def test_tmux_choice_click_feeds_owner_session_and_second_click_is_stale(m
     async def _send(_self, tmux_sess, text):
         sent.append((tmux_sess, text))
 
-    monkeypatch.setattr(TmuxExecutionBackend, "send_input", _send)
+    monkeypatch.setattr(TmuxExecutionBackend, "send_choice", _send)
     resolves = []
 
     class _Runtime:
@@ -120,7 +120,7 @@ async def test_tmux_choice_click_keeps_card_when_pane_send_fails(monkeypatch):
         attempts.append(text)
         raise RuntimeError("pane down")
 
-    monkeypatch.setattr(TmuxExecutionBackend, "send_input", _send)
+    monkeypatch.setattr(TmuxExecutionBackend, "send_choice", _send)
     qid = "tmux_choice_s45_cd3c802bc4d1"
     pending = _pending(qid, tmux_feed=True)
     app = _app(
