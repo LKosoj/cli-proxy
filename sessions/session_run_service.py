@@ -916,6 +916,7 @@ class SessionRunService:
                 session.busy = True
                 if not capacity_retry:
                     session._cli_capacity_retry_count = 0
+                    session._cli_capacity_retry_preview_base = ""
                 session.started_at = time.time()
                 session.last_output_ts = session.started_at
                 session.last_tick_ts = None
@@ -1027,6 +1028,9 @@ class SessionRunService:
                     if terminal_error:
                         session.last_cli_terminal_error = ""
                         session.last_cli_retry_prompt = ""
+                    if not terminal_error:
+                        session._cli_capacity_retry_count = 0
+                        session._cli_capacity_retry_preview_base = ""
                     if tmux_request_id and terminal_error:
                         if (
                             managed_tmux
@@ -1036,10 +1040,12 @@ class SessionRunService:
                             retry_count = int(getattr(session, "_cli_capacity_retry_count", 0) or 0) + 1
                             session._cli_capacity_retry_count = retry_count
                             previous_preview = str(
-                                getattr(session, "assistant_preview_last_value", "")
+                                getattr(session, "_cli_capacity_retry_preview_base", "")
+                                or getattr(session, "assistant_preview_last_value", "")
                                 or getattr(session, "last_assistant_text_value", "")
                                 or terminal_error
                             ).strip()
+                            session._cli_capacity_retry_preview_base = previous_preview
                             preview_text = (
                                 f"{previous_preview}\n\n"
                                 f"⚠️ Модель перегружена. Попытка повтора {retry_count} через 60 секунд."
@@ -1066,6 +1072,8 @@ class SessionRunService:
                         else:
                             # Обычная доставка превратила бы короткую ошибку в большой
                             # отчёт. Здесь нужно само сообщение и кнопка повтора.
+                            session._cli_capacity_retry_count = 0
+                            session._cli_capacity_retry_preview_base = ""
                             send_output_scheduled = True
                             delivered = await self._send_cli_terminal_error(
                                 session,
