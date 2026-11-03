@@ -56,6 +56,7 @@ _CHOICE_QUESTION_MAX_LINES = 12
 _log = logging.getLogger(__name__)
 # Telegram принимает callback_data не длиннее 64 байт.
 _CLI_RETRY_CALLBACK_LIMIT = 64
+_CLI_CAPACITY_RETRY_DELAY_SEC = 60.0
 # Ошибки, после которых тот же запрос имеет смысл отправить ещё раз.
 _CLI_RETRYABLE_ERROR_PARTS = (
     "at capacity",
@@ -204,6 +205,10 @@ class SessionRunService:
             coro=self.run_prompt(session, prompt, dest, context),
             name=task_name,
         )
+
+    async def _run_capacity_retry(self, session, dest: dict, context) -> None:
+        await asyncio.sleep(_CLI_CAPACITY_RETRY_DELAY_SEC)
+        await self.run_prompt(session, "продолжи", dest, context, capacity_retry=True)
 
     def _recovery_dest(self, session, request: TmuxRecoveryRequest) -> dict:
         persisted = dict(request.dest or {})
@@ -892,6 +897,7 @@ class SessionRunService:
         context,
         *,
         recovery_request: Optional[TmuxRecoveryRequest] = None,
+        capacity_retry: bool = False,
     ) -> None:
         self._track_session_task(session, name="run_prompt")
         _rp_log = logging.getLogger("bot.run_prompt")
@@ -908,13 +914,16 @@ class SessionRunService:
             async with session.run_lock:
                 _rp_log.info("[run_prompt] lock acquired session=%s", session.id)
                 session.busy = True
+                if not capacity_retry:
+                    session._cli_capacity_retry_count = 0
                 session.started_at = time.time()
                 session.last_output_ts = session.started_at
                 session.last_tick_ts = None
                 session.last_tick_value = None
                 session.last_assistant_text_ts = None
                 session.last_assistant_text_value = None
-                self._reset_assistant_preview_state(session)
+                if not capacity_retry:
+                    self._reset_assistant_preview_state(session)
                 clear_final_output_delivery_guard(session)
                 session.tick_seen = 0
                 clear_session_ticks(session)
@@ -995,8 +1004,6 @@ class SessionRunService:
                     if preview_task is not None:
                         await asyncio.gather(preview_task, return_exceptions=True)
 
-                    # Просто удалить превью перед отправкой финального сообщения.
-                    await self._clear_telegram_assistant_preview(session, dest, context)
                     if hook is not None and prepared is not None:
                         hook.record_success(prepared, output=output)
                     self._log_cli_dialog(
@@ -1021,27 +1028,63 @@ class SessionRunService:
                         session.last_cli_terminal_error = ""
                         session.last_cli_retry_prompt = ""
                     if tmux_request_id and terminal_error:
-                        # Обычная доставка превратила бы короткую ошибку в большой
-                        # отчёт. Здесь нужно само сообщение и кнопка повтора.
-                        send_output_scheduled = True
-                        delivered = await self._send_cli_terminal_error(
-                            session,
-                            dest,
-                            context,
-                            terminal_error,
-                            retry_prompt,
-                        )
-                        if delivered:
-                            queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(
-                                session,
-                                tmux_request_id,
+                        if (
+                            managed_tmux
+                            and str(getattr(getattr(session, "cli", None), "active_cli", "") or "").lower() == "codex"
+                            and cli_terminal_error_is_retryable(terminal_error)
+                        ):
+                            retry_count = int(getattr(session, "_cli_capacity_retry_count", 0) or 0) + 1
+                            session._cli_capacity_retry_count = retry_count
+                            previous_preview = str(
+                                getattr(session, "assistant_preview_last_value", "")
+                                or getattr(session, "last_assistant_text_value", "")
+                                or terminal_error
+                            ).strip()
+                            preview_text = (
+                                f"{previous_preview}\n\n"
+                                f"⚠️ Модель перегружена. Попытка повтора {retry_count} через 60 секунд."
                             )
-                            if not queue_drain_allowed:
+                            session.last_assistant_text_value = preview_text
+                            await self._upsert_telegram_assistant_preview(
+                                session,
+                                dest,
+                                context,
+                                preview_text,
+                            )
+                            send_output_scheduled = self.start_session_task(
+                                session,
+                                coro=self._run_capacity_retry(session, dest, context),
+                                name="run_prompt.capacity_retry",
+                            )
+                            queue_drain_allowed = False
+                            if TmuxExecutionBackend.mark_request_delivered(session, tmux_request_id) is False:
                                 _log.error(
                                     "tmux delivery marker was not persisted session=%s request_id=%s",
                                     session.id,
                                     tmux_request_id,
                                 )
+                        else:
+                            # Обычная доставка превратила бы короткую ошибку в большой
+                            # отчёт. Здесь нужно само сообщение и кнопка повтора.
+                            send_output_scheduled = True
+                            delivered = await self._send_cli_terminal_error(
+                                session,
+                                dest,
+                                context,
+                                terminal_error,
+                                retry_prompt,
+                            )
+                            if delivered:
+                                queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(
+                                    session,
+                                    tmux_request_id,
+                                )
+                                if not queue_drain_allowed:
+                                    _log.error(
+                                        "tmux delivery marker was not persisted session=%s request_id=%s",
+                                        session.id,
+                                        tmux_request_id,
+                                    )
                     elif tmux_request_id and observed_silence:
                         # Чтение живого pane закончилось тишиной: заголовок с пустым
                         # отчётом в чат слать не за чем.

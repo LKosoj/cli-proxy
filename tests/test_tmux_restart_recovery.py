@@ -217,7 +217,7 @@ async def test_observed_tmux_silence_is_not_reported_to_chat(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_model_capacity_error_is_shown_with_retry_button(monkeypatch):
+async def test_model_capacity_error_schedules_automatic_retry(monkeypatch):
     events: list[tuple] = []
     sent: list[dict] = []
     service = _run_service(events)
@@ -248,7 +248,14 @@ async def test_model_capacity_error_is_shown_with_retry_button(monkeypatch):
         "mark_request_delivered",
         lambda _session, request_id: delivered.append(str(request_id)) or True,
     )
-    service.start_prompt_task = lambda *_args, **_kwargs: True
+    retry_tasks = []
+
+    def _start_session_task(_session, *, coro, name):
+        assert name == "run_prompt.capacity_retry"
+        retry_tasks.append(coro)
+        return True
+
+    service.start_session_task = _start_session_task
 
     await service.run_prompt(
         session,
@@ -259,12 +266,12 @@ async def test_model_capacity_error_is_shown_with_retry_button(monkeypatch):
     )
 
     assert [event for event in events if event[0] == "output"] == []
-    assert sent and sent[0]["text"] == error
-    button = sent[0]["reply_markup"].inline_keyboard[0][0]
-    assert button.text == "Повторить"
-    assert button.callback_data == "cli_retry:desktop:s1"
-    assert session.pending_cli_retry_prompt == "Какой статус?"
+    assert sent and "Модель перегружена" in sent[0]["text"]
+    assert "Попытка повтора 1" in sent[0]["text"]
+    assert "reply_markup" not in sent[0]
     assert delivered == ["observe-codex"]
+    assert len(retry_tasks) == 1
+    retry_tasks[0].close()
 
 
 @pytest.mark.asyncio

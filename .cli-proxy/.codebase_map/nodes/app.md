@@ -93,4 +93,4 @@ Instruction node for `app` area.
 - project-maintainers
 
 ## Last reviewed
-- 2026-10-16 — Codex limits skip malformed session records and retain token counts.
+- 2026-11-03 — Codex tmux capacity errors retry automatically after 60 seconds and keep retry status in the preview.
