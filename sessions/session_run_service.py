@@ -427,8 +427,12 @@ class SessionRunService:
             start = next((idx for idx, line in enumerate(lines)
                           if (match := _CHOICE_OPTION_RE.match(line.strip())) and match.group(1) == "1"), len(lines))
         q_lines = lines[:start]
+        rest = lines[start:]
+        # Подсказка «Select with numbers» значит, что ниже ещё меню. Перенос
+        # длинного пункта тогда идёт с края экрана, без отступа.
+        footer_ahead = any(_is_choice_submit_footer(line.strip()) for line in rest)
         opts = []
-        for line in lines[start:]:
+        for line in rest:
             s = line.strip()
             if _is_choice_submit_footer(s):
                 break
@@ -439,8 +443,7 @@ class SessionRunService:
             if m and int(m.group(1)) == len(opts) + 1:
                 opts.append(f"{m.group(1)}. {m.group(2).strip()}")
                 continue
-            # Длинный пункт Claude переносится на следующую строку с отступом.
-            if opts and line[:1].isspace() and s:
+            if opts and s and (line[:1].isspace() or footer_ahead):
                 opts[-1] = f"{opts[-1]} {s}"
                 continue
             break
@@ -457,7 +460,10 @@ class SessionRunService:
                 if not _is_volatile_choice_status_line(line)
             ]
             question_at = next(
-                (idx for idx, line in enumerate(q_lines) if line.strip().lower().startswith("question:")),
+                (
+                    idx for idx, line in enumerate(q_lines)
+                    if line.strip().lower().startswith(("question:", "questions:"))
+                ),
                 None,
             )
             if question_at is not None:

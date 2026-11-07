@@ -199,6 +199,48 @@ def _claude_ask_user_frame() -> str:
     )
 
 
+def _claude_question_list_frame() -> str:
+    # Несколько вопросов Claude: заголовок «Questions:», пункт перенесён по краю
+    # экрана без отступа. Подсказка «Select with numbers» на этом кадре есть.
+    return (
+        "claude: Порты 80 и 443 на bots уже заняты Caddy.\n"
+        "Questions: Прокси, Публикация, Старый код\n"
+        "> Порты 80/443 на bots занимает Caddy. Как организовать удалённый доступ к\n"
+        "> video_explainer?\n"
+        "1. Angie вместо Caddy (Рекомендую) — Ставлю Angie и переношу маршруты. Будет короткий перерыв ezobot (секунды)\n"
+        "при переключении портов; откат — запустить Caddy обратно.\n"
+        "2. Оставить Caddy — Angie не ставим, добавляю video_explainer в Caddyfile.\n"
+        "3. Angie за Caddy — Caddy остаётся на 80/443 и передаёт домен в Angie.\n"
+        "4. Other\n"
+        "5. Chat about this\n"
+        "Select with numbers [1-5]. Then Enter to submit or Escape to cancel:\n"
+    )
+
+
+def test_claude_question_list_keeps_wrapped_options_and_round_trips() -> None:
+    text = _claude_question_list_frame()
+
+    assert SessionRunService._is_cli_choice_question(text) is True
+    question, options = SessionRunService._parse_cli_choice_question(text)
+
+    assert question.startswith("Questions: Прокси, Публикация, Старый код")
+    assert "Порты 80 и 443 на bots уже заняты" not in question
+    assert options[0].startswith("1. Angie вместо Caddy (Рекомендую)")
+    assert options[0].endswith("запустить Caddy обратно.")
+    assert "при переключении портов" in options[0]
+    assert options[1:] == [
+        "2. Оставить Caddy — Angie не ставим, добавляю video_explainer в Caddyfile.",
+        "3. Angie за Caddy — Caddy остаётся на 80/443 и передаёт домен в Angie.",
+        "4. Other",
+        "5. Chat about this",
+    ]
+    # Монитор отдаёт в превью уже разобранный блок, без подсказки внизу.
+    # Повторный разбор должен снова увидеть меню, иначе кнопки не уйдут.
+    preview = "\n".join([question, f"❯ {options[0]}", *options[1:]])
+    assert SessionRunService._is_cli_choice_question(preview) is True
+    assert SessionRunService._parse_cli_choice_question(preview)[1] == options
+
+
 def test_claude_ask_user_menu_without_cursor_is_a_choice() -> None:
     text = _claude_ask_user_frame()
 
