@@ -133,6 +133,54 @@ def test_out_of_order_numbers_are_not_options() -> None:
     assert SessionRunService._parse_cli_choice_question(text)[1] == []
 
 
+def _claude_permission_frame(timer: str, command: str) -> str:
+    # Кадр без пустой строки над меню: так Claude рисует разрешение на команду.
+    return (
+        "… +22 lines (ctrl+o to expand)\n"
+        "tool: Bash (cd /work && ls)\n"
+        "ok tests\n"
+        f"Running…  ({timer} · timeout 10m)\n"
+        "(ctrl+b ctrl+b (twice) to run in background)\n"
+        "Permission Required: Bash command · from the general-purpose agent\n"
+        "> Run shell command\n"
+        f"> {command}\n"
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No\n"
+    )
+
+
+def test_ticking_permission_timer_does_not_change_question_or_id() -> None:
+    early = _claude_permission_frame("5s", "rm -f Tests/LacEditorTests/*")
+    later = _claude_permission_frame("1m 27s", "rm -f Tests/LacEditorTests/*")
+
+    early_question, early_options = SessionRunService._parse_cli_choice_question(early)
+    later_question, later_options = SessionRunService._parse_cli_choice_question(later)
+
+    assert early_options == ["1. Yes", "2. No"]
+    assert later_options == early_options
+    assert "timeout" not in early_question
+    assert "rm -f Tests/LacEditorTests/*" in early_question
+    assert early_question == later_question
+    assert SessionRunService._tmux_choice_question_id("s45", early_question, early_options) == (
+        SessionRunService._tmux_choice_question_id("s45", later_question, later_options)
+    )
+
+
+def test_different_permission_commands_keep_different_question_ids() -> None:
+    first_question, first_options = SessionRunService._parse_cli_choice_question(
+        _claude_permission_frame("5s", "rm -f Tests/LacEditorTests/*")
+    )
+    second_question, second_options = SessionRunService._parse_cli_choice_question(
+        _claude_permission_frame("6s", "rm -rf /tmp/other")
+    )
+
+    assert first_question != second_question
+    assert SessionRunService._tmux_choice_question_id("s45", first_question, first_options) != (
+        SessionRunService._tmux_choice_question_id("s45", second_question, second_options)
+    )
+
+
 def test_question_id_is_stable_for_repeated_frames() -> None:
     first = SessionRunService._tmux_choice_question_id("s5", "Выбор?", ["1. Да", "2. Нет"])
     second = SessionRunService._tmux_choice_question_id("s5", "Выбор?", ["1. Да", "2. Нет"])

@@ -53,6 +53,9 @@ _CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\
 # Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
 _CHOICE_CURSOR_RE = re.compile(r'^[ \t]*(?:[❯▶►▌»][ \t]*(?:☐[ \t]*)?|☐[ \t]*)[1-9][\.\)][ \t]', re.M)
 _CHOICE_QUESTION_MAX_LINES = 12
+# «Running… (42s · timeout 10m)» и «(6s · timeout 10m)» перерисовываются
+# каждую секунду. Точка посередине у Claude — «·», у Codex — «•».
+_CHOICE_STATUS_TIMER_RE = re.compile(r"\(\d+(?:m\s+\d+)?s\s*[·•]")
 _log = logging.getLogger(__name__)
 # Telegram принимает callback_data не длиннее 64 байт.
 _CLI_RETRY_CALLBACK_LIMIT = 64
@@ -65,6 +68,18 @@ _CLI_RETRYABLE_ERROR_PARTS = (
     "capacity unavailable",
     "flex capacity",
 )
+
+
+def _is_volatile_choice_status_line(line: str) -> bool:
+    """Строка статуса TUI с живым таймером, а не текст вопроса.
+
+    Команда на экране Claude начинается с «>» и остаётся частью вопроса.
+    """
+
+    stripped = line.strip()
+    if not stripped or stripped.startswith(">"):
+        return False
+    return _CHOICE_STATUS_TIMER_RE.search(stripped) is not None
 
 
 def cli_terminal_error_is_retryable(message: str) -> bool:
@@ -411,7 +426,10 @@ class SessionRunService:
                 if not line.strip() or len(tail) >= _CHOICE_QUESTION_MAX_LINES:
                     break
                 tail.append(line)
-            q_lines = list(reversed(tail))
+            q_lines = [
+                line for line in reversed(tail)
+                if not _is_volatile_choice_status_line(line)
+            ]
         q = "\n".join(q_lines).strip() or "Please choose:"
         # Заглушки "Option 1..5" не подставляются: без распознанных вариантов
         # кнопки бессмысленны, вызывающий код покажет обычное превью.

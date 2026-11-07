@@ -590,6 +590,43 @@ def _choice_preview_app(questions: list, previews: list):
     )
 
 
+def _ticking_permission_frame(timer: str) -> str:
+    return (
+        "Permission Required: Bash command\n"
+        f"Running…  ({timer} · timeout 10m)\n"
+        "> rm -f Tests/LacEditorTests/*\n"
+        "Do you want to proceed?\n"
+        "❯ 1. Yes\n"
+        "  2. No\n"
+    )
+
+
+def test_session_run_service_asks_ticking_tmux_choice_once() -> None:
+    async def _run() -> None:
+        questions: list[dict[str, object]] = []
+        previews: list[str] = []
+        bot_app = _choice_preview_app(questions, previews)
+        service = _build_service(bot_app)
+        session = _preview_session(backend="tmux")
+        dest = {"kind": "telegram", "chat_id": 123}
+
+        await service._upsert_telegram_assistant_preview(
+            session, dest, object(), _ticking_permission_frame("5s"),
+        )
+        await service._upsert_telegram_assistant_preview(
+            session, dest, object(), _ticking_permission_frame("6s"),
+        )
+
+        assert len(questions) == 1
+        assert previews == []
+        pending = next(iter(bot_app.ui_state.pending_questions.values()))
+        assert pending["options"] == ["1. Yes", "2. No"]
+        assert "timeout" not in str(pending["question"])
+        assert "rm -f Tests/LacEditorTests/*" in str(pending["question"])
+
+    asyncio.run(_run())
+
+
 def test_session_run_service_does_not_reask_answered_tmux_choice() -> None:
     async def _run() -> None:
         questions: list[dict[str, object]] = []
