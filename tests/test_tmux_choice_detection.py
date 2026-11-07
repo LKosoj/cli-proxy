@@ -181,6 +181,41 @@ def test_different_permission_commands_keep_different_question_ids() -> None:
     )
 
 
+def _claude_ask_user_frame() -> str:
+    # Вопрос Claude без курсора: длинный пункт перенесён, внизу подсказка про номер.
+    return (
+        "tool: Bash (sed -n 1,40p src/store.py)\n"
+        "        self.directory = store.generation_dir(project.uid, record.uid)\n"
+        "Question: Очистка\n"
+        "> Как очистить тестовый проект?\n"
+        "> История на 70 МБ, плюс настройки проекта.\n"
+        "1. Удалить историю (Рекомендую) — Сохранить input.txt рядом с проектом,\n"
+        " удалить папку истории целиком.\n"
+        "2. Удалить и ресурсы проекта — То же, плюс фон и заставку.\n"
+        "3. Только медиа истории — Удалить media и workspace.\n"
+        "4. Other\n"
+        "5. Chat about this\n"
+        "Select with numbers [1-5]. Then Enter to submit or Escape to cancel:\n"
+    )
+
+
+def test_claude_ask_user_menu_without_cursor_is_a_choice() -> None:
+    text = _claude_ask_user_frame()
+
+    assert SessionRunService._is_cli_choice_question(text) is True
+    question, options = SessionRunService._parse_cli_choice_question(text)
+
+    assert question.startswith("Question: Очистка")
+    assert "store.generation_dir" not in question
+    assert options == [
+        "1. Удалить историю (Рекомендую) — Сохранить input.txt рядом с проектом, удалить папку истории целиком.",
+        "2. Удалить и ресурсы проекта — То же, плюс фон и заставку.",
+        "3. Только медиа истории — Удалить media и workspace.",
+        "4. Other",
+        "5. Chat about this",
+    ]
+
+
 def test_question_id_is_stable_for_repeated_frames() -> None:
     first = SessionRunService._tmux_choice_question_id("s5", "Выбор?", ["1. Да", "2. Нет"])
     second = SessionRunService._tmux_choice_question_id("s5", "Выбор?", ["1. Да", "2. Нет"])

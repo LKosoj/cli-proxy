@@ -114,6 +114,36 @@ def test_send_ask_question_keeps_tmux_feed_flag(tmp_path):
     asyncio.run(_run())
 
 
+def test_send_ask_question_truncates_long_button_but_keeps_full_text(tmp_path):
+    async def _run() -> None:
+        app = _build_app(tmp_path)
+        sent = {}
+
+        async def _fake_send_message(_context, **kwargs):
+            sent.update(kwargs)
+
+        app._send_message = _fake_send_message
+        long_choice = "1. " + ("удалить историю " * 12)
+        await app._send_ask_question(
+            context=object(),
+            chat_id=1,
+            session_id="s1",
+            question_id="q1",
+            question="Question: Очистка",
+            options=[long_choice, "2. Оставить"],
+            allow_custom=False,
+            system_options=False,
+        )
+
+        assert app.ui_state.pending_questions["q1"]["options"] == [long_choice.strip(), "2. Оставить"]
+        assert long_choice.strip() in sent["text"]
+        label = sent["reply_markup"].inline_keyboard[0][0].text
+        assert len(label) <= 64
+        assert label.endswith("…")
+
+    asyncio.run(_run())
+
+
 def test_resolve_pending_custom_answer_prefers_active_question(tmp_path):
     async def _run() -> None:
         app = _build_app(tmp_path)

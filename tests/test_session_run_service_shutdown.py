@@ -627,6 +627,46 @@ def test_session_run_service_asks_ticking_tmux_choice_once() -> None:
     asyncio.run(_run())
 
 
+def test_session_run_service_asks_claude_question_menu_once() -> None:
+    async def _run() -> None:
+        questions: list[dict[str, object]] = []
+        previews: list[str] = []
+        bot_app = _choice_preview_app(questions, previews)
+        service = _build_service(bot_app)
+        text = (
+            "Question: Очистка\n"
+            "> Как очистить тестовый проект?\n"
+            "1. Удалить историю\n"
+            " и оставить настройки.\n"
+            "2. Удалить всё\n"
+            "Select with numbers [1-2]. Then Enter to submit or Escape to cancel:\n"
+        )
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+
+        assert len(questions) == 1
+        assert previews == []
+        pending = next(iter(bot_app.ui_state.pending_questions.values()))
+        assert pending["options"] == [
+            "1. Удалить историю и оставить настройки.",
+            "2. Удалить всё",
+        ]
+        assert str(pending["question"]).startswith("Question: Очистка")
+
+    asyncio.run(_run())
+
+
 def test_session_run_service_does_not_reask_answered_tmux_choice() -> None:
     async def _run() -> None:
         questions: list[dict[str, object]] = []

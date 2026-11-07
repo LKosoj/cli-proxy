@@ -1328,12 +1328,27 @@ class BotApp:
         }
         if tmux_feed:
             record["tmux_feed"] = True
+        body = str(question or "")
+        labels = [self._ask_button_text(opt) for opt in options]
+        if any(label != " ".join(str(opt).split()) for label, opt in zip(labels, options)):
+            # Полный текст длинного пункта остаётся в сообщении: на кнопке он обрезан.
+            body = body.rstrip() + "\n\n" + "\n".join(str(opt).strip() for opt in options)
+            record["question"] = body
         self.ui_state.pending_questions[question_id] = record
-        rows = [[InlineKeyboardButton(opt, callback_data=f"ask:{question_id}:{idx}")] for idx, opt in enumerate(options)]
+        rows = [[InlineKeyboardButton(label, callback_data=f"ask:{question_id}:{idx}")] for idx, label in enumerate(labels)]
         if allow_custom:
             rows.append([InlineKeyboardButton(t("bot.ask_custom_btn", _ask_q_lang), callback_data=f"ask:{question_id}:custom")])
         keyboard = InlineKeyboardMarkup(rows)
-        await self._send_message(context, text=question, reply_markup=keyboard, **ui_key.reply_kwargs())
+        await self._send_message(context, text=body, reply_markup=keyboard, **ui_key.reply_kwargs())
+
+    @staticmethod
+    def _ask_button_text(option: str) -> str:
+        """Подпись кнопки. Telegram принимает не больше 64 символов."""
+
+        text = " ".join(str(option or "").split())
+        if len(text) <= 64:
+            return text
+        return text[:63].rstrip() + "…"
 
     @staticmethod
     def _normalize_ask_options(options: list[str], allow_custom: bool = True) -> list[str]:
@@ -1358,7 +1373,8 @@ class BotApp:
     def _ensure_min_ask_options(options: list[str], system_options: bool = True, lang: str = "ru") -> list[str]:
         normalized = [str(x).strip() for x in (options or []) if str(x).strip()]
         if len(normalized) >= 2:
-            return normalized[:4]
+            # Пять пунктов — меню Claude: три ответа, Other и Chat about this.
+            return normalized[:5]
         if not system_options:
             return normalized
         if len(normalized) == 1:

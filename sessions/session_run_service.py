@@ -70,6 +70,19 @@ _CLI_RETRYABLE_ERROR_PARTS = (
 )
 
 
+def _is_choice_submit_footer(line: str) -> bool:
+    """Подсказка TUI «введите номер и Enter», а не пункт меню."""
+
+    lowered = line.strip().lower()
+    if not lowered:
+        return False
+    return (
+        "select with numbers" in lowered
+        or "enter to submit" in lowered
+        or lowered.startswith("enter selection [")
+    )
+
+
 def _is_volatile_choice_status_line(line: str) -> bool:
     """Строка статуса TUI с живым таймером, а не текст вопроса.
 
@@ -367,7 +380,14 @@ class SessionRunService:
         if not text:
             return False
         t = text.lower()
-        if "enter selection [" in t or "or escape to cancel" in t or "or esc to cancel" in t:
+        # «Select with numbers [1-5]. Then Enter to submit» — вопрос Claude
+        # без курсора на пункте. Обычный нумерованный список так не подписан.
+        if (
+            "enter selection [" in t
+            or "or escape to cancel" in t
+            or "or esc to cancel" in t
+            or "select with numbers" in t
+        ):
             return True
         # "esc to interrupt" / "shift+tab" — это индикатор работы и подсказка в
         # футере TUI, а не вопрос: по ним нельзя распознавать выбор.
@@ -410,14 +430,20 @@ class SessionRunService:
         opts = []
         for line in lines[start:]:
             s = line.strip()
+            if _is_choice_submit_footer(s):
+                break
             # Support plain "1. foo", "1) foo", "☐ 1. foo", "❯ 1. foo"
             m = _CHOICE_OPTION_RE.match(s)
             # Нумерация меню идёт подряд с единицы, поэтому "1754161234.567 /tmp/x"
             # из вывода команд вариантом не становится.
             if m and int(m.group(1)) == len(opts) + 1:
                 opts.append(f"{m.group(1)}. {m.group(2).strip()}")
-            else:
-                break
+                continue
+            # Длинный пункт Claude переносится на следующую строку с отступом.
+            if opts and line[:1].isspace() and s:
+                opts[-1] = f"{opts[-1]} {s}"
+                continue
+            break
         # Вопрос стоит прямо над вариантами и отделён от остального вывода пустой
         # строкой: без этого в него попадал весь экран TUI, включая логи команд.
         if opts:
@@ -430,6 +456,12 @@ class SessionRunService:
                 line for line in reversed(tail)
                 if not _is_volatile_choice_status_line(line)
             ]
+            question_at = next(
+                (idx for idx, line in enumerate(q_lines) if line.strip().lower().startswith("question:")),
+                None,
+            )
+            if question_at is not None:
+                q_lines = q_lines[question_at:]
         q = "\n".join(q_lines).strip() or "Please choose:"
         # Заглушки "Option 1..5" не подставляются: без распознанных вариантов
         # кнопки бессмысленны, вызывающий код покажет обычное превью.
