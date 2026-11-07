@@ -1470,6 +1470,11 @@ async def test_tmux_backend_sends_choice_as_key_events(tmp_path):
     assert driver.sent_key_sequences == [(paths["pane_target"], ("1",))]
     assert driver.events[-1] == "send_enter"
 
+    await backend.send_choice(session, "y")
+
+    assert driver.sent_key_sequences[-1] == (paths["pane_target"], ("y",))
+    assert driver.events[-1] == "send_enter"
+
 
 @pytest.mark.asyncio
 async def test_tmux_backend_neutralizes_embedded_esc_in_active_input(tmp_path):
@@ -2476,9 +2481,15 @@ CLAUDE_FOLDER_TRUST_PANE = (
 
 def test_tmux_backend_recognizes_claude_folder_trust_prompt() -> None:
     assert TmuxExecutionBackend._is_claude_folder_trust_prompt(CLAUDE_FOLDER_TRUST_PANE) is True
+    # Старый курсор в истории не прячет живой вопрос внизу экрана.
+    assert TmuxExecutionBackend._is_claude_folder_trust_prompt("старый ответ\n❯\n" + CLAUDE_FOLDER_TRUST_PANE) is True
     # Тот же текст в уже открытом поле ввода — цитата, а не вопрос.
     assert TmuxExecutionBackend._is_claude_folder_trust_prompt(CLAUDE_FOLDER_TRUST_PANE + "\n❯") is False
     assert TmuxExecutionBackend._is_claude_folder_trust_prompt("❯") is False
+    # Подтверждение ответов — другое меню, его «y» само нажимать нельзя.
+    assert TmuxExecutionBackend._is_claude_folder_trust_prompt(
+        "Ready to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:\n"
+    ) is False
 
 
 @pytest.mark.asyncio
@@ -2517,6 +2528,205 @@ async def test_tmux_backend_does_not_confirm_quoted_claude_folder_trust_prompt(t
 
     assert result.abnormal_stop is False
     assert driver.sent_key_sequences == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_monitor_confirms_folder_trust_without_asking(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+
+    class SilentTranscriptReader:
+        def __init__(self, **kwargs):
+            self.locator = None
+
+        def poll(self):
+            return TranscriptPollResult()
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SilentTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=30.0,
+    )
+    session = _session(tmp_path)
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("старый ответ\n❯\n" + CLAUDE_FOLDER_TRUST_PANE + "\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="trust-1",
+        started_at=time.time(),
+        offset=0,
+        prompt="do work",
+        dest={"kind": "telegram", "chat_id": 42},
+        observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if driver.sent_key_sequences:
+                break
+        assert driver.sent_key_sequences == [(paths["pane_target"], ("y", "Enter"))]
+        await asyncio.sleep(0.05)
+        assert driver.sent_key_sequences == [(paths["pane_target"], ("y", "Enter"))]
+    finally:
+        monitor.cancel()
+        with suppress(asyncio.CancelledError):
+            await asyncio.wait_for(monitor, timeout=5)
+
+
+CODEX_FOLDER_TRUST_PANE = (
+    "  Folder access\n"
+    "  /srv/git_projects/newsgrabber\n"
+    "\n"
+    "  Trust this folder? Codex can read, edit, and run files here,\n"
+    "  subject to your permission settings. Folder settings can run code\n"
+    "  automatically, even without a model request. Continue only if you\n"
+    "  trust these files. Your trust decision will be saved.\n"
+    "\n"
+    "› 1. Trust and continue\n"
+    "  2. Quit\n"
+    "\n"
+    "  enter continue · esc quit\n"
+)
+CODEX_RESTRICTED_FOLDER_PANE = (
+    "  Folder access\n"
+    "  /srv/git_projects/newsgrabber\n"
+    "\n"
+    "  Config, hooks, and exec policies from untrusted folders stay disabled.\n"
+    "  Opening will not change saved trust.\n"
+    "\n"
+    "› 1. Open restricted\n"
+    "  2. Back to Agent Command Center\n"
+    "\n"
+    "  enter continue · esc back\n"
+)
+
+
+def test_tmux_backend_recognizes_codex_folder_trust_prompt() -> None:
+    assert TmuxExecutionBackend._is_codex_folder_trust_prompt(CODEX_FOLDER_TRUST_PANE) is True
+    # Старый курсор в истории не прячет живой вопрос внизу экрана.
+    assert TmuxExecutionBackend._is_codex_folder_trust_prompt(
+        "старый ответ\n› Ask Codex to do anything\n" + CODEX_FOLDER_TRUST_PANE
+    ) is True
+    # Перенос строки внутри фразы не ломает узнавание.
+    wrapped = CODEX_FOLDER_TRUST_PANE.replace("Trust this folder?", "Trust this\nfolder?")
+    assert TmuxExecutionBackend._is_codex_folder_trust_prompt(wrapped) is True
+    # Тот же текст над уже открытым полем ввода — цитата, а не вопрос.
+    quoted = CODEX_FOLDER_TRUST_PANE + "\n› Ask Codex to do anything"
+    assert TmuxExecutionBackend._is_codex_folder_trust_prompt(quoted) is False
+    assert TmuxExecutionBackend._is_interactive_ready(_codex_session(), quoted) is True
+    # «Open restricted» доверие не включает, само его нажимать нельзя.
+    assert TmuxExecutionBackend._is_codex_folder_trust_prompt(CODEX_RESTRICTED_FOLDER_PANE) is False
+    # Живой экран без перехвата остановил бы запуск, а не отправил бы текст в меню.
+    with pytest.raises(TmuxDriverError, match="workspace trust prompt"):
+        TmuxExecutionBackend._is_interactive_ready(_codex_session(), CODEX_FOLDER_TRUST_PANE)
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_confirms_codex_folder_trust_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [CODEX_FOLDER_TRUST_PANE, CODEX_READY_PANE]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=2.0,
+    )
+    session = _session(tmp_path)
+    session.tool.name = "codex"
+    session.tool.interactive_cmd = ["codex"]
+    session.cli.active_cli = "codex"
+
+    result = await backend.run(session, "do work")
+
+    assert result.abnormal_stop is False
+    paths = backend.paths(session)
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("1", "Enter"))]
+    assert driver.loaded_prompt_path is not None
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_does_not_confirm_quoted_codex_folder_trust_prompt(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [CODEX_FOLDER_TRUST_PANE + "\n› Ask Codex to do anything"]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.5,
+    )
+    session = _session(tmp_path)
+    session.tool.name = "codex"
+    session.tool.interactive_cmd = ["codex"]
+    session.cli.active_cli = "codex"
+
+    result = await backend.run(session, "do work")
+
+    assert result.abnormal_stop is False
+    assert driver.sent_key_sequences == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_monitor_confirms_codex_folder_trust_without_asking(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+
+    class SilentTranscriptReader:
+        def __init__(self, **kwargs):
+            self.locator = None
+
+        def poll(self):
+            return TranscriptPollResult()
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SilentTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=5.0,
+        quiet_timeout_sec=30.0,
+    )
+    session = _session(tmp_path)
+    session.tool.name = "codex"
+    session.tool.interactive_cmd = ["codex"]
+    session.cli.active_cli = "codex"
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("старый ответ\n› Ask Codex to do anything\n" + CODEX_FOLDER_TRUST_PANE + "\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="trust-codex-1",
+        started_at=time.time(),
+        offset=0,
+        prompt="do work",
+        dest={"kind": "telegram", "chat_id": 42},
+        observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if driver.sent_key_sequences:
+                break
+        assert driver.sent_key_sequences == [(paths["pane_target"], ("1", "Enter"))]
+        await asyncio.sleep(0.05)
+        assert driver.sent_key_sequences == [(paths["pane_target"], ("1", "Enter"))]
+    finally:
+        monitor.cancel()
+        with suppress(asyncio.CancelledError):
+            await asyncio.wait_for(monitor, timeout=5)
 
 
 CODEX_LOADING_PANE = (

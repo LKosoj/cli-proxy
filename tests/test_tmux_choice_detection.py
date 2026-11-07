@@ -241,6 +241,62 @@ def test_claude_question_list_keeps_wrapped_options_and_round_trips() -> None:
     assert SessionRunService._parse_cli_choice_question(preview)[1] == options
 
 
+def _claude_answer_confirm_frame() -> str:
+    # После списка вопросов Claude просит подтвердить ответы: y или n, не цифры.
+    return (
+        "claude: Ещё одно замечание по третьей вставке.\n"
+        "Questions: Исправление (answered), Вставка 3 (answered)\n"
+        "Review your answers\n"
+        "> В первой видеовставке губы переключились раньше. Что делаем?\n"
+        "→ Упростить промпт (Recommended)\n"
+        "> Разобрать также ошибку третьей вставки?\n"
+        "→ Да, разобрать\n"
+        "Ready to submit your answers?\n"
+        "y. Submit answers\n"
+        "n. Cancel\n"
+        "Enter y/n:\n"
+    )
+
+
+def test_claude_answer_confirm_is_a_choice_and_round_trips() -> None:
+    text = _claude_answer_confirm_frame()
+
+    assert SessionRunService._is_cli_choice_question(text) is True
+    question, options = SessionRunService._parse_cli_choice_question(text)
+
+    assert question.startswith("Review your answers")
+    assert "Ready to submit your answers?" in question
+    assert "Упростить промпт" in question
+    assert "Ещё одно замечание" not in question
+    assert options == ["y. Submit answers", "n. Cancel"]
+    preview = "\n".join([question, f"❯ {options[0]}", *options[1:]])
+    assert SessionRunService._is_cli_choice_question(preview) is True
+    assert SessionRunService._parse_cli_choice_question(preview)[1] == options
+
+
+def test_answer_confirm_ignores_numbered_list_above() -> None:
+    text = (
+        "1. Старый пункт из журнала\n"
+        "2. Ещё один пункт\n"
+        "Review your answers\n"
+        "> Оставить изменение?\n"
+        "→ Да\n"
+        "Ready to submit your answers?\n"
+        "y. Submit answers\n"
+        "n. Cancel\n"
+        "Enter y/n:\n"
+    )
+
+    assert SessionRunService._parse_cli_choice_question(text)[1] == ["y. Submit answers", "n. Cancel"]
+
+
+def test_yes_no_letters_without_confirm_prompt_are_not_a_menu() -> None:
+    text = "Заметка:\ny. Submit answers\nn. Cancel"
+
+    assert SessionRunService._is_cli_choice_question(text) is False
+    assert SessionRunService._parse_cli_choice_question(text)[1] == []
+
+
 def test_claude_ask_user_menu_without_cursor_is_a_choice() -> None:
     text = _claude_ask_user_frame()
 

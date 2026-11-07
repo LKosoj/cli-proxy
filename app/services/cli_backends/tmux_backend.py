@@ -76,8 +76,8 @@ _CODEX_DUMB_TERM_PROMPT = (
     'warning: term is set to "dumb". codex\'s interactive tui may not work in this terminal. '
     "continue anyway? [y/n]:"
 )
-# Claude около 150 мс после открытия диалога доверия глотает нажатия.
-_CLAUDE_TRUST_INPUT_GRACE_SEC = 0.2
+# Claude и Codex около 200 мс после открытия диалога доверия глотают нажатия.
+_FOLDER_TRUST_INPUT_GRACE_SEC = 0.2
 # CLI, у которых нет режима линейного вывода (аналога claude --ax-screen-reader),
 # поэтому элементы TUI приходится вычищать на стороне моста.
 _TUI_CHROME_CLI_NAMES = {"codex", "qwen", "gemini", "grok", "kimi"}
@@ -795,10 +795,15 @@ class TmuxExecutionBackend:
                 self._write_state(paths, state)
 
     async def send_choice(self, session: Any, choice: str) -> None:
-        """Send a numeric TUI choice as key events, not as pasted text."""
+        """Send a TUI choice as key events, not as pasted text.
+
+        Число — пункт меню. Буквы y/n — подтверждение ответов Claude.
+        """
         value = str(choice or "").strip()
-        if not value.isdigit():
-            raise TmuxDriverError("tmux choice must contain only digits")
+        if re.fullmatch(r"[yn]", value, re.IGNORECASE):
+            value = value.lower()
+        elif not value.isdigit():
+            raise TmuxDriverError("tmux choice must be a number or y/n")
 
         paths = self.paths(session)
         async with self._pane_lock(session):
@@ -891,16 +896,56 @@ class TmuxExecutionBackend:
 
     @staticmethod
     def _is_claude_folder_trust_prompt(pane: str) -> bool:
-        """Экран «Quick safety check»: Claude ждёт y/n, обычного поля ввода ещё нет."""
+        """Живой экран «Yes, I trust this folder». Цитата выше по истории — не он.
+
+        Папку мы уже выбрали запуском, поэтому этот вопрос подтверждаем сами.
+        """
 
         text = normalize_terminal_text(pane)
-        # «❯» — уже поле ввода. Текст диалога тогда просто цитата в переписке.
-        if "❯" in text:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
             return False
-        lower = text.lower()
-        if "enter y/n" not in lower:
+        # Поле ввода уже открыто: диалог выше — цитата, отвечать некому.
+        if lines[-1].startswith("❯"):
             return False
-        return "trust this folder" in lower
+        tail = "\n".join(lines[-12:]).lower()
+        if "enter y/n" not in tail:
+            return False
+        return "trust this folder" in tail
+
+    @staticmethod
+    def _is_codex_folder_trust_prompt(pane: str) -> bool:
+        """Живой экран Codex «Trust and continue». Цитата в ответе — не он.
+
+        Папку мы уже выбрали запуском, поэтому этот вопрос подтверждаем сами.
+        «Open restricted» сюда не входит: тот пункт доверие не включает.
+        """
+
+        text = normalize_terminal_text(pane)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return False
+        # Поле ввода уже открыто: диалог выше — цитата, отвечать некому.
+        # Строка «› 1. Trust and continue» — сам пункт меню, не поле ввода.
+        last = lines[-1]
+        if last.startswith(("›", "❯")) and "trust and continue" not in last.lower():
+            return False
+        tail = "".join("\n".join(lines[-18:]).lower().split())
+        return "trustthisfolder?" in tail and "trustandcontinue" in tail
+
+    @classmethod
+    def _workspace_trust_confirm_keys(cls, session: Any, pane: str) -> Optional[tuple[str, ...]]:
+        """Клавиши «да» для диалога доверия папке. None — это не тот диалог."""
+
+        cli_name = cls._interactive_cli_name(session)
+        if cli_name == "claude" and cls._is_claude_folder_trust_prompt(pane):
+            # y выбирает «Yes, I trust this folder», Enter подтверждает.
+            return ("y", "Enter")
+        if cli_name == "codex" and cls._is_codex_folder_trust_prompt(pane):
+            # 1 ставит курсор на «Trust and continue», Enter подтверждает.
+            # Один Enter без 1 нажал бы «Quit», если курсор уже съехал вниз.
+            return ("1", "Enter")
+        return None
 
     @staticmethod
     def _is_interactive_ready(session: Any, pane: str, *, fresh_start: bool = False) -> bool:
@@ -909,10 +954,18 @@ class TmuxExecutionBackend:
         lower = text.lower()
         compact = "".join(lower.split())
         if "doyoutrust" in compact or "trustthisfolder?" in compact:
-            raise TmuxDriverError(
-                f"{cli_name} workspace trust prompt is blocking tmux backend; "
-                f"open {cli_name} once in this workdir and trust it"
+            # У Codex та же фраза бывает цитатой в ответе. Живой экран
+            # подтверждается раньше, до этого вызова.
+            quoted_codex = (
+                cli_name == "codex"
+                and "trustthisfolder?" in compact
+                and not TmuxExecutionBackend._is_codex_folder_trust_prompt(pane)
             )
+            if not quoted_codex:
+                raise TmuxDriverError(
+                    f"{cli_name} workspace trust prompt is blocking tmux backend; "
+                    f"open {cli_name} once in this workdir and trust it"
+                )
         if cli_name == "claude":
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             screen_reader_ready = bool(
@@ -971,20 +1024,18 @@ class TmuxExecutionBackend:
                     await self._driver(session).send_keys(paths["pane_target"], "y", "Enter")
                     dumb_term_confirmed = True
                     continue
-                if (
-                    not trust_confirmed
-                    and self._interactive_cli_name(session) == "claude"
-                    and self._is_claude_folder_trust_prompt(pane)
-                ):
-                    trust_confirmed = True
-                    logger.info(
-                        "confirming claude workspace trust prompt pane=%s",
-                        paths["pane_target"],
-                    )
-                    await asyncio.sleep(_CLAUDE_TRUST_INPUT_GRACE_SEC)
-                    # y выбирает «Yes, I trust this folder», Enter подтверждает.
-                    await self._driver(session).send_keys(paths["pane_target"], "y", "Enter")
-                    continue
+                if not trust_confirmed:
+                    trust_keys = self._workspace_trust_confirm_keys(session, pane)
+                    if trust_keys:
+                        trust_confirmed = True
+                        logger.info(
+                            "confirming workspace trust prompt cli=%s pane=%s",
+                            self._interactive_cli_name(session),
+                            paths["pane_target"],
+                        )
+                        await asyncio.sleep(_FOLDER_TRUST_INPUT_GRACE_SEC)
+                        await self._driver(session).send_keys(paths["pane_target"], *trust_keys)
+                        continue
                 if self._is_interactive_ready(session, pane, fresh_start=fresh_start):
                     return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
@@ -1336,6 +1387,8 @@ class TmuxExecutionBackend:
         latest_text = ""
         last_reported_text = ""
         last_progress_text = ""
+        # Один ответ на один показ. Пока экран не сменился, клавиши второй раз не шлём.
+        folder_trust_sent = False
         complete = False
         completion_source = ""
         # Ошибка, которой Codex закрыл ход. Пустая, пока в журнале её нет.
@@ -1462,6 +1515,21 @@ class TmuxExecutionBackend:
                 # История прокрутки его не содержит как живой вопрос: иначе старый
                 # «Yes/No» снова и снова уходит в чат, хотя CLI уже ушёл дальше.
                 pane_for_choice = advance.viewport
+                # «Доверяете папке?» в чат не уходит: папка уже выбрана запуском.
+                trust_keys = self._workspace_trust_confirm_keys(session, pane_for_choice)
+                if trust_keys:
+                    if not folder_trust_sent:
+                        logger.info(
+                            "confirming workspace trust prompt during request cli=%s session_id=%s",
+                            self._interactive_cli_name(session),
+                            getattr(session, "id", "?"),
+                        )
+                        await asyncio.sleep(_FOLDER_TRUST_INPUT_GRACE_SEC)
+                        await self._driver(session).send_keys(paths["pane_target"], *trust_keys)
+                        folder_trust_sent = True
+                        last_change = time.time()
+                    continue
+                folder_trust_sent = False
 
                 transcript_update = None
                 if transcript_reader is not None:

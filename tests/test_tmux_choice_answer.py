@@ -112,6 +112,38 @@ async def test_tmux_choice_click_feeds_owner_session_and_second_click_is_stale(m
 
 
 @pytest.mark.asyncio
+async def test_tmux_confirm_click_sends_letter_not_digit(monkeypatch):
+    session = SimpleNamespace(id="s45", chat_id=142987535)
+    sent = []
+
+    async def _send(_self, tmux_sess, text):
+        sent.append((tmux_sess, text))
+
+    monkeypatch.setattr(TmuxExecutionBackend, "send_choice", _send)
+    qid = "tmux_choice_s45_confirm"
+    pending = _pending(qid, tmux_feed=True)
+    pending[qid]["options"] = ["y. Submit answers", "n. Cancel"]
+    app = _app(
+        pending=pending,
+        get_session=lambda chat_id, session_id: session
+        if int(chat_id) == 142987535 and session_id == "s45"
+        else None,
+    )
+    query = _query()
+
+    ok = await _AskHarness(app)._cb_ask(
+        data=f"ask:{qid}:0",
+        chat_id=100,
+        query=query,
+        context=object(),
+    )
+
+    assert ok is True
+    assert sent == [(session, "y")]
+    assert qid not in pending
+
+
+@pytest.mark.asyncio
 async def test_tmux_choice_click_keeps_card_when_pane_send_fails(monkeypatch):
     session = SimpleNamespace(id="s45", chat_id=142987535)
     attempts = []

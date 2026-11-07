@@ -177,8 +177,11 @@ class ProtocolActionsMixin:
                 if tmux_sess is not None:
                     choice = "1"
                     m = re.match(r"^(\d+)", answer or "")
+                    letter = re.match(r"^([yn])\.", str(answer or "").strip(), re.IGNORECASE)
                     if m:
                         choice = m.group(1)
+                    elif letter:
+                        choice = letter.group(1).lower()
                     from app.services.cli_backends import TmuxExecutionBackend
                     from sessions.session_run_service import SessionRunService
 

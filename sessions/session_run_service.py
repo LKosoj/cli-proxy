@@ -50,6 +50,8 @@ from utils.text import build_preview, strip_ansi
 _SESSION_TASK_MODE_ID = "__session__"
 # Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева.
 _CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(\S.*)$')
+# Подтверждение ответов Claude: «y. Submit answers» / «n. Cancel», не цифры.
+_CONFIRM_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?([yn])[\.\)]\s+(\S.*)$', re.IGNORECASE)
 # Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
 _CHOICE_CURSOR_RE = re.compile(r'^[ \t]*(?:[❯▶►▌»][ \t]*(?:☐[ \t]*)?|☐[ \t]*)[1-9][\.\)][ \t]', re.M)
 _CHOICE_QUESTION_MAX_LINES = 12
@@ -81,6 +83,74 @@ def _is_choice_submit_footer(line: str) -> bool:
         or "enter to submit" in lowered
         or lowered.startswith("enter selection [")
     )
+
+
+def _is_answer_confirm(text: str) -> bool:
+    """Экран Claude «подтвердите ответы»: y/n под фразой Ready to submit.
+
+    Другой вопрос «Do you trust this folder?» тоже кончается на Enter y/n,
+    но это не сверка ответов, и его сюда не берём.
+    """
+
+    lines = str(text or "").splitlines()
+    ready_at = next(
+        (idx for idx, line in enumerate(lines) if "ready to submit your answers" in line.lower()),
+        None,
+    )
+    if ready_at is None:
+        return False
+    letters = set()
+    for line in lines[ready_at + 1:]:
+        match = _CONFIRM_OPTION_RE.match(line.strip())
+        if match:
+            letters.add(match.group(1).lower())
+    return {"y", "n"} <= letters
+
+
+def _parse_answer_confirm(text: str) -> Tuple[str, List[str]]:
+    """Вопрос — сверка ответов. Кнопки — отправить или отменить."""
+
+    lines = text.splitlines()
+    ready_at = next(
+        (idx for idx, line in enumerate(lines) if "ready to submit your answers" in line.lower()),
+        None,
+    )
+    footer_at = next(
+        (idx for idx, line in enumerate(lines) if line.strip().lower().startswith("enter y/n")),
+        len(lines),
+    )
+    search_from = ready_at + 1 if ready_at is not None else 0
+    opts: List[str] = []
+    opt_at = None
+    for idx, line in enumerate(lines[search_from:footer_at], search_from):
+        match = _CONFIRM_OPTION_RE.match(line.strip())
+        if not match:
+            continue
+        letter = match.group(1).lower()
+        if any(item.startswith(f"{letter}.") for item in opts):
+            continue
+        if opt_at is None:
+            opt_at = idx
+        opts.append(f"{letter}. {match.group(2).strip()}")
+    if opt_at is None:
+        return "Please choose:", []
+    q_lines = lines[:opt_at]
+    review_at = next(
+        (idx for idx, line in enumerate(q_lines) if line.strip().lower().startswith("review your answers")),
+        None,
+    )
+    if review_at is not None:
+        q_lines = q_lines[review_at:]
+    else:
+        tail: List[str] = []
+        for line in reversed(q_lines):
+            if not line.strip() or len(tail) >= _CHOICE_QUESTION_MAX_LINES:
+                break
+            tail.append(line)
+        q_lines = list(reversed(tail))
+    q_lines = [line for line in q_lines if not _is_volatile_choice_status_line(line)]
+    question = "\n".join(q_lines).strip() or "Ready to submit your answers?"
+    return question, opts[:5]
 
 
 def _is_volatile_choice_status_line(line: str) -> bool:
@@ -380,6 +450,9 @@ class SessionRunService:
         if not text:
             return False
         t = text.lower()
+        # «Ready to submit your answers?» — подтверждение уже выбранных ответов.
+        if _is_answer_confirm(text):
+            return True
         # «Select with numbers [1-5]. Then Enter to submit» — вопрос Claude
         # без курсора на пункте. Обычный нумерованный список так не подписан.
         if (
@@ -412,6 +485,9 @@ class SessionRunService:
     def _parse_cli_choice_question(text: str) -> Tuple[str, List[str]]:
         if not text:
             return "Please choose an option:", []
+        # Подтверждение y/n важнее старого нумерованного списка выше по экрану.
+        if _is_answer_confirm(text):
+            return _parse_answer_confirm(text)
         lines = text.splitlines()
         # Если есть курсор/флажок, разбираем его блок, а не предыдущий список
         # из ответа агента. Символ цитаты ">" курсором меню не считается.
