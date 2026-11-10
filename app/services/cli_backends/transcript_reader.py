@@ -49,6 +49,8 @@ class TranscriptPollResult:
     retry_prompt: str = ""
     # Заметки модели (thinking). Превью их показывает, итоговый ответ — нет.
     thinking_text: str = ""
+    # Сколько фоновых агентов ещё работают. 0 — ход родителя можно закрывать.
+    background_pending: int = 0
 
 
 def _parse_timestamp(raw: Any) -> Optional[float]:
@@ -182,6 +184,7 @@ class CliTranscriptReader:
         self._gemini_turn_end: tuple[str, str] = ("", "")
         self.terminal_error = ""
         self.retry_prompt = ""
+        self.background_pending = 0
         # Реплика пользователя текущего хода. task_started начинает ход заново.
         self._turn_user_text = ""
         if locator is not None:
@@ -469,6 +472,11 @@ class CliTranscriptReader:
                         self.latest_progress_text = tool_name
         elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
             self.complete = True
+            raw_pending = record.get("pendingBackgroundAgentCount")
+            try:
+                self.background_pending = max(0, int(raw_pending or 0))
+            except (TypeError, ValueError):
+                self.background_pending = 0
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         record_type = str(record.get("type") or "").strip()
@@ -756,12 +764,22 @@ class CliTranscriptReader:
         """Return paths to all transcripts that should be considered for liveness.
 
         For Claude this includes the main session JSONL plus any subagent
-        transcripts under <session_id>/subagents/*.jsonl. Used to prevent
+        transcripts under <session_id>/subagents/*.jsonl. For Kimi it includes
+        every agents/*/wire.jsonl of the same session. Used to prevent
         quiet-timeout while background/sub-agents are still writing.
         """
         paths: list[str] = []
         if self.locator and self.locator.path:
             paths.append(self.locator.path)
+
+        if self.provider == "kimi" and self.locator and self.locator.path:
+            agents_dir = Path(self.locator.path).resolve().parent.parent
+            if agents_dir.name == "agents" and agents_dir.is_dir():
+                for wire in sorted(agents_dir.glob("*/wire.jsonl")):
+                    resolved = str(wire.resolve())
+                    if resolved not in paths:
+                        paths.append(resolved)
+            return paths
 
         if self.provider != "claude" or not self.session_id:
             return paths
@@ -815,4 +833,5 @@ class CliTranscriptReader:
             terminal_error=self.terminal_error,
             retry_prompt=self.retry_prompt,
             thinking_text=self.latest_thinking_text,
+            background_pending=self.background_pending,
         )

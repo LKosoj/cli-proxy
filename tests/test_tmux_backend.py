@@ -605,6 +605,266 @@ async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monk
 
 
 @pytest.mark.asyncio
+async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path, monkeypatch):
+    """Пока журнал агента растёт, конец хода родителя не снимает превью."""
+    driver = FakeTmuxDriver()
+    agent_log = tmp_path / "agent.jsonl"
+    agent_log.write_text("{}\n", encoding="utf-8")
+    stop_growth = asyncio.Event()
+
+    class BackgroundAgentsReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Запустил агентов",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=2,
+            )
+
+        def get_all_relevant_paths(self):
+            return [str(agent_log)]
+
+    async def _grow_agent_log() -> None:
+        while not stop_growth.is_set():
+            with agent_log.open("a", encoding="utf-8") as handle:
+                handle.write('{"tick": true}\n')
+            await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", BackgroundAgentsReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=5.0,
+        answer_idle_sec=0.3,
+    )
+    session = _session(tmp_path)
+    grow_task = asyncio.create_task(_grow_agent_log())
+    monitor = asyncio.create_task(
+        backend.run(
+            session,
+            "do work",
+            request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+        )
+    )
+    try:
+        await _wait_for_preview(session)
+        await asyncio.sleep(0.5)
+        assert not monitor.done()
+        stop_growth.set()
+        result = await asyncio.wait_for(monitor, timeout=2)
+    finally:
+        stop_growth.set()
+        grow_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await grow_task
+        if not monitor.done():
+            monitor.cancel()
+            with suppress(asyncio.CancelledError):
+                await monitor
+
+    assert result.text == "Запустил агентов"
+    assert result.diagnostics["completion_source"] == "answer-idle"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_delivers_stable_answer_without_deadman_wait(tmp_path, monkeypatch):
+    """Готовый ответ при замершем журнале не ждёт пяти минут тишины."""
+    driver = FakeTmuxDriver()
+
+    class StableAnswerReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готовый ответ",
+                complete=False,
+                available=True,
+                recognized=True,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", StableAnswerReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=5.0,
+        answer_idle_sec=0.2,
+    )
+    started_at = time.time()
+
+    result = await asyncio.wait_for(
+        backend.run(
+            _session(tmp_path),
+            "do work",
+            request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+        ),
+        timeout=2,
+    )
+
+    assert result.text == "Готовый ответ"
+    assert result.diagnostics["completion_source"] == "answer-idle"
+    assert time.time() - started_at < 2
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_waits_deadman_when_answer_never_appears(tmp_path, monkeypatch):
+    """Без текста ответа короткая пауза ход не закрывает."""
+    driver = FakeTmuxDriver()
+
+    class SilentTranscriptReader:
+        def __init__(self, **kwargs):
+            self.locator = None
+
+        def poll(self):
+            return TranscriptPollResult()
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SilentTranscriptReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=0.35,
+        answer_idle_sec=0.05,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("экран без ответа\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="silent-1",
+        started_at=time.time(),
+        offset=os.path.getsize(paths["pane_log"]),
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+    )
+    started_at = time.time()
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
+
+    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
+    assert time.time() - started_at >= 0.35
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_finishes_immediately_without_background_agents(tmp_path, monkeypatch):
+    """Обычный конец хода без фоновых агентов по-прежнему сразу закрывает чтение."""
+    driver = FakeTmuxDriver()
+
+    class FinishedReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готово",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", FinishedReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=5.0,
+        answer_idle_sec=5.0,
+    )
+    started_at = time.time()
+
+    result = await asyncio.wait_for(
+        backend.run(
+            _session(tmp_path),
+            "do work",
+            request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+        ),
+        timeout=2,
+    )
+
+    assert result.text == "Готово"
+    assert result.diagnostics["completion_source"] == "transcript"
+    assert time.time() - started_at < 1.5
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_observe_honors_completion_that_arrives_while_watching(tmp_path, monkeypatch):
+    """Конец хода, пришедший уже во время наблюдения, закрывает его сразу."""
+    driver = FakeTmuxDriver()
+
+    class RisingCompletionReader:
+        def __init__(self, **kwargs):
+            self.polls = 0
+
+        def poll(self):
+            self.polls += 1
+            if self.polls == 1:
+                return TranscriptPollResult(
+                    assistant_text="ещё думаю",
+                    complete=False,
+                    available=True,
+                    recognized=True,
+                )
+            return TranscriptPollResult(
+                assistant_text="Готово",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", RisingCompletionReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=5.0,
+        answer_idle_sec=5.0,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("старый ответ\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="observe-rising",
+        started_at=time.time(),
+        offset=os.path.getsize(paths["pane_log"]),
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+        observe=True,
+    )
+    started_at = time.time()
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=1)
+
+    assert result.text == "Готово"
+    assert result.diagnostics["completion_source"] == "transcript"
+    assert time.time() - started_at < 1
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_observe_returns_model_capacity_error_immediately(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
     error = "Selected model is at capacity. Please try a different model."

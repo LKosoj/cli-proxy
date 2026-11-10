@@ -93,6 +93,7 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
     assert final.assistant_text == "Финальный ответ"
     assert final.thinking_text == ""
     assert final.complete is True
+    assert final.background_pending == 0
     assert final.locator is not None
     assert final.locator.path == str(path.resolve())
 
@@ -166,7 +167,7 @@ def test_claude_transcript_reader_keeps_thinking_until_next_reply(tmp_path):
 
 
 def test_claude_transcript_reader_completes_with_background_agents(tmp_path):
-    """turn_duration закрывает ход, даже если фоновые агенты ещё работают."""
+    """turn_duration закрывает ход родителя и сообщает, сколько фоновых агентов ещё работают."""
     started_at = time.time() - 5
     session_id = "66666666-6666-4666-8666-666666666666"
     path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
@@ -198,6 +199,7 @@ def test_claude_transcript_reader_completes_with_background_agents(tmp_path):
 
     assert result.assistant_text == "Запустил агентов"
     assert result.complete is True
+    assert result.background_pending == 10
 
 
 def test_claude_transcript_reader_skips_records_of_previous_turn(tmp_path):
@@ -835,6 +837,35 @@ def test_kimi_transcript_reader_restarts_text_on_next_step(tmp_path):
     # Only the last step's text is the answer; the previous step is progress noise.
     assert result.assistant_text == "Тесты зелёные."
     assert result.complete is False
+
+
+def test_kimi_transcript_reader_watches_other_agent_journals(tmp_path):
+    """Журналы соседних агентов Kimi держат ход живым, пока они растут."""
+    started_at = time.time() - 5
+    session_id = "session_66666666-6666-4666-8666-666666666666"
+    main = _kimi_wire_path(tmp_path, session_id)
+    explorer = main.parent.parent / "explorer" / "wire.jsonl"
+    _append_jsonl(
+        main,
+        {"type": "turn.prompt", "time": int((started_at + 1) * 1000)},
+    )
+    _append_jsonl(
+        explorer,
+        {"type": "turn.prompt", "time": int((started_at + 1) * 1000)},
+    )
+    reader = CliTranscriptReader(
+        cli_name="kimi",
+        workdir="/srv/project",
+        started_at=started_at,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    reader.poll()
+    watched = set(reader.get_all_relevant_paths())
+
+    assert str(main.resolve()) in watched
+    assert str(explorer.resolve()) in watched
 
 
 def test_transcript_reader_recovers_from_persisted_locator(tmp_path):

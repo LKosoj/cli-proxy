@@ -617,13 +617,15 @@ class TmuxExecutionBackend:
         poll_interval_sec: float = 0.25,
         idle_fallback_sec: Optional[float] = None,
         startup_timeout_sec: float = 60.0,
-        quiet_timeout_sec: float = 300.0,  # 5 мин: если ни экран, ни журнал CLI не растут, считаем ход законченным
+        quiet_timeout_sec: float = 300.0,  # 5 мин: если ответа так и нет, ход считаем зависшим
+        answer_idle_sec: float = 30.0,  # ответ уже есть и журнал замер — отдаём, не дожидаясь 5 мин
     ):
         self.driver = driver
         self.poll_interval_sec = float(poll_interval_sec)
         self.idle_fallback_sec = idle_fallback_sec
         self.startup_timeout_sec = float(startup_timeout_sec)
         self.quiet_timeout_sec = float(quiet_timeout_sec)
+        self.answer_idle_sec = float(answer_idle_sec)
 
     def _driver(self, session: Any) -> TmuxDriver:
         return self.driver or _driver_for_session(session)
@@ -1364,6 +1366,7 @@ class TmuxExecutionBackend:
         if idle_probe_interval is None:
             idle_probe_interval = max(1.0, float(getattr(session, "idle_timeout_sec", 100) or 100))
         quiet_timeout = self.quiet_timeout_sec
+        answer_idle = max(0.0, self.answer_idle_sec)
         # Висящий вопрос удерживает ход только тогда, когда пользователь его
         # видит: кнопки шлёт assistant preview в Telegram. Без превью или в
         # другом канале отвечать некому, и ход должен закрыться по таймауту.
@@ -1405,6 +1408,12 @@ class TmuxExecutionBackend:
         # count for quiet_timeout to avoid dropping long-running planner tasks.
         watched_transcript_paths: list[str] = []
         last_transcript_sizes: dict[str, int] = {}
+        # Рост журнала агента, не основного хода. Пока он свежий, конец родителя
+        # не снимает превью.
+        last_agent_change = 0.0
+        # В наблюдении первая же запись «ход закончен» может относиться к уже
+        # отданному ходу. Принимаем только ту, что появилась после открытого опроса.
+        observe_seen_open = False
 
         def _refresh_watched_transcripts() -> bool:
             """Refresh list of watched transcripts. Returns True if any new file appeared."""
@@ -1475,6 +1484,7 @@ class TmuxExecutionBackend:
                 if _refresh_watched_transcripts():
                     last_change = time.time()
                 grew = False
+                agent_grew = False
                 for tpath in watched_transcript_paths:
                     if tpath and os.path.exists(tpath):
                         try:
@@ -1483,11 +1493,15 @@ class TmuxExecutionBackend:
                             if tsize != prev:
                                 last_transcript_sizes[tpath] = tsize
                                 grew = True
+                                if tpath != transcript_path:
+                                    agent_grew = True
                             # Also keep legacy single-value in sync for main path
                             if tpath == transcript_path:
                                 last_transcript_size = tsize
                         except Exception:
                             logger.debug("transcript growth probe failed path=%s", tpath, exc_info=True)
+                if agent_grew:
+                    last_agent_change = time.time()
                 if grew:
                     last_change = time.time()
                 # Чтение pane.log и разбор экрана держатся вне event loop: оба
@@ -1589,8 +1603,22 @@ class TmuxExecutionBackend:
                     # Refresh subagent paths too (new subagents can appear mid-run)
                     if _refresh_watched_transcripts():
                         last_change = time.time()
-                    if transcript_update.complete and not request.observe:
+                    try:
+                        background_pending = max(0, int(transcript_update.background_pending or 0))
+                    except (TypeError, ValueError):
+                        background_pending = 0
+                    if request.observe:
+                        if not transcript_update.complete:
+                            observe_seen_open = True
+                        parent_done = bool(transcript_update.complete and observe_seen_open)
+                    else:
+                        parent_done = bool(transcript_update.complete)
+                    agents_recent = background_pending > 0 or (
+                        last_agent_change > 0 and time.time() - last_agent_change < answer_idle
+                    )
+                    if parent_done and not agents_recent:
                         # Конец хода виден только в журнале CLI: экран панели о нём не сообщает.
+                        # Живые фоновые агенты этот конец откладывают.
                         complete = True
                         completion_source = "transcript"
 
@@ -1661,11 +1689,17 @@ class TmuxExecutionBackend:
                 if complete:
                     break
 
-                # Quiet timeout: if neither pane.log nor (preferably) the session JSONL (incl. subagents) has grown
-                # for quiet_timeout (default 5min), treat as finished. Growth of any related JSONL resets the timer.
-                # Доставленный пользователю вопрос таймаут не закрывает: CLI ждёт
-                # ответа, экран и журнал при этом не растут, а ответ вернёт ход к работе.
-                if not (awaiting_choice and choice_holds_turn) and time.time() - last_change >= quiet_timeout:
+                # Тишина. Вопрос с кнопками не закрывает ход: CLI ждёт ответа,
+                # экран и журнал при этом не растут.
+                # Ответ уже есть и файлы замерли ненадолго — отдаём его.
+                # Если текста ещё нет, ждём прежние пять минут: ход мог зависнуть.
+                choice_blocking = awaiting_choice and choice_holds_turn
+                idle_for = time.time() - last_change
+                if not choice_blocking and str(latest_text or "").strip() and idle_for >= answer_idle:
+                    complete = True
+                    completion_source = "answer-idle"
+                    break
+                if not choice_blocking and idle_for >= quiet_timeout:
                     if not complete:
                         complete = True
                         has_json = bool(watched_transcript_paths or transcript_path)
