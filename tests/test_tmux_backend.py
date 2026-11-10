@@ -606,11 +606,15 @@ async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monk
 
 @pytest.mark.asyncio
 async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path, monkeypatch):
-    """Пока журнал агента растёт, конец хода родителя не снимает превью."""
+    """Пока журнал агента растёт или агенты ещё числятся живыми, превью не снимается.
+
+    После остановки роста ход закрывается только когда счётчик агентов падает до нуля.
+    """
     driver = FakeTmuxDriver()
     agent_log = tmp_path / "agent.jsonl"
     agent_log.write_text("{}\n", encoding="utf-8")
     stop_growth = asyncio.Event()
+    pending = {"count": 2}
 
     class BackgroundAgentsReader:
         def __init__(self, **kwargs):
@@ -622,7 +626,7 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
                 complete=True,
                 available=True,
                 recognized=True,
-                background_pending=2,
+                background_pending=pending["count"],
             )
 
         def get_all_relevant_paths(self):
@@ -656,6 +660,9 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
         await asyncio.sleep(0.5)
         assert not monitor.done()
         stop_growth.set()
+        await asyncio.sleep(0.5)
+        assert not monitor.done()
+        pending["count"] = 0
         result = await asyncio.wait_for(monitor, timeout=2)
     finally:
         stop_growth.set()
@@ -668,12 +675,12 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
                 await monitor
 
     assert result.text == "Запустил агентов"
-    assert result.diagnostics["completion_source"] == "answer-idle"
+    assert result.diagnostics["completion_source"] == "transcript"
 
 
 @pytest.mark.asyncio
 async def test_tmux_backend_delivers_stable_answer_without_deadman_wait(tmp_path, monkeypatch):
-    """Готовый ответ при замершем журнале не ждёт пяти минут тишины."""
+    """Готовый ответ при замершем журнале не ждёт общего предела тишины."""
     driver = FakeTmuxDriver()
 
     class StableAnswerReader:
@@ -713,6 +720,60 @@ async def test_tmux_backend_delivers_stable_answer_without_deadman_wait(tmp_path
     assert result.text == "Готовый ответ"
     assert result.diagnostics["completion_source"] == "answer-idle"
     assert time.time() - started_at < 2
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_holds_text_while_background_agents_are_pending(tmp_path, monkeypatch):
+    """Текст уже есть, но агенты ещё работают: 30 секунд ход не закрывают.
+
+    Закрывает только общий предел тишины. Дольше этого молчания ход не живёт.
+    """
+    driver = FakeTmuxDriver()
+
+    class PendingAgentsReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Промежуточный статус",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=2,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", PendingAgentsReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=0.45,
+        answer_idle_sec=0.1,
+    )
+    started_at = time.time()
+
+    result = await asyncio.wait_for(
+        backend.run(
+            _session(tmp_path),
+            "do work",
+            request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+        ),
+        timeout=2,
+    )
+
+    assert result.text == "Промежуточный статус"
+    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
+    assert time.time() - started_at >= 0.45
+
+
+def test_tmux_backend_quiet_timeout_defaults_to_ten_minutes():
+    backend = TmuxExecutionBackend(driver=FakeTmuxDriver())
+
+    assert backend.quiet_timeout_sec == 600
 
 
 @pytest.mark.asyncio

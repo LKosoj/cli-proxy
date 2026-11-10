@@ -202,6 +202,74 @@ def test_claude_transcript_reader_completes_with_background_agents(tmp_path):
     assert result.background_pending == 10
 
 
+def test_claude_transcript_reader_keeps_pending_count_from_before_cursor(tmp_path):
+    """Наблюдение читает журнал с конца и само старую turn_duration уже не видит.
+
+    Число живых агентов оттуда нужно, а старый текст и конец хода — нет.
+    """
+    started_at = time.time()
+    session_id = "88888888-8888-4888-8888-888888888888"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at - 30),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "старый ответ"}]},
+        },
+        {
+            "type": "system",
+            "subtype": "turn_duration",
+            "pendingBackgroundAgentCount": 3,
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at - 20),
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="claude",
+        workdir="/srv/project",
+        started_at=started_at,
+        session_id=session_id,
+        home_dir=tmp_path,
+        locator=TranscriptLocator(
+            provider="claude",
+            path=str(path),
+            start_offset=path.stat().st_size,
+            session_id=session_id,
+        ),
+    )
+
+    seeded = reader.poll()
+
+    assert seeded.background_pending == 3
+    assert seeded.complete is False
+    assert seeded.assistant_text == ""
+
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 1),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "агенты закончили"}]},
+        },
+        {
+            "type": "system",
+            "subtype": "turn_duration",
+            "pendingBackgroundAgentCount": 0,
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 2),
+        },
+    )
+
+    finished = reader.poll()
+
+    assert finished.assistant_text == "агенты закончили"
+    assert finished.complete is True
+    assert finished.background_pending == 0
+
+
 def test_claude_transcript_reader_skips_records_of_previous_turn(tmp_path):
     """Журнал общий для всего треда: ход начинается с первой записи после старта."""
     started_at = time.time() - 5

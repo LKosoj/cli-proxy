@@ -239,6 +239,7 @@ class CliTranscriptReader:
         self.cursor = self.locator.start_offset
         if self.locator.session_id:
             self.session_id = self.locator.session_id
+        self._seed_background_pending()
 
     def _exact_paths(self) -> list[Path]:
         """Журналы треда, найденные по известному идентификатору сессии."""
@@ -421,6 +422,55 @@ class CliTranscriptReader:
         self.cursor = offset
         if session_id:
             self.session_id = session_id
+        self._seed_background_pending()
+
+    def _seed_background_pending(self) -> None:
+        """Берёт число живых агентов из последней turn_duration до курсора.
+
+        Наблюдение начинает читать с конца файла и саму запись уже не видит.
+        Текст ответа и признак конца хода из неё не берём.
+        """
+        if self.provider != "claude" or self.locator is None or self.cursor <= 0:
+            return
+        path = Path(self.locator.path)
+        try:
+            with path.open("rb") as handle:
+                start = max(0, self.cursor - _DISCOVERY_TAIL_BYTES)
+                handle.seek(start)
+                data = handle.read(self.cursor - start)
+        except OSError:
+            logger.debug("claude pending seed read failed path=%s", path, exc_info=True)
+            return
+        if start:
+            # Хвост мог начаться посреди строки.
+            head = data.find(b"\n")
+            if head < 0:
+                return
+            data = data[head + 1 :]
+        pending: Optional[int] = None
+        for raw_line in data.splitlines():
+            try:
+                text = raw_line.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                continue
+            if not text:
+                continue
+            try:
+                record = loads_safe(text, strict_first=True)
+            except Exception:
+                continue
+            if not isinstance(record, dict):
+                continue
+            if str(record.get("type") or "").strip() != "system":
+                continue
+            if str(record.get("subtype") or "").strip() != "turn_duration":
+                continue
+            try:
+                pending = max(0, int(record.get("pendingBackgroundAgentCount") or 0))
+            except (TypeError, ValueError):
+                pending = 0
+        if pending is not None:
+            self.background_pending = pending
 
     def _attach_new_records(self, paths: Iterable[Path]) -> bool:
         for path in paths:

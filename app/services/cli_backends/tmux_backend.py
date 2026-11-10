@@ -617,8 +617,8 @@ class TmuxExecutionBackend:
         poll_interval_sec: float = 0.25,
         idle_fallback_sec: Optional[float] = None,
         startup_timeout_sec: float = 60.0,
-        quiet_timeout_sec: float = 300.0,  # 5 мин: если ответа так и нет, ход считаем зависшим
-        answer_idle_sec: float = 30.0,  # ответ уже есть и журнал замер — отдаём, не дожидаясь 5 мин
+        quiet_timeout_sec: float = 600.0,  # 10 мин: если журнал так и молчит, ход считаем зависшим
+        answer_idle_sec: float = 30.0,  # ответ уже есть, агентов не осталось и журнал замер — отдаём, не дожидаясь 10 мин
     ):
         self.driver = driver
         self.poll_interval_sec = float(poll_interval_sec)
@@ -1414,6 +1414,9 @@ class TmuxExecutionBackend:
         # В наблюдении первая же запись «ход закончен» может относиться к уже
         # отданному ходу. Принимаем только ту, что появилась после открытого опроса.
         observe_seen_open = False
+        # Сколько помощников ещё работают. Пока число больше нуля, короткая
+        # пауза в 30 секунд ход не закрывает: агент может молчать в долгом тесте.
+        background_pending = 0
 
         def _refresh_watched_transcripts() -> bool:
             """Refresh list of watched transcripts. Returns True if any new file appeared."""
@@ -1691,11 +1694,17 @@ class TmuxExecutionBackend:
 
                 # Тишина. Вопрос с кнопками не закрывает ход: CLI ждёт ответа,
                 # экран и журнал при этом не растут.
-                # Ответ уже есть и файлы замерли ненадолго — отдаём его.
-                # Если текста ещё нет, ждём прежние пять минут: ход мог зависнуть.
+                # Ответ уже есть, живых агентов нет и файлы замерли ненадолго — отдаём его.
+                # Пока счётчик агентов больше нуля, эту короткую паузу не используем.
+                # Если текста нет или агенты так и не закончились, ждём десять минут.
                 choice_blocking = awaiting_choice and choice_holds_turn
                 idle_for = time.time() - last_change
-                if not choice_blocking and str(latest_text or "").strip() and idle_for >= answer_idle:
+                if (
+                    not choice_blocking
+                    and background_pending == 0
+                    and str(latest_text or "").strip()
+                    and idle_for >= answer_idle
+                ):
                     complete = True
                     completion_source = "answer-idle"
                     break
@@ -1706,6 +1715,8 @@ class TmuxExecutionBackend:
                         completion_source = "json-quiet-timeout" if has_json else "pane-quiet-timeout"
                     break
 
+                # Проверка панели стоит после предела тишины: оба срока могут
+                # совпасть, и сброс таймера здесь не должен отменять уже наступивший предел.
                 if time.time() - last_change >= idle_probe_interval:
                     if not await driver.has_session(paths["session_name"]):
                         logger.warning(
