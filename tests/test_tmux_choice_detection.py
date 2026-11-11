@@ -231,14 +231,18 @@ def test_claude_question_list_keeps_wrapped_options_and_round_trips() -> None:
     assert options[1:] == [
         "2. Оставить Caddy — Angie не ставим, добавляю video_explainer в Caddyfile.",
         "3. Angie за Caddy — Caddy остаётся на 80/443 и передаёт домен в Angie.",
-        "4. Other",
         "5. Chat about this",
     ]
     # Монитор отдаёт в превью уже разобранный блок, без подсказки внизу.
-    # Повторный разбор должен снова увидеть меню, иначе кнопки не уйдут.
-    preview = "\n".join([question, f"❯ {options[0]}", *options[1:]])
+    # Строка Other в тексте остаётся, иначе повторный разбор теряет Chat.
+    preview = SessionRunService._choice_preview_text(
+        question,
+        options,
+        SessionRunService._claude_other_choice_number(text),
+    )
     assert SessionRunService._is_cli_choice_question(preview) is True
     assert SessionRunService._parse_cli_choice_question(preview)[1] == options
+    assert "Other" not in "\n".join(SessionRunService._parse_cli_choice_question(preview)[1])
 
 
 def _claude_answer_confirm_frame() -> str:
@@ -309,8 +313,52 @@ def test_claude_ask_user_menu_without_cursor_is_a_choice() -> None:
         "1. Удалить историю (Рекомендую) — Сохранить input.txt рядом с проектом, удалить папку истории целиком.",
         "2. Удалить и ресурсы проекта — То же, плюс фон и заставку.",
         "3. Только медиа истории — Удалить media и workspace.",
-        "4. Other",
         "5. Chat about this",
+    ]
+
+
+def test_other_chrome_is_dropped_but_chat_about_this_keeps_its_number() -> None:
+    # Четыре настоящих ответа, затем служебные Other и Chat. Лимит — пять
+    # кнопок. Other убираем до обрезки, иначе Chat не помещается.
+    text = (
+        "Question: Иллюстрации\n"
+        "1. Без картинок\n"
+        "2. Только иллюстрации\n"
+        "3. Иллюстрации и Remotion\n"
+        "4. Ещё вариант\n"
+        "5. Other\n"
+        "6. Chat about this\n"
+        "Select with numbers [1-6]. Then Enter to submit or Escape to cancel:\n"
+    )
+
+    assert SessionRunService._is_cli_choice_question(text) is True
+    _question, options = SessionRunService._parse_cli_choice_question(text)
+
+    assert options == [
+        "1. Без картинок",
+        "2. Только иллюстрации",
+        "3. Иллюстрации и Remotion",
+        "4. Ещё вариант",
+        "6. Chat about this",
+    ]
+    assert SessionRunService._claude_other_choice_number(text) == "5"
+
+
+def test_russian_option_is_not_treated_as_other_chrome() -> None:
+    text = (
+        "Question: Проект\n"
+        "❯ 1. Другой проект целиком\n"
+        "  2. Кухня\n"
+        "  3. Other\n"
+        "  4. Chat about this\n"
+    )
+
+    _question, options = SessionRunService._parse_cli_choice_question(text)
+
+    assert options == [
+        "1. Другой проект целиком",
+        "2. Кухня",
+        "4. Chat about this",
     ]
 
 

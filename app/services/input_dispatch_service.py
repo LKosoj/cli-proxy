@@ -906,6 +906,55 @@ class InputDispatchService:
             user_id=int(user_id) if user_id is not None else None,
         )
 
+    async def _try_feed_busy_other_text(
+        self,
+        session,
+        text: str,
+        *,
+        context,
+        dest: dict,
+        chat_id: Any,
+        lang: str,
+    ) -> bool:
+        """True — сообщение забрало поле Other (ушло или не ушло, но не в очередь)."""
+
+        if get_session_execution_backend(session) != "tmux":
+            return False
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        backend = TmuxExecutionBackend()
+        try:
+            open_field = await backend.pane_is_other_text_prompt(session)
+        except Exception:
+            logger.exception(
+                "tmux other-text check failed session_id=%s",
+                getattr(session, "id", "?"),
+            )
+            return False
+        if not open_field:
+            return False
+        try:
+            await backend.send_other_text(session, text)
+        except Exception:
+            logger.exception(
+                "failed to feed tmux other text while busy session_id=%s",
+                getattr(session, "id", "?"),
+            )
+            await self._send_text(
+                context,
+                text=t("msg.error.tmux_current_send_failed", lang),
+                dest=dest,
+                chat_id=chat_id,
+            )
+            return True
+        await self._send_text(
+            context,
+            text=t("msg.input.custom_accepted", lang),
+            dest=dest,
+            chat_id=chat_id,
+        )
+        return True
+
     async def handle_cli_input(
         self,
         session,
@@ -948,6 +997,20 @@ class InputDispatchService:
                 return
         dest = self._apply_images_to_dest(dict(dest or {}), image_paths=effective_image_paths)
         if self._is_session_busy(session, self.bot_app):
+            # Поле Other уже открыто: очередь сюда не дойдёт, а ход из-за поля не кончается.
+            if (
+                not effective_image_paths
+                and str(text or "").strip()
+                and await self._try_feed_busy_other_text(
+                    session,
+                    text,
+                    context=context,
+                    dest=dest,
+                    chat_id=chat_id,
+                    lang=lang,
+                )
+            ):
+                return
             await self._handle_busy_pending_input(
                 session=session,
                 pending_input=self._build_pending_input(

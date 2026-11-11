@@ -51,6 +51,19 @@ class TranscriptPollResult:
     thinking_text: str = ""
     # Сколько фоновых агентов ещё работают. 0 — ход родителя можно закрывать.
     background_pending: int = 0
+    # False: последняя запись конца шага не сказала, сколько агентов осталось.
+    # Такое молчание — не ноль, ход из-за него сразу не закрываем.
+    background_agents_settled: bool = True
+
+
+def _claude_pending_count(record: dict[str, Any]) -> Optional[int]:
+    """Число живых агентов из turn_duration. None — поля в записи нет."""
+    if "pendingBackgroundAgentCount" not in record:
+        return None
+    try:
+        return max(0, int(record.get("pendingBackgroundAgentCount") or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _parse_timestamp(raw: Any) -> Optional[float]:
@@ -185,6 +198,10 @@ class CliTranscriptReader:
         self.terminal_error = ""
         self.retry_prompt = ""
         self.background_pending = 0
+        # У Codex, Grok, Kimi, Qwen и Gemini этого счётчика нет: их конец хода
+        # закрывает превью сразу. Claude сам снимает флаг, если в turn_duration
+        # нет числа агентов или оно больше нуля.
+        self.background_agents_settled = True
         # Реплика пользователя текущего хода. task_started начинает ход заново.
         self._turn_user_text = ""
         if locator is not None:
@@ -448,6 +465,7 @@ class CliTranscriptReader:
                 return
             data = data[head + 1 :]
         pending: Optional[int] = None
+        saw_turn = False
         for raw_line in data.splitlines():
             try:
                 text = raw_line.decode("utf-8").strip()
@@ -465,12 +483,15 @@ class CliTranscriptReader:
                 continue
             if str(record.get("subtype") or "").strip() != "turn_duration":
                 continue
-            try:
-                pending = max(0, int(record.get("pendingBackgroundAgentCount") or 0))
-            except (TypeError, ValueError):
-                pending = 0
-        if pending is not None:
-            self.background_pending = pending
+            pending = _claude_pending_count(record)
+            saw_turn = True
+        if not saw_turn:
+            return
+        if pending is None:
+            self.background_agents_settled = False
+            return
+        self.background_pending = pending
+        self.background_agents_settled = pending == 0
 
     def _attach_new_records(self, paths: Iterable[Path]) -> bool:
         for path in paths:
@@ -522,11 +543,13 @@ class CliTranscriptReader:
                         self.latest_progress_text = tool_name
         elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
             self.complete = True
-            raw_pending = record.get("pendingBackgroundAgentCount")
-            try:
-                self.background_pending = max(0, int(raw_pending or 0))
-            except (TypeError, ValueError):
-                self.background_pending = 0
+            pending = _claude_pending_count(record)
+            if pending is None:
+                # Поля нет. Это не «агентов ноль»: уже известное число не затираем.
+                self.background_agents_settled = False
+            else:
+                self.background_pending = pending
+                self.background_agents_settled = pending == 0
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         record_type = str(record.get("type") or "").strip()
@@ -884,4 +907,5 @@ class CliTranscriptReader:
             retry_prompt=self.retry_prompt,
             thinking_text=self.latest_thinking_text,
             background_pending=self.background_pending,
+            background_agents_settled=self.background_agents_settled,
         )

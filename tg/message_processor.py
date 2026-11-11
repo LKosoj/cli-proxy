@@ -303,6 +303,24 @@ class MessageProcessor:
             message_thread_id=route_thread_id,
         ):
             return
+        feeder = getattr(self.bot_app, "feed_tmux_other_answer", None)
+        if callable(feeder):
+            fed = await feeder(
+                route_ui_chat_id,
+                text or "",
+                message_thread_id=route_thread_id,
+                owner_chat_id=owner_chat_id,
+            )
+            if fed == "accepted":
+                await self.bot_app._send_message(context, text=t("msg.input.custom_accepted", lang), **reply_kwargs)
+                return
+            if fed == "failed":
+                await self.bot_app._send_message(
+                    context,
+                    text=t("msg.error.tmux_current_send_failed", lang),
+                    **reply_kwargs,
+                )
+                return
         if self.bot_app._resolve_pending_custom_answer(
             route_ui_chat_id,
             text or "",

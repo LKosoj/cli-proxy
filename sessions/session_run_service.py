@@ -482,6 +482,40 @@ class SessionRunService:
         return f"tmux_choice_{session_key}_{digest}"
 
     @staticmethod
+    def _claude_other_choice_number(text: str) -> str:
+        """Номер служебной строки Claude «N. Other». Пустая строка — её нет."""
+
+        for line in str(text or "").splitlines():
+            match = _CHOICE_OPTION_RE.match(line.strip())
+            if match and match.group(2).strip().casefold() == "other":
+                return match.group(1)
+        return ""
+
+    @staticmethod
+    def _choice_preview_text(question: str, options: List[str], other_number: str = "") -> str:
+        """Текст меню для повторного разбора: Other остаётся строкой, не кнопкой.
+
+        Без этой строки номер «Chat about this» перестаёт идти по порядку,
+        и повторный разбор выбрасывает пункт.
+        """
+
+        rows = [str(opt) for opt in options]
+        number = str(other_number or "").strip()
+        if number.isdigit():
+            other_line = f"{number}. Other"
+            if other_line not in rows:
+                insert_at = len(rows)
+                for index, opt in enumerate(rows):
+                    head = opt.split(".", 1)[0].strip()
+                    if head.isdigit() and int(head) > int(number):
+                        insert_at = index
+                        break
+                rows.insert(insert_at, other_line)
+        if not rows:
+            return str(question or "").strip()
+        return "\n".join([str(question or ""), f"❯ {rows[0]}", *rows[1:]]).strip()
+
+    @staticmethod
     def _parse_cli_choice_question(text: str) -> Tuple[str, List[str]]:
         if not text:
             return "Please choose an option:", []
@@ -508,6 +542,7 @@ class SessionRunService:
         # длинного пункта тогда идёт с края экрана, без отступа.
         footer_ahead = any(_is_choice_submit_footer(line.strip()) for line in rest)
         opts = []
+        next_number = 1
         for line in rest:
             s = line.strip()
             if _is_choice_submit_footer(s):
@@ -516,8 +551,14 @@ class SessionRunService:
             m = _CHOICE_OPTION_RE.match(s)
             # Нумерация меню идёт подряд с единицы, поэтому "1754161234.567 /tmp/x"
             # из вывода команд вариантом не становится.
-            if m and int(m.group(1)) == len(opts) + 1:
-                opts.append(f"{m.group(1)}. {m.group(2).strip()}")
+            if m and int(m.group(1)) == next_number:
+                next_number += 1
+                label = m.group(2).strip()
+                # Other — служебная строка Claude, не ответ. Номер всё равно
+                # считаем, иначе следующий пункт «Chat about this» выпадет.
+                if label.casefold() == "other":
+                    continue
+                opts.append(f"{m.group(1)}. {label}")
                 continue
             if opts and s and (line[:1].isspace() or footer_ahead):
                 opts[-1] = f"{opts[-1]} {s}"
@@ -733,6 +774,7 @@ class SessionRunService:
                     answered.clear()
                 if qid in self.bot_app.ui_state.pending_questions:
                     return  # этот вопрос уже отправлен, повтор кадра игнорируем
+                other_number = self._claude_other_choice_number(visible_choice_text)
                 meta = {
                     "question": question,
                     "options": options,
@@ -744,6 +786,8 @@ class SessionRunService:
                 self.bot_app.ui_state.pending_questions[qid] = meta
                 try:
                     cid = int(dest.get("chat_id") or 0)
+                    # Свой вариант только если в кадре был Other: следующее
+                    # сообщение — текст для этого поля, а не новый запрос.
                     await self.bot_app._send_ask_question(
                         context,
                         cid,
@@ -751,10 +795,13 @@ class SessionRunService:
                         qid,
                         question,
                         options,
-                        allow_custom=False,
+                        allow_custom=bool(other_number),
                         system_options=False,
                         message_thread_id=dest.get("message_thread_id"),
                     )
+                    record = self.bot_app.ui_state.pending_questions.get(qid)
+                    if other_number and isinstance(record, dict):
+                        record["tmux_other_choice"] = other_number
                 except Exception:
                     logging.getLogger("bot.preview").exception("failed to send tmux choice as ask from preview")
                 return  # do not show plain preview for the choice question

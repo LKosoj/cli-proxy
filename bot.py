@@ -1519,6 +1519,66 @@ class BotApp:
         self._pending_custom_input_status_by_chat[ui_key] = "stale"
         return False
 
+    async def feed_tmux_other_answer(
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        message_thread_id: Optional[int] = None,
+        owner_chat_id: Optional[int] = None,
+    ) -> str:
+        """Текст кнопки «свой вариант» для меню tmux. '' — это не то поле.
+
+        accepted — строка ушла в панель. failed — вопрос остаётся, новый запрос не стартует.
+        """
+
+        answer = str(text or "").strip()
+        if not answer:
+            return ""
+        ui_key = self.telegram_ui_key(chat_id, message_thread_id)
+        active_qid = str(self.ui_state.active_ask_question_by_chat.get(ui_key, "") or "").strip()
+        if not active_qid:
+            return ""
+        meta = self.ui_state.pending_questions.get(active_qid)
+        if not isinstance(meta, dict) or not meta.get("tmux_feed") or not meta.get("awaiting_custom"):
+            return ""
+        try:
+            session_id = str(meta.get("session_id") or "").strip()
+            manager = getattr(self, "manager", None)
+            getter = getattr(manager, "get", None) if manager is not None else None
+            session = None
+            if callable(getter) and session_id:
+                lookups = []
+                for raw in (owner_chat_id, chat_id, meta.get("chat_id")):
+                    if raw is None:
+                        continue
+                    try:
+                        number = int(raw)
+                    except (TypeError, ValueError):
+                        continue
+                    if number not in lookups:
+                        lookups.append(number)
+                for candidate in lookups:
+                    session = getter(candidate, session_id)
+                    if session is not None:
+                        break
+            if session is None:
+                raise RuntimeError("tmux session for other text is missing")
+            from app.services.cli_backends import TmuxExecutionBackend
+            from sessions.session_run_service import SessionRunService
+
+            await TmuxExecutionBackend().send_other_text(
+                session,
+                answer,
+                choice_number=str(meta.get("tmux_other_choice") or ""),
+            )
+            SessionRunService.remember_answered_tmux_choice(session, active_qid)
+        except Exception:
+            logging.getLogger("bot.ask").exception("failed to feed tmux other text")
+            return "failed"
+        self._clear_pending_question(active_qid)
+        return "accepted"
+
     def _should_accept_implicit_analyst_text_answer(self, chat_id: int, session_id: str) -> bool:
         sid = str(session_id or "").strip()
         if not sid:

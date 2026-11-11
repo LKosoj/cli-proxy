@@ -94,6 +94,15 @@ _RECOVERY_DEST_KEYS = (
 
 logger = logging.getLogger(__name__)
 
+# Claude пишет это на экране, когда оболочки ещё работают после ответа.
+_RUNNING_SHELLS_RE = re.compile(r"\d+\s+shells?\s+still\s+running", re.IGNORECASE)
+# Поле после пункта Other: «Enter text for option 5 (Other), or Escape for the list:».
+_OTHER_TEXT_PROMPT_RE = re.compile(
+    r"enter text for option\s+\d+\s*\(\s*other\s*\)",
+    re.IGNORECASE,
+)
+_OTHER_TEXT_WAIT_SEC = 3.0
+
 
 def _read_pane_chunk(log_path: str, cursor: int, *, max_bytes: int = 0) -> tuple[bytes, int, bool]:
     """Читает байты pane.log, дописанные после cursor.
@@ -820,6 +829,59 @@ class TmuxExecutionBackend:
                 state["last_activity_at"] = time.time()
                 self._write_state(paths, state)
 
+    async def pane_is_other_text_prompt(self, session: Any) -> bool:
+        paths = self.paths(session)
+        pane = await self._capture_pane_text(session, paths)
+        return bool(pane and _OTHER_TEXT_PROMPT_RE.search(pane))
+
+    async def send_other_text(self, session: Any, text: str, choice_number: str = "") -> None:
+        """Вписать текст в поле Other. Цифру пункта саму по себе не оставляем.
+
+        Если поле уже открыто, вставляем текст и Enter. Иначе сначала цифра,
+        и только после появления поля — текст. Нет поля — в меню цифр не вставляем.
+        """
+
+        prompt = str(text or "").strip()
+        if not prompt:
+            raise TmuxDriverError("cannot send empty input to active tmux session")
+
+        paths = self.paths(session)
+        async with self._pane_lock(session):
+            if not await self.can_accept_input(session):
+                raise TmuxDriverError("active tmux session is unavailable")
+
+            pane = await self._capture_pane_text(session, paths) or ""
+            if not _OTHER_TEXT_PROMPT_RE.search(pane):
+                number = str(choice_number or "").strip()
+                if not number.isdigit():
+                    raise TmuxDriverError("tmux other text field is not open")
+                driver = self._driver(session)
+                await driver.send_keys(paths["pane_target"], *number)
+                await driver.send_enter(paths["pane_target"])
+                if not await self._other_text_prompt_opened(session, paths):
+                    raise TmuxDriverError("tmux other text field did not open")
+
+            await self._deliver_prompt(
+                session,
+                paths,
+                prompt,
+                buffer_name=f"cli-proxy-other-{_new_request_id()}",
+                ready_wait_sec=_OTHER_TEXT_WAIT_SEC,
+            )
+            state = self._read_state(paths)
+            if self._has_active_runtime_state(session, state):
+                state["last_activity_at"] = time.time()
+                self._write_state(paths, state)
+
+    async def _other_text_prompt_opened(self, session: Any, paths: dict[str, str]) -> bool:
+        deadline = time.time() + _OTHER_TEXT_WAIT_SEC
+        while time.time() < deadline:
+            pane = await self._capture_pane_text(session, paths)
+            if pane and _OTHER_TEXT_PROMPT_RE.search(pane):
+                return True
+            await asyncio.sleep(min(self.poll_interval_sec, 0.25))
+        return False
+
     async def _ensure_started(self, session: Any, paths: dict[str, str], *, force_fresh: bool = False) -> bool:
         driver = self._driver(session)
         Path(paths["runtime_dir"]).mkdir(parents=True, exist_ok=True)
@@ -1017,6 +1079,9 @@ class TmuxExecutionBackend:
             pane = await self._capture_pane_text(session, paths)
             if pane is not None:
                 last_pane = pane
+                # Поле Other не содержит ❯. Текст нового сообщения — как раз для него.
+                if _OTHER_TEXT_PROMPT_RE.search(pane):
+                    return
                 normalized = " ".join(normalize_terminal_text(pane).lower().split())
                 if (
                     not dumb_term_confirmed
@@ -1610,6 +1675,11 @@ class TmuxExecutionBackend:
                         background_pending = max(0, int(transcript_update.background_pending or 0))
                     except (TypeError, ValueError):
                         background_pending = 0
+                    # Молчание про число агентов — не ноль. Закрывать можно только
+                    # когда запись явно сказала, что агентов не осталось.
+                    background_agents_settled = bool(
+                        getattr(transcript_update, "background_agents_settled", True)
+                    )
                     if request.observe:
                         if not transcript_update.complete:
                             observe_seen_open = True
@@ -1619,7 +1689,7 @@ class TmuxExecutionBackend:
                     agents_recent = background_pending > 0 or (
                         last_agent_change > 0 and time.time() - last_agent_change < answer_idle
                     )
-                    if parent_done and not agents_recent:
+                    if parent_done and background_agents_settled and not agents_recent:
                         # Конец хода виден только в журнале CLI: экран панели о нём не сообщает.
                         # Живые фоновые агенты этот конец откладывают.
                         complete = True
@@ -1642,8 +1712,13 @@ class TmuxExecutionBackend:
                         # текст транскрипта, а в чат уходил буфер TUI целиком.
                         if pane_options:
                             # Превью повторно распознаёт меню перед отправкой кнопок.
-                            # Сохраняем признак меню после нормализации вариантов.
-                            latest_text = "\n".join([pane_question, f"❯ {pane_options[0]}", *pane_options[1:]]).strip()
+                            # Строка Other остаётся в тексте: без неё следующий номер
+                            # выпадает, и кнопка «свой вариант» не появляется.
+                            latest_text = _SRS._choice_preview_text(
+                                pane_question,
+                                pane_options,
+                                _SRS._claude_other_choice_number(pane_for_choice),
+                            )
                         elif not transcript_authoritative:
                             latest_text = pane_for_choice or latest_text
                     awaiting_choice = choice_in_pane or choice_in_transcript
@@ -1689,6 +1764,13 @@ class TmuxExecutionBackend:
                     setattr(session, "last_output_ts", time.time())
                     setattr(session, "last_assistant_text_ts", time.time())
                     setattr(session, "last_assistant_text_value", preview_text)
+                shells_running = bool(_RUNNING_SHELLS_RE.search(pane_for_choice or ""))
+                if shells_running and completion_source == "transcript":
+                    complete = False
+                # Поле Other — то же ожидание, что меню: CLI ждёт строку, журнал молчит.
+                other_text_open = bool(_OTHER_TEXT_PROMPT_RE.search(pane_for_choice or ""))
+                if other_text_open and completion_source != "transcript-error":
+                    complete = False
                 if complete:
                     break
 
@@ -1697,10 +1779,11 @@ class TmuxExecutionBackend:
                 # Ответ уже есть, живых агентов нет и файлы замерли ненадолго — отдаём его.
                 # Пока счётчик агентов больше нуля, эту короткую паузу не используем.
                 # Если текста нет или агенты так и не закончились, ждём десять минут.
-                choice_blocking = awaiting_choice and choice_holds_turn
+                choice_blocking = (awaiting_choice or other_text_open) and choice_holds_turn
                 idle_for = time.time() - last_change
                 if (
                     not choice_blocking
+                    and not shells_running
                     and background_pending == 0
                     and str(latest_text or "").strip()
                     and idle_for >= answer_idle

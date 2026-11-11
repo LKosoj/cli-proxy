@@ -4,6 +4,7 @@ import pytest
 
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 from app.services.telegram_ui_scope import TelegramUiKey
+from bot import BotApp
 from i18n import t
 from tg.callback_actions.protocol import ProtocolActionsMixin
 
@@ -217,3 +218,97 @@ async def test_plain_ask_click_still_resolves_plugin_question(monkeypatch):
     assert resolves == [(qid, "1. Yes")]
     assert qid not in pending
     assert query.edits == [t("msg.ask.choice_selected", "ru", answer="1. Yes")]
+
+
+def _other_app(pending, session, qid):
+    ui_key = TelegramUiKey.from_parts(100)
+
+    def _clear(question_id: str) -> bool:
+        return pending.pop(question_id, None) is not None
+
+    return SimpleNamespace(
+        ui_state=SimpleNamespace(
+            pending_questions=pending,
+            active_ask_question_by_chat={ui_key: qid},
+        ),
+        manager=SimpleNamespace(
+            get=lambda chat_id, session_id: session if int(chat_id) == 142987535 and session_id == "s46" else None,
+        ),
+        telegram_ui_key=BotApp.telegram_ui_key,
+        _clear_pending_question=_clear,
+    )
+
+
+@pytest.mark.asyncio
+async def test_feed_tmux_other_answer_types_stored_number(monkeypatch):
+    sent = []
+
+    async def _send(_self, tmux_sess, text, choice_number=""):
+        sent.append((tmux_sess, text, choice_number))
+
+    monkeypatch.setattr(TmuxExecutionBackend, "send_other_text", _send)
+    session = SimpleNamespace(id="s46")
+    qid = "tmux_choice_s46_other"
+    pending = {
+        qid: {
+            "chat_id": 100,
+            "session_id": "s46",
+            "tmux_feed": True,
+            "awaiting_custom": True,
+            "tmux_other_choice": "5",
+            "options": ["1. Без картинок", "6. Chat about this"],
+        }
+    }
+    app = _other_app(pending, session, qid)
+
+    result = await BotApp.feed_tmux_other_answer(app, 100, "Кухня мира", owner_chat_id=142987535)
+
+    assert result == "accepted"
+    assert sent == [(session, "Кухня мира", "5")]
+    assert qid not in pending
+    assert qid in session._answered_tmux_choice_ids
+
+
+@pytest.mark.asyncio
+async def test_feed_tmux_other_answer_keeps_question_when_send_fails(monkeypatch):
+    async def _send(_self, _tmux_sess, _text, choice_number=""):
+        raise RuntimeError("pane down")
+
+    monkeypatch.setattr(TmuxExecutionBackend, "send_other_text", _send)
+    session = SimpleNamespace(id="s46")
+    qid = "tmux_choice_s46_other"
+    pending = {
+        qid: {
+            "chat_id": 100,
+            "session_id": "s46",
+            "tmux_feed": True,
+            "awaiting_custom": True,
+            "tmux_other_choice": "5",
+        }
+    }
+    app = _other_app(pending, session, qid)
+
+    result = await BotApp.feed_tmux_other_answer(app, 100, "Кухня мира", owner_chat_id=142987535)
+
+    assert result == "failed"
+    assert qid in pending
+    assert not getattr(session, "_answered_tmux_choice_ids", set())
+
+
+@pytest.mark.asyncio
+async def test_feed_tmux_other_answer_ignores_plugin_question():
+    qid = "q-plugin"
+    pending = {
+        qid: {
+            "chat_id": 100,
+            "session_id": "s46",
+            "awaiting_custom": True,
+            "allow_custom": True,
+        }
+    }
+    app = _other_app(pending, SimpleNamespace(id="s46"), qid)
+
+    result = await BotApp.feed_tmux_other_answer(app, 100, "свой текст", owner_chat_id=142987535)
+
+    assert result == ""
+    assert qid in pending

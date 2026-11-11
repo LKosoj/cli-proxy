@@ -94,6 +94,7 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
     assert final.thinking_text == ""
     assert final.complete is True
     assert final.background_pending == 0
+    assert final.background_agents_settled is True
     assert final.locator is not None
     assert final.locator.path == str(path.resolve())
 
@@ -268,6 +269,48 @@ def test_claude_transcript_reader_keeps_pending_count_from_before_cursor(tmp_pat
     assert finished.assistant_text == "агенты закончили"
     assert finished.complete is True
     assert finished.background_pending == 0
+
+
+def test_claude_transcript_reader_missing_agent_count_is_not_zero(tmp_path):
+    """Нет поля pendingBackgroundAgentCount — это не ноль и не повод сразу закрывать ход."""
+    started_at = time.time() - 5
+    session_id = "99999999-9999-4999-8999-999999999999"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+    _append_jsonl(
+        path,
+        {
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 1),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "Промежуточный статус"}]},
+        },
+        {
+            "type": "system",
+            "subtype": "turn_duration",
+            "pendingBackgroundAgentCount": 2,
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 2),
+        },
+        {
+            "type": "system",
+            "subtype": "turn_duration",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 3),
+        },
+    )
+    reader = CliTranscriptReader(
+        cli_name="claude",
+        workdir="/srv/project",
+        started_at=started_at,
+        session_id=session_id,
+        home_dir=tmp_path,
+    )
+
+    result = reader.poll()
+
+    assert result.complete is True
+    assert result.background_pending == 2
+    assert result.background_agents_settled is False
 
 
 def test_claude_transcript_reader_skips_records_of_previous_turn(tmp_path):

@@ -163,6 +163,56 @@ def test_session_run_service_turns_tmux_preview_question_into_buttons() -> None:
         assert len(questions) == 1
         assert questions[0]["allow_custom"] is False
         assert len(bot_app.ui_state.pending_questions) == 1
+        stored = next(iter(bot_app.ui_state.pending_questions.values()))
+        assert "tmux_other_choice" not in stored
+
+    asyncio.run(_run())
+
+
+def test_session_run_service_tmux_other_menu_offers_custom_text() -> None:
+    async def _run() -> None:
+        questions: list[tuple] = []
+
+        async def _send_ask_question(*args, **kwargs):
+            questions.append((args, kwargs))
+
+        bot_app = SimpleNamespace(
+            _send_message=None,
+            _send_ask_question=_send_ask_question,
+            ui_state=SimpleNamespace(pending_questions={}),
+        )
+        service = _build_service(bot_app)
+        text = (
+            "Question: Иллюстрации\n"
+            "1. Без картинок\n"
+            "2. Только иллюстрации\n"
+            "3. Иллюстрации и Remotion\n"
+            "4. Ещё вариант\n"
+            "5. Other\n"
+            "6. Chat about this\n"
+            "Select with numbers [1-6]. Then Enter to submit or Escape to cancel:\n"
+        )
+
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"),
+            {"kind": "telegram", "chat_id": 123},
+            object(),
+            text,
+        )
+
+        assert len(questions) == 1
+        args, kwargs = questions[0]
+        assert kwargs["allow_custom"] is True
+        assert args[5] == [
+            "1. Без картинок",
+            "2. Только иллюстрации",
+            "3. Иллюстрации и Remotion",
+            "4. Ещё вариант",
+            "6. Chat about this",
+        ]
+        stored = next(iter(bot_app.ui_state.pending_questions.values()))
+        assert stored["tmux_feed"] is True
+        assert stored["tmux_other_choice"] == "5"
 
     asyncio.run(_run())
 

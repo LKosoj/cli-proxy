@@ -60,7 +60,13 @@ def _write_cli_transcript(*, cli: str, workdir: str, session_id: str, text: str)
                 "timestamp": stamp,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
             },
-            {"type": "system", "subtype": "turn_duration", "sessionId": session_id, "timestamp": stamp},
+            {
+                "type": "system",
+                "subtype": "turn_duration",
+                "pendingBackgroundAgentCount": 0,
+                "sessionId": session_id,
+                "timestamp": stamp,
+            },
         ]
     elif cli == "codex":
         path = root / ".codex" / "sessions" / f"rollout-2026-08-21T00-00-00-{session_id}.jsonl"
@@ -774,6 +780,104 @@ def test_tmux_backend_quiet_timeout_defaults_to_ten_minutes():
     backend = TmuxExecutionBackend(driver=FakeTmuxDriver())
 
     assert backend.quiet_timeout_sec == 600
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_waits_when_agent_count_is_missing(tmp_path, monkeypatch):
+    """Запись «шаг закончен» без числа агентов ход сразу не закрывает."""
+    driver = FakeTmuxDriver()
+
+    class UnknownPendingReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готовый ответ",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+                background_agents_settled=False,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", UnknownPendingReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=5.0,
+        answer_idle_sec=0.25,
+    )
+    started_at = time.time()
+
+    result = await asyncio.wait_for(
+        backend.run(
+            _session(tmp_path),
+            "do work",
+            request_context={"prompt": "do work", "dest": {"kind": "telegram", "chat_id": 42}},
+        ),
+        timeout=2,
+    )
+
+    assert result.text == "Готовый ответ"
+    assert result.diagnostics["completion_source"] == "answer-idle"
+    assert time.time() - started_at >= 0.25
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_holds_turn_while_pane_shells_are_running(tmp_path, monkeypatch):
+    """Надпись на экране «shells still running» держит превью, даже если журнал молчит про агентов."""
+    driver = FakeTmuxDriver()
+
+    class SettledReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готово",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+                background_agents_settled=True,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SettledReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=0.45,
+        answer_idle_sec=0.1,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("Baked for 35s · done\n5 shells still running\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="shells-1",
+        started_at=time.time(),
+        offset=0,
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+    )
+    started_at = time.time()
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
+
+    assert result.text == "Готово"
+    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
+    assert time.time() - started_at >= 0.45
 
 
 @pytest.mark.asyncio
@@ -1795,6 +1899,241 @@ async def test_tmux_backend_sends_choice_as_key_events(tmp_path):
 
     assert driver.sent_key_sequences[-1] == (paths["pane_target"], ("y",))
     assert driver.events[-1] == "send_enter"
+
+
+_OTHER_TEXT_PROMPT = "Enter text for option 5 (Other), or Escape for the list:"
+
+
+def _activate_tmux(backend, session, driver):
+    session._active_execution_backend = "tmux"
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    TmuxExecutionBackend._write_state(
+        paths,
+        {
+            "state": "active",
+            "active_request_id": "request-1",
+            "session_name": paths["session_name"],
+            "pane_target": paths["pane_target"],
+            "last_activity_at": 1.0,
+        },
+    )
+    return paths
+
+
+@pytest.mark.asyncio
+async def test_send_other_text_pastes_when_field_is_already_open(tmp_path):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [_OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "pasted"]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+
+    await backend.send_other_text(session, "Кухня мира", choice_number="5")
+
+    assert driver.sent_key_sequences == []
+    assert driver.sent_prompts == ["Кухня мира"]
+    assert "paste_buffer" in driver.events
+
+
+@pytest.mark.asyncio
+async def test_send_other_text_opens_field_before_paste(tmp_path):
+    driver = FakeTmuxDriver()
+    menu = "5. Other\n6. Chat about this\nSelect with numbers [1-6]. Then Enter to submit:"
+    driver.capture_outputs = [menu, _OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "pasted"]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    dummy = tmp_path / "digit.txt"
+    dummy.write_text("5", encoding="utf-8")
+    driver.loaded_prompt_path = str(dummy)
+
+    await backend.send_other_text(session, "Кухня мира", choice_number="5")
+
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("5",))]
+    assert driver.sent_prompts[-1] == "Кухня мира"
+    digit_enter = driver.events.index("send_enter")
+    paste_at = driver.events.index("paste_buffer")
+    assert digit_enter < paste_at
+
+
+@pytest.mark.asyncio
+async def test_send_other_text_does_not_paste_into_number_menu(tmp_path):
+    driver = FakeTmuxDriver()
+    menu = "5. Other\nSelect with numbers [1-5]. Then Enter to submit:"
+
+    async def _menu_only(_pane_target):
+        driver.capture_calls += 1
+        driver.events.append("capture_pane")
+        return menu
+
+    driver.capture_pane = _menu_only
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    dummy = tmp_path / "digit.txt"
+    dummy.write_text("5", encoding="utf-8")
+    driver.loaded_prompt_path = str(dummy)
+
+    with pytest.raises(TmuxDriverError):
+        await backend.send_other_text(session, "Кухня мира", choice_number="5")
+
+    assert "paste_buffer" not in driver.events
+    assert "load_buffer" not in driver.events
+
+
+class _OtherFieldDriver(FakeTmuxDriver):
+    async def capture_pane(self, pane_target):
+        self.capture_calls += 1
+        self.events.append("capture_pane")
+        if self.capture_outputs:
+            return self.capture_outputs.pop(0)
+        return _OTHER_TEXT_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_run_types_into_open_other_field_without_ready_prompt(tmp_path, monkeypatch):
+    driver = _OtherFieldDriver()
+    driver.capture_outputs = [_OTHER_TEXT_PROMPT, "before", "after"]
+    driver.autowrite_transcript = True
+
+    class SettledReader:
+        def __init__(self, **kwargs):
+            self.locator = None
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="принял",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+                background_agents_settled=True,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SettledReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        startup_timeout_sec=0.4,
+        quiet_timeout_sec=1.0,
+        answer_idle_sec=0.2,
+    )
+    session = _session(tmp_path)
+
+    result = await asyncio.wait_for(backend.run(session, "Кухня мира"), timeout=3)
+
+    assert driver.sent_prompts == ["Кухня мира"]
+    assert driver.sent_key_sequences == []
+    assert result.abnormal_stop is False
+    assert result.diagnostics["completion_source"] == "transcript"
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_holds_turn_while_other_text_prompt_is_open(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+
+    class SettledReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готово",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+                background_agents_settled=True,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SettledReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=5.0,
+        answer_idle_sec=0.05,
+    )
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("Question: Иллюстрации\n" + _OTHER_TEXT_PROMPT + "\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="other-1",
+        started_at=time.time(),
+        offset=0,
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+    )
+    task = asyncio.create_task(backend.recover(session, request))
+    try:
+        await asyncio.sleep(0.3)
+        assert task.done() is False
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_other_text_prompt_without_preview_uses_quiet_timeout(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+
+    class SettledReader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готово",
+                complete=True,
+                available=True,
+                recognized=True,
+                background_pending=0,
+                background_agents_settled=True,
+            )
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SettledReader)
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=30.0,
+        quiet_timeout_sec=0.2,
+        answer_idle_sec=30.0,
+    )
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    driver.sessions.add(paths["session_name"])
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write(_OTHER_TEXT_PROMPT + "\n")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="other-quiet",
+        started_at=time.time(),
+        offset=0,
+        prompt="",
+        dest={"kind": "telegram", "chat_id": 42},
+    )
+
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
+
+    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
 
 
 @pytest.mark.asyncio

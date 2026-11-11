@@ -7,6 +7,7 @@ import pytest
 
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.ui_state_models import ChatUiState
+from i18n import t
 from tg.message_processor import MessageProcessor
 
 
@@ -198,6 +199,105 @@ async def test_plugin_awaiting_input_does_not_swallow_regular_message() -> None:
             "owner_chat_id": 1001,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_tmux_other_text_is_accepted_before_a_new_prompt() -> None:
+    sent: list[str] = []
+    buffer_calls: list[str] = []
+    resolve_calls: list[str] = []
+
+    async def _feed(_chat_id, text, message_thread_id=None, owner_chat_id=None):
+        assert text == "Кухня мира"
+        assert owner_chat_id == 1001
+        assert message_thread_id is None
+        return "accepted"
+
+    async def _send_message(_context, *, text, **_kwargs):
+        sent.append(text)
+
+    def _resolve(*_args, **_kwargs):
+        resolve_calls.append("called")
+        return False
+
+    async def _buffer_or_send(*_args, **_kwargs):
+        buffer_calls.append("called")
+
+    bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
+        access_policy_service=_AccessPolicy(),
+        context_by_chat={},
+        metrics=_Metrics(),
+        session_ui=_SessionUI(),
+        ui_state=ChatUiState(),
+        feed_tmux_other_answer=_feed,
+        _resolve_pending_custom_answer=_resolve,
+        _send_message=_send_message,
+        _plugin_awaiting_input=lambda _chat_id: False,
+        manager=SimpleNamespace(get_by_uid=lambda _session_uid: None),
+        _mode_allows_plugin_ui=lambda _session: True,
+        _cancel_plugin_dialogs=lambda _chat_id: None,
+        _buffer_or_send=_buffer_or_send,
+        telegram_ui_key=(lambda chat_id, message_thread_id=None: TelegramUiKey.from_parts(chat_id, message_thread_id)),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=1001),
+        effective_user=SimpleNamespace(id=9001),
+        message=_text_message("Кухня мира"),
+    )
+
+    await MessageProcessor(bot_app).process_message(update, context=object())
+
+    assert sent == [t("msg.input.custom_accepted", "ru")]
+    assert resolve_calls == []
+    assert buffer_calls == []
+
+
+@pytest.mark.asyncio
+async def test_tmux_other_text_failure_does_not_start_prompt() -> None:
+    sent: list[str] = []
+
+    async def _feed(*_args, **_kwargs):
+        return "failed"
+
+    async def _send_message(_context, *, text, **_kwargs):
+        sent.append(text)
+
+    async def _buffer_or_send(*_args, **_kwargs):
+        raise AssertionError("failed other text must not start a prompt")
+
+    bot_app = SimpleNamespace(
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru"),
+        ),
+        access_policy_service=_AccessPolicy(),
+        context_by_chat={},
+        metrics=_Metrics(),
+        session_ui=_SessionUI(),
+        ui_state=ChatUiState(),
+        feed_tmux_other_answer=_feed,
+        _resolve_pending_custom_answer=lambda *_args, **_kwargs: False,
+        _send_message=_send_message,
+        _plugin_awaiting_input=lambda _chat_id: False,
+        manager=SimpleNamespace(get_by_uid=lambda _session_uid: None),
+        _mode_allows_plugin_ui=lambda _session: True,
+        _cancel_plugin_dialogs=lambda _chat_id: None,
+        _buffer_or_send=_buffer_or_send,
+        telegram_ui_key=(lambda chat_id, message_thread_id=None: TelegramUiKey.from_parts(chat_id, message_thread_id)),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=1001),
+        effective_user=SimpleNamespace(id=9001),
+        message=_text_message("Кухня мира"),
+    )
+
+    await MessageProcessor(bot_app).process_message(update, context=object())
+
+    assert sent == [t("msg.error.tmux_current_send_failed", "ru")]
 
 
 @pytest.mark.asyncio

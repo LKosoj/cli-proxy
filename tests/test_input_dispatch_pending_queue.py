@@ -9,6 +9,7 @@ import pytest
 
 from app.services.input_dispatch_models import PendingInput, PendingInputDecision
 from app.services.input_dispatch_service import InputDispatchService
+from i18n import t
 from tg.pending_input_ui import build_pending_input_reply_markup
 
 
@@ -269,6 +270,138 @@ async def test_handle_cli_input_busy_without_queue_still_requires_confirmation_w
     assert pending_queue[0].text == "m1"
     assert session.queue == []
     assert int(metrics.get("queued", 0)) == 1
+    assert sent == [InputDispatchService.queue_confirm_prompt_text()]
+
+
+def _tmux_tool():
+    return SimpleNamespace(
+        name="claude",
+        mode="interactive",
+        execution_backends=["tmux"],
+        default_execution_backend="tmux",
+    )
+
+
+def _busy_tmux_session():
+    tool = _tmux_tool()
+    return SimpleNamespace(
+        id="s1",
+        busy=True,
+        queue=[],
+        is_active_by_tick=lambda: False,
+        run_lock=asyncio.Lock(),
+        tool=tool,
+        cli=SimpleNamespace(active_cli="claude"),
+        config=SimpleNamespace(tools={"claude": tool}, defaults=SimpleNamespace()),
+    )
+
+
+@pytest.mark.asyncio
+async def test_busy_other_text_field_is_typed_instead_of_queued(monkeypatch) -> None:
+    sent: list[str] = []
+    typed: list[tuple[str, str]] = []
+
+    async def _open(_self, _session):
+        return True
+
+    async def _send(_self, _session, text, choice_number=""):
+        typed.append((text, choice_number))
+
+    monkeypatch.setattr(
+        "app.services.cli_backends.tmux_backend.TmuxExecutionBackend.pane_is_other_text_prompt",
+        _open,
+    )
+    monkeypatch.setattr(
+        "app.services.cli_backends.tmux_backend.TmuxExecutionBackend.send_other_text",
+        _send,
+    )
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        run_prompt=(lambda *_a, **_k: asyncio.sleep(0)),
+        ui_state=SimpleNamespace(pending={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru", pending_input_confirmation_enabled=False),
+        ),
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+
+    await service.handle_cli_input(_busy_tmux_session(), "Кухня мира", chat_id=1, context=object())
+
+    assert typed == [("Кухня мира", "")]
+    assert bot_app.ui_state.pending == {}
+    assert sent == [t("msg.input.custom_accepted", "ru")]
+
+
+@pytest.mark.asyncio
+async def test_busy_other_text_failure_is_not_queued(monkeypatch) -> None:
+    sent: list[str] = []
+
+    async def _open(_self, _session):
+        return True
+
+    async def _send(_self, _session, _text, choice_number=""):
+        raise RuntimeError("pane down")
+
+    monkeypatch.setattr(
+        "app.services.cli_backends.tmux_backend.TmuxExecutionBackend.pane_is_other_text_prompt",
+        _open,
+    )
+    monkeypatch.setattr(
+        "app.services.cli_backends.tmux_backend.TmuxExecutionBackend.send_other_text",
+        _send,
+    )
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        ui_state=SimpleNamespace(pending={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru", pending_input_confirmation_enabled=False),
+        ),
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+
+    await service.handle_cli_input(_busy_tmux_session(), "Кухня мира", chat_id=1, context=object())
+
+    assert bot_app.ui_state.pending == {}
+    assert sent == [t("msg.error.tmux_current_send_failed", "ru")]
+
+
+@pytest.mark.asyncio
+async def test_busy_image_is_still_queued_when_other_field_is_open(monkeypatch) -> None:
+    sent: list[str] = []
+
+    async def _open(_self, _session):
+        raise AssertionError("image input must not look at the other-text field")
+
+    monkeypatch.setattr(
+        "app.services.cli_backends.tmux_backend.TmuxExecutionBackend.pane_is_other_text_prompt",
+        _open,
+    )
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        ui_state=SimpleNamespace(pending={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru", pending_input_confirmation_enabled=False),
+        ),
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+
+    await service.handle_cli_input(
+        _busy_tmux_session(),
+        "подпись",
+        chat_id=1,
+        context=object(),
+        image_paths=["/tmp/pic.png"],
+    )
+
+    pending_queue = bot_app.ui_state.pending.get(InputDispatchService._pending_ui_key(None, 1))
+    assert isinstance(pending_queue, deque)
+    assert pending_queue[0].text == "подпись"
     assert sent == [InputDispatchService.queue_confirm_prompt_text()]
 
 
