@@ -79,4 +79,5 @@ Instruction node for `tg` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-11 — после ответа на меню tmux возобновляется чтение вывода существующим reread_tmux_output.
 - 2026-10-24 — документы любого формата, аудио и голосовые передаются в CLI путями; небольшие TXT/MD/RST/LOG остаются inline.

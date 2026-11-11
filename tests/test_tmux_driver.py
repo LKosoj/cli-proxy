@@ -228,3 +228,17 @@ async def test_tmux_driver_kill_session_raises_for_real_error(monkeypatch) -> No
 
     with pytest.raises(TmuxDriverError, match="permission denied"):
         await TmuxDriver().kill_session("blocked")
+
+
+@pytest.mark.asyncio
+async def test_tmux_driver_types_literal_characters_separately(monkeypatch):
+    calls = []
+
+    async def _run(self, *args, **kwargs):
+        calls.append(args)
+        return TmuxCommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(TmuxDriver, "run", _run)
+    await TmuxDriver().type_text("pane:0.0", "Я -Enter")
+
+    assert calls == [("send-keys", "-t", "pane:0.0", "-l", "--", char) for char in "Я -Enter"]

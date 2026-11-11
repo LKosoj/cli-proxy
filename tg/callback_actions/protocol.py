@@ -196,6 +196,7 @@ class ProtocolActionsMixin:
                 return True
             self.bot_app._clear_pending_question(question_id)
             await self._edit_msg(context, query, t("msg.ask.choice_selected", lang, answer=answer))
+            await self.bot_app.session_management.reread_tmux_output(tmux_sess, context)
             return True
         runtime = None
         getter = getattr(self.bot_app, "get_runtime_by_capability", None)

@@ -4,6 +4,7 @@ import asyncio
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -316,6 +317,7 @@ async def test_busy_other_text_field_is_typed_instead_of_queued(monkeypatch) -> 
         _send,
     )
     bot_app = SimpleNamespace(
+        session_management=SimpleNamespace(reread_tmux_output=AsyncMock(return_value="started")),
         _shutdown_in_progress=False,
         run_prompt=(lambda *_a, **_k: asyncio.sleep(0)),
         ui_state=SimpleNamespace(pending={}),
@@ -329,6 +331,7 @@ async def test_busy_other_text_field_is_typed_instead_of_queued(monkeypatch) -> 
 
     await service.handle_cli_input(_busy_tmux_session(), "Кухня мира", chat_id=1, context=object())
 
+    bot_app.session_management.reread_tmux_output.assert_awaited_once()
     assert typed == [("Кухня мира", "")]
     assert bot_app.ui_state.pending == {}
     assert sent == [t("msg.input.custom_accepted", "ru")]

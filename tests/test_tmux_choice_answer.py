@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
 import pytest
@@ -34,6 +35,7 @@ def _app(*, pending: dict, get_session):
         ui_state=SimpleNamespace(pending_questions=pending, active_ask_question_by_chat={}),
         resolve_telegram_callback_scope=lambda _query: (100, None, 142987535, None),
         _clear_pending_question=_clear,
+        session_management=SimpleNamespace(reread_tmux_output=AsyncMock(return_value="started")),
     )
 
 
@@ -95,6 +97,7 @@ async def test_tmux_choice_click_feeds_owner_session_and_second_click_is_stale(m
 
     assert ok is True
     assert sent == [(session, "1")]
+    app.session_management.reread_tmux_output.assert_awaited_once()
     assert qid not in pending
     assert resolves == []
     assert query.edits == [t("msg.ask.choice_selected", "ru", answer="1. Yes")]
@@ -109,6 +112,7 @@ async def test_tmux_choice_click_feeds_owner_session_and_second_click_is_stale(m
 
     assert again is True
     assert sent == [(session, "1")]
+    app.session_management.reread_tmux_output.assert_awaited_once()
     assert query.edits[-1] == t("msg.input.question_stale", "ru")
 
 
@@ -236,6 +240,7 @@ def _other_app(pending, session, qid):
         ),
         telegram_ui_key=BotApp.telegram_ui_key,
         _clear_pending_question=_clear,
+        session_management=SimpleNamespace(reread_tmux_output=AsyncMock(return_value="started")),
     )
 
 
@@ -261,10 +266,11 @@ async def test_feed_tmux_other_answer_types_stored_number(monkeypatch):
     }
     app = _other_app(pending, session, qid)
 
-    result = await BotApp.feed_tmux_other_answer(app, 100, "Кухня мира", owner_chat_id=142987535)
+    result = await BotApp.feed_tmux_other_answer(app, 100, "Кухня мира", owner_chat_id=142987535, context=None)
 
     assert result == "accepted"
     assert sent == [(session, "Кухня мира", "5")]
+    app.session_management.reread_tmux_output.assert_awaited_once_with(session, None)
     assert qid not in pending
     assert qid in session._answered_tmux_choice_ids
 
@@ -288,9 +294,10 @@ async def test_feed_tmux_other_answer_keeps_question_when_send_fails(monkeypatch
     }
     app = _other_app(pending, session, qid)
 
-    result = await BotApp.feed_tmux_other_answer(app, 100, "Кухня мира", owner_chat_id=142987535)
+    result = await BotApp.feed_tmux_other_answer(app, 100, "Кухня мира", owner_chat_id=142987535, context=None)
 
     assert result == "failed"
+    app.session_management.reread_tmux_output.assert_not_awaited()
     assert qid in pending
     assert not getattr(session, "_answered_tmux_choice_ids", set())
 
@@ -308,7 +315,7 @@ async def test_feed_tmux_other_answer_ignores_plugin_question():
     }
     app = _other_app(pending, SimpleNamespace(id="s46"), qid)
 
-    result = await BotApp.feed_tmux_other_answer(app, 100, "свой текст", owner_chat_id=142987535)
+    result = await BotApp.feed_tmux_other_answer(app, 100, "свой текст", owner_chat_id=142987535, context=None)
 
     assert result == ""
     assert qid in pending

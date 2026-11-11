@@ -214,14 +214,19 @@ class FakeTmuxDriver:
 
     async def send_enter(self, pane_target):
         self.events.append("send_enter")
-        prompt = open(self.loaded_prompt_path, encoding="utf-8").read()
-        self.sent_prompts.append(prompt)
+        if self.events[-2:-1] != ["type_text"]:
+            prompt = open(self.loaded_prompt_path, encoding="utf-8").read()
+            self.sent_prompts.append(prompt)
         if not self.log_path:
             return
         with open(self.log_path, "a", encoding="utf-8") as handle:
             handle.write(f"{self.response_text}\n")
         if self.autowrite_transcript:
             self.write_transcript()
+
+    async def type_text(self, pane_target, text):
+        self.events.append("type_text")
+        self.sent_prompts.append(text)
 
     async def send_keys(self, pane_target, *keys):
         self.sent_key_sequences.append((pane_target, keys))
@@ -1922,7 +1927,7 @@ def _activate_tmux(backend, session, driver):
 
 
 @pytest.mark.asyncio
-async def test_send_other_text_pastes_when_field_is_already_open(tmp_path):
+async def test_send_other_text_types_when_field_is_already_open(tmp_path):
     driver = FakeTmuxDriver()
     driver.capture_outputs = [_OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "pasted"]
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
@@ -1933,11 +1938,12 @@ async def test_send_other_text_pastes_when_field_is_already_open(tmp_path):
 
     assert driver.sent_key_sequences == []
     assert driver.sent_prompts == ["Кухня мира"]
-    assert "paste_buffer" in driver.events
+    assert "type_text" in driver.events
+    assert "paste_buffer" not in driver.events
 
 
 @pytest.mark.asyncio
-async def test_send_other_text_opens_field_before_paste(tmp_path):
+async def test_send_other_text_opens_field_before_typing(tmp_path):
     driver = FakeTmuxDriver()
     menu = "5. Other\n6. Chat about this\nSelect with numbers [1-6]. Then Enter to submit:"
     driver.capture_outputs = [menu, _OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "pasted"]
@@ -1953,8 +1959,9 @@ async def test_send_other_text_opens_field_before_paste(tmp_path):
     assert driver.sent_key_sequences == [(paths["pane_target"], ("5",))]
     assert driver.sent_prompts[-1] == "Кухня мира"
     digit_enter = driver.events.index("send_enter")
-    paste_at = driver.events.index("paste_buffer")
-    assert digit_enter < paste_at
+    typed_at = driver.events.index("type_text")
+    assert digit_enter < typed_at
+    assert "paste_buffer" not in driver.events
 
 
 @pytest.mark.asyncio
@@ -1994,7 +2001,7 @@ class _OtherFieldDriver(FakeTmuxDriver):
 @pytest.mark.asyncio
 async def test_run_types_into_open_other_field_without_ready_prompt(tmp_path, monkeypatch):
     driver = _OtherFieldDriver()
-    driver.capture_outputs = [_OTHER_TEXT_PROMPT, "before", "after"]
+    driver.capture_outputs = [_OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "after"]
     driver.autowrite_transcript = True
 
     class SettledReader:
@@ -2029,6 +2036,8 @@ async def test_run_types_into_open_other_field_without_ready_prompt(tmp_path, mo
 
     assert driver.sent_prompts == ["Кухня мира"]
     assert driver.sent_key_sequences == []
+    assert "type_text" in driver.events
+    assert "paste_buffer" not in driver.events
     assert result.abnormal_stop is False
     assert result.diagnostics["completion_source"] == "transcript"
 
@@ -4400,3 +4409,90 @@ async def test_tmux_backend_captures_resume_token_split_across_reads(tmp_path):
         await asyncio.gather(streamer, return_exceptions=True)
 
     assert session.resume_token == "1234abcd-5678-9abc"
+
+
+@pytest.mark.asyncio
+async def test_send_other_text_fails_if_cli_keeps_field_open(tmp_path, monkeypatch):
+    driver = _OtherFieldDriver()
+    driver.capture_outputs = [_OTHER_TEXT_PROMPT, "", _OTHER_TEXT_PROMPT]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    monkeypatch.setattr(tmux_backend_module, "_OTHER_TEXT_WAIT_SEC", 0.05)
+
+    with pytest.raises(TmuxDriverError, match="not accepted"):
+        await backend.send_other_text(session, "Кухня мира", choice_number="5")
+
+    assert driver.sent_prompts == ["Кухня мира"]
+    assert "paste_buffer" not in driver.events
+
+
+@pytest.mark.asyncio
+async def test_other_text_capture_failure_does_not_fall_back_to_paste(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [_OTHER_TEXT_PROMPT]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    monkeypatch.setattr(tmux_backend_module, "_OTHER_TEXT_WAIT_SEC", 0.05)
+
+    async def capture(_pane_target):
+        if driver.capture_outputs:
+            return driver.capture_outputs.pop(0)
+        raise TmuxDriverError("capture failed")
+
+    driver.capture_pane = capture
+    with pytest.raises(TmuxDriverError, match="not accepted"):
+        await backend.send_other_text(session, "Ответ")
+    assert driver.sent_prompts == ["Ответ"]
+    assert "paste_buffer" not in driver.events
+
+
+@pytest.mark.asyncio
+async def test_cancelling_other_acceptance_wait_does_not_send_second_enter(tmp_path):
+    driver = _OtherFieldDriver()
+    driver.capture_outputs = []
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    waiting = asyncio.Event()
+
+    async def capture(_pane_target):
+        if "send_enter" in driver.events:
+            waiting.set()
+        return _OTHER_TEXT_PROMPT
+
+    driver.capture_pane = capture
+    task = asyncio.create_task(backend.send_other_text(session, "Ответ"))
+    await asyncio.wait_for(waiting.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert driver.events.count("send_enter") == 1
+
+
+@pytest.mark.asyncio
+async def test_cancelling_other_typing_finishes_answer_before_enter(tmp_path):
+    driver = _OtherFieldDriver()
+    driver.capture_outputs = []
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def type_text(_pane_target, text):
+        started.set()
+        await release.wait()
+        driver.events.append("type_text")
+        driver.sent_prompts.append(text)
+
+    driver.type_text = type_text
+    task = asyncio.create_task(backend.send_other_text(session, "Полный ответ"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert driver.sent_prompts == ["Полный ответ"]
+    assert driver.events[-2:] == ["type_text", "send_enter"]

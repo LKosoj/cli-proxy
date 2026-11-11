@@ -754,6 +754,9 @@ class TmuxExecutionBackend:
             # Снимок панели тоже внутри try: между ним и paste_buffer возможна
             # отмена, и без finally временный файл промпта остался бы на диске.
             pane_before = await self._capture_pane_text(session, paths) if ready_wait else None
+            if pane_before and _OTHER_TEXT_PROMPT_RE.search(pane_before):
+                await self._type_other_text(session, paths, prompt)
+                return
             await driver.load_buffer(prompt_path, buffer_name=buffer_name)
             buffer_loaded = True
             await driver.paste_buffer(paths["pane_target"], buffer_name=buffer_name, delete=True)
@@ -835,9 +838,9 @@ class TmuxExecutionBackend:
         return bool(pane and _OTHER_TEXT_PROMPT_RE.search(pane))
 
     async def send_other_text(self, session: Any, text: str, choice_number: str = "") -> None:
-        """Вписать текст в поле Other. Цифру пункта саму по себе не оставляем.
+        """Набрать текст в поле Other. Цифру пункта саму по себе не оставляем.
 
-        Если поле уже открыто, вставляем текст и Enter. Иначе сначала цифра,
+        Если поле уже открыто, набираем текст и Enter. Иначе сначала цифра,
         и только после появления поля — текст. Нет поля — в меню цифр не вставляем.
         """
 
@@ -861,17 +864,30 @@ class TmuxExecutionBackend:
                 if not await self._other_text_prompt_opened(session, paths):
                     raise TmuxDriverError("tmux other text field did not open")
 
-            await self._deliver_prompt(
-                session,
-                paths,
-                prompt,
-                buffer_name=f"cli-proxy-other-{_new_request_id()}",
-                ready_wait_sec=_OTHER_TEXT_WAIT_SEC,
-            )
+            await self._type_other_text(session, paths, prompt)
             state = self._read_state(paths)
             if self._has_active_runtime_state(session, state):
                 state["last_activity_at"] = time.time()
                 self._write_state(paths, state)
+
+    async def _type_other_text(self, session: Any, paths: dict[str, str], prompt: str) -> None:
+        driver = self._driver(session)
+        typing = asyncio.create_task(driver.type_text(paths["pane_target"], prompt))
+        try:
+            await asyncio.shield(typing)
+        except asyncio.CancelledError:
+            # Завершить набор перед Enter, чтобы в поле не остался обрывок ответа.
+            await typing
+            await driver.send_enter(paths["pane_target"])
+            raise
+        await driver.send_enter(paths["pane_target"])
+        deadline = time.time() + _OTHER_TEXT_WAIT_SEC
+        while time.time() < deadline:
+            pane = await self._capture_pane_text(session, paths)
+            if pane and pane.strip() and not _OTHER_TEXT_PROMPT_RE.search(pane):
+                return
+            await asyncio.sleep(min(self.poll_interval_sec, 0.25))
+        raise TmuxDriverError("tmux other text was not accepted")
 
     async def _other_text_prompt_opened(self, session: Any, paths: dict[str, str]) -> bool:
         deadline = time.time() + _OTHER_TEXT_WAIT_SEC

@@ -308,6 +308,7 @@ class MessageProcessor:
             fed = await feeder(
                 route_ui_chat_id,
                 text or "",
+                context=context,
                 message_thread_id=route_thread_id,
                 owner_chat_id=owner_chat_id,
             )

@@ -1088,6 +1088,7 @@ class InputDispatchService:
             dest=dest,
             chat_id=chat_id,
         )
+        await self.bot_app.session_management.reread_tmux_output(session, context)
         return True
 
     async def handle_cli_input(

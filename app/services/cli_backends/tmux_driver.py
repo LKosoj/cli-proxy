@@ -179,6 +179,11 @@ class TmuxDriver:
             return
         await self.run("delete-buffer", "-b", str(buffer_name), check=False)
 
+    async def type_text(self, pane_target: str, text: str) -> None:
+        """Поле Other принимает отдельные клавиши, но не вставку текста."""
+        for char in text:
+            await self.run("send-keys", "-t", pane_target, "-l", "--", char)
+
     async def send_enter(self, pane_target: str) -> None:
         await self.run("send-keys", "-t", pane_target, "Enter")
 

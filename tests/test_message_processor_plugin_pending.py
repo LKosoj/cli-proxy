@@ -207,7 +207,7 @@ async def test_tmux_other_text_is_accepted_before_a_new_prompt() -> None:
     buffer_calls: list[str] = []
     resolve_calls: list[str] = []
 
-    async def _feed(_chat_id, text, message_thread_id=None, owner_chat_id=None):
+    async def _feed(_chat_id, text, *, context, message_thread_id=None, owner_chat_id=None):
         assert text == "Кухня мира"
         assert owner_chat_id == 1001
         assert message_thread_id is None

@@ -1524,6 +1524,7 @@ class BotApp:
         chat_id: int,
         text: str,
         *,
+        context,
         message_thread_id: Optional[int] = None,
         owner_chat_id: Optional[int] = None,
     ) -> str:
@@ -1577,6 +1578,7 @@ class BotApp:
             logging.getLogger("bot.ask").exception("failed to feed tmux other text")
             return "failed"
         self._clear_pending_question(active_qid)
+        await self.session_management.reread_tmux_output(session, context)
         return "accepted"
 
     def _should_accept_implicit_analyst_text_answer(self, chat_id: int, session_id: str) -> bool:
