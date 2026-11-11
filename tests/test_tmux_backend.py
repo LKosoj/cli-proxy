@@ -3727,7 +3727,7 @@ async def test_tmux_backend_recovers_late_structured_completion_from_failed_stat
         paths,
         {
             "request_id": request_id,
-            "started_at": 10.0,
+            "started_at": time.time() - 1,
             "offset": 0,
             "prompt": "original prompt",
             "dest": {"kind": "telegram", "chat_id": 42},
@@ -4499,7 +4499,7 @@ async def test_cancelling_other_typing_finishes_answer_before_enter(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["pane", "log", "transcript"])
+@pytest.mark.parametrize("change", ["menu", "transcript"])
 async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatch, change):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver)
@@ -4516,6 +4516,8 @@ async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatc
         transcript_locator=TranscriptLocator(provider="claude", path=str(transcript), start_offset=3),
     )
 
+    backend._write_last_request(paths, {"request_id": "observe", "started_at": time.time(), "transcript_path": str(transcript)})
+
     async def observe(_session):
         return request
 
@@ -4524,7 +4526,9 @@ async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatc
 
     async def capture(_target):
         captured.set()
-        return "new pane" if change == "pane" and log.read_text() != "old" else "old pane"
+        if change == "menu" and log.read_text() != "old":
+            return "Choose\n1. Yes\n2. No\nSelect with numbers [1-2]. Then Enter to submit:"
+        return "old pane"
 
     driver.capture_pane = capture
     task = asyncio.create_task(backend.wait_for_output(session))
@@ -4535,8 +4539,8 @@ async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatc
         transcript.write_text("old new", encoding="utf-8")
     else:
         log.write_text("old new", encoding="utf-8")
-        if change == "pane":
-            # Смена кадра без роста журнала тоже должна разбудить монитор.
+        if change == "menu":
+            # Новый вопрос выбора виден на экране, но отсутствует в JSONL.
             log.write_text("new", encoding="utf-8")
     result = await asyncio.wait_for(task, timeout=2)
     assert result is request
@@ -4551,7 +4555,8 @@ async def test_idle_tmux_wait_stops_for_new_run_or_closed_pane(tmp_path, monkeyp
     backend = TmuxExecutionBackend(driver=driver)
     session = _session(tmp_path)
     session.busy = busy
-    _activate_tmux(backend, session, driver)
+    paths = _activate_tmux(backend, session, driver)
+    backend._write_last_request(paths, {"request_id": "observe", "started_at": time.time()})
     request = tmux_backend_module.TmuxRecoveryRequest(
         request_id="observe", started_at=time.time(), offset=0, prompt="", dest={}, observe=True,
     )
@@ -4573,9 +4578,17 @@ async def test_idle_watch_keeps_output_written_during_final_delivery(tmp_path):
     session.busy = False
     paths = _activate_tmux(backend, session, driver)
     Path(paths["pane_log"]).write_text("old new", encoding="utf-8")
-    backend._write_last_request(paths, {"request_id": "done", "delivery_state": "delivered"})
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("old new", encoding="utf-8")
+    backend._write_last_request(paths, {
+        "request_id": "done", "delivery_state": "delivered", "started_at": time.time(),
+        "transcript_path": str(transcript), "transcript_provider": "claude", "transcript_offset": 0,
+    })
     state = backend._read_state(paths)
-    state.update(observed_request_id="done", observed_pane_offset=3)
+    state.update(
+        observed_request_id="done", observed_pane_offset=3,
+        observed_transcript_path=str(transcript), observed_transcript_offset=3,
+    )
     backend._write_state(paths, state)
 
     request = await asyncio.wait_for(backend.wait_for_output(session), timeout=2)
@@ -4622,7 +4635,7 @@ async def test_cancelled_monitor_saves_cursor_before_idle_watch(tmp_path, monkey
     session._preserve_tmux_on_shutdown = True
     paths = _activate_tmux(backend, session, driver)
     Path(paths["pane_log"]).write_text("new answer", encoding="utf-8")
-    backend._write_last_request(paths, {"request_id": "cancelled", "delivery_state": "delivered"})
+    backend._write_last_request(paths, {"request_id": "cancelled", "delivery_state": "delivered", "started_at": time.time()})
     request = tmux_backend_module.TmuxRecoveryRequest(
         request_id="cancelled", started_at=time.time(), offset=0, prompt="", dest={},
     )
@@ -4657,7 +4670,7 @@ async def test_cancelled_monitor_saves_cursor_before_idle_watch(tmp_path, monkey
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cli_name", ["claude", "codex"])
-async def test_explicit_reread_includes_existing_claude_reply_but_preserves_codex(tmp_path, cli_name):
+async def test_explicit_reread_reads_saved_reply_for_claude_and_codex(tmp_path, cli_name):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver)
     session = _session(tmp_path)
@@ -4676,25 +4689,24 @@ async def test_explicit_reread_includes_existing_claude_reply_but_preserves_code
 
     assert request.observe is True
     assert request.offset == len("old pane")
-    if cli_name == "claude":
-        assert request.started_at == 10.0
-        assert request.transcript_locator.start_offset == 2
-    else:
-        assert request.transcript_locator.start_offset == transcript.stat().st_size
-        assert request.started_at > 10.0
+    assert request.started_at == 10.0
+    assert request.transcript_locator.start_offset == 2
     background_request = await backend.build_observe_request(session)
     assert background_request.transcript_locator.start_offset == transcript.stat().st_size
 
 
 @pytest.mark.asyncio
-async def test_claude_reread_shows_latest_saved_reply_without_new_output(tmp_path):
+@pytest.mark.parametrize("cli_name", ["claude", "codex"])
+async def test_reread_shows_latest_saved_reply_without_new_output(tmp_path, cli_name):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, answer_idle_sec=0.05)
     session = _session(tmp_path)
+    session.cli.active_cli = cli_name
+    session.tool.name = cli_name
     paths = _activate_tmux(backend, session, driver)
     Path(paths["pane_log"]).write_text("", encoding="utf-8")
     transcript = _write_cli_transcript(
-        cli="claude", workdir=session.workdir, session_id="claude-thread", text="Последний ответ агента",
+        cli=cli_name, workdir=session.workdir, session_id="claude-thread", text="Последний ответ агента",
     )
     records = transcript.read_text(encoding="utf-8")
     previous = {
@@ -4704,7 +4716,7 @@ async def test_claude_reread_shows_latest_saved_reply_without_new_output(tmp_pat
     transcript.write_text(json.dumps(previous) + "\n" + records, encoding="utf-8")
     backend._write_last_request(paths, {
         "request_id": "done", "started_at": time.time() - 120, "delivery_state": "delivered",
-        "transcript_provider": "claude", "transcript_path": str(transcript), "transcript_offset": 0,
+        "transcript_provider": cli_name, "transcript_path": str(transcript), "transcript_offset": 0,
         "transcript_session_id": "claude-thread",
     })
     before = transcript.stat().st_size
@@ -4721,4 +4733,251 @@ async def test_claude_reread_shows_latest_saved_reply_without_new_output(tmp_pat
     finally:
         if not monitor.done():
             monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reader_available", [False, True])
+async def test_observe_never_delivers_terminal_history_without_new_assistant_record(tmp_path, monkeypatch, reader_available):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, answer_idle_sec=0.02, quiet_timeout_sec=0.06)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("Старый ответ\nИстория давно завершённой работы\n", encoding="utf-8")
+
+    class Reader:
+        locator = None
+
+        def poll(self):
+            return TranscriptPollResult(available=True, recognized=True)
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: Reader() if reader_available else None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="old", started_at=time.time(), offset=0, prompt="", dest={}, observe=True,
+    )
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=1)
+    assert result.text == ""
+    assert not getattr(session, "last_assistant_text_value", "")
+
+
+def test_monitoring_activity_ignores_fresh_redraw_of_old_transcript(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("fresh redraw", encoding="utf-8")
+    transcript = tmp_path / "old.jsonl"
+    transcript.write_text("old", encoding="utf-8")
+    old = time.time() - 3601
+    os.utime(transcript, (old, old))
+    backend._write_last_request(paths, {"request_id": "old", "started_at": old, "transcript_path": str(transcript)})
+    assert backend.has_recent_activity(session) is False
+    backend.record_input_activity(session)
+    assert backend.has_recent_activity(session) is True
+
+
+@pytest.mark.asyncio
+async def test_monitor_detaches_after_inactivity_without_ctrl_c_or_final_reply(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=100, answer_idle_sec=100)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("old answer", encoding="utf-8")
+    monkeypatch.setattr(tmux_backend_module, "_MONITOR_INACTIVITY_SEC", 0.04, raising=False)
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="old", started_at=time.time(), offset=0, prompt="", dest={}, observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(monitor, timeout=0.5)
+    assert driver.sent_ctrl_c is False
+    assert paths["session_name"] in driver.sessions
+    assert backend._read_state(paths)["state"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_idle_watch_ignores_redraw_until_transcript_grows(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = False
+    paths = _activate_tmux(backend, session, driver)
+    log = Path(paths["pane_log"])
+    log.write_text("old", encoding="utf-8")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("old", encoding="utf-8")
+    backend._write_last_request(paths, {
+        "request_id": "done", "started_at": time.time(), "delivery_state": "delivered",
+        "transcript_provider": "codex", "transcript_path": str(transcript), "transcript_offset": 0,
+    })
+    ready = asyncio.Event()
+
+    async def capture(_target):
+        ready.set()
+        return "Перерисовка старого ответа" if log.read_text() != "old" else "old pane"
+
+    driver.capture_pane = capture
+    watcher = asyncio.create_task(backend.wait_for_output(session))
+    try:
+        await asyncio.wait_for(ready.wait(), timeout=1)
+        log.write_text("redraw old history", encoding="utf-8")
+        await asyncio.sleep(1.1)
+        assert not watcher.done()
+        transcript.write_text("old new assistant response", encoding="utf-8")
+        request = await asyncio.wait_for(watcher, timeout=2)
+        assert request.transcript_locator.start_offset == len("old")
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)
+
+
+@pytest.mark.parametrize("age,expected", [(3599, True), (3600, False), (3601, False)])
+def test_monitor_activity_hour_boundary_ignores_monitor_start_timestamp(tmp_path, monkeypatch, age, expected):
+    backend = TmuxExecutionBackend(driver=FakeTmuxDriver())
+    session = _session(tmp_path)
+    paths = backend.paths(session)
+    now = time.time()
+    backend._write_last_request(paths, {"request_id": "old", "started_at": now - age})
+    backend._write_state(paths, {"state": "active", "last_activity_at": now})
+    monkeypatch.setattr(tmux_backend_module.time, "time", lambda: now)
+    assert backend.has_recent_activity(session) is expected
+
+
+@pytest.mark.asyncio
+async def test_idle_wait_expires_without_any_terminal_reads_after_hour(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = False
+    paths = _activate_tmux(backend, session, driver)
+    backend._write_last_request(paths, {"request_id": "recent", "started_at": time.time()})
+    monkeypatch.setattr(tmux_backend_module, "_MONITOR_INACTIVITY_SEC", 0.1)
+    assert await asyncio.wait_for(backend.wait_for_output(session), timeout=2) is None
+    assert driver.sent_ctrl_c is False
+    assert driver.capture_calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prompt", ["Choose\n1. Yes\n2. No\nSelect with numbers [1-2]. Then Enter to submit:", _OTHER_TEXT_PROMPT])
+async def test_waiting_for_number_or_other_expires_without_ctrl_c(tmp_path, monkeypatch, prompt):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=100, answer_idle_sec=100)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text(prompt, encoding="utf-8")
+    monkeypatch.setattr(tmux_backend_module, "_MONITOR_INACTIVITY_SEC", 0.08)
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="waiting", started_at=time.time(), offset=0, prompt="", dest={"kind": "telegram", "chat_id": 42}, observe=True,
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(backend.recover(session, request), timeout=0.5)
+    assert driver.sent_ctrl_c is False
+    assert paths["session_name"] in driver.sessions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial_redraw", [False, True])
+async def test_recovering_old_menu_does_not_restart_inactivity_clock(tmp_path, monkeypatch, partial_redraw):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=10000, answer_idle_sec=10000)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    paths = _activate_tmux(backend, session, driver)
+    menu = "Choose\n1. Yes\n2. No\nSelect with numbers [1-2]. Then Enter to submit:"
+    Path(paths["pane_log"]).write_text("" if partial_redraw else menu, encoding="utf-8")
+    driver.capture_outputs = [menu]
+    clock = [time.time()]
+    old = clock[0] - 3599
+    backend._write_last_request(paths, {"request_id": "old", "started_at": old})
+    monkeypatch.setattr(tmux_backend_module.time, "time", lambda: clock[0])
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="old", started_at=old, offset=0, prompt="", dest={"kind": "telegram", "chat_id": 42}, observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        if partial_redraw:
+            await asyncio.sleep(0.03)
+            Path(paths["pane_log"]).write_text(menu, encoding="utf-8")
+        await asyncio.wait_for(_wait_for_preview(session), timeout=1)
+        assert "last_cli_activity_at" not in backend._read_state(paths)
+        clock[0] += 2
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(monitor, timeout=1)
+        assert driver.sent_ctrl_c is False
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_redrawing_same_choice_does_not_wake_watch_or_refresh_activity(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = False
+    paths = _activate_tmux(backend, session, driver)
+    backend._write_last_request(paths, {"request_id": "old", "started_at": time.time()})
+    menu = "Choose\n1. Yes\n2. No\nSelect with numbers [1-2]. Then Enter to submit:"
+    ready = asyncio.Event()
+
+    async def capture(_target):
+        if not ready.is_set():
+            ready.set()
+            return menu
+        return menu + "\n"
+
+    driver.capture_pane = capture
+    watcher = asyncio.create_task(backend.wait_for_output(session))
+    try:
+        await asyncio.wait_for(ready.wait(), timeout=1)
+        await asyncio.sleep(1.1)
+        assert not watcher.done()
+        assert "last_cli_activity_at" not in backend._read_state(paths)
+        monkeypatch.setattr(tmux_backend_module, "_MONITOR_INACTIVITY_SEC", 0)
+        assert await asyncio.wait_for(watcher, timeout=2) is None
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_partial_option_list_does_not_extend_monitoring(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=10000, answer_idle_sec=10000)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    paths = _activate_tmux(backend, session, driver)
+    full = "Choose\n1. Yes\n2. No\n3. Other\nSelect with numbers [1-3]. Then Enter to submit:"
+    partial = "Choose\n1. Yes\n2. No\nSelect with numbers [1-3]. Then Enter to submit:"
+    log = Path(paths["pane_log"])
+    log.write_text(full, encoding="utf-8")
+    driver.capture_outputs = [full]
+    clock = [time.time()]
+    old = clock[0] - 3599
+    backend._write_last_request(paths, {"request_id": "old", "started_at": old})
+    monkeypatch.setattr(tmux_backend_module.time, "time", lambda: clock[0])
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="old", started_at=old, offset=0, prompt="", dest={"kind": "telegram", "chat_id": 42}, observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        await asyncio.wait_for(_wait_for_preview(session), timeout=1)
+        for frame in (partial, full):
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write("\x1b[2J\x1b[H" + frame)
+            await asyncio.sleep(0.06)
+            assert "last_cli_activity_at" not in backend._read_state(paths)
+        clock[0] += 2
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(monitor, timeout=1)
+    finally:
+        monitor.cancel()
         await asyncio.gather(monitor, return_exceptions=True)

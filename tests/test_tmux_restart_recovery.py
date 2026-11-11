@@ -309,6 +309,7 @@ async def test_recovery_run_is_marked_as_such_in_log(monkeypatch, caplog):
 async def test_startup_reconciliation_schedules_all_supported_tmux_clis(monkeypatch):
     events: list[tuple] = []
     service = _run_service(events)
+    monkeypatch.setattr(TmuxExecutionBackend, "has_recent_activity", lambda *_args: True)
     sessions = {}
     for cli_name in ("claude", "codex", "grok", "qwen"):
         session = _recovery_session()
@@ -361,6 +362,7 @@ async def test_startup_reconciliation_schedules_all_supported_tmux_clis(monkeypa
 async def test_startup_reconciliation_observes_only_live_panes(monkeypatch):
     events: list[tuple] = []
     service = _run_service(events)
+    monkeypatch.setattr(TmuxExecutionBackend, "has_recent_activity", lambda *_args: True)
     sessions = {}
     for session_id in ("s-live", "s-idle"):
         session = _recovery_session()
@@ -739,6 +741,7 @@ async def test_idle_tmux_watch_is_registered_for_session_cancellation(monkeypatc
 @pytest.mark.asyncio
 async def test_startup_arms_watch_for_quiet_tmux_session(monkeypatch):
     service = _run_service([])
+    monkeypatch.setattr(TmuxExecutionBackend, "has_recent_activity", lambda *_args: True)
     session = _recovery_session()
     service.bot_app.manager = SimpleNamespace(sessions_by_chat={42: {session.id: session}})
     watched = []
@@ -761,6 +764,7 @@ async def test_reread_uses_existing_reply_only_for_manual_request(monkeypatch, m
     service = _run_service([])
     session = _recovery_session()
     calls = []
+    interactions = []
     request = TmuxRecoveryRequest(
         request_id="existing", started_at=10, offset=0, prompt="", dest={}, observe=True,
     )
@@ -781,10 +785,49 @@ async def test_reread_uses_existing_reply_only_for_manual_request(monkeypatch, m
     monkeypatch.setattr(TmuxExecutionBackend, "build_reread_request", existing)
     monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", observe)
     monkeypatch.setattr(service, "_start_tmux_recovery", lambda *_args: True)
+    monkeypatch.setattr(TmuxExecutionBackend, "record_input_activity", lambda *_args: interactions.append(True))
     context = object()
     if manual:
         result = await service.reread_tmux_output(session, context, include_existing=True)
     else:
         result = await service.reread_tmux_output(session, context)
+    assert interactions == ([True] if manual else [])
     assert result == "started"
     assert calls == (["existing"] if manual else ["new_only"])
+
+
+@pytest.mark.asyncio
+async def test_startup_skips_hour_old_session_before_any_recovery(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    service.bot_app.manager = SimpleNamespace(sessions_by_chat={42: {session.id: session}})
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+    monkeypatch.setattr(TmuxExecutionBackend, "has_recent_activity", lambda *_args: False, raising=False)
+
+    async def forbidden(*_args, **_kwargs):
+        pytest.fail("stale session must not be read during startup")
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", forbidden)
+    assert await service.recover_tmux_sessions(object()) == 0
+    assert not hasattr(session, "_tmux_output_watch_task")
+
+
+@pytest.mark.asyncio
+async def test_inactivity_detach_does_not_deliver_or_drain_queue(monkeypatch):
+    events = []
+    service = _run_service(events)
+    session = _recovery_session()
+
+    async def detached(_request):
+        raise asyncio.CancelledError("one hour of inactivity")
+
+    session.recover_tmux_request = detached
+    monkeypatch.setattr(service, "_watch_idle_tmux", lambda *_args: None)
+    request = TmuxRecoveryRequest(
+        request_id="recover-codex", started_at=10, offset=0, prompt="", dest={"kind": "telegram", "chat_id": 42},
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await service.run_prompt(session, "", request.dest, object(), recovery_request=request)
+    assert events == []
+    assert len(session.queue) == 1
+    assert session.busy is False

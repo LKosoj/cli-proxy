@@ -46,6 +46,7 @@ _PANE_LOG_MAX_BYTES = 16_000_000
 # просто ждёт ввода, а кнопка «в текущую tmux-сессию» уводила бы запрос мимо
 # обычного запуска с отслеживанием ответа.
 _OBSERVE_ACTIVITY_WINDOW_SEC = 30.0
+_MONITOR_INACTIVITY_SEC = 3600.0
 _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--resume", "-r", "--continue", "-c"},
     "gemini": {"--resume", "-r"},
@@ -691,6 +692,38 @@ class TmuxExecutionBackend:
                 continue
         return False
 
+    def _last_real_activity_at(self, session: Any) -> float:
+        paths = self.paths(session)
+        payload = self._read_last_request(paths)
+        state = self._read_state(paths)
+        activity_at = max(float(payload.get("started_at") or 0), float(state.get("last_cli_activity_at") or 0))
+        transcript_path = str(payload.get("transcript_path") or "")
+        watched = [Path(transcript_path)] if transcript_path else []
+        if transcript_path and payload.get("transcript_provider") == "claude":
+            transcript = Path(transcript_path)
+            watched.extend((transcript.parent / transcript.stem / "subagents").glob("*.jsonl"))
+        elif transcript_path and payload.get("transcript_provider") == "kimi":
+            agents_dir = Path(transcript_path).parent.parent
+            if agents_dir.name == "agents":
+                watched.extend(agents_dir.glob("*/wire.jsonl"))
+        for path in watched:
+            try:
+                activity_at = max(activity_at, path.stat().st_mtime)
+            except OSError:
+                logger.debug("tmux activity probe failed path=%s", path, exc_info=True)
+        return activity_at
+
+    def has_recent_activity(self, session: Any) -> bool:
+        return time.time() - self._last_real_activity_at(session) < _MONITOR_INACTIVITY_SEC
+
+    def record_input_activity(self, session: Any) -> None:
+        paths = self.paths(session)
+        state = self._read_state(paths)
+        state["last_cli_activity_at"] = time.time()
+        if self._has_active_runtime_state(session, state):
+            state["last_activity_at"] = state["last_cli_activity_at"]
+        self._write_state(paths, state)
+
     async def can_accept_input(self, session: Any) -> bool:
         """Можно ли дописать текст в pane прямо сейчас.
 
@@ -803,10 +836,7 @@ class TmuxExecutionBackend:
                 ready_wait_sec=3.0,
             )
 
-            state = self._read_state(paths)
-            if self._has_active_runtime_state(session, state):
-                state["last_activity_at"] = time.time()
-                self._write_state(paths, state)
+            self.record_input_activity(session)
 
     async def send_choice(self, session: Any, choice: str) -> None:
         """Send a TUI choice as key events, not as pasted text.
@@ -827,10 +857,7 @@ class TmuxExecutionBackend:
             await self._driver(session).send_keys(paths["pane_target"], *value)
             await self._driver(session).send_enter(paths["pane_target"])
 
-            state = self._read_state(paths)
-            if self._has_active_runtime_state(session, state):
-                state["last_activity_at"] = time.time()
-                self._write_state(paths, state)
+            self.record_input_activity(session)
 
     async def pane_is_other_text_prompt(self, session: Any) -> bool:
         paths = self.paths(session)
@@ -865,10 +892,7 @@ class TmuxExecutionBackend:
                     raise TmuxDriverError("tmux other text field did not open")
 
             await self._type_other_text(session, paths, prompt)
-            state = self._read_state(paths)
-            if self._has_active_runtime_state(session, state):
-                state["last_activity_at"] = time.time()
-                self._write_state(paths, state)
+            self.record_input_activity(session)
 
     async def _type_other_text(self, session: Any, paths: dict[str, str], prompt: str) -> None:
         driver = self._driver(session)
@@ -1353,6 +1377,9 @@ class TmuxExecutionBackend:
 
     async def wait_for_output(self, session: Any) -> Optional[TmuxRecoveryRequest]:
         """Дождаться нового вывода живой панели, сохранив позицию до изменения."""
+        if not self.has_recent_activity(session):
+            logger.info("tmux watch skipped after one hour without activity session_id=%s", getattr(session, "id", "?"))
+            return None
         request = await self.build_observe_request(session)
         if request is None:
             return None
@@ -1380,8 +1407,10 @@ class TmuxExecutionBackend:
             # Новый запрос уже имеет собственное чтение вывода.
             if getattr(session, "busy", False):
                 return None
+            if not self.has_recent_activity(session):
+                logger.info("tmux watch stopped after one hour without activity session_id=%s", getattr(session, "id", "?"))
+                return None
             pane = await self._capture_pane_text(session, paths)
-            log_changed = os.path.exists(paths["pane_log"]) and os.path.getsize(paths["pane_log"]) != request.offset
             locator = request.transcript_locator
             transcript_changed = bool(
                 locator and os.path.exists(locator.path) and (
@@ -1389,17 +1418,39 @@ class TmuxExecutionBackend:
                     or (locator.provider == "gemini" and os.path.getmtime(locator.path) != transcript_mtime)
                 )
             )
-            if log_changed or transcript_changed or (pane and pane_before is not None and pane != pane_before):
+            if transcript_changed:
+                logger.info("tmux watch woke on transcript session_id=%s request_id=%s", getattr(session, "id", "?"), request.request_id)
                 return request
+            if pane and pane_before is not None and pane != pane_before:
+                from sessions.session_run_service import SessionRunService
+
+                if SessionRunService._is_cli_choice_question(pane) or _OTHER_TEXT_PROMPT_RE.search(pane):
+                    current_other = _OTHER_TEXT_PROMPT_RE.search(pane)
+                    previous_other = _OTHER_TEXT_PROMPT_RE.search(pane_before)
+                    if current_other and previous_other and current_other.group() == previous_other.group():
+                        continue
+                    current_question, current_options = SessionRunService._parse_cli_choice_question(pane)
+                    previous_question, previous_options = SessionRunService._parse_cli_choice_question(pane_before)
+                    # Неполный список вариантов при redraw — всё ещё прежний вопрос.
+                    if previous_options and " ".join(current_question.split()) == " ".join(previous_question.split()):
+                        continue
+                    logger.info("tmux watch woke on choice session_id=%s request_id=%s", getattr(session, "id", "?"), request.request_id)
+                    state = self._read_state(paths)
+                    state["last_cli_activity_at"] = time.time()
+                    self._write_state(paths, state)
+                    return request
             if pane_before is None and pane:
                 pane_before = pane
 
     async def build_reread_request(self, session: Any) -> Optional[TmuxRecoveryRequest]:
-        """Перечитать последний ответ Claude, затем следить за продолжением."""
+        """Перечитать сохранённый ответ, затем следить за продолжением."""
         request = await self.build_observe_request(session)
-        if request is None or self._interactive_cli_name(session) != "claude":
+        if request is None:
+            return None
+        paths = self.paths(session)
+        if self._interactive_cli_name(session) not in {"claude", "codex"}:
             return request
-        payload = self._read_last_request(self.paths(session))
+        payload = self._read_last_request(paths)
         return replace(
             request,
             started_at=float(payload.get("started_at") or request.started_at),
@@ -1514,6 +1565,12 @@ class TmuxExecutionBackend:
         log_path = paths["pane_log"]
         last_size = request.offset
         last_change = time.time()
+        last_real_activity = self._last_real_activity_at(session) or request.started_at
+        from sessions.session_run_service import SessionRunService as _SRS
+
+        initial_pane = await self._capture_pane_text(session, paths) or ""
+        question, options = _SRS._parse_cli_choice_question(initial_pane)
+        last_question = " ".join(question.split()) if options else ""
         pane_stream = _PaneStream(log_path, request.request_id, offset=request.offset)
         pane_latest_text = ""
         # Диагностика: последний статус из OSC-заголовка панели и число
@@ -1771,14 +1828,19 @@ class TmuxExecutionBackend:
                         complete = True
                         completion_source = "transcript"
 
-                latest_text = transcript_latest_text or pane_latest_text
+                last_real_activity = max(last_real_activity, self._last_real_activity_at(session))
+                if last_read_at - last_real_activity >= _MONITOR_INACTIVITY_SEC:
+                    latest_text = ""
+                    complete = True
+                    completion_source = "monitor-idle-timeout"
+                    break
+                # Перерисованный терминал содержит историю, а не новый ответ.
+                latest_text = transcript_latest_text if request.observe else (transcript_latest_text or pane_latest_text)
                 # Меню ищется на текущем экране: в события транскрипта его нет,
                 # а копия в истории прокрутки уже не ждёт ответа.
                 # Найденный блок становится текстом превью, ход при этом не закрывается.
                 awaiting_choice = False
                 try:
-                    # Local import avoids any potential circular at module load time.
-                    from sessions.session_run_service import SessionRunService as _SRS
                     choice_in_pane = _SRS._is_cli_choice_question(pane_for_choice)
                     choice_in_transcript = _SRS._is_cli_choice_question(transcript_latest_text or "")
                     if choice_in_pane:
@@ -1795,6 +1857,13 @@ class TmuxExecutionBackend:
                                 pane_options,
                                 _SRS._claude_other_choice_number(pane_for_choice),
                             )
+                            question = " ".join(pane_question.split())
+                            if question != last_question:
+                                last_question = question
+                                last_real_activity = time.time()
+                                state = self._read_state(paths)
+                                state["last_cli_activity_at"] = last_real_activity
+                                self._write_state(paths, state)
                         elif not transcript_authoritative:
                             latest_text = pane_for_choice or latest_text
                     awaiting_choice = choice_in_pane or choice_in_transcript
@@ -1928,6 +1997,9 @@ class TmuxExecutionBackend:
             latest_title_status or "none",
             total_bell_count,
         )
+        if completion_source == "monitor-idle-timeout":
+            # Остановить только чтение: вне обработчика отмены, который шлёт Ctrl+C.
+            raise asyncio.CancelledError("tmux monitoring stopped after one hour of inactivity")
         return ExecutionResult(
             text=latest_text.strip(),
             backend=self.name,

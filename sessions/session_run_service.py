@@ -373,6 +373,9 @@ class SessionRunService:
                     continue
                 backend = TmuxExecutionBackend()
                 try:
+                    if not backend.has_recent_activity(session):
+                        _log.info("tmux startup skipped inactive session=%s", getattr(session, "id", "?"))
+                        continue
                     request = await backend.get_recovery_request(session)
                     if request is None:
                         # Свой запрос бот закрыл до перезапуска, но CLI в pane
@@ -459,6 +462,8 @@ class SessionRunService:
             return "failed"
         if request is None:
             return "no_request"
+        if include_existing:
+            backend.record_input_activity(session)
         await self._detach_tmux_monitor(session)
         # Вопрос с кнопками отправляется один раз на кадр TUI: без сброса тот же
         # кадр после перечитывания будет молча подавлен как дубль.
