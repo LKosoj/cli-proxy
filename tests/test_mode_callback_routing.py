@@ -1587,6 +1587,87 @@ def test_send_current_tmux_callback_keeps_pending_when_session_disappears():
     assert app.sent[-1] == (1, InputDispatchService.queue_confirm_prompt_text())
 
 
+def test_send_current_tmux_callback_rejects_text_while_choice_menu_is_open(monkeypatch):
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+    from i18n import t
+
+    tool = types.SimpleNamespace(
+        name="claude",
+        mode="interactive",
+        execution_backends=["tmux"],
+        default_execution_backend="tmux",
+    )
+    session = types.SimpleNamespace(
+        id="s46",
+        active_mode="agent",
+        busy=True,
+        queue=[],
+        tool=tool,
+        cli=types.SimpleNamespace(active_cli="claude"),
+        config=types.SimpleNamespace(tools={"claude": tool}, defaults=types.SimpleNamespace()),
+        conversation_scope=types.SimpleNamespace(session_uid="thread:142987535:510528"),
+    )
+    app = _FakeBotApp(session)
+    pending = app.input_dispatch_service._build_pending_input(
+        session=session,
+        text="почини тест",
+        chat_id=1,
+        dest={"kind": "telegram", "chat_id": 1},
+        image_path=None,
+        image_paths=None,
+        action=InputDispatchService.PENDING_ACTION_TMUX_QUEUE_CONFIRM,
+    )
+    ui_key = TelegramUiKey.from_parts(1)
+    app.ui_state.pending[ui_key] = deque([pending])
+    asked = []
+
+    async def _send_ask_question(
+        _context,
+        chat_id,
+        session_id,
+        question_id,
+        question,
+        options,
+        allow_custom=True,
+        system_options=True,
+        message_thread_id=None,
+    ):
+        asked.append(list(options))
+
+    async def _capture(_self, _session, _paths):
+        return (
+            "Questions: 3+ говорят\n"
+            "1. Разрешить, показывать всех\n"
+            "2. Предпочитать окна с двумя\n"
+            "3. Other\n"
+            "4. Chat about this\n"
+            "Select with numbers [1-4]. Then Enter to submit or Escape to cancel:\n"
+        )
+
+    async def _send_input(_self, _session, _text):
+        raise AssertionError("choice menu must not receive pasted text")
+
+    app._send_ask_question = _send_ask_question
+    monkeypatch.setattr(TmuxExecutionBackend, "_capture_pane_text", _capture)
+    monkeypatch.setattr(TmuxExecutionBackend, "send_input", _send_input)
+    handler = CallbackHandler(app)
+    edited = []
+
+    async def _fake_edit_msg(_context, _query, text, *, reply_markup=None, md2=True):
+        _ = reply_markup, md2
+        edited.append(str(text or ""))
+        return True
+
+    handler._edit_msg = _fake_edit_msg
+    update = types.SimpleNamespace(callback_query=_FakeQuery("send_current_tmux"))
+
+    asyncio.run(handler.handle_callback(update, context=object()))
+
+    assert InputDispatchService.pending_head(app.ui_state.pending, ui_key) is None
+    assert edited[-1] == t("msg.input.choice_text_rejected", "ru")
+    assert asked and any("Chat about this" in opt for opt in asked[0])
+
+
 def test_queue_input_callback_consumes_pending_head_only():
     session = types.SimpleNamespace(
         id="s1",

@@ -802,6 +802,127 @@ class InputDispatchService:
         self._record_queue_metric()
         await self._show_pending_prompt(ui_key=ui_key, pending_input=merged, chat_id=chat_id, context=context, lang=lang)
 
+    async def choice_menu_blocking_text(self, session) -> str:
+        """Текст меню на экране. Пустая строка — свободный текст в панель можно.
+
+        Поле Other сюда не входит: туда фраза как раз пишется. Меню цифр
+        вставку игнорирует, поэтому такой текст в панель не отправляем.
+        """
+
+        if get_session_execution_backend(session) != "tmux":
+            return ""
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+        from sessions.session_run_service import SessionRunService
+
+        backend = TmuxExecutionBackend()
+        try:
+            if await backend.pane_is_other_text_prompt(session):
+                return ""
+            pane = await backend._capture_pane_text(session, backend.paths(session)) or ""
+        except Exception:
+            logger.exception(
+                "tmux choice menu check failed session_id=%s",
+                getattr(session, "id", "?"),
+            )
+            return ""
+        visible = SessionRunService._visible_choice_text(pane)
+        if not SessionRunService._is_cli_choice_question(visible):
+            return ""
+        _question, options = SessionRunService._parse_cli_choice_question(visible)
+        if len(options) < 2:
+            return ""
+        return visible
+
+    async def show_choice_buttons(self, session, pane_text: str, *, context, dest, chat_id) -> None:
+        from sessions.session_run_service import SessionRunService
+
+        visible = SessionRunService._visible_choice_text(pane_text)
+        question, options = SessionRunService._parse_cli_choice_question(visible)
+        if len(options) < 2:
+            return
+        sender = getattr(self.bot_app, "_send_ask_question", None)
+        ui_state = getattr(self.bot_app, "ui_state", None)
+        pending = getattr(ui_state, "pending_questions", None)
+        if not callable(sender) or not isinstance(pending, dict):
+            return
+        target = dict(dest or {})
+        raw_chat = target.get("chat_id") if target.get("chat_id") is not None else chat_id
+        try:
+            cid = int(raw_chat)
+        except (TypeError, ValueError):
+            return
+        other_number = SessionRunService._claude_other_choice_number(visible)
+        qid = SessionRunService._tmux_choice_question_id(
+            str(getattr(session, "id", "x")),
+            question,
+            options,
+        )
+        pending[qid] = {
+            "question": question,
+            "options": list(options),
+            "chat_id": cid,
+            "message_thread_id": target.get("message_thread_id"),
+            "session_id": str(getattr(session, "id", "")),
+            "tmux_feed": True,
+        }
+        await sender(
+            context,
+            cid,
+            str(getattr(session, "id", "")),
+            qid,
+            question,
+            options,
+            allow_custom=bool(other_number),
+            system_options=False,
+            message_thread_id=target.get("message_thread_id"),
+        )
+        record = pending.get(qid)
+        if other_number and isinstance(record, dict):
+            record["tmux_other_choice"] = other_number
+
+    async def _reject_choice_menu_text(
+        self,
+        session,
+        text: str,
+        *,
+        context,
+        dest,
+        chat_id,
+        lang: str,
+        image_paths,
+    ) -> bool:
+        if image_paths or not str(text or "").strip():
+            return False
+        menu = await self.choice_menu_blocking_text(session)
+        if not menu:
+            return False
+        try:
+            await self._send_text(
+                context,
+                text=t("msg.input.choice_text_rejected", lang),
+                dest=dest,
+                chat_id=chat_id,
+            )
+        except Exception:
+            logger.exception(
+                "failed to report rejected choice text session_id=%s",
+                getattr(session, "id", "?"),
+            )
+        try:
+            await self.show_choice_buttons(
+                session,
+                menu,
+                context=context,
+                dest=dest,
+                chat_id=chat_id,
+            )
+        except Exception:
+            logger.exception(
+                "failed to show choice buttons session_id=%s",
+                getattr(session, "id", "?"),
+            )
+        return True
+
     async def stage_user_input(
         self,
         session,
@@ -824,6 +945,20 @@ class InputDispatchService:
         )
 
         lang = resolve_user_lang(getattr(self.bot_app, "config", None), chat_id=chat_id)
+        if await self._reject_choice_menu_text(
+            session,
+            text,
+            context=context,
+            dest=dict(getattr(pending_input, "dest", None) or {}),
+            chat_id=chat_id,
+            lang=lang,
+            image_paths=self._normalize_image_paths(
+                image_path=image_path,
+                image_paths=image_paths,
+                dest=dict(dest or {}),
+            ),
+        ):
+            return
         pending_map = self._pending_map()
         ui_key = self._pending_ui_key(getattr(pending_input, "dest", None), chat_id)
         if self._pending_input_confirmation_enabled():
@@ -996,6 +1131,16 @@ class InputDispatchService:
                 )
                 return
         dest = self._apply_images_to_dest(dict(dest or {}), image_paths=effective_image_paths)
+        if await self._reject_choice_menu_text(
+            session,
+            text,
+            context=context,
+            dest=dest,
+            chat_id=chat_id,
+            lang=lang,
+            image_paths=effective_image_paths,
+        ):
+            return
         if self._is_session_busy(session, self.bot_app):
             # Поле Other уже открыто: очередь сюда не дойдёт, а ход из-за поля не кончается.
             if (

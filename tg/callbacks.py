@@ -803,6 +803,43 @@ class CallbackHandler(CallbackActionsMixin):
                     text=t("msg.error.tmux_current_send_failed", lang),
                 )
                 return
+            # Меню могло открыться уже после вопроса «отправить в панель».
+            # Вставка в этот кадр пропадает, цифру выбирает только кнопка.
+            menu = ""
+            checker = getattr(dispatch, "choice_menu_blocking_text", None)
+            if callable(checker):
+                menu = str(await checker(session) or "")
+            if menu:
+                if hasattr(dispatch, "clear_pending_prompt_record"):
+                    dispatch.clear_pending_prompt_record(ui_key)
+                InputDispatchService.pop_pending(pending_map, ui_key)
+                await self._respond_callback(
+                    context=context,
+                    query=query,
+                    chat_id=int(chat_id),
+                    text=t("msg.input.choice_text_rejected", lang),
+                )
+                shower = getattr(dispatch, "show_choice_buttons", None)
+                if callable(shower):
+                    try:
+                        await shower(
+                            session,
+                            menu,
+                            context=context,
+                            dest=dict(getattr(pending, "dest", {}) or {}),
+                            chat_id=int(chat_id),
+                        )
+                    except Exception:
+                        logging.exception(
+                            "failed to resend tmux choice buttons session_id=%s",
+                            getattr(session, "id", "?"),
+                        )
+                await self._show_next_pending_input(
+                    chat_id=int(chat_id),
+                    context=context,
+                    message_thread_id=ui_key.message_thread_id,
+                )
+                return
             try:
                 await sender(session, pending)
             except Exception:

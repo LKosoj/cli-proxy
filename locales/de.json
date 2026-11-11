@@ -756,6 +756,7 @@
       "interrupted_partial": "Aktuelle Generierung unterbrochen, aber ein Teil der Laufzeit beendet noch. Input verworfen.",
       "interrupt_failed": "Sitzung konnte nicht vollständig unterbrochen werden. Input verworfen.",
       "custom_accepted": "Ihre Antwort wurde übernommen.",
+      "choice_text_rejected": "Text nicht angenommen. Bitte eine Schaltfläche wählen.",
       "custom_cancelled": "OK, Eingabe der eigenen Antwort abgebrochen.",
       "forward_must_be_command": "Eine weitergeleitete Nachricht muss ein Befehl sein.",
       "prompt_retired": "Nachricht aktualisiert.",

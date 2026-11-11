@@ -369,6 +369,191 @@ async def test_busy_other_text_failure_is_not_queued(monkeypatch) -> None:
     assert sent == [t("msg.error.tmux_current_send_failed", "ru")]
 
 
+_CHOICE_PANE = """\
+Questions: 3+ говорят
+> Видеоведущих 3–4, и в окне говорят трое или больше. Как делать?
+1. Разрешить, показывать всех (Recommended) — Предел снимается.
+2. Предпочитать окна с двумя — Код ищет окна с двумя говорящими.
+3. Other
+4. Chat about this
+Select with numbers [1-4]. Then Enter to submit or Escape to cancel:
+"""
+
+
+def _choice_bot(asked: list[dict]):
+    bot_app = SimpleNamespace(
+        _shutdown_in_progress=False,
+        ui_state=SimpleNamespace(pending={}, pending_questions={}),
+        metrics=SimpleNamespace(inc=lambda *_a, **_k: None),
+        config=SimpleNamespace(
+            telegram=SimpleNamespace(user_languages={}),
+            defaults=SimpleNamespace(default_language="ru", pending_input_confirmation_enabled=False),
+        ),
+    )
+
+    async def _send_ask_question(
+        _context,
+        chat_id,
+        session_id,
+        question_id,
+        question,
+        options,
+        allow_custom=True,
+        system_options=True,
+        message_thread_id=None,
+    ):
+        # Как боевой _send_ask_question: запись собирается заново и чужие поля теряет.
+        previous = bot_app.ui_state.pending_questions.get(question_id)
+        bot_app.ui_state.pending_questions[question_id] = {
+            "question": question,
+            "options": list(options),
+            "tmux_feed": bool(isinstance(previous, dict) and previous.get("tmux_feed")),
+        }
+        asked.append(
+            {
+                "chat_id": chat_id,
+                "session_id": session_id,
+                "question_id": question_id,
+                "question": question,
+                "options": list(options),
+                "allow_custom": allow_custom,
+                "system_options": system_options,
+                "message_thread_id": message_thread_id,
+            }
+        )
+
+    bot_app._send_ask_question = _send_ask_question
+    return bot_app
+
+
+def _install_pane(monkeypatch, pane: str, *, other_open: bool = False) -> None:
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+    async def _other(_self, _session):
+        return other_open
+
+    async def _capture(_self, _session, _paths):
+        return pane
+
+    async def _can_accept(_self, _session):
+        return True
+
+    async def _send_input(_self, _session, _text):
+        raise AssertionError("free text must not be pasted into the pane")
+
+    monkeypatch.setattr(TmuxExecutionBackend, "pane_is_other_text_prompt", _other)
+    monkeypatch.setattr(TmuxExecutionBackend, "_capture_pane_text", _capture)
+    monkeypatch.setattr(TmuxExecutionBackend, "can_accept_input", _can_accept)
+    monkeypatch.setattr(TmuxExecutionBackend, "send_input", _send_input)
+
+
+@pytest.mark.asyncio
+async def test_choice_menu_rejects_text_and_shows_buttons(monkeypatch) -> None:
+    sent: list[str] = []
+    asked: list[dict] = []
+    _install_pane(monkeypatch, _CHOICE_PANE)
+    bot_app = _choice_bot(asked)
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+
+    await service.stage_user_input(
+        _busy_tmux_session(),
+        "почини тест",
+        chat_id=1,
+        context=object(),
+        dest={"kind": "telegram", "chat_id": 1},
+    )
+
+    assert bot_app.ui_state.pending == {}
+    assert sent == [t("msg.input.choice_text_rejected", "ru")]
+    assert len(asked) == 1
+    options = asked[0]["options"]
+    assert any("Chat about this" in opt for opt in options)
+    assert all(opt.split(".", 1)[-1].strip().casefold() != "other" for opt in options)
+    assert asked[0]["allow_custom"] is True
+    stored = next(iter(bot_app.ui_state.pending_questions.values()))
+    assert stored["tmux_feed"] is True
+    assert stored["tmux_other_choice"] == "3"
+
+
+@pytest.mark.asyncio
+async def test_other_text_field_is_not_rejected_as_choice_menu(monkeypatch) -> None:
+    sent: list[str] = []
+    asked: list[dict] = []
+    _install_pane(monkeypatch, _CHOICE_PANE, other_open=True)
+    bot_app = _choice_bot(asked)
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+
+    await service.stage_user_input(
+        _busy_tmux_session(),
+        "Кухня мира",
+        chat_id=1,
+        context=object(),
+        dest={"kind": "telegram", "chat_id": 1},
+    )
+
+    assert asked == []
+    assert t("msg.input.choice_text_rejected", "ru") not in sent
+    pending = InputDispatchService.pending_head(
+        bot_app.ui_state.pending,
+        InputDispatchService._pending_ui_key({"kind": "telegram", "chat_id": 1}, 1),
+    )
+    assert pending is not None
+    assert pending.text == "Кухня мира"
+
+
+@pytest.mark.asyncio
+async def test_plain_tmux_prompt_still_accepts_text_while_busy(monkeypatch) -> None:
+    sent: list[str] = []
+    asked: list[dict] = []
+    _install_pane(monkeypatch, "❯\n")
+    bot_app = _choice_bot(asked)
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+
+    await service.stage_user_input(
+        _busy_tmux_session(),
+        "Какой статус?",
+        chat_id=1,
+        context=object(),
+        dest={"kind": "telegram", "chat_id": 1},
+    )
+
+    assert asked == []
+    pending = InputDispatchService.pending_head(
+        bot_app.ui_state.pending,
+        InputDispatchService._pending_ui_key({"kind": "telegram", "chat_id": 1}, 1),
+    )
+    assert pending is not None
+    assert pending.text == "Какой статус?"
+    assert sent == [InputDispatchService.tmux_busy_prompt_text()]
+
+
+@pytest.mark.asyncio
+async def test_idle_choice_menu_does_not_start_prompt(monkeypatch) -> None:
+    sent: list[str] = []
+    asked: list[dict] = []
+    started: list[str] = []
+    _install_pane(monkeypatch, _CHOICE_PANE)
+    bot_app = _choice_bot(asked)
+    bot_app.session_management = SimpleNamespace(
+        start_prompt_task=lambda _session, text, *_a, **_k: started.append(text)
+    )
+    service = InputDispatchService(bot_app, pending_input_ui=_RecordingInputTransport(sent))
+    session = _busy_tmux_session()
+    session.busy = False
+
+    await service.handle_cli_input(
+        session,
+        "почини тест",
+        chat_id=1,
+        context=object(),
+        dest={"kind": "telegram", "chat_id": 1},
+    )
+
+    assert started == []
+    assert sent == [t("msg.input.choice_text_rejected", "ru")]
+    assert len(asked) == 1
+
+
 @pytest.mark.asyncio
 async def test_busy_image_is_still_queued_when_other_field_is_open(monkeypatch) -> None:
     sent: list[str] = []

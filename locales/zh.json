@@ -756,6 +756,7 @@
       "interrupted_partial": "当前生成已中断，但部分 runtime 仍在完成停止。输入已丢弃。",
       "interrupt_failed": "无法完全中断会话。输入已丢弃。",
       "custom_accepted": "已接受您的回答。",
+      "choice_text_rejected": "文本未接受。请用按钮选择。",
       "custom_cancelled": "好的，已取消自定义回答的输入。",
       "forward_must_be_command": "转发的消息必须是命令。",
       "prompt_retired": "消息已更新。",

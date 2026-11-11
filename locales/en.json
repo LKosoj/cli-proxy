@@ -756,6 +756,7 @@
       "interrupted_partial": "Current generation interrupted, but part of the runtime is still stopping. Input discarded.",
       "interrupt_failed": "Failed to fully interrupt the session. Input discarded.",
       "custom_accepted": "Your answer accepted.",
+      "choice_text_rejected": "Text was not accepted. Choose a button.",
       "custom_cancelled": "OK, custom answer input cancelled.",
       "forward_must_be_command": "A forwarded message must be a command.",
       "prompt_retired": "Message updated.",
