@@ -436,7 +436,7 @@ class SessionRunService:
         finally:
             setattr(session, "_preserve_tmux_on_shutdown", False)
 
-    async def reread_tmux_output(self, session, context) -> str:
+    async def reread_tmux_output(self, session, context, *, include_existing: bool = False) -> str:
         """Переподключить чтение вывода tmux для сессии.
 
         Возвращает код результата: started / not_tmux / no_request / failed.
@@ -448,9 +448,12 @@ class SessionRunService:
         try:
             request = await backend.get_recovery_request(session)
             if request is None:
-                # Свой запрос бот уже закрыл и доставил, но CLI в pane продолжает
-                # работать — тогда читается живой вывод с текущего момента.
-                request = await backend.build_observe_request(session)
+                # По ручной кнопке возвращаем и записанный ответ Claude.
+                # После ответа на меню читаем только продолжение.
+                if include_existing:
+                    request = await backend.build_reread_request(session)
+                else:
+                    request = await backend.build_observe_request(session)
         except Exception:
             _log.exception("tmux reread: recovery request failed session=%s", getattr(session, "id", "?"))
             return "failed"

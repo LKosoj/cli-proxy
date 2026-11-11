@@ -1394,6 +1394,18 @@ class TmuxExecutionBackend:
             if pane_before is None and pane:
                 pane_before = pane
 
+    async def build_reread_request(self, session: Any) -> Optional[TmuxRecoveryRequest]:
+        """Перечитать последний ответ Claude, затем следить за продолжением."""
+        request = await self.build_observe_request(session)
+        if request is None or self._interactive_cli_name(session) != "claude":
+            return request
+        payload = self._read_last_request(self.paths(session))
+        return replace(
+            request,
+            started_at=float(payload.get("started_at") or request.started_at),
+            transcript_locator=_transcript_locator_from_payload(payload),
+        )
+
     async def build_observe_request(
         self,
         session: Any,

@@ -753,3 +753,38 @@ async def test_startup_arms_watch_for_quiet_tmux_session(monkeypatch):
     assert await service.recover_tmux_sessions(object()) == 0
     assert watched == [session]
     assert session.busy is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("manual", [False, True])
+async def test_reread_uses_existing_reply_only_for_manual_request(monkeypatch, manual):
+    service = _run_service([])
+    session = _recovery_session()
+    calls = []
+    request = TmuxRecoveryRequest(
+        request_id="existing", started_at=10, offset=0, prompt="", dest={}, observe=True,
+    )
+
+    async def no_recovery(*_args):
+        return None
+
+    async def existing(*_args):
+        calls.append("existing")
+        return request
+
+    async def observe(*_args):
+        calls.append("new_only")
+        return request
+
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", no_recovery)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_reread_request", existing)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", observe)
+    monkeypatch.setattr(service, "_start_tmux_recovery", lambda *_args: True)
+    context = object()
+    if manual:
+        result = await service.reread_tmux_output(session, context, include_existing=True)
+    else:
+        result = await service.reread_tmux_output(session, context)
+    assert result == "started"
+    assert calls == (["existing"] if manual else ["new_only"])

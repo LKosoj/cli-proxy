@@ -944,7 +944,7 @@ class SessionActionsMixin:
         # сообщение висело бы с уже неактуальными кнопками.
         await self._close_session_menu(context, query, lang)
         try:
-            outcome = str(await reread(session, context) or "failed")
+            outcome = str(await reread(session, context, include_existing=True) or "failed")
         except Exception:
             logging.getLogger(__name__).exception(
                 "tmux reread failed session_id=%s",

@@ -470,7 +470,8 @@ def _tmux_reread_bot_app(
         def get_by_uid(self, token):
             return session if str(token) == session_uid else None
 
-    async def _reread(target_session, _context):
+    async def _reread(target_session, _context, *, include_existing=False):
+        assert include_existing is True
         assert target_session is session
         return outcome
 

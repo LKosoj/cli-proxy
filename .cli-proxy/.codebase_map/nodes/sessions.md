@@ -72,5 +72,6 @@ Instruction node for `sessions` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-12 — перечитывание Claude включает сохранённый ответ; фоновое наблюдение по-прежнему читает только новый вывод.
 - 2026-11-12 — после завершения превью живая tmux-панель ожидает новый вывод и возобновляет чтение с сохранённой позиции.
 - 2026-10-10 — restored pre-redesign menu completion behavior.

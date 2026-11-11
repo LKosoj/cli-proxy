@@ -4653,3 +4653,72 @@ async def test_cancelled_monitor_saves_cursor_before_idle_watch(tmp_path, monkey
     finally:
         watcher.cancel()
         await asyncio.gather(watcher, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cli_name", ["claude", "codex"])
+async def test_explicit_reread_includes_existing_claude_reply_but_preserves_codex(tmp_path, cli_name):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.cli.active_cli = cli_name
+    session.tool.name = cli_name
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("old pane", encoding="utf-8")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("old answer", encoding="utf-8")
+    backend._write_last_request(paths, {
+        "request_id": "done", "started_at": 10.0, "delivery_state": "delivered",
+        "transcript_provider": cli_name, "transcript_path": str(transcript), "transcript_offset": 2,
+    })
+
+    request = await backend.build_reread_request(session)
+
+    assert request.observe is True
+    assert request.offset == len("old pane")
+    if cli_name == "claude":
+        assert request.started_at == 10.0
+        assert request.transcript_locator.start_offset == 2
+    else:
+        assert request.transcript_locator.start_offset == transcript.stat().st_size
+        assert request.started_at > 10.0
+    background_request = await backend.build_observe_request(session)
+    assert background_request.transcript_locator.start_offset == transcript.stat().st_size
+
+
+@pytest.mark.asyncio
+async def test_claude_reread_shows_latest_saved_reply_without_new_output(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, answer_idle_sec=0.05)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("", encoding="utf-8")
+    transcript = _write_cli_transcript(
+        cli="claude", workdir=session.workdir, session_id="claude-thread", text="Последний ответ агента",
+    )
+    records = transcript.read_text(encoding="utf-8")
+    previous = {
+        "type": "assistant", "sessionId": "claude-thread", "timestamp": _iso_utc(time.time() - 60),
+        "message": {"role": "assistant", "content": [{"type": "text", "text": "Предыдущий ответ"}]},
+    }
+    transcript.write_text(json.dumps(previous) + "\n" + records, encoding="utf-8")
+    backend._write_last_request(paths, {
+        "request_id": "done", "started_at": time.time() - 120, "delivery_state": "delivered",
+        "transcript_provider": "claude", "transcript_path": str(transcript), "transcript_offset": 0,
+        "transcript_session_id": "claude-thread",
+    })
+    before = transcript.stat().st_size
+    request = await backend.build_reread_request(session)
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        preview = await asyncio.wait_for(_wait_for_preview(session), timeout=1)
+        assert preview == "Последний ответ агента"
+        result = await asyncio.wait_for(monitor, timeout=2)
+        assert result.text == "Последний ответ агента"
+        assert transcript.stat().st_size == before
+        assert driver.sent_key_sequences == []
+        assert driver.sent_prompts == []
+    finally:
+        if not monitor.done():
+            monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
