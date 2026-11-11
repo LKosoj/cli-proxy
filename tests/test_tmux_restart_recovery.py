@@ -610,3 +610,146 @@ async def test_post_init_starts_tmux_reconciliation_after_notification_queue(mon
     await build_post_init(bot_app)(application)
 
     assert events.index("notifications") < events.index("tmux_recovery")
+
+
+@pytest.mark.asyncio
+async def test_idle_tmux_watch_restarts_preview_only_after_new_output(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    session.queue.clear()
+    ready = asyncio.Event()
+    started = []
+    request = TmuxRecoveryRequest(
+        request_id="continued", started_at=10, offset=123, prompt="", dest={}, observe=True,
+    )
+
+    async def wait(_backend, _session):
+        await ready.wait()
+        return request
+
+    monkeypatch.setattr(TmuxExecutionBackend, "wait_for_output", wait)
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+    service._start_tmux_recovery = lambda current, req, ctx: started.append((current, req, ctx)) or True
+    context = object()
+    service._watch_idle_tmux(session, context)
+    task = session._tmux_output_watch_task
+    service._watch_idle_tmux(session, context)
+    assert session._tmux_output_watch_task is task
+    assert session.busy is False
+    assert started == []
+    ready.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert started == [(session, request, context)]
+
+
+@pytest.mark.asyncio
+async def test_tmux_completion_arms_idle_watch_after_clearing_preview(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    session.queue.clear()
+    watched = []
+    monkeypatch.setattr(service, "_watch_idle_tmux", lambda current, _context: watched.append(current.busy))
+    monkeypatch.setattr(TmuxExecutionBackend, "mark_request_delivered", lambda *_args: True)
+    request = TmuxRecoveryRequest(
+        request_id="recover-codex", started_at=10, offset=0, prompt="old", dest={"kind": "telegram", "chat_id": 42},
+    )
+    await service.run_prompt(session, "old", request.dest, object(), recovery_request=request)
+    assert watched == [False]
+    assert session.assistant_preview_message_id is None
+
+
+@pytest.mark.asyncio
+async def test_new_run_cancels_idle_watcher(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    session.queue.clear()
+    watching = asyncio.Event()
+
+    async def wait():
+        watching.set()
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(wait())
+    session._tmux_output_watch_task = task
+    await asyncio.wait_for(watching.wait(), timeout=1)
+    monkeypatch.setattr(service, "_watch_idle_tmux", lambda *_args: None)
+    monkeypatch.setattr(TmuxExecutionBackend, "mark_request_delivered", lambda *_args: True)
+    request = TmuxRecoveryRequest(
+        request_id="recover-codex", started_at=10, offset=0, prompt="old", dest={"kind": "telegram", "chat_id": 42},
+    )
+    await service.run_prompt(session, "old", request.dest, object(), recovery_request=request)
+    await asyncio.gather(task, return_exceptions=True)
+    assert task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_tmux_watch_starts_after_final_delivery_even_without_request_id(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    session.queue.clear()
+    sending = asyncio.Event()
+    release = asyncio.Event()
+    watched = []
+
+    async def run(*_args, **_kwargs):
+        return "finished"
+
+    async def send(*_args):
+        sending.set()
+        await release.wait()
+
+    session.run_prompt = run
+    service.bot_app.send_output = send
+    monkeypatch.setattr(service, "_watch_idle_tmux", lambda *_args: watched.append(True))
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+    task = asyncio.create_task(service.run_prompt(session, "new", {"kind": "telegram", "chat_id": 42}, object()))
+    await asyncio.wait_for(sending.wait(), timeout=1)
+    assert watched == []
+    assert not task.done()
+    release.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert watched == [True]
+
+
+@pytest.mark.asyncio
+async def test_idle_tmux_watch_is_registered_for_session_cancellation(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    waiting = asyncio.Event()
+    tracked = []
+
+    async def wait(_backend, _session):
+        waiting.set()
+        await asyncio.Event().wait()
+
+    def track(**kwargs):
+        tracked.append((kwargs["name"], asyncio.current_task()))
+
+    service._mode_tasks_track = track
+    monkeypatch.setattr(TmuxExecutionBackend, "wait_for_output", wait)
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+    service._watch_idle_tmux(session, object())
+    await asyncio.wait_for(waiting.wait(), timeout=1)
+    assert tracked == [("tmux_output_watch", session._tmux_output_watch_task)]
+    tracked[0][1].cancel()
+    await asyncio.gather(tracked[0][1], return_exceptions=True)
+    assert session._tmux_output_watch_task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_startup_arms_watch_for_quiet_tmux_session(monkeypatch):
+    service = _run_service([])
+    session = _recovery_session()
+    service.bot_app.manager = SimpleNamespace(sessions_by_chat={42: {session.id: session}})
+    watched = []
+
+    async def no_request(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(TmuxExecutionBackend, "get_recovery_request", no_request)
+    monkeypatch.setattr(TmuxExecutionBackend, "build_observe_request", no_request)
+    monkeypatch.setattr("sessions.session_run_service.get_session_execution_backend", lambda _session: "tmux")
+    monkeypatch.setattr(service, "_watch_idle_tmux", lambda current, _context: watched.append(current))
+    assert await service.recover_tmux_sessions(object()) == 0
+    assert watched == [session]
+    assert session.busy is False

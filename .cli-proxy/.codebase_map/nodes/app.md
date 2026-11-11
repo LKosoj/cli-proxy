@@ -93,5 +93,6 @@ Instruction node for `app` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-12 — после завершения превью живая tmux-панель ожидает новый вывод и возобновляет чтение с сохранённой позиции.
 - 2026-11-11 — поле Other получает отдельные клавиши; успех требует закрытия поля после Enter.
 - 2026-11-03 — Codex tmux capacity errors retry automatically after 60 seconds and keep retry status in the preview.

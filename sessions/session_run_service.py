@@ -330,6 +330,28 @@ class SessionRunService:
         base.update(persisted)
         return base
 
+    def _watch_idle_tmux(self, session, context) -> None:
+        if self._is_shutting_down() or get_session_execution_backend(session) != "tmux":
+            return
+        task = getattr(session, "_tmux_output_watch_task", None)
+        if task is not None and not task.done():
+            return
+        session._tmux_output_watch_task = self._safe_create_task(
+            self._wait_for_tmux_output(session, context), label="tmux_output_watch",
+        )
+
+    async def _wait_for_tmux_output(self, session, context) -> None:
+        self._track_session_task(session, name="tmux_output_watch")
+        try:
+            request = await TmuxExecutionBackend().wait_for_output(session)
+            if request is not None and not self._is_shutting_down() and not session.busy:
+                manager = getattr(self.bot_app, "manager", None)
+                if manager is not None and manager.get(session.chat_id, session.id) is not session:
+                    return
+                self._start_tmux_recovery(session, request, context)
+        except Exception:
+            _log.exception("tmux output watch failed session=%s", getattr(session, "id", "?"))
+
     async def recover_tmux_sessions(self, context) -> int:
         manager = getattr(self.bot_app, "manager", None)
         sessions_by_chat = getattr(manager, "sessions_by_chat", None)
@@ -360,6 +382,7 @@ class SessionRunService:
                     _log.exception("tmux startup reconciliation failed session=%s", getattr(session, "id", "?"))
                     continue
                 if request is None:
+                    self._watch_idle_tmux(session, context)
                     continue
                 if self._start_tmux_recovery(session, request, context):
                     recovered += 1
@@ -1078,6 +1101,10 @@ class SessionRunService:
         recovery_request: Optional[TmuxRecoveryRequest] = None,
         capacity_retry: bool = False,
     ) -> None:
+        watch_task = getattr(session, "_tmux_output_watch_task", None)
+        if watch_task is not None and watch_task is not asyncio.current_task():
+            watch_task.cancel()
+            session._tmux_output_watch_task = None
         self._track_session_task(session, name="run_prompt")
         _rp_log = logging.getLogger("bot.run_prompt")
         with bind_session_log_context(session=session, chat_id=dest.get("chat_id")):
@@ -1279,10 +1306,10 @@ class SessionRunService:
                             session,
                             tmux_request_id,
                         )
-                    elif tmux_request_id:
+                    elif managed_tmux:
                         send_output_scheduled = True
                         delivered = await self._send_output_task(session, dest, output, context)
-                        if delivered:
+                        if delivered and tmux_request_id:
                             queue_drain_allowed = TmuxExecutionBackend.mark_request_delivered(
                                 session,
                                 tmux_request_id,
@@ -1377,6 +1404,8 @@ class SessionRunService:
                         )
                     if recovery_request is not None:
                         setattr(session, "_tmux_recovery_request_id", None)
+                    if not session.busy:
+                        self._watch_idle_tmux(session, context)
 
     async def run_mode_pipeline(self, session, prompt: str, dest: dict, context, *, mode_id: str) -> None:
         mode_id = str(mode_id or "").strip()

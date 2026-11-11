@@ -1351,6 +1351,49 @@ class TmuxExecutionBackend:
             return None
         return recovery if transcript is not None and transcript.complete else None
 
+    async def wait_for_output(self, session: Any) -> Optional[TmuxRecoveryRequest]:
+        """Дождаться нового вывода живой панели, сохранив позицию до изменения."""
+        request = await self.build_observe_request(session)
+        if request is None:
+            return None
+        paths = self.paths(session)
+        state = self._read_state(paths)
+        if state.get("observed_request_id") == request.request_id:
+            request = replace(
+                request, offset=int(state.get("observed_pane_offset", request.offset)),
+                started_at=float(state.get("observed_at", request.started_at)),
+            )
+            if request.transcript_locator and state.get("observed_transcript_path") == request.transcript_locator.path:
+                request = replace(request, transcript_locator=replace(
+                    request.transcript_locator,
+                    start_offset=int(state.get("observed_transcript_offset", request.transcript_locator.start_offset)),
+                ))
+        locator = request.transcript_locator
+        transcript_mtime = os.path.getmtime(locator.path) if locator and os.path.exists(locator.path) else None
+        if state.get("observed_request_id") == request.request_id and locator and state.get("observed_transcript_path") == locator.path:
+            transcript_mtime = state.get("observed_transcript_mtime", transcript_mtime)
+        pane_before = await self._capture_pane_text(session, paths)
+        while True:
+            await asyncio.sleep(1.0)
+            if not await self._driver(session).has_session(paths["session_name"]):
+                return None
+            # Новый запрос уже имеет собственное чтение вывода.
+            if getattr(session, "busy", False):
+                return None
+            pane = await self._capture_pane_text(session, paths)
+            log_changed = os.path.exists(paths["pane_log"]) and os.path.getsize(paths["pane_log"]) != request.offset
+            locator = request.transcript_locator
+            transcript_changed = bool(
+                locator and os.path.exists(locator.path) and (
+                    os.path.getsize(locator.path) != locator.start_offset
+                    or (locator.provider == "gemini" and os.path.getmtime(locator.path) != transcript_mtime)
+                )
+            )
+            if log_changed or transcript_changed or (pane and pane_before is not None and pane != pane_before):
+                return request
+            if pane_before is None and pane:
+                pane_before = pane
+
     async def build_observe_request(
         self,
         session: Any,
@@ -1495,6 +1538,8 @@ class TmuxExecutionBackend:
         # В наблюдении первая же запись «ход закончен» может относиться к уже
         # отданному ходу. Принимаем только ту, что появилась после открытого опроса.
         observe_seen_open = False
+        last_read_at = request.started_at
+        last_transcript_mtime = None
         # Сколько помощников ещё работают. Пока число больше нуля, короткая
         # пауза в 30 секунд ход не закрывает: агент может молчать в долгом тесте.
         background_pending = 0
@@ -1557,6 +1602,7 @@ class TmuxExecutionBackend:
         try:
             while True:
                 await asyncio.sleep(self.poll_interval_sec)
+                last_read_at = time.time()
                 size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
                 if size != last_size:
                     last_size = size
@@ -1630,6 +1676,8 @@ class TmuxExecutionBackend:
                 folder_trust_sent = False
 
                 transcript_update = None
+                if transcript_path and os.path.exists(transcript_path):
+                    last_transcript_mtime = os.path.getmtime(transcript_path)
                 if transcript_reader is not None:
                     try:
                         transcript_update = await asyncio.to_thread(transcript_reader.poll)
@@ -1828,6 +1876,20 @@ class TmuxExecutionBackend:
         except asyncio.CancelledError:
             await self._handle_request_cancellation(session, paths)
             raise
+        finally:
+            state = self._read_state(paths)
+            state.update({
+                "observed_request_id": request.request_id,
+                "observed_at": last_read_at,
+                "observed_pane_offset": pane_stream._cursor,
+                "observed_transcript_path": transcript_path,
+                "observed_transcript_mtime": last_transcript_mtime,
+                "observed_transcript_offset": (
+                    last_transcript_size if self._interactive_cli_name(session) == "gemini"
+                    else getattr(transcript_reader, "cursor", last_transcript_size)
+                ),
+            })
+            self._write_state(paths, state)
 
         finished_at = time.time()
         state = self._read_state(paths)

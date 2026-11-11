@@ -4496,3 +4496,160 @@ async def test_cancelling_other_typing_finishes_answer_before_enter(tmp_path):
         await task
     assert driver.sent_prompts == ["Полный ответ"]
     assert driver.events[-2:] == ["type_text", "send_enter"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["pane", "log", "transcript"])
+async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatch, change):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = False
+    paths = _activate_tmux(backend, session, driver)
+    log = Path(paths["pane_log"])
+    log.write_text("old", encoding="utf-8")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text("old", encoding="utf-8")
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="observe", started_at=time.time(), offset=3, prompt="",
+        dest={"kind": "telegram", "chat_id": 1}, observe=True,
+        transcript_locator=TranscriptLocator(provider="claude", path=str(transcript), start_offset=3),
+    )
+
+    async def observe(_session):
+        return request
+
+    monkeypatch.setattr(backend, "build_observe_request", observe)
+    captured = asyncio.Event()
+
+    async def capture(_target):
+        captured.set()
+        return "new pane" if change == "pane" and log.read_text() != "old" else "old pane"
+
+    driver.capture_pane = capture
+    task = asyncio.create_task(backend.wait_for_output(session))
+    await asyncio.wait_for(captured.wait(), timeout=1)
+    assert not task.done()
+    assert session.busy is False
+    if change == "transcript":
+        transcript.write_text("old new", encoding="utf-8")
+    else:
+        log.write_text("old new", encoding="utf-8")
+        if change == "pane":
+            # Смена кадра без роста журнала тоже должна разбудить монитор.
+            log.write_text("new", encoding="utf-8")
+    result = await asyncio.wait_for(task, timeout=2)
+    assert result is request
+    assert result.offset == 3
+    assert result.transcript_locator.start_offset == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("busy", [True, False])
+async def test_idle_tmux_wait_stops_for_new_run_or_closed_pane(tmp_path, monkeypatch, busy):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = busy
+    _activate_tmux(backend, session, driver)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="observe", started_at=time.time(), offset=0, prompt="", dest={}, observe=True,
+    )
+
+    async def observe(_session):
+        return request
+
+    monkeypatch.setattr(backend, "build_observe_request", observe)
+    if not busy:
+        driver.sessions.clear()
+    assert await asyncio.wait_for(backend.wait_for_output(session), timeout=2) is None
+
+
+@pytest.mark.asyncio
+async def test_idle_watch_keeps_output_written_during_final_delivery(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = False
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("old new", encoding="utf-8")
+    backend._write_last_request(paths, {"request_id": "done", "delivery_state": "delivered"})
+    state = backend._read_state(paths)
+    state.update(observed_request_id="done", observed_pane_offset=3)
+    backend._write_state(paths, state)
+
+    request = await asyncio.wait_for(backend.wait_for_output(session), timeout=2)
+
+    assert request is not None
+    assert request.offset == 3
+    assert request.observe is True
+
+
+@pytest.mark.asyncio
+async def test_idle_snapshot_watch_preserves_time_boundary_and_detects_same_size_rewrite(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    session.busy = False
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("old", encoding="utf-8")
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text("new", encoding="utf-8")
+    boundary = time.time() - 10
+    backend._write_last_request(paths, {
+        "request_id": "done", "delivery_state": "delivered",
+        "transcript_provider": "gemini", "transcript_path": str(snapshot), "transcript_offset": 0,
+    })
+    state = backend._read_state(paths)
+    state.update(
+        observed_request_id="done", observed_pane_offset=3, observed_at=boundary,
+        observed_transcript_path=str(snapshot), observed_transcript_offset=3, observed_transcript_mtime=boundary,
+    )
+    backend._write_state(paths, state)
+
+    request = await asyncio.wait_for(backend.wait_for_output(session), timeout=2)
+
+    assert request.started_at == boundary
+    assert request.transcript_locator.start_offset == 3
+
+
+@pytest.mark.asyncio
+async def test_cancelled_monitor_saves_cursor_before_idle_watch(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, answer_idle_sec=100)
+    session = _session(tmp_path)
+    session.busy = False
+    session._preserve_tmux_on_shutdown = True
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text("new answer", encoding="utf-8")
+    backend._write_last_request(paths, {"request_id": "cancelled", "delivery_state": "delivered"})
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="cancelled", started_at=time.time(), offset=0, prompt="", dest={},
+    )
+
+    class Reader:
+        locator = None
+        cursor = 10
+
+        def poll(self):
+            return TranscriptPollResult(assistant_text="new answer", available=True, recognized=True)
+
+        def get_all_relevant_paths(self):
+            return []
+
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: Reader())
+    monitor = asyncio.create_task(backend._monitor_request(session, paths, request))
+    await asyncio.wait_for(_wait_for_preview(session), timeout=1)
+    monitor.cancel()
+    await asyncio.gather(monitor, return_exceptions=True)
+    state = backend._read_state(paths)
+    assert state["observed_request_id"] == "cancelled"
+    assert state["observed_pane_offset"] == len("new answer")
+
+    watcher = asyncio.create_task(backend.wait_for_output(session))
+    try:
+        await asyncio.sleep(1.1)
+        assert not watcher.done()
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)
