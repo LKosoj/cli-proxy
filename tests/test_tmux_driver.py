@@ -1,3 +1,4 @@
+import asyncio
 import os
 import stat
 import subprocess
@@ -242,3 +243,33 @@ async def test_tmux_driver_types_literal_characters_separately(monkeypatch):
     await TmuxDriver().type_text("pane:0.0", "Я -Enter")
 
     assert calls == [("send-keys", "-t", "pane:0.0", "-l", "--", char) for char in "Я -Enter"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not TmuxDriver.tmux_available(), reason="tmux is required for the isolated pipe test")
+async def test_pipe_pane_reconnects_without_disabling_existing_stream(tmp_path, monkeypatch):
+    socket = str(tmp_path / "tmux.sock")
+    driver = TmuxDriver()
+    monkeypatch.setattr(driver, "command", lambda *args: ["tmux", "-S", socket, *args])
+    target = "pipe-test:0.0"
+    log = tmp_path / "folder ' with spaces" / "pane.log"
+    try:
+        await driver.run("new-session", "-d", "-s", "pipe-test", "sh")
+        await driver.pipe_pane(target, str(log))
+        first = await driver.run("display-message", "-p", "-t", target, "#{pane_pipe}")
+        assert first.stdout.strip() == "1"
+        await driver.pipe_pane(target, str(log))
+        second = await driver.run("display-message", "-p", "-t", target, "#{pane_pipe}")
+        assert second.stdout.strip() == "1"
+        await driver.run("pipe-pane", "-t", target)
+        await driver.pipe_pane(target, str(log))
+        restored = await driver.run("display-message", "-p", "-t", target, "#{pane_pipe}")
+        assert restored.stdout.strip() == "1"
+        await driver.send_keys(target, "printf 'pipe-marker\\n'", "Enter")
+        for _ in range(100):
+            if log.exists() and "pipe-marker" in log.read_text():
+                break
+            await asyncio.sleep(0.01)
+        assert "pipe-marker" in log.read_text()
+    finally:
+        await driver.run("kill-server", check=False)

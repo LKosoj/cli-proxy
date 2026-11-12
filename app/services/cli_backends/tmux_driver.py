@@ -145,7 +145,10 @@ class TmuxDriver:
     async def pipe_pane(self, pane_target: str, log_path: str) -> None:
         Path(log_path).parent.mkdir(parents=True, exist_ok=True)
         shell_command = f"cat >> {shlex.quote(str(log_path))}"
-        await self.run("pipe-pane", "-o", "-t", pane_target, shell_command)
+        # -o переключает существующий pipe и может закрыть его. Проверяем
+        # наличие записи внутри tmux, чтобы повторный вызов её не отключил.
+        command = f"pipe-pane -t {shlex.quote(pane_target)} {shlex.quote(shell_command)}"
+        await self.run("if-shell", "-F", "-t", pane_target, "#{==:#{pane_pipe},0}", command)
 
     async def load_buffer(self, prompt_path: str, *, buffer_name: Optional[str] = None) -> None:
         args = ["load-buffer"]

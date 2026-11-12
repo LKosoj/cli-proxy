@@ -18,6 +18,7 @@ from config import ToolConfig
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, build_tmux_attach_command
 from app.services.cli_backends.tmux_driver import TmuxDriverError
 from app.services.cli_backends.transcript_reader import TranscriptLocator, TranscriptPollResult
+from app.services.cli_backends.terminal_screen import TerminalScreen
 from app.services.session_transfer.reader_claude import _project_key as _claude_project_key
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
@@ -156,7 +157,9 @@ class FakeTmuxDriver:
         self.sessions = set()
         self.log_path = None
         self.pipe_calls = 0
+        self.active_pipes = set()
         self.loaded_prompt_path = None
+        self._submitted = False
         self.sent_ctrl_c = False
         self.killed = []
         self.kill_result = True
@@ -189,6 +192,9 @@ class FakeTmuxDriver:
         self.new_session_envs.append(dict(env or {}))
 
     async def pipe_pane(self, pane_target, log_path):
+        if pane_target in self.active_pipes:
+            return
+        self.active_pipes.add(pane_target)
         self.pipe_calls += 1
         self.log_path = log_path
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
@@ -199,6 +205,7 @@ class FakeTmuxDriver:
             raise RuntimeError("load failed")
         self.events.append("load_buffer")
         self.loaded_prompt_path = prompt_path
+        self._submitted = False
         self.loaded_buffer_name = buffer_name
 
     async def paste_buffer(self, pane_target, *, buffer_name=None, delete=False):
@@ -213,6 +220,7 @@ class FakeTmuxDriver:
         self.deleted_buffers.append(buffer_name)
 
     async def send_enter(self, pane_target):
+        self._submitted = True
         self.events.append("send_enter")
         if self.events[-2:-1] != ["type_text"]:
             prompt = open(self.loaded_prompt_path, encoding="utf-8").read()
@@ -273,8 +281,15 @@ class FakeTmuxDriver:
         self.events.append("capture_pane")
         if self.capture_outputs:
             return self.capture_outputs.pop(0)
-        if self.loaded_prompt_path and os.path.exists(self.loaded_prompt_path):
+        if self.loaded_prompt_path and not self._submitted and os.path.exists(self.loaded_prompt_path):
             return open(self.loaded_prompt_path, encoding="utf-8").read()
+        if self.log_path and os.path.exists(self.log_path):
+            with open(self.log_path, "rb") as handle:
+                handle.seek(max(0, os.path.getsize(self.log_path) - 64000))
+                text = handle.read().decode("utf-8", "replace")
+            screen = TerminalScreen()
+            screen.feed(text)
+            return screen.viewport_text().strip() + ("\n❯" if self._submitted else "")
         return "❯"
 
     async def send_ctrl_c(self, pane_target):
@@ -2001,7 +2016,7 @@ class _OtherFieldDriver(FakeTmuxDriver):
 @pytest.mark.asyncio
 async def test_run_types_into_open_other_field_without_ready_prompt(tmp_path, monkeypatch):
     driver = _OtherFieldDriver()
-    driver.capture_outputs = [_OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "after"]
+    driver.capture_outputs = [_OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "after", "after", "after"]
     driver.autowrite_transcript = True
 
     class SettledReader:
@@ -4978,6 +4993,129 @@ async def test_partial_option_list_does_not_extend_monitoring(tmp_path, monkeypa
         clock[0] += 2
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(monitor, timeout=1)
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_recover_reconnects_pipe_and_reads_existing_confirmation_from_live_pane(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    paths = _activate_tmux(backend, session, driver)
+    log = Path(paths["pane_log"])
+    log.write_text("old frozen pane", encoding="utf-8")
+    old = time.time() - 7200
+    backend._write_last_request(paths, {"request_id": "s46", "started_at": old})
+    # Ответ на Other — свежая активность, хотя исходному запросу уже два часа.
+    backend.record_input_activity(session)
+    confirmation = "Review your answers\nReady to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:"
+
+    async def capture(_target):
+        return confirmation
+
+    driver.capture_pane = capture
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="s46", started_at=old, offset=log.stat().st_size,
+        prompt="", dest={"kind": "telegram", "chat_id": 42}, observe=True,
+    )
+    session._preserve_tmux_on_shutdown = True
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        preview = await asyncio.wait_for(_wait_for_preview(session), timeout=0.5)
+        from sessions.session_run_service import SessionRunService
+
+        assert SessionRunService._parse_cli_choice_question(preview)[1] == ["y. Submit answers", "n. Cancel"]
+        assert driver.pipe_calls == 1
+        assert driver.new_session_commands == []
+        assert log.read_text() == "old frozen pane"
+        assert driver.sent_key_sequences == []
+        assert driver.sent_prompts == []
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_live_ready_pane_does_not_revive_confirmation_from_frozen_log(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=0.05)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    paths = _activate_tmux(backend, session, driver)
+    Path(paths["pane_log"]).write_text(
+        "Review your answers\nReady to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:", encoding="utf-8",
+    )
+
+    async def capture(_target):
+        return "Ответ принят\n❯"
+
+    driver.capture_pane = capture
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="old", started_at=time.time(), offset=0, prompt="", dest={"kind": "telegram", "chat_id": 42}, observe=True,
+    )
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=0.3)
+    assert result.text == ""
+    assert not getattr(session, "last_assistant_text_value", "")
+
+
+@pytest.mark.asyncio
+async def test_existing_tmux_session_reconnects_pipe_before_submitting_input(tmp_path):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    created = await backend._ensure_started(session, paths)
+    assert created is False
+    assert driver.new_session_commands == []
+    assert driver.pipe_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_other_answer_transitions_to_live_confirmation_with_monitor_running(tmp_path, monkeypatch):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    session._preserve_tmux_on_shutdown = True
+    paths = _activate_tmux(backend, session, driver)
+    log = Path(paths["pane_log"])
+    log.write_text("frozen old output", encoding="utf-8")
+    screen = [_OTHER_TEXT_PROMPT]
+    seen = asyncio.Event()
+    confirmation = "Review your answers\nReady to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:"
+
+    async def capture(_target):
+        seen.set()
+        return screen[0]
+
+    async def enter(_target):
+        driver.events.append("send_enter")
+        screen[0] = confirmation
+
+    driver.capture_pane = capture
+    driver.send_enter = enter
+    monkeypatch.setattr(backend, "_build_transcript_reader", lambda *_args: None)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="old", started_at=time.time(), offset=log.stat().st_size,
+        prompt="", dest={"kind": "telegram", "chat_id": 42}, observe=True,
+    )
+    monitor = asyncio.create_task(backend.recover(session, request))
+    try:
+        await asyncio.wait_for(seen.wait(), timeout=1)
+        await backend.send_other_text(session, "Мой ответ")
+        preview = await asyncio.wait_for(_wait_for_preview(session), timeout=1)
+        from sessions.session_run_service import SessionRunService
+
+        assert SessionRunService._parse_cli_choice_question(preview)[1] == ["y. Submit answers", "n. Cancel"]
+        assert driver.sent_prompts == ["Мой ответ"]
+        assert driver.events.count("send_enter") == 1
+        assert driver.sent_key_sequences == []
+        assert log.read_text() == "frozen old output"
     finally:
         monitor.cancel()
         await asyncio.gather(monitor, return_exceptions=True)

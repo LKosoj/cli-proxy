@@ -944,8 +944,7 @@ class TmuxExecutionBackend:
                 env={"CLI_PROXY_SESSION_UID": session_runtime_uid(session)},
             )
             created_session = True
-        if created_session:
-            await driver.pipe_pane(paths["pane_target"], paths["pane_log"])
+        await driver.pipe_pane(paths["pane_target"], paths["pane_log"])
         resume_token = _get_resume_token(session)
         cli_state = getattr(session, "cli", None)
         tmux_users = getattr(cli_state, "tmux_users", None)
@@ -1727,7 +1726,8 @@ class TmuxExecutionBackend:
                 # Меню TUI живёт на текущем экране и не попадает в события транскрипта.
                 # История прокрутки его не содержит как живой вопрос: иначе старый
                 # «Yes/No» снова и снова уходит в чат, хотя CLI уже ушёл дальше.
-                pane_for_choice = advance.viewport
+                live_pane = await self._capture_pane_text(session, paths)
+                pane_for_choice = live_pane if live_pane is not None else advance.viewport
                 # «Доверяете папке?» в чат не уходит: папка уже выбрана запуском.
                 trust_keys = self._workspace_trust_confirm_keys(session, pane_for_choice)
                 if trust_keys:
@@ -2024,6 +2024,7 @@ class TmuxExecutionBackend:
         paths = self.paths(session)
         if not await self._driver(session).has_session(paths["session_name"]):
             raise TmuxDriverError(f"tmux session disappeared during recovery: {paths['session_name']}")
+        await self._driver(session).pipe_pane(paths["pane_target"], paths["pane_log"])
         return await self._monitor_request(session, paths, request)
 
     async def run(
