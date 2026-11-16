@@ -861,6 +861,13 @@ class CallbackHandler(CallbackActionsMixin):
                     context=context,
                     lang=lang,
                 )
+                try:
+                    await self.bot_app.session_management.reread_tmux_output(session, context, include_existing=True)
+                except Exception:
+                    logging.exception(
+                        "failed to reread preview after sending input to tmux session_id=%s",
+                        getattr(session, "id", "?"),
+                    )
                 return
             if hasattr(dispatch, "clear_pending_prompt_record"):
                 dispatch.clear_pending_prompt_record(ui_key)
@@ -871,6 +878,13 @@ class CallbackHandler(CallbackActionsMixin):
                 chat_id=int(chat_id),
                 text=t("msg.input.tmux_current_sent", lang),
             )
+            try:
+                await self.bot_app.session_management.reread_tmux_output(session, context, include_existing=True)
+            except Exception:
+                logging.exception(
+                    "failed to reread preview after sending input to tmux session_id=%s",
+                    getattr(session, "id", "?"),
+                )
             await self._show_next_pending_input(
                 chat_id=int(chat_id),
                 context=context,

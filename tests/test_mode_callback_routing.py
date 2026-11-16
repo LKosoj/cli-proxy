@@ -1494,7 +1494,8 @@ def test_orch_transition_cancel_with_disable_orchestrator_preserves_existing_sem
     assert dispatch_calls == []
 
 
-def test_send_current_tmux_callback_consumes_pending_only_after_success():
+@pytest.mark.parametrize("reread_fails", [False, True])
+def test_send_current_tmux_callback_consumes_pending_only_after_success(reread_fails):
     session = types.SimpleNamespace(
         id="s1",
         active_mode="agent",
@@ -1515,10 +1516,20 @@ def test_send_current_tmux_callback_consumes_pending_only_after_success():
     ui_key = TelegramUiKey.from_parts(1)
     app.ui_state.pending[ui_key] = deque([pending])
     sent_to_tmux = []
+    reread_calls = []
 
     async def _send_to_tmux(target_session, target_pending):
         sent_to_tmux.append((target_session, target_pending))
 
+    async def _reread(target_session, context, *, include_existing=False):
+        assert sent_to_tmux == [(session, pending)]
+        assert InputDispatchService.pending_head(app.ui_state.pending, ui_key) is None
+        reread_calls.append((target_session, include_existing))
+        if reread_fails:
+            raise RuntimeError("preview reread failed")
+        return "started"
+
+    app.session_management = types.SimpleNamespace(reread_tmux_output=_reread)
     app.input_dispatch_service.send_pending_to_active_tmux = _send_to_tmux
     handler = CallbackHandler(app)
     edited = []
@@ -1534,6 +1545,7 @@ def test_send_current_tmux_callback_consumes_pending_only_after_success():
     asyncio.run(handler.handle_callback(update, context=object()))
 
     assert sent_to_tmux == [(session, pending)]
+    assert reread_calls == [(session, True)]
     assert InputDispatchService.pending_head(app.ui_state.pending, ui_key) is None
     assert edited[-1] == "Сообщение отправлено в текущую tmux-сессию."
 
@@ -1566,6 +1578,14 @@ def test_send_current_tmux_callback_keeps_pending_when_session_disappears():
         target_pending.action = InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM
         return target_pending.action
 
+    reread_calls = []
+
+    async def _reread(target_session, context, *, include_existing=False):
+        assert edited[-1] == "Не удалось отправить сообщение в текущую tmux-сессию. Сообщение сохранено."
+        reread_calls.append((target_session, include_existing))
+        return "no_request"
+
+    app.session_management = types.SimpleNamespace(reread_tmux_output=_reread)
     app.input_dispatch_service.send_pending_to_active_tmux = _send_to_tmux
     app.input_dispatch_service.refresh_busy_pending_action = _refresh_action
     handler = CallbackHandler(app)
@@ -1582,6 +1602,7 @@ def test_send_current_tmux_callback_keeps_pending_when_session_disappears():
     asyncio.run(handler.handle_callback(update, context=object()))
 
     assert InputDispatchService.pending_head(app.ui_state.pending, ui_key) is pending
+    assert reread_calls == [(session, True)]
     assert pending.action == InputDispatchService.PENDING_ACTION_QUEUE_CONFIRM
     assert edited[-1] == "Не удалось отправить сообщение в текущую tmux-сессию. Сообщение сохранено."
     assert app.sent[-1] == (1, InputDispatchService.queue_confirm_prompt_text())
