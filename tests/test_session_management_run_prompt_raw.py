@@ -450,3 +450,26 @@ async def test_run_prompt_final_output_cancels_retry_after_preview(tmp_path, mon
     assert final_outputs == ["FINAL OUTPUT"]
     assert events == ["send_preview", "edit_preview", "delete_preview", "send_output"]
     app.shutdown_html_process_pool()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("answer", ["", "Пояснение не изменилось"])
+async def test_preview_watcher_delivers_menu_changes_without_new_answer(answer):
+    session = SimpleNamespace(last_assistant_text_value=answer, _tmux_choice_text="Первый вопрос")
+    stop = asyncio.Event()
+    choices = []
+
+    async def emit(text, timer_only):
+        choices.append(session._tmux_choice_text)
+        assert timer_only is False
+        if len(choices) == 1:
+            session._tmux_choice_text = "Второй вопрос"
+        elif len(choices) == 2:
+            session._tmux_choice_text = ""
+        else:
+            stop.set()
+
+    await asyncio.wait_for(watch_session_assistant_preview(
+        session, emit_update=emit, stop_event=stop, poll_interval_sec=0.01,
+    ), timeout=1)
+    assert choices == ["Первый вопрос", "Второй вопрос", ""]

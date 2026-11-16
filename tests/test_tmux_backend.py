@@ -325,7 +325,7 @@ async def _wait_for_preview(session, timeout: float = 5.0) -> str:
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        value = str(getattr(session, "last_assistant_text_value", "") or "")
+        value = str(getattr(session, "last_assistant_text_value", "") or getattr(session, "_tmux_choice_text", ""))
         if value:
             return value
         await asyncio.sleep(0.01)
@@ -583,7 +583,7 @@ async def test_tmux_backend_waits_for_structured_completion_after_pane_done(tmp_
 
 
 @pytest.mark.asyncio
-async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monkeypatch):
+async def test_tmux_backend_observe_honors_transcript_completion(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
 
     class FakeTranscriptReader:
@@ -591,7 +591,7 @@ async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monk
             pass
 
         def poll(self):
-            # Конец прошлого хода уже отдан: журнал по-прежнему рапортует о завершении.
+            # Читатель сообщает состояние текущего хода, старое завершение уже сброшено.
             return TranscriptPollResult(
                 assistant_text="Новый текст живого агента",
                 complete=True,
@@ -625,9 +625,8 @@ async def test_tmux_backend_observe_ignores_transcript_completion(tmp_path, monk
     result = await asyncio.wait_for(backend.recover(session, request), timeout=5)
 
     assert result.text == "Новый текст живого агента"
-    # Наблюдение живёт до тишины в выводе, а не до первого конца хода в журнале.
-    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
-    assert time.time() - started_at >= 0.3
+    assert result.diagnostics["completion_source"] == "transcript"
+    assert time.time() - started_at < 0.3
 
 
 @pytest.mark.asyncio
@@ -705,9 +704,11 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_tmux_backend_delivers_stable_answer_without_deadman_wait(tmp_path, monkeypatch):
-    """Готовый ответ при замершем журнале не ждёт общего предела тишины."""
+async def test_tmux_backend_delivers_stable_unrecognized_answer_without_deadman_wait(tmp_path, monkeypatch):
+    """Ответ без распознанного журнала по-прежнему доставляется по тишине."""
     driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = "Готовый ответ"
 
     class StableAnswerReader:
         def __init__(self, **kwargs):
@@ -715,10 +716,8 @@ async def test_tmux_backend_delivers_stable_answer_without_deadman_wait(tmp_path
 
         def poll(self):
             return TranscriptPollResult(
-                assistant_text="Готовый ответ",
-                complete=False,
                 available=True,
-                recognized=True,
+                recognized=False,
             )
 
         def get_all_relevant_paths(self):
@@ -1475,7 +1474,7 @@ async def test_tmux_backend_reports_only_menu_block_for_real_choice(tmp_path, mo
         session.tool.execution_backends = ["tmux"]
         session.tool.default_execution_backend = "tmux"
         await service._upsert_telegram_assistant_preview(
-            session, {"kind": "telegram", "chat_id": 123}, object(), session.last_assistant_text_value,
+            session, {"kind": "telegram", "chat_id": 123}, object(), getattr(session, "last_assistant_text_value", ""),
         )
         assert questions == [("Do you want to proceed?", ["1. Yes", "2. No, tell Claude what to do differently"])]
         # Вопрос уходит в чат из превью, поэтому тишина на экране — это ожидание
@@ -5119,3 +5118,136 @@ async def test_other_answer_transitions_to_live_confirmation_with_monitor_runnin
     finally:
         monitor.cancel()
         await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cli_name", _TRANSCRIPT_CLIS)
+async def test_transcript_menu_example_does_not_hold_cli_turn(tmp_path, monkeypatch, cli_name):
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    if cli_name == "kimi":
+        driver.capture_outputs = [KIMI_READY_PANE]
+    driver.response_text = "Working"
+    answer = "Пример меню:\n1. Да\n2. Нет\nSelect with numbers [1-2]. Then Enter to submit:"
+
+    class Reader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(assistant_text=answer, available=True, recognized=True, complete=True)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", Reader)
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    session.cli.active_cli = cli_name
+    session.tool.name = cli_name
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    result = await asyncio.wait_for(backend.run(session, "do work"), timeout=2)
+    assert result.text == answer
+    assert result.diagnostics["completion_source"] == "transcript"
+    assert session._tmux_choice_text == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("preview_enabled", [False, True])
+async def test_live_menu_keeps_transcript_explanation_separate(tmp_path, monkeypatch, preview_enabled):
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = (
+        "Почему так вышло:\n1. Завышен объём.\n2. Требуется дописывание.\n\n"
+        "Questions: План\n> Чинить планировщик?\n1. Да\n2. Нет\n3. Other\n"
+        "Select with numbers [1-3]. Then Enter to submit or Escape to cancel:"
+    )
+
+    original_capture = driver.capture_pane
+
+    async def capture(target):
+        return driver.response_text if driver._submitted else await original_capture(target)
+
+    driver.capture_pane = capture
+    explanation = "Полное значимое пояснение. " * 300
+
+    class Reader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(assistant_text=explanation, available=True, recognized=True)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", Reader)
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, answer_idle_sec=0.05)
+    session = _session(tmp_path)
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=preview_enabled))
+    session._preserve_tmux_on_shutdown = True
+    monitor = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        assert await _wait_for_preview(session) == explanation
+        from sessions.session_run_service import SessionRunService
+
+        question, options = SessionRunService._parse_cli_choice_question(session._tmux_choice_text)
+        assert question == "Questions: План\n> Чинить планировщик?"
+        assert options == ["1. Да", "2. Нет"]
+        assert session.last_assistant_text_value == explanation
+        if preview_enabled:
+            assert not monitor.done()
+        else:
+            result = await asyncio.wait_for(monitor, timeout=1)
+            assert result.text.startswith(explanation)
+            assert "Чинить планировщик?" in result.text
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_unfinished_native_reply_survives_pause_until_completion(tmp_path, monkeypatch):
+    finished = [False]
+
+    class Reader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(
+                assistant_text="Готово" if finished[0] else "Ещё работаю",
+                available=True, recognized=True, complete=finished[0],
+            )
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", Reader)
+    backend = TmuxExecutionBackend(driver=FakeTmuxDriver(), poll_interval_sec=0.01, answer_idle_sec=0.03)
+    session = _session(tmp_path)
+    monitor = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        assert await _wait_for_preview(session) == "Ещё работаю"
+        await asyncio.sleep(0.15)
+        assert not monitor.done()
+        finished[0] = True
+        result = await asyncio.wait_for(monitor, timeout=1)
+        assert result.text == "Готово"
+        assert result.diagnostics["completion_source"] == "transcript"
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_observe_accepts_completed_reply_in_first_poll(tmp_path, monkeypatch):
+    class Reader:
+        def __init__(self, **kwargs):
+            pass
+
+        def poll(self):
+            return TranscriptPollResult(assistant_text="Готово", available=True, recognized=True, complete=True)
+
+    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", Reader)
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, answer_idle_sec=30)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="done", started_at=time.time(), offset=0, prompt="", dest={}, observe=True,
+    )
+    result = await asyncio.wait_for(backend.recover(session, request), timeout=1)
+    assert result.text == "Готово"
+    assert result.diagnostics["completion_source"] == "transcript"

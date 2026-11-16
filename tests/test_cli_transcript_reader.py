@@ -1378,3 +1378,68 @@ def test_gemini_transcript_reader_ignores_session_of_other_workdir(tmp_path):
 
     assert result.available is False
     assert result.assistant_text == ""
+
+
+def test_new_cli_turn_resets_previous_completion(tmp_path):
+    cases = {
+        "claude": (
+            {"type": "system", "subtype": "turn_duration", "pendingBackgroundAgentCount": 0},
+            {"type": "user", "message": {"content": "продолжай"}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "ещё работаю"}]}},
+        ),
+        "codex": (
+            {"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "готово"}},
+            {"type": "event_msg", "payload": {"type": "task_started"}},
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "ещё работаю"}],
+            }},
+        ),
+        "grok": (
+            {"params": {"update": {"sessionUpdate": "turn_completed"}}},
+            {"params": {"update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "ещё"}}}},
+            {"params": {"update": {"sessionUpdate": "tool_call", "title": "Bash"}}},
+        ),
+        "qwen": (
+            {"type": "assistant", "message": {"parts": [{"text": "готово"}]}},
+            {"type": "user", "message": {"parts": [{"text": "ещё"}]}},
+            {"type": "assistant", "message": {"parts": [{"functionCall": {"name": "Bash"}}]}},
+        ),
+        "kimi": (
+            {"type": "turn.ended"},
+            {"type": "turn.prompt", "prompt": "ещё"},
+            {"type": "context.append_loop_event", "event": {"type": "step.begin"}},
+        ),
+    }
+    for provider, (end, start, progress) in cases.items():
+        reader = CliTranscriptReader(cli_name=provider, workdir=str(tmp_path), started_at=0, home_dir=tmp_path)
+        path = reader.root / "session.jsonl"
+        _append_jsonl(path, end)
+        reader._restore_locator(TranscriptLocator(provider, str(path), 0))
+        assert reader.poll().complete, provider
+        _append_jsonl(path, start, progress)
+        assert not reader.poll().complete, provider
+        _append_jsonl(path, end)
+        assert reader.poll().complete, provider
+
+
+def test_gemini_new_snapshot_turn_resets_previous_completion(tmp_path):
+    path = tmp_path / ".gemini" / "tmp" / "session.json"
+    path.parent.mkdir(parents=True)
+    messages = [{"type": "gemini", "id": "answer1", "content": "готово", "timestamp": _iso_utc(time.time())}]
+    path.write_text(json.dumps({"messages": messages}), encoding="utf-8")
+    reader = CliTranscriptReader(
+        cli_name="gemini", workdir=str(tmp_path), started_at=0,
+        locator=TranscriptLocator("gemini", str(path), 0), home_dir=tmp_path,
+    )
+    assert not reader.poll().complete
+    assert reader.poll().complete
+    messages.append({"type": "user", "content": "продолжай", "timestamp": _iso_utc(time.time())})
+    path.write_text(json.dumps({"messages": messages}), encoding="utf-8")
+    assert not reader.poll().complete
+    messages.append({"type": "gemini", "id": "answer2", "content": "ещё работаю", "toolCalls": [{"name": "Bash"}]})
+    path.write_text(json.dumps({"messages": messages}), encoding="utf-8")
+    assert not reader.poll().complete
+    messages.append({"type": "gemini", "id": "answer3", "content": "новый ответ"})
+    path.write_text(json.dumps({"messages": messages}), encoding="utf-8")
+    assert not reader.poll().complete
+    assert reader.poll().complete

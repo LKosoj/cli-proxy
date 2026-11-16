@@ -374,3 +374,40 @@ def test_question_id_differs_for_different_questions() -> None:
     other = SessionRunService._tmux_choice_question_id("s5", "Другой выбор?", ["1. Да"])
 
     assert first != other
+
+
+def test_menu_without_cursor_ignores_explanation_list() -> None:
+    text = (
+        "Почему так вышло:\n1. Планировщик завышает время.\n2. Код дописывает.\n\n"
+        "Questions: Нехватка (answered), План\n> Чинить ли планировщик?\n"
+        "1. Да\n2. Нет\n3. Other\n4. Chat about this\n"
+        "Select with numbers [1-4]. Then Enter to submit or Escape to cancel:"
+    )
+    assert SessionRunService._is_cli_choice_question(text)
+    assert SessionRunService._parse_cli_choice_question(text) == (
+        "Questions: Нехватка (answered), План\n> Чинить ли планировщик?",
+        ["1. Да", "2. Нет", "4. Chat about this"],
+    )
+
+
+def test_menu_hint_mentioned_in_answer_is_not_a_menu() -> None:
+    text = (
+        "Причины:\n1. Планировщик завышает время.\n2. Код дописывает.\n\n"
+        "Нужно искать меню возле подсказки Select with numbers, сохраняя пояснение."
+    )
+    assert not SessionRunService._is_cli_choice_question(text)
+
+
+def test_old_menu_footer_does_not_override_new_cursor_menu() -> None:
+    text = (
+        "Старый вопрос\n1. Старый ответ\n2. Другой ответ\n3. Other\n"
+        "Select with numbers [1-3]. Then Enter to submit:\n\n"
+        "Новый вопрос\n❯ 1. Да\n2. Нет"
+    )
+    assert SessionRunService._parse_cli_choice_question(text) == ("Новый вопрос", ["1. Да", "2. Нет"])
+    assert SessionRunService._claude_other_choice_number(text) == ""
+
+
+def test_menu_example_above_cli_input_prompt_is_not_waiting_for_choice() -> None:
+    text = "Пример:\n1. Да\n2. Нет\nSelect with numbers [1-2]. Then Enter to submit:\n\n› Ask Codex to do anything"
+    assert not SessionRunService._is_cli_choice_question(text)

@@ -521,6 +521,8 @@ class CliTranscriptReader:
         event_type = str(record.get("type") or "").strip()
         if event_type in {"user", "assistant", "system", "progress"}:
             self.recognized = True
+        if event_type in {"user", "assistant"}:
+            self.complete = False
         self.activity_at = _event_timestamp(record.get("timestamp"))
         if event_type == "assistant":
             message = record.get("message") if isinstance(record.get("message"), dict) else {}
@@ -557,6 +559,8 @@ class CliTranscriptReader:
         if record_type == "response_item":
             item_type = str(payload.get("type") or "").strip()
             role = str(payload.get("role") or "").strip()
+            if item_type == "message" and role in {"user", "assistant"}:
+                self.complete = False
             if item_type == "message" and role == "user":
                 text = _codex_message_text(payload.get("content"))
                 if text:
@@ -582,7 +586,11 @@ class CliTranscriptReader:
         if event_type in {"user_message", "agent_message", "task_started", "task_complete", "token_count"}:
             self.recognized = True
         self.activity_at = _event_timestamp(record.get("timestamp"))
+        if event_type in {"task_started", "user_message", "agent_message"}:
+            self.complete = False
         if event_type == "task_started":
+            self.terminal_error = ""
+            self.retry_prompt = ""
             self._turn_user_text = ""
         elif event_type == "user_message":
             text = str(payload.get("message") or "").strip()
@@ -623,6 +631,8 @@ class CliTranscriptReader:
         if event_type:
             self.recognized = True
         self.activity_at = _event_timestamp(record.get("timestamp"))
+        if event_type in {"user_message", "user_message_chunk", "agent_message_chunk", "tool_call"}:
+            self.complete = False
         if event_type == "tool_call":
             title = str(update.get("title") or "").strip()
             if title:
@@ -646,6 +656,8 @@ class CliTranscriptReader:
         if event_type in {"user", "assistant", "system", "tool_result"}:
             self.recognized = True
         self.activity_at = _event_timestamp(record.get("timestamp"))
+        if event_type in {"user", "assistant", "tool_result"}:
+            self.complete = False
         if event_type != "assistant":
             return
         message = record.get("message") if isinstance(record.get("message"), dict) else {}
@@ -691,6 +703,8 @@ class CliTranscriptReader:
             self.recognized = True
         self.activity_at = _kimi_activity(record.get("time"))
 
+        if record_type in {"turn.prompt", "context.append_message", "context.append_loop_event"}:
+            self.complete = False
         if record_type == "turn.ended":
             self.complete = True
             return
@@ -774,7 +788,10 @@ class CliTranscriptReader:
             if not isinstance(item, dict):
                 continue
             self.activity_at = _event_timestamp(item.get("timestamp"))
-            if str(item.get("type") or "").strip() != "gemini":
+            item_type = str(item.get("type") or "").strip()
+            if item_type != "gemini":
+                if item_type == "user":
+                    turn_end = ("", "")
                 continue
             text = str(item.get("content") or "").strip()
             if not text:
@@ -784,8 +801,7 @@ class CliTranscriptReader:
         # Записи о конце хода в снимке нет, а вызовы инструментов дописываются в
         # то же сообщение следом за текстом: ход закончен, когда последний ответ
         # модели не изменился между чтениями и инструментов в нём так и нет.
-        if turn_end[1] and turn_end == self._gemini_turn_end:
-            self.complete = True
+        self.complete = bool(turn_end[1] and turn_end == self._gemini_turn_end)
         self._gemini_turn_end = turn_end
 
     def _read_new_records(self) -> None:

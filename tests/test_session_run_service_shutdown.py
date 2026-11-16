@@ -152,11 +152,10 @@ def test_session_run_service_turns_tmux_preview_question_into_buttons() -> None:
         )
         service = _build_service(bot_app)
 
+        session = _preview_session(backend="tmux")
+        session._tmux_choice_text = _tui_menu_text()
         await service._upsert_telegram_assistant_preview(
-            _preview_session(backend="tmux"),
-            {"kind": "telegram", "chat_id": 123},
-            object(),
-            _tui_menu_text(),
+            session, {"kind": "telegram", "chat_id": 123}, object(), "",
         )
 
         assert previews == []
@@ -193,11 +192,10 @@ def test_session_run_service_tmux_other_menu_offers_custom_text() -> None:
             "Select with numbers [1-6]. Then Enter to submit or Escape to cancel:\n"
         )
 
+        session = _preview_session(backend="tmux")
+        session._tmux_choice_text = text
         await service._upsert_telegram_assistant_preview(
-            _preview_session(backend="tmux"),
-            {"kind": "telegram", "chat_id": 123},
-            object(),
-            text,
+            session, {"kind": "telegram", "chat_id": 123}, object(), "",
         )
 
         assert len(questions) == 1
@@ -660,12 +658,10 @@ def test_session_run_service_asks_ticking_tmux_choice_once() -> None:
         session = _preview_session(backend="tmux")
         dest = {"kind": "telegram", "chat_id": 123}
 
-        await service._upsert_telegram_assistant_preview(
-            session, dest, object(), _ticking_permission_frame("5s"),
-        )
-        await service._upsert_telegram_assistant_preview(
-            session, dest, object(), _ticking_permission_frame("6s"),
-        )
+        session._tmux_choice_text = _ticking_permission_frame("5s")
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "")
+        session._tmux_choice_text = _ticking_permission_frame("6s")
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "")
 
         assert len(questions) == 1
         assert previews == []
@@ -692,17 +688,15 @@ def test_session_run_service_asks_claude_question_menu_once() -> None:
             "Select with numbers [1-2]. Then Enter to submit or Escape to cancel:\n"
         )
 
+        session = _preview_session(backend="tmux")
+        session._tmux_choice_text = text
         await service._upsert_telegram_assistant_preview(
-            _preview_session(backend="tmux"),
-            {"kind": "telegram", "chat_id": 123},
-            object(),
-            text,
+            session, {"kind": "telegram", "chat_id": 123}, object(), "",
         )
+        session = _preview_session(backend="tmux")
+        session._tmux_choice_text = text
         await service._upsert_telegram_assistant_preview(
-            _preview_session(backend="tmux"),
-            {"kind": "telegram", "chat_id": 123},
-            object(),
-            text,
+            session, {"kind": "telegram", "chat_id": 123}, object(), "",
         )
 
         assert len(questions) == 1
@@ -725,6 +719,7 @@ def test_session_run_service_does_not_reask_answered_tmux_choice() -> None:
         service = _build_service(bot_app)
         session = _preview_session(backend="tmux")
         text = _tui_menu_text()
+        session._tmux_choice_text = text
         question, options = service._parse_cli_choice_question(text)
         qid = service._tmux_choice_question_id(session.id, question, options)
         SessionRunService.remember_answered_tmux_choice(session, qid)
@@ -762,7 +757,8 @@ def test_session_run_service_asks_tmux_choice_again_after_screen_moves_on() -> N
         assert previews == ["Brewing…"]
         assert session._answered_tmux_choice_ids == set()
 
-        await service._upsert_telegram_assistant_preview(session, dest, object(), text)
+        session._tmux_choice_text = text
+        await service._upsert_telegram_assistant_preview(session, dest, object(), "")
 
         assert len(questions) == 1
         assert bot_app.ui_state.pending_questions[qid]["tmux_feed"] is True
@@ -801,8 +797,10 @@ def test_session_run_service_asks_tmux_choice_inside_visible_tail() -> None:
         tail = "\n".join(f"tail {index}" for index in range(5))
         text = head + "\n" + _tui_menu_text() + "\n" + tail
 
+        session = _preview_session(backend="tmux")
+        session._tmux_choice_text = service._visible_choice_text(text)
         await service._upsert_telegram_assistant_preview(
-            _preview_session(backend="tmux"),
+            session,
             {"kind": "telegram", "chat_id": 123},
             object(),
             text,
@@ -813,3 +811,60 @@ def test_session_run_service_asks_tmux_choice_inside_visible_tail() -> None:
         assert len(bot_app.ui_state.pending_questions) == 1
 
     asyncio.run(_run())
+
+
+def test_tmux_answer_with_menu_example_stays_text() -> None:
+    async def run() -> None:
+        sent = []
+        asked = []
+
+        async def send(_context, *, text, **_kwargs):
+            sent.append(text)
+            return SimpleNamespace(message_id=1)
+
+        async def ask(*args, **kwargs):
+            asked.append(args)
+
+        service = _build_service(SimpleNamespace(
+            _send_message=send, _send_ask_question=ask,
+            ui_state=SimpleNamespace(pending_questions={}),
+        ))
+        text = "Пример меню:\n1. Да\n2. Нет\nSelect with numbers [1-2]. Then Enter to submit:"
+        await service._upsert_telegram_assistant_preview(
+            _preview_session(backend="tmux"), {"kind": "telegram", "chat_id": 123}, object(), text,
+        )
+        assert sent == [text]
+        assert asked == []
+
+    asyncio.run(run())
+
+
+def test_tmux_sends_full_explanation_before_each_new_question() -> None:
+    async def run() -> None:
+        events = []
+
+        async def send(_context, *, text, **_kwargs):
+            events.append(("text", text))
+            return SimpleNamespace(message_id=1)
+
+        async def ask(*args, **kwargs):
+            events.append(("question", args[4]))
+
+        service = _build_service(SimpleNamespace(
+            _send_message=send, _send_ask_question=ask,
+            ui_state=SimpleNamespace(pending_questions={}),
+        ))
+        session = _preview_session(backend="tmux")
+        explanation = "Значимое пояснение. " * 400
+        session.last_assistant_text_value = explanation
+        dest = {"kind": "telegram", "chat_id": 123}
+        for question in ("Нехватка", "План"):
+            session._tmux_choice_text = f"{question}\n❯ 1. Да\n2. Нет"
+            await service._upsert_telegram_assistant_preview(session, dest, object(), "обрезанное превью")
+            await service._upsert_telegram_assistant_preview(session, dest, object(), "обрезанное превью")
+        assert events == [
+            ("text", explanation.strip()), ("question", "Нехватка"),
+            ("text", explanation.strip()), ("question", "План"),
+        ]
+
+    asyncio.run(run())

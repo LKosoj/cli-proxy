@@ -247,6 +247,7 @@ async def watch_session_assistant_preview(
     clock: Callable[[], float] = time.monotonic,
 ) -> None:
     last_sent_source: Optional[str] = None
+    last_sent_choice = ""
     last_sent_at: Optional[float] = None
     started_at: Optional[float] = None
     interval = max(0.05, float(poll_interval_sec))
@@ -255,6 +256,7 @@ async def watch_session_assistant_preview(
         refresh_interval = max(interval, float(refresh_interval_sec))
     while True:
         source = build_text(getattr(session, "last_assistant_text_value", None))
+        choice = str(getattr(session, "_tmux_choice_text", "") or "")
         now = clock()
         should_refresh = (
             source
@@ -263,19 +265,22 @@ async def watch_session_assistant_preview(
             and last_sent_at is not None
             and now - last_sent_at >= refresh_interval
         )
-        if source and (source != last_sent_source or should_refresh):
+        if (source or choice or last_sent_choice) and (
+            source != last_sent_source or choice != last_sent_choice or should_refresh
+        ):
             if started_at is None:
                 started_at = now
             current = (
-                _build_elapsed_preview_text(source, now - started_at)
-                if include_elapsed_time
-                else source
+                _build_elapsed_preview_text(source or "", now - started_at)
+                if include_elapsed_time and source
+                else (source or "")
             )
             await emit_update(
                 current,
-                bool(should_refresh and source == last_sent_source),
+                bool(should_refresh and source == last_sent_source and choice == last_sent_choice),
             )
             last_sent_source = source
+            last_sent_choice = choice
             last_sent_at = now
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)

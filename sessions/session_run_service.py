@@ -79,8 +79,8 @@ def _is_choice_submit_footer(line: str) -> bool:
     if not lowered:
         return False
     return (
-        "select with numbers" in lowered
-        or "enter to submit" in lowered
+        lowered.startswith("select with numbers [")
+        or lowered.startswith("enter to submit")
         or lowered.startswith("enter selection [")
     )
 
@@ -480,18 +480,8 @@ class SessionRunService:
     def _is_cli_choice_question(cls, text: str) -> bool:
         if not text:
             return False
-        t = text.lower()
         # «Ready to submit your answers?» — подтверждение уже выбранных ответов.
         if _is_answer_confirm(text):
-            return True
-        # «Select with numbers [1-5]. Then Enter to submit» — вопрос Claude
-        # без курсора на пункте. Обычный нумерованный список так не подписан.
-        if (
-            "enter selection [" in t
-            or "or escape to cancel" in t
-            or "or esc to cancel" in t
-            or "select with numbers" in t
-        ):
             return True
         # "esc to interrupt" / "shift+tab" — это индикатор работы и подсказка в
         # футере TUI, а не вопрос: по ним нельзя распознавать выбор.
@@ -501,7 +491,10 @@ class SessionRunService:
         # Нумерованный список сам по себе ничего не значит: его печатают и команды
         # (`find -printf '%T@ %p'`, `ls -l`), и сам агент в ответе. Меню TUI
         # отличают курсор выбора или чекбоксы.
-        return bool(_CHOICE_CURSOR_RE.search(text))
+        if _CHOICE_CURSOR_RE.search(text):
+            return True
+        lines = text.strip().splitlines()
+        return bool(lines and _is_choice_submit_footer(lines[-1]))
 
     @staticmethod
     def _tmux_choice_question_id(session_key: str, question: str, options: List[str]) -> str:
@@ -516,10 +509,14 @@ class SessionRunService:
     def _claude_other_choice_number(text: str) -> str:
         """Номер служебной строки Claude «N. Other». Пустая строка — её нет."""
 
-        for line in str(text or "").splitlines():
+        if _is_answer_confirm(text):
+            return ""
+        for line in reversed(str(text or "").splitlines()):
             match = _CHOICE_OPTION_RE.match(line.strip())
             if match and match.group(2).strip().casefold() == "other":
                 return match.group(1)
+            if match and match.group(1) == "1":
+                break
         return ""
 
     @staticmethod
@@ -556,17 +553,36 @@ class SessionRunService:
         lines = text.splitlines()
         # Если есть курсор/флажок, разбираем его блок, а не предыдущий список
         # из ответа агента. Символ цитаты ">" курсором меню не считается.
-        start = next((idx for idx, line in enumerate(lines) if _CHOICE_CURSOR_RE.match(line)), None)
-        if start is not None:
-            while start > 0:
-                current = _CHOICE_OPTION_RE.match(lines[start].strip())
-                previous = _CHOICE_OPTION_RE.match(lines[start - 1].strip())
-                if not current or not previous or int(previous.group(1)) != int(current.group(1)) - 1:
+        # Берём нижнее меню, а не список из пояснения выше него.
+        footer = next((idx for idx in range(len(lines) - 1, -1, -1)
+                       if _is_choice_submit_footer(lines[idx])), None)
+        cursor = next((idx for idx in range(len(lines) - 1, -1, -1)
+                       if _CHOICE_CURSOR_RE.match(lines[idx])), None)
+        if cursor is not None and footer is not None and cursor > footer:
+            footer = None
+        start = None
+        if footer is not None:
+            for idx in range(footer - 1, -1, -1):
+                if not lines[idx].strip():
                     break
-                start -= 1
-        else:
-            start = next((idx for idx, line in enumerate(lines)
-                          if (match := _CHOICE_OPTION_RE.match(line.strip())) and match.group(1) == "1"), len(lines))
+                match = _CHOICE_OPTION_RE.match(lines[idx].strip())
+                if match and match.group(1) == "1":
+                    start = idx
+                    break
+            if start is None:
+                return "Please choose:", []
+        if start is None:
+            start = cursor
+            if start is not None:
+                while start > 0:
+                    current = _CHOICE_OPTION_RE.match(lines[start].strip())
+                    previous = _CHOICE_OPTION_RE.match(lines[start - 1].strip())
+                    if not current or not previous or int(previous.group(1)) != int(current.group(1)) - 1:
+                        break
+                    start -= 1
+            else:
+                start = next((idx for idx, line in enumerate(lines)
+                              if (match := _CHOICE_OPTION_RE.match(line.strip())) and match.group(1) == "1"), len(lines))
         q_lines = lines[:start]
         rest = lines[start:]
         # Подсказка «Select with numbers» значит, что ниже ещё меню. Перенос
@@ -791,9 +807,8 @@ class SessionRunService:
         *,
         timer_only: bool = False,
     ) -> None:
-        if not text:
-            return
-        visible_choice_text = self._visible_choice_text(text)
+        # Снимок меню приходит только от чтения текущего экрана tmux.
+        visible_choice_text = str(getattr(session, "_tmux_choice_text", "") or "")
         if self._is_tmux_choice_preview(session, visible_choice_text):
             question, options = self._parse_cli_choice_question(visible_choice_text)
             if options:
@@ -817,6 +832,13 @@ class SessionRunService:
                 self.bot_app.ui_state.pending_questions[qid] = meta
                 try:
                     cid = int(dest.get("chat_id") or 0)
+                    # Полный ответ перед вопросом нельзя подменять меню или
+                    # обрезанным превью. Transport сам делит длинные сообщения.
+                    explanation = str(getattr(session, "last_assistant_text_value", "") or "").strip()
+                    if explanation:
+                        await self.bot_app._send_message(
+                            context, text=explanation, **self._telegram_reply_kwargs(dest, session=session),
+                        )
                     # Свой вариант только если в кадре был Other: следующее
                     # сообщение — текст для этого поля, а не новый запрос.
                     await self.bot_app._send_ask_question(
@@ -837,6 +859,8 @@ class SessionRunService:
                     logging.getLogger("bot.preview").exception("failed to send tmux choice as ask from preview")
                 return  # do not show plain preview for the choice question
         self._drop_answered_tmux_choices(session)
+        if not text:
+            return
         send_message = getattr(self.bot_app, "_send_message", None)
         edit_message = getattr(self.bot_app, "_edit_message", None)
         edit_message_outcome = getattr(self.bot_app, "_edit_message_outcome", None)

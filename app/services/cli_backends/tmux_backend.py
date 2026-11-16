@@ -1581,6 +1581,9 @@ class TmuxExecutionBackend:
         transcript_thinking_text = ""
         latest_text = ""
         last_reported_text = ""
+        # Одноразовый снимок экрана для превью; после подхвата он читается заново.
+        session._tmux_choice_text = ""
+        session.last_assistant_text_value = ""
         last_progress_text = ""
         # Один ответ на один показ. Пока экран не сменился, клавиши второй раз не шлём.
         folder_trust_sent = False
@@ -1605,7 +1608,6 @@ class TmuxExecutionBackend:
         last_agent_change = 0.0
         # В наблюдении первая же запись «ход закончен» может относиться к уже
         # отданному ходу. Принимаем только ту, что появилась после открытого опроса.
-        observe_seen_open = False
         last_read_at = request.started_at
         last_transcript_mtime = None
         # Сколько помощников ещё работают. Пока число больше нуля, короткая
@@ -1813,12 +1815,7 @@ class TmuxExecutionBackend:
                     background_agents_settled = bool(
                         getattr(transcript_update, "background_agents_settled", True)
                     )
-                    if request.observe:
-                        if not transcript_update.complete:
-                            observe_seen_open = True
-                        parent_done = bool(transcript_update.complete and observe_seen_open)
-                    else:
-                        parent_done = bool(transcript_update.complete)
+                    parent_done = bool(transcript_update.complete)
                     agents_recent = background_pending > 0 or (
                         last_agent_change > 0 and time.time() - last_agent_change < answer_idle
                     )
@@ -1838,25 +1835,28 @@ class TmuxExecutionBackend:
                 latest_text = transcript_latest_text if request.observe else (transcript_latest_text or pane_latest_text)
                 # Меню ищется на текущем экране: в события транскрипта его нет,
                 # а копия в истории прокрутки уже не ждёт ответа.
-                # Найденный блок становится текстом превью, ход при этом не закрывается.
+                # Меню хранится отдельно от текста ответа и не закрывает ход.
                 awaiting_choice = False
+                session._tmux_choice_text = ""
                 try:
                     choice_in_pane = _SRS._is_cli_choice_question(pane_for_choice)
-                    choice_in_transcript = _SRS._is_cli_choice_question(transcript_latest_text or "")
                     if choice_in_pane:
                         pane_question, pane_options = _SRS._parse_cli_choice_question(pane_for_choice)
-                        # Подставляется только блок меню, и только когда варианты
-                        # распознаны: иначе распознанный по ошибке экран выбрасывал
-                        # текст транскрипта, а в чат уходил буфер TUI целиком.
+                        # Сохраняется только распознанный блок меню. Текст ответа
+                        # из журнала CLI остаётся отдельным источником.
                         if pane_options:
                             # Превью повторно распознаёт меню перед отправкой кнопок.
                             # Строка Other остаётся в тексте: без неё следующий номер
                             # выпадает, и кнопка «свой вариант» не появляется.
-                            latest_text = _SRS._choice_preview_text(
+                            session._tmux_choice_text = _SRS._choice_preview_text(
                                 pane_question,
                                 pane_options,
                                 _SRS._claude_other_choice_number(pane_for_choice),
                             )
+                            if not transcript_authoritative:
+                                latest_text = session._tmux_choice_text
+                            elif not choice_holds_turn:
+                                latest_text = "\n\n".join(filter(None, (transcript_latest_text, session._tmux_choice_text)))
                             question = " ".join(pane_question.split())
                             if question != last_question:
                                 last_question = question
@@ -1866,14 +1866,9 @@ class TmuxExecutionBackend:
                                 self._write_state(paths, state)
                         elif not transcript_authoritative:
                             latest_text = pane_for_choice or latest_text
-                    awaiting_choice = choice_in_pane or choice_in_transcript
+                    awaiting_choice = bool(session._tmux_choice_text)
                 except Exception:
-                    # Fallback to legacy string check if import/func unavailable
-                    awaiting_choice = (
-                        "Enter selection [" in (latest_text or "")
-                        or "or Escape to cancel" in (latest_text or "")
-                        or "☐ " in (latest_text or "")
-                    )
+                    logger.exception("failed to parse live tmux choice session_id=%s", getattr(session, "id", "?"))
                 # Статус "ждёт разрешения" из заголовка панели сознательно не
                 # удерживает ход. Удержание имело бы смысл только там, где ход
                 # уже помечен завершённым, а это делает единственный источник -
@@ -1889,7 +1884,9 @@ class TmuxExecutionBackend:
                 # его в превью нельзя. Панель остаётся источником только для CLI
                 # без распознанного транскрипта и для доставки вопроса с выбором.
                 # В итоговый ответ заметки не входят: latest_text остаётся репликой.
-                if awaiting_choice or not transcript_authoritative:
+                if awaiting_choice:
+                    preview_text = transcript_latest_text if transcript_authoritative else ""
+                elif not transcript_authoritative:
                     preview_text = latest_text
                 else:
                     preview_text = transcript_latest_text
@@ -1904,7 +1901,7 @@ class TmuxExecutionBackend:
                     preview_text = terminal_error
                     complete = True
                     completion_source = "transcript-error"
-                if preview_text and preview_text != last_reported_text:
+                if preview_text != last_reported_text:
                     last_reported_text = preview_text
                     setattr(session, "last_output_ts", time.time())
                     setattr(session, "last_assistant_text_ts", time.time())
@@ -1930,6 +1927,11 @@ class TmuxExecutionBackend:
                     not choice_blocking
                     and not shells_running
                     and background_pending == 0
+                    and (
+                        not transcript_authoritative
+                        or bool(transcript_update and transcript_update.complete)
+                        or (awaiting_choice and not choice_holds_turn)
+                    )
                     and str(latest_text or "").strip()
                     and idle_for >= answer_idle
                 ):
