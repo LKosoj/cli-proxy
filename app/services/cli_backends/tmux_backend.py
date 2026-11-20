@@ -956,16 +956,28 @@ class TmuxExecutionBackend:
         has_session = await driver.has_session(paths["session_name"])
         created_session = False
         if not has_session:
-            await driver.new_session(
-                paths["session_name"],
-                workdir=str(getattr(session, "workdir", "") or os.getcwd()),
-                command=_start_command(session, state, force_fresh=force_fresh),
-                # Канонический uid сессии бота, а не _session_uid: события пишет
-                # task_bearing_cli_hook_service через session_runtime_uid, и без
-                # совпадения фолбэков (у desktop-сессий это "s1" против
-                # "desktop:s1") native-хук нельзя связать с нашей сессией.
-                env={"CLI_PROXY_SESSION_UID": session_runtime_uid(session)},
+            start_task = asyncio.create_task(
+                driver.new_session(
+                    paths["session_name"],
+                    workdir=str(getattr(session, "workdir", "") or os.getcwd()),
+                    command=_start_command(session, state, force_fresh=force_fresh),
+                    # Канонический uid сессии бота, а не _session_uid: события пишет
+                    # task_bearing_cli_hook_service через session_runtime_uid, и без
+                    # совпадения фолбэков (у desktop-сессий это "s1" против
+                    # "desktop:s1") native-хук нельзя связать с нашей сессией.
+                    env={"CLI_PROXY_SESSION_UID": session_runtime_uid(session)},
+                )
             )
+            try:
+                await asyncio.shield(start_task)
+            except asyncio.CancelledError:
+                # Отмена ожидания не останавливает команду tmux в потоке.
+                # Дождаться её под блокировкой, прежде чем /interrupt закроет окно.
+                try:
+                    await start_task
+                except Exception:
+                    logger.exception("tmux startup failed during cancellation session_id=%s", getattr(session, "id", "?"))
+                raise
             created_session = True
         await driver.pipe_pane(paths["pane_target"], paths["pane_log"])
         resume_token = _get_resume_token(session)
@@ -1543,6 +1555,8 @@ class TmuxExecutionBackend:
         except Exception:
             logger.exception("failed to interrupt cancelled tmux request session_id=%s", getattr(session, "id", "?"))
         state = self._read_state(paths)
+        if state.get("state") == "stopped":
+            return
         state.update(
             {
                 "state": "idle" if sent else "failed",
@@ -2092,7 +2106,8 @@ class TmuxExecutionBackend:
         paths = self.paths(session)
         if force_fresh:
             await self.close(session)
-        fresh_start = await self._ensure_started(session, paths, force_fresh=force_fresh)
+        async with self._pane_lock(session):
+            fresh_start = await self._ensure_started(session, paths, force_fresh=force_fresh)
         if self._uses_ready_wait(session):
             try:
                 await self._wait_for_interactive_ready(session, paths, fresh_start=fresh_start)

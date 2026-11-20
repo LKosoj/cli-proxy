@@ -3636,6 +3636,36 @@ async def test_tmux_backend_marks_failed_without_interrupt_when_session_disappea
 
 
 @pytest.mark.asyncio
+async def test_tmux_cancelled_start_keeps_pane_lock_until_creation_finishes(tmp_path):
+    start_entered = asyncio.Event()
+    finish_start = asyncio.Event()
+
+    class SlowTmuxDriver(FakeTmuxDriver):
+        async def new_session(self, session_name, *, workdir, command, env=None):
+            start_entered.set()
+            await finish_start.wait()
+            await super().new_session(session_name, workdir=workdir, command=command, env=env)
+
+    driver = SlowTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    task = asyncio.create_task(backend.run(session, "do work"))
+    try:
+        await asyncio.wait_for(start_entered.wait(), timeout=1)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert backend._pane_lock(session).locked()
+    finally:
+        finish_start.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async with backend._pane_lock(session):
+        assert await backend.close(session) is True
+    assert not driver.sessions
+
+
+@pytest.mark.asyncio
 async def test_tmux_backend_cancellation_interrupts_and_closes_active_state(tmp_path):
     driver = FakeTmuxDriver()
     driver.autowrite_transcript = False

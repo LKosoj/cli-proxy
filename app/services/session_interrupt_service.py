@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from app.services.runtime_progress_service import clear_runtime_progress
 from app.services.session_tick_history_store import clear_session_ticks
-from session import session_runtime_uid
+from session import get_session_execution_backend, session_runtime_uid
 from sessions.conversation_scope import ConversationScope
 
 
@@ -139,11 +139,17 @@ class SessionInterruptService:
                 warnings.append("pending_questions_clear_failed")
                 self._log.exception("session interrupt: pending questions clear failed session_uid=%s", session_uid)
 
-        try:
-            session.interrupt()
-        except Exception:
-            warnings.append("session_interrupt_failed")
-            self._log.exception("session interrupt: backend interrupt failed session_uid=%s", session_uid)
+        active_backend = str(getattr(session, "_active_execution_backend", "") or "").strip().lower()
+        close_tmux = reason in {"telegram_command", "cancel_current"} and (
+            active_backend == "tmux"
+            or (active_backend in {"", "none"} and get_session_execution_backend(session) == "tmux")
+        )
+        if not close_tmux:
+            try:
+                session.interrupt()
+            except Exception:
+                warnings.append("session_interrupt_failed")
+                self._log.exception("session interrupt: backend interrupt failed session_uid=%s", session_uid)
 
         cancelled_task_count = 0
         try:
@@ -153,6 +159,15 @@ class SessionInterruptService:
         except Exception:
             warnings.append("task_cancel_failed")
             self._log.exception("session interrupt: cancel_session failed session_uid=%s", session_uid)
+        if close_tmux:
+            try:
+                from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+                async with TmuxExecutionBackend._pane_lock(session):
+                    await session.close_active_tmux_async()
+            except Exception:
+                warnings.append("tmux_close_failed")
+                self._log.exception("session interrupt: tmux close failed session_uid=%s", session_uid)
         await asyncio.sleep(0)
 
         cleared_notifications = 0
@@ -178,13 +193,13 @@ class SessionInterruptService:
                 self._log.exception("session interrupt: persist session failed session_uid=%s", session_uid)
 
         remaining_task_names = tuple(self._collect_remaining_task_names(session_uid))
-        backend_state = self._backend_state(session)
+        backend_state = "stopped" if close_tmux and "tmux_close_failed" not in warnings else self._backend_state(session)
         cleared_busy_signals = self._busy_signals_cleared(session, remaining_task_names=remaining_task_names)
 
         status = "completed"
         if remaining_task_names or backend_state not in {"stopped", "idle", "tmux_idle"} or not cleared_busy_signals:
             status = "partial_timeout"
-        if "session_interrupt_failed" in warnings and status == "partial_timeout":
+        if "tmux_close_failed" in warnings or ("session_interrupt_failed" in warnings and status == "partial_timeout"):
             status = "failed"
 
         report = SessionInterruptReport(
@@ -247,8 +262,6 @@ class SessionInterruptService:
         backend = str(getattr(session, "_active_execution_backend", "") or "").strip().lower()
         selected_backend = ""
         try:
-            from session import get_session_execution_backend
-
             selected_backend = str(get_session_execution_backend(session) or "").strip().lower()
         except Exception:
             selected_backend = ""

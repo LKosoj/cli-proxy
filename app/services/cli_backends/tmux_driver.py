@@ -91,7 +91,7 @@ class TmuxDriver:
         return result
 
     async def has_session(self, session_name: str) -> bool:
-        result = await self.run("has-session", "-t", session_name, check=False)
+        result = await self.run("has-session", "-t", f"={session_name}", check=False)
         return result.returncode == 0
 
     def has_session_sync(self, session_name: str) -> bool:
@@ -202,7 +202,7 @@ class TmuxDriver:
         return result.stdout
 
     async def kill_session(self, session_name: str) -> bool:
-        result = await self.run("kill-session", "-t", session_name, check=False)
+        result = await self.run("kill-session", "-t", f"={session_name}", check=False)
         if result.returncode == 0:
             return True
         error = str(result.stderr or "").strip()

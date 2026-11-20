@@ -242,3 +242,54 @@ async def test_session_interrupt_service_treats_selected_unstarted_tmux_as_stopp
 
     assert report.status == "completed"
     assert report.backend_state == "stopped"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reason", "active_backend", "close_fails"),
+    [
+        ("telegram_command", "tmux", False),
+        ("cancel_current", "none", False),
+        ("telegram_command", "tmux", True),
+    ],
+)
+async def test_explicit_interrupt_waits_for_tmux_close(tmp_path, reason, active_backend, close_fails) -> None:
+    session = _build_session(tmp_path)
+    session._active_execution_backend = active_backend
+    session.tool.execution_backends = ["headless", "tmux"]
+    session.tool.default_execution_backend = "tmux"
+    paths = TmuxExecutionBackend().paths(session)
+    TmuxExecutionBackend._write_state(paths, {"state": "idle"})
+    close_started = asyncio.Event()
+    finish_close = asyncio.Event()
+    tasks_cancelled = False
+
+    async def _cancel_session(_session_uid: str, _timeout_s: float) -> int:
+        nonlocal tasks_cancelled
+        tasks_cancelled = True
+        return 0
+
+    async def _close_tmux() -> bool:
+        assert tasks_cancelled
+        close_started.set()
+        await finish_close.wait()
+        if close_fails:
+            raise RuntimeError("tmux still running")
+        return True
+
+    session.close_active_tmux_async = _close_tmux
+    service = SessionInterruptService(cancel_session_tasks=_cancel_session)
+    task = asyncio.create_task(service.interrupt_session_runtime(session, owner_chat_id=None, reason=reason))
+    try:
+        await asyncio.wait_for(close_started.wait(), timeout=1)
+        assert not task.done()
+    finally:
+        finish_close.set()
+        report = await task
+
+    if close_fails:
+        assert report.status == "failed"
+        assert report.warnings == ("tmux_close_failed",)
+    else:
+        assert report.status == "completed"
+        assert report.backend_state == "stopped"
