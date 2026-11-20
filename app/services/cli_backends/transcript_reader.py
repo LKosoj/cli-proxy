@@ -193,6 +193,7 @@ class CliTranscriptReader:
         self.latest_progress_text = ""
         self.complete = False
         self.recognized = False
+        self.has_claude_turn_activity = False
         self.activity_at: Optional[float] = None
         self._grok_stream_key = ""
         self._grok_stream_chunks: list[str] = []
@@ -543,6 +544,8 @@ class CliTranscriptReader:
         self._update_claude_background_agents(record)
         if event_type in {"user", "assistant", "system", "progress"}:
             self.recognized = True
+        if event_type in {"user", "assistant", "progress"}:
+            self.has_claude_turn_activity = True
         if event_type in {"user", "assistant"}:
             self.complete = False
         self.activity_at = _event_timestamp(record.get("timestamp"))

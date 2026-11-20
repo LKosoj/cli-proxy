@@ -1433,6 +1433,7 @@ class TmuxExecutionBackend:
         transcript_mtime = os.path.getmtime(locator.path) if locator and os.path.exists(locator.path) else None
         if state.get("observed_request_id") == request.request_id and locator and state.get("observed_transcript_path") == locator.path:
             transcript_mtime = state.get("observed_transcript_mtime", transcript_mtime)
+        claude_reader = None
         pane_before = await self._capture_pane_text(session, paths)
         while True:
             await asyncio.sleep(1.0)
@@ -1445,13 +1446,20 @@ class TmuxExecutionBackend:
                 logger.info("tmux watch stopped after one hour without activity session_id=%s", getattr(session, "id", "?"))
                 return None
             pane = await self._capture_pane_text(session, paths)
-            locator = request.transcript_locator
             transcript_changed = bool(
                 locator and os.path.exists(locator.path) and (
-                    os.path.getsize(locator.path) != locator.start_offset
+                    os.path.getsize(locator.path) != (claude_reader.cursor if claude_reader else locator.start_offset)
                     or (locator.provider == "gemini" and os.path.getmtime(locator.path) != transcript_mtime)
                 )
             )
+            if transcript_changed and locator.provider == "claude":
+                # Claude дописывает служебные записи (например, away_summary)
+                # и после завершения хода. Они не должны занимать сессию.
+                if claude_reader is None:
+                    claude_reader = await asyncio.to_thread(self._build_transcript_reader, session, request)
+                if claude_reader is not None and claude_reader.locator is not None:
+                    await asyncio.to_thread(claude_reader.poll)
+                    transcript_changed = claude_reader.has_claude_turn_activity
             if transcript_changed:
                 logger.info("tmux watch woke on transcript session_id=%s request_id=%s", getattr(session, "id", "?"), request.request_id)
                 return request

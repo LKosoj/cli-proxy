@@ -4576,7 +4576,7 @@ async def test_cancelling_other_typing_finishes_answer_before_enter(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["menu", "transcript"])
-async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatch, change):
+async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatch, _isolated_home, change):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver)
     session = _session(tmp_path)
@@ -4584,12 +4584,14 @@ async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatc
     paths = _activate_tmux(backend, session, driver)
     log = Path(paths["pane_log"])
     log.write_text("old", encoding="utf-8")
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text("old", encoding="utf-8")
+    transcript = _isolated_home / ".claude" / "projects" / "transcript.jsonl"
+    transcript.parent.mkdir(parents=True)
+    old_reply = '{"type":"assistant","message":{"content":"old"}}\n'
+    transcript.write_text(old_reply, encoding="utf-8")
     request = tmux_backend_module.TmuxRecoveryRequest(
         request_id="observe", started_at=time.time(), offset=3, prompt="",
         dest={"kind": "telegram", "chat_id": 1}, observe=True,
-        transcript_locator=TranscriptLocator(provider="claude", path=str(transcript), start_offset=3),
+        transcript_locator=TranscriptLocator(provider="claude", path=str(transcript), start_offset=len(old_reply)),
     )
 
     backend._write_last_request(paths, {"request_id": "observe", "started_at": time.time(), "transcript_path": str(transcript)})
@@ -4611,17 +4613,23 @@ async def test_idle_tmux_wait_keeps_cursor_until_new_output(tmp_path, monkeypatc
     await asyncio.wait_for(captured.wait(), timeout=1)
     assert not task.done()
     assert session.busy is False
+    metadata = (
+        '{"type":"system","subtype":"away_summary"}\n'
+        '{"type":"file-history-snapshot"}\n'
+    )
+    transcript.write_text(old_reply + metadata, encoding="utf-8")
+    await asyncio.sleep(1.1)
+    assert not task.done()
     if change == "transcript":
-        transcript.write_text("old new", encoding="utf-8")
+        with transcript.open("a", encoding="utf-8") as handle:
+            handle.write('{"type":"user","message":{"content":"new request"}}\n')
     else:
-        log.write_text("old new", encoding="utf-8")
-        if change == "menu":
-            # Новый вопрос выбора виден на экране, но отсутствует в JSONL.
-            log.write_text("new", encoding="utf-8")
+        # Новый вопрос выбора виден на экране, но отсутствует в JSONL.
+        log.write_text("new", encoding="utf-8")
     result = await asyncio.wait_for(task, timeout=2)
     assert result is request
     assert result.offset == 3
-    assert result.transcript_locator.start_offset == 3
+    assert result.transcript_locator.start_offset == len(old_reply)
 
 
 @pytest.mark.asyncio
@@ -4647,15 +4655,19 @@ async def test_idle_tmux_wait_stops_for_new_run_or_closed_pane(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_idle_watch_keeps_output_written_during_final_delivery(tmp_path):
+async def test_idle_watch_keeps_output_written_during_final_delivery(tmp_path, _isolated_home):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver)
     session = _session(tmp_path)
     session.busy = False
     paths = _activate_tmux(backend, session, driver)
     Path(paths["pane_log"]).write_text("old new", encoding="utf-8")
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("old new", encoding="utf-8")
+    transcript = _isolated_home / ".claude" / "projects" / "session.jsonl"
+    transcript.parent.mkdir(parents=True)
+    old_reply = '{"type":"assistant","message":{"content":"old"}}\n'
+    transcript.write_text(
+        old_reply + '{"type":"assistant","message":{"content":"new"}}\n', encoding="utf-8",
+    )
     backend._write_last_request(paths, {
         "request_id": "done", "delivery_state": "delivered", "started_at": time.time(),
         "transcript_path": str(transcript), "transcript_provider": "claude", "transcript_offset": 0,
@@ -4663,7 +4675,7 @@ async def test_idle_watch_keeps_output_written_during_final_delivery(tmp_path):
     state = backend._read_state(paths)
     state.update(
         observed_request_id="done", observed_pane_offset=3,
-        observed_transcript_path=str(transcript), observed_transcript_offset=3,
+        observed_transcript_path=str(transcript), observed_transcript_offset=len(old_reply),
     )
     backend._write_state(paths, state)
 
