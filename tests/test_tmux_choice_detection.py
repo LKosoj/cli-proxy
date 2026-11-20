@@ -285,12 +285,12 @@ def test_answer_confirm_ignores_numbered_list_above() -> None:
         "Review your answers\n"
         "> Оставить изменение?\n"
         "→ Да\n"
-        "Ready to submit your answers?\n"
         "y. Submit answers\n"
         "n. Cancel\n"
         "Enter y/n:\n"
     )
 
+    assert SessionRunService._is_cli_choice_question(text) is True
     assert SessionRunService._parse_cli_choice_question(text)[1] == ["y. Submit answers", "n. Cancel"]
 
 

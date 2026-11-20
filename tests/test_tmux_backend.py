@@ -3169,7 +3169,7 @@ def test_tmux_backend_recognizes_claude_folder_trust_prompt() -> None:
     # Тот же текст в уже открытом поле ввода — цитата, а не вопрос.
     assert TmuxExecutionBackend._is_claude_folder_trust_prompt(CLAUDE_FOLDER_TRUST_PANE + "\n❯") is False
     assert TmuxExecutionBackend._is_claude_folder_trust_prompt("❯") is False
-    # Подтверждение ответов — другое меню, его «y» само нажимать нельзя.
+    # Сверка ответов обрабатывается отдельно от доверия папке.
     assert TmuxExecutionBackend._is_claude_folder_trust_prompt(
         "Ready to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:\n"
     ) is False
@@ -5046,7 +5046,7 @@ async def test_live_ready_pane_does_not_revive_confirmation_from_frozen_log(tmp_
     session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
     paths = _activate_tmux(backend, session, driver)
     Path(paths["pane_log"]).write_text(
-        "Review your answers\nReady to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:", encoding="utf-8",
+        "Review your answers\n> Что сделать?\n→ Да\ny. Submit answers\nn. Cancel\nEnter y/n:", encoding="utf-8",
     )
 
     async def capture(_target):
@@ -5060,6 +5060,7 @@ async def test_live_ready_pane_does_not_revive_confirmation_from_frozen_log(tmp_
     result = await asyncio.wait_for(backend.recover(session, request), timeout=0.3)
     assert result.text == ""
     assert not getattr(session, "last_assistant_text_value", "")
+    assert driver.sent_key_sequences == []
 
 
 @pytest.mark.asyncio
@@ -5075,7 +5076,7 @@ async def test_existing_tmux_session_reconnects_pipe_before_submitting_input(tmp
 
 
 @pytest.mark.asyncio
-async def test_other_answer_transitions_to_live_confirmation_with_monitor_running(tmp_path, monkeypatch):
+async def test_other_answer_is_submitted_automatically_with_monitor_running(tmp_path, monkeypatch):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
     session = _session(tmp_path)
@@ -5085,11 +5086,15 @@ async def test_other_answer_transitions_to_live_confirmation_with_monitor_runnin
     log = Path(paths["pane_log"])
     log.write_text("frozen old output", encoding="utf-8")
     screen = [_OTHER_TEXT_PROMPT]
-    seen = asyncio.Event()
-    confirmation = "Review your answers\nReady to submit your answers?\ny. Submit answers\nn. Cancel\nEnter y/n:"
+    confirmation_seen_again = asyncio.Event()
+    confirmation = (
+        "Questions: Действие (answered)\nReview your answers\n> Что сделать?\n→ Мой ответ\n"
+        "y. Submit answers\nn. Cancel\nEnter y/n:"
+    )
 
     async def capture(_target):
-        seen.set()
+        if screen[0] == confirmation and driver.sent_key_sequences:
+            confirmation_seen_again.set()
         return screen[0]
 
     async def enter(_target):
@@ -5105,15 +5110,12 @@ async def test_other_answer_transitions_to_live_confirmation_with_monitor_runnin
     )
     monitor = asyncio.create_task(backend.recover(session, request))
     try:
-        await asyncio.wait_for(seen.wait(), timeout=1)
         await backend.send_other_text(session, "Мой ответ")
-        preview = await asyncio.wait_for(_wait_for_preview(session), timeout=1)
-        from sessions.session_run_service import SessionRunService
-
-        assert SessionRunService._parse_cli_choice_question(preview)[1] == ["y. Submit answers", "n. Cancel"]
+        await asyncio.wait_for(confirmation_seen_again.wait(), timeout=1)
+        assert session._tmux_choice_text == ""
         assert driver.sent_prompts == ["Мой ответ"]
         assert driver.events.count("send_enter") == 1
-        assert driver.sent_key_sequences == []
+        assert driver.sent_key_sequences == [(paths["pane_target"], ("y", "Enter"))]
         assert log.read_text() == "frozen old output"
     finally:
         monitor.cancel()

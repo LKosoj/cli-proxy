@@ -86,57 +86,38 @@ def _is_choice_submit_footer(line: str) -> bool:
 
 
 def _is_answer_confirm(text: str) -> bool:
-    """Экран Claude «подтвердите ответы»: y/n под фразой Ready to submit.
+    """Экран Claude «подтвердите ответы»: y/n под заголовком сверки.
 
     Другой вопрос «Do you trust this folder?» тоже кончается на Enter y/n,
     но это не сверка ответов, и его сюда не берём.
     """
 
-    lines = str(text or "").splitlines()
-    ready_at = next(
-        (idx for idx, line in enumerate(lines) if "ready to submit your answers" in line.lower()),
-        None,
-    )
-    if ready_at is None:
+    lines = str(text or "").strip().lower().splitlines()
+    if lines and lines[-1].strip() == "enter y/n:":
+        lines.pop()
+    if len(lines) < 3:
         return False
-    letters = set()
-    for line in lines[ready_at + 1:]:
-        match = _CONFIRM_OPTION_RE.match(line.strip())
-        if match:
-            letters.add(match.group(1).lower())
-    return {"y", "n"} <= letters
+    return (
+        lines[-2].strip().lstrip("❯▶►▌»").lstrip() == "y. submit answers"
+        and lines[-1].strip().lstrip("❯▶►▌»").lstrip() == "n. cancel"
+        and any(line.strip() in {"review your answers", "ready to submit your answers?"} for line in lines[:-2])
+    )
 
 
 def _parse_answer_confirm(text: str) -> Tuple[str, List[str]]:
     """Вопрос — сверка ответов. Кнопки — отправить или отменить."""
 
-    lines = text.splitlines()
-    ready_at = next(
-        (idx for idx, line in enumerate(lines) if "ready to submit your answers" in line.lower()),
-        None,
-    )
-    footer_at = next(
-        (idx for idx, line in enumerate(lines) if line.strip().lower().startswith("enter y/n")),
-        len(lines),
-    )
-    search_from = ready_at + 1 if ready_at is not None else 0
-    opts: List[str] = []
-    opt_at = None
-    for idx, line in enumerate(lines[search_from:footer_at], search_from):
-        match = _CONFIRM_OPTION_RE.match(line.strip())
-        if not match:
-            continue
-        letter = match.group(1).lower()
-        if any(item.startswith(f"{letter}.") for item in opts):
-            continue
-        if opt_at is None:
-            opt_at = idx
-        opts.append(f"{letter}. {match.group(2).strip()}")
-    if opt_at is None:
-        return "Please choose:", []
-    q_lines = lines[:opt_at]
+    lines = text.strip().splitlines()
+    if lines[-1].strip().lower() == "enter y/n:":
+        lines.pop()
+    opts = [
+        f"{match.group(1).lower()}. {match.group(2).strip()}"
+        for line in lines[-2:]
+        if (match := _CONFIRM_OPTION_RE.match(line.strip()))
+    ]
+    q_lines = lines[:-2]
     review_at = next(
-        (idx for idx, line in enumerate(q_lines) if line.strip().lower().startswith("review your answers")),
+        (idx for idx in reversed(range(len(q_lines))) if q_lines[idx].strip().lower() == "review your answers"),
         None,
     )
     if review_at is not None:
@@ -150,7 +131,7 @@ def _parse_answer_confirm(text: str) -> Tuple[str, List[str]]:
         q_lines = list(reversed(tail))
     q_lines = [line for line in q_lines if not _is_volatile_choice_status_line(line)]
     question = "\n".join(q_lines).strip() or "Ready to submit your answers?"
-    return question, opts[:5]
+    return question, opts
 
 
 def _is_volatile_choice_status_line(line: str) -> bool:

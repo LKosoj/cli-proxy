@@ -103,6 +103,11 @@ _OTHER_TEXT_PROMPT_RE = re.compile(
     re.IGNORECASE,
 )
 _OTHER_TEXT_WAIT_SEC = 3.0
+_CLAUDE_ANSWER_REVIEW_RE = re.compile(
+    r"^[ \t]*Review your answers[ \t]*\n(?:.*\n)*?^[ \t]*→[ \t]+\S.*\n"
+    r"(?:.*\n)*?^[ \t]*y\. Submit answers[ \t]*\n[ \t]*n\. Cancel[ \t]*\n[ \t]*Enter y/n:\s*\Z",
+    re.MULTILINE,
+)
 
 
 def _read_pane_chunk(log_path: str, cursor: int, *, max_bytes: int = 0) -> tuple[bytes, int, bool]:
@@ -1587,6 +1592,7 @@ class TmuxExecutionBackend:
         last_progress_text = ""
         # Один ответ на один показ. Пока экран не сменился, клавиши второй раз не шлём.
         folder_trust_sent = False
+        answer_review_sent: Optional[bool] = None
         complete = False
         completion_source = ""
         # Ошибка, которой Codex закрыл ход. Пустая, пока в журнале её нет.
@@ -1831,6 +1837,29 @@ class TmuxExecutionBackend:
                     complete = True
                     completion_source = "monitor-idle-timeout"
                     break
+                if live_pane is not None and self._uses_claude_code(session):
+                    if not _CLAUDE_ANSWER_REVIEW_RE.search(live_pane):
+                        answer_review_sent = None
+                    elif answer_review_sent is None:
+                        # Пользователь уже выбрал ответы. Подтверждаем только
+                        # текущий экран, перечитанный под блокировкой ввода.
+                        async with self._pane_lock(session):
+                            current_pane = await self._capture_pane_text(session, paths)
+                            if current_pane is None or not _CLAUDE_ANSWER_REVIEW_RE.search(current_pane):
+                                continue
+                            try:
+                                await driver.send_keys(paths["pane_target"], "y", "Enter")
+                            except TmuxDriverError:
+                                answer_review_sent = False
+                                logger.exception("failed to submit Claude answers session_id=%s", session.id)
+                            else:
+                                answer_review_sent = True
+                                self.record_input_activity(session)
+                                last_change = time.time()
+                                logger.info("submitted Claude answers session_id=%s", session.id)
+                if answer_review_sent:
+                    session._tmux_choice_text = ""
+                    continue
                 # Перерисованный терминал содержит историю, а не новый ответ.
                 latest_text = transcript_latest_text if request.observe else (transcript_latest_text or pane_latest_text)
                 # Меню ищется на текущем экране: в события транскрипта его нет,
