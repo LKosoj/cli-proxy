@@ -23,6 +23,10 @@ _SUPPORTED_PROVIDERS = {"claude", "codex", "grok", "qwen", "gemini", "kimi"}
 _DISCOVERY_TAIL_BYTES = 4 * 1024 * 1024
 _DISCOVERY_CANDIDATE_LIMIT = 30
 _CODEX_SESSION_ID_RE = re.compile(r"-([0-9a-fA-F-]{36})\.jsonl$")
+_CLAUDE_AGENT_FINISHED_RE = re.compile(
+    r"^<task-notification>\s*<task-id>([^<]+)</task-id>\s*<tool-use-id>([^<]+)</tool-use-id>"
+    r"(?:\s*<output-file>[^<]*</output-file>)?\s*<status>(?:completed|failed|stopped|killed|cancelled)</status>",
+)
 
 
 @dataclass(frozen=True)
@@ -51,8 +55,7 @@ class TranscriptPollResult:
     thinking_text: str = ""
     # Сколько фоновых агентов ещё работают. 0 — ход родителя можно закрывать.
     background_pending: int = 0
-    # False: последняя запись конца шага не сказала, сколько агентов осталось.
-    # Такое молчание — не ноль, ход из-за него сразу не закрываем.
+    # False: журнал ещё не подтвердил, что все фоновые агенты завершились.
     background_agents_settled: bool = True
 
 
@@ -198,10 +201,9 @@ class CliTranscriptReader:
         self.terminal_error = ""
         self.retry_prompt = ""
         self.background_pending = 0
-        # У Codex, Grok, Kimi, Qwen и Gemini этого счётчика нет: их конец хода
-        # закрывает превью сразу. Claude сам снимает флаг, если в turn_duration
-        # нет числа агентов или оно больше нуля.
         self.background_agents_settled = True
+        self._claude_running_agents: dict[str, str] = {}
+        self._claude_unidentified_agents: Optional[int] = None
         # Реплика пользователя текущего хода. task_started начинает ход заново.
         self._turn_user_text = ""
         if locator is not None:
@@ -442,7 +444,7 @@ class CliTranscriptReader:
         self._seed_background_pending()
 
     def _seed_background_pending(self) -> None:
-        """Берёт число живых агентов из последней turn_duration до курсора.
+        """Восстанавливает учёт фоновых агентов из записей до курсора.
 
         Наблюдение начинает читать с конца файла и саму запись уже не видит.
         Текст ответа и признак конца хода из неё не берём.
@@ -463,9 +465,7 @@ class CliTranscriptReader:
             head = data.find(b"\n")
             if head < 0:
                 return
-            data = data[head + 1 :]
-        pending: Optional[int] = None
-        saw_turn = False
+            data = data[head + 1:]
         for raw_line in data.splitlines():
             try:
                 text = raw_line.decode("utf-8").strip()
@@ -477,21 +477,42 @@ class CliTranscriptReader:
                 record = loads_safe(text, strict_first=True)
             except Exception:
                 continue
-            if not isinstance(record, dict):
-                continue
-            if str(record.get("type") or "").strip() != "system":
-                continue
-            if str(record.get("subtype") or "").strip() != "turn_duration":
-                continue
+            if isinstance(record, dict):
+                self._update_claude_background_agents(record)
+
+    def _update_claude_background_agents(self, record: dict[str, Any]) -> None:
+        event_type = record.get("type")
+        if event_type == "system" and record.get("subtype") == "turn_duration":
             pending = _claude_pending_count(record)
-            saw_turn = True
-        if not saw_turn:
+            if pending is not None:
+                if pending == 0:
+                    self._claude_running_agents.clear()
+                # Сохраняем и тех, чей запуск остался за пределами прочитанного журнала.
+                self._claude_unidentified_agents = max(0, pending - len(self._claude_running_agents))
+        elif event_type == "user":
+            message = record.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            result = record.get("toolUseResult")
+            origin = record.get("origin")
+            if isinstance(result, dict) and result.get("status") == "async_launched" and isinstance(content, list):
+                agent_id = str(result.get("agentId") or "")
+                tool_id = next(
+                    (str(item["tool_use_id"]) for item in content
+                     if isinstance(item, dict) and item.get("type") == "tool_result" and item.get("tool_use_id")),
+                    "",
+                )
+                if agent_id and tool_id:
+                    self._claude_running_agents[agent_id] = tool_id
+            elif isinstance(origin, dict) and origin.get("kind") == "task-notification" and isinstance(content, str):
+                finished = _CLAUDE_AGENT_FINISHED_RE.match(content)
+                if finished and self._claude_running_agents.get(finished[1]) == finished[2]:
+                    del self._claude_running_agents[finished[1]]
+            else:
+                return
+        else:
             return
-        if pending is None:
-            self.background_agents_settled = False
-            return
-        self.background_pending = pending
-        self.background_agents_settled = pending == 0
+        self.background_pending = len(self._claude_running_agents) + (self._claude_unidentified_agents or 0)
+        self.background_agents_settled = self.background_pending == 0 and self._claude_unidentified_agents == 0
 
     def _attach_new_records(self, paths: Iterable[Path]) -> bool:
         for path in paths:
@@ -519,6 +540,7 @@ class CliTranscriptReader:
 
     def _handle_claude(self, record: dict[str, Any]) -> None:
         event_type = str(record.get("type") or "").strip()
+        self._update_claude_background_agents(record)
         if event_type in {"user", "assistant", "system", "progress"}:
             self.recognized = True
         if event_type in {"user", "assistant"}:
@@ -545,13 +567,6 @@ class CliTranscriptReader:
                         self.latest_progress_text = tool_name
         elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
             self.complete = True
-            pending = _claude_pending_count(record)
-            if pending is None:
-                # Поля нет. Это не «агентов ноль»: уже известное число не затираем.
-                self.background_agents_settled = False
-            else:
-                self.background_pending = pending
-                self.background_agents_settled = pending == 0
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         record_type = str(record.get("type") or "").strip()

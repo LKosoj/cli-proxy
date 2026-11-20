@@ -4,6 +4,8 @@ import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from app.services.cli_backends.transcript_reader import CliTranscriptReader, TranscriptLocator
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 
@@ -311,6 +313,57 @@ def test_claude_transcript_reader_missing_agent_count_is_not_zero(tmp_path):
     assert result.complete is True
     assert result.background_pending == 2
     assert result.background_agents_settled is False
+
+
+@pytest.mark.parametrize("restore", [False, True])
+def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_path, restore):
+    started_at = time.time() - 10
+    session_id = "66666666-6666-4666-8666-666666666666"
+    path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
+
+    def launch(agent_id, offset):
+        return {
+            "type": "user", "sessionId": session_id, "timestamp": _iso_utc(started_at + offset),
+            "toolUseResult": {"status": "async_launched", "agentId": agent_id, "isAsync": True},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": f"tool-{agent_id}"}]},
+        }
+
+    def finish(agent_id, offset):
+        return {
+            "type": "user", "sessionId": session_id, "timestamp": _iso_utc(started_at + offset),
+            "origin": {"kind": "task-notification"},
+            "message": {"content": (
+                f"<task-notification>\n<task-id>{agent_id}</task-id>\n<tool-use-id>tool-{agent_id}</tool-use-id>\n"
+                "<output-file>/tmp/task.output</output-file>\n<status>completed</status>\n</task-notification>"
+            )},
+        }
+
+    def duration(offset, **extra):
+        return {
+            "type": "system", "subtype": "turn_duration", "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + offset), **extra,
+        }
+
+    _append_jsonl(path, launch("a", 1), launch("b", 2), duration(3, pendingBackgroundAgentCount=2))
+    reader = CliTranscriptReader(
+        cli_name="claude", workdir="/srv/project", started_at=started_at, session_id=session_id, home_dir=tmp_path,
+        locator=TranscriptLocator("claude", str(path), path.stat().st_size, session_id) if restore else None,
+    )
+    assert reader.poll().background_pending == 2
+
+    _append_jsonl(path, finish("a", 4), finish("a", 5), finish("shell", 6), duration(7))
+    partial = reader.poll()
+    assert partial.complete is True
+    assert partial.background_pending == 1
+    assert partial.background_agents_settled is False
+
+    _append_jsonl(path, finish("b", 8))
+    assert reader.poll().complete is False
+    _append_jsonl(path, duration(9))
+    final = reader.poll()
+    assert final.complete is True
+    assert final.background_pending == 0
+    assert final.background_agents_settled is True
 
 
 def test_claude_transcript_reader_skips_records_of_previous_turn(tmp_path):

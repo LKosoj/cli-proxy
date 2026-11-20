@@ -1834,8 +1834,8 @@ class TmuxExecutionBackend:
                         background_pending = max(0, int(transcript_update.background_pending or 0))
                     except (TypeError, ValueError):
                         background_pending = 0
-                    # Молчание про число агентов — не ноль. Закрывать можно только
-                    # когда запись явно сказала, что агентов не осталось.
+                    # Журнал подтверждает конец фоновой работы счётчиком
+                    # или уведомлениями о завершении известных агентов.
                     background_agents_settled = bool(
                         getattr(transcript_update, "background_agents_settled", True)
                     )
