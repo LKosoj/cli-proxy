@@ -843,13 +843,16 @@ class TmuxExecutionBackend:
 
             self.record_input_activity(session)
 
-    async def send_choice(self, session: Any, choice: str) -> None:
+    async def send_choice(self, session: Any, choice: str, *, multi_question_id: str = "") -> None:
         """Send a TUI choice as key events, not as pasted text.
 
         Число — пункт меню. Буквы y/n — подтверждение ответов Claude.
         """
         value = str(choice or "").strip()
-        if re.fullmatch(r"[yn]", value, re.IGNORECASE):
+        if multi_question_id:
+            if not re.fullmatch(r"[1-9](?:,[1-9])*", value):
+                raise TmuxDriverError("invalid tmux multiple choice")
+        elif re.fullmatch(r"[yn]", value, re.IGNORECASE):
             value = value.lower()
         elif not value.isdigit():
             raise TmuxDriverError("tmux choice must be a number or y/n")
@@ -859,8 +862,23 @@ class TmuxExecutionBackend:
             if not await self.can_accept_input(session):
                 raise TmuxDriverError("active tmux session is unavailable")
 
-            await self._driver(session).send_keys(paths["pane_target"], *value)
-            await self._driver(session).send_enter(paths["pane_target"])
+            driver = self._driver(session)
+            if multi_question_id:
+                from sessions.session_run_service import SessionRunService
+
+                pane = await self._capture_pane_text(session, paths) or ""
+                footer = SessionRunService._tmux_multi_select_footer(pane)
+                question, options = SessionRunService._parse_cli_choice_question(pane)
+                current_id = SessionRunService._tmux_choice_question_id(str(session.id), question, options)
+                if not footer or not pane.rstrip().endswith(":") or current_id != multi_question_id:
+                    raise TmuxDriverError("tmux multiple-choice menu changed or already has input")
+                if multi_question_id in getattr(session, "_answered_tmux_choice_ids", ()):
+                    raise TmuxDriverError("tmux multiple-choice menu already answered")
+                await driver.send_keys(paths["pane_target"], *value, "Enter")
+                SessionRunService.remember_answered_tmux_choice(session, multi_question_id)
+            else:
+                await driver.send_keys(paths["pane_target"], *value)
+                await driver.send_enter(paths["pane_target"])
 
             self.record_input_activity(session)
 
@@ -1881,6 +1899,7 @@ class TmuxExecutionBackend:
                                 pane_question,
                                 pane_options,
                                 _SRS._claude_other_choice_number(pane_for_choice),
+                                _SRS._tmux_multi_select_footer(pane_for_choice),
                             )
                             if not transcript_authoritative:
                                 latest_text = session._tmux_choice_text

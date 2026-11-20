@@ -57,5 +57,6 @@ Instruction node for `bot.py` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-20 — Карточка вопроса Claude показывает отметки выбора и кнопку отправки.
 - 2026-11-11 — после ответа на меню tmux возобновляется чтение вывода существующим reread_tmux_output.
 - 2026-10-10 — restored pre-redesign menu completion behavior.

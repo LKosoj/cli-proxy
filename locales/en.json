@@ -785,6 +785,8 @@
       "invalid": "Unknown language code."
     },
     "ask": {
+      "multi_select": "Select the options you want, then press Send.",
+      "submit_selection": "Send",
       "answer_already_received": "Answer already received.",
       "choice_selected": "Selected: {answer}",
       "enter_custom": "Enter your own answer in a single message.",

@@ -785,6 +785,8 @@
       "invalid": "Неизвестный код языка."
     },
     "ask": {
+      "multi_select": "Отметьте нужные варианты, затем нажмите «Отправить».",
+      "submit_selection": "Отправить",
       "answer_already_received": "Ответ уже получен.",
       "choice_selected": "Вы выбрали: {answer}",
       "enter_custom": "Введите свой вариант одним сообщением.",

@@ -857,6 +857,9 @@ class InputDispatchService:
             question,
             options,
         )
+        multi_select = bool(SessionRunService._tmux_multi_select_footer(visible))
+        if multi_select and qid in pending:
+            return
         pending[qid] = {
             "question": question,
             "options": list(options),
@@ -864,6 +867,7 @@ class InputDispatchService:
             "message_thread_id": target.get("message_thread_id"),
             "session_id": str(getattr(session, "id", "")),
             "tmux_feed": True,
+            "tmux_multi_select": multi_select,
         }
         await sender(
             context,

@@ -1305,7 +1305,9 @@ class BotApp:
         message_thread_id: Optional[int] = None,
     ) -> None:
         _ask_q_lang = resolve_user_lang(self.config, chat_id=chat_id)
-        options = self._normalize_ask_options(options, allow_custom=allow_custom)
+        previous = self.ui_state.pending_questions.get(question_id) or {}
+        multi_select = bool(previous.get("tmux_multi_select"))
+        options = self._normalize_ask_options(options, allow_custom=allow_custom and not multi_select)
         options = self._ensure_min_ask_options(options, system_options=system_options, lang=_ask_q_lang)
         ui_key = self.telegram_ui_key(
             chat_id,
@@ -1314,10 +1316,7 @@ class BotApp:
         # Вызывающий код может пометить вопрос до отправки, например tmux_feed.
         # Новая запись не должна терять эту пометку: без неё ответ остаётся в чате
         # и не впечатывается в панель.
-        previous = self.ui_state.pending_questions.get(question_id)
-        tmux_feed = bool(previous.get("tmux_feed")) if isinstance(previous, dict) else False
         record = {
-            "question": str(question or ""),
             "options": options,
             "chat_id": int(ui_key.chat_id),
             "message_thread_id": ui_key.message_thread_id,
@@ -1326,20 +1325,37 @@ class BotApp:
             "allow_custom": allow_custom,
             "created_at": time.time(),
         }
-        if tmux_feed:
+        if previous.get("tmux_feed"):
             record["tmux_feed"] = True
+        if multi_select:
+            record["tmux_multi_select"] = True
         body = str(question or "")
         labels = [self._ask_button_text(opt) for opt in options]
-        if any(label != " ".join(str(opt).split()) for label, opt in zip(labels, options)):
+        if any(label != " ".join(str(opt).split()) or (multi_select and len(label) > 62)
+               for label, opt in zip(labels, options)):
             # Полный текст длинного пункта остаётся в сообщении: на кнопке он обрезан.
             body = body.rstrip() + "\n\n" + "\n".join(str(opt).strip() for opt in options)
-            record["question"] = body
+        if multi_select:
+            body += "\n\n" + t("msg.ask.multi_select", _ask_q_lang)
+        record["question"] = body
         self.ui_state.pending_questions[question_id] = record
-        rows = [[InlineKeyboardButton(label, callback_data=f"ask:{question_id}:{idx}")] for idx, label in enumerate(labels)]
-        if allow_custom:
-            rows.append([InlineKeyboardButton(t("bot.ask_custom_btn", _ask_q_lang), callback_data=f"ask:{question_id}:custom")])
-        keyboard = InlineKeyboardMarkup(rows)
+        keyboard = self._ask_question_keyboard(question_id, record, _ask_q_lang)
         await self._send_message(context, text=body, reply_markup=keyboard, **ui_key.reply_kwargs())
+
+    @classmethod
+    def _ask_question_keyboard(
+        cls, question_id: str, record: dict, lang: str, *, selected=(),
+    ) -> InlineKeyboardMarkup:
+        rows = []
+        for idx, option in enumerate(record["options"]):
+            if record.get("tmux_multi_select"):
+                option = f"{'☑' if idx in selected else '☐'} {option}"
+            rows.append([InlineKeyboardButton(cls._ask_button_text(option), callback_data=f"ask:{question_id}:{idx}")])
+        if record.get("allow_custom"):
+            rows.append([InlineKeyboardButton(t("bot.ask_custom_btn", lang), callback_data=f"ask:{question_id}:custom")])
+        if selected:
+            rows.append([InlineKeyboardButton(t("msg.ask.submit_selection", lang), callback_data=f"ask:{question_id}:submit")])
+        return InlineKeyboardMarkup(rows)
 
     @staticmethod
     def _ask_button_text(option: str) -> str:

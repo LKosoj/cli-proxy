@@ -1941,6 +1941,38 @@ def _activate_tmux(backend, session, driver):
 
 
 @pytest.mark.asyncio
+async def test_tmux_multiple_choice_sends_numbers_in_one_submission(tmp_path):
+    from sessions.session_run_service import SessionRunService
+
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver)
+    session = _session(tmp_path)
+    paths = _activate_tmux(backend, session, driver)
+    pane = (
+        "Questions: Changes, Details\n> Which changes?\n1. First\n2. Second\n3. Other\n"
+        "Select with numbers [1-3] (comma- or space-separated\n"
+        "for several). Then Enter to Next, bare Enter for defaults, or Escape to cancel:"
+    )
+    question, options = SessionRunService._parse_cli_choice_question(pane)
+    footer = SessionRunService._tmux_multi_select_footer(pane)
+    assert footer
+    assert SessionRunService._is_cli_choice_question(pane)
+    preview = SessionRunService._choice_preview_text(question, options, "3", footer)
+    assert SessionRunService._tmux_multi_select_footer(preview) == footer
+    assert SessionRunService._parse_cli_choice_question(preview) == (question, options)
+    qid = SessionRunService._tmux_choice_question_id(session.id, question, options)
+
+    driver.capture_outputs = [pane + " 1,2", pane, pane]
+    with pytest.raises(TmuxDriverError, match="changed or already has input"):
+        await backend.send_choice(session, "1,2", multi_question_id=qid)
+    await backend.send_choice(session, "1,2", multi_question_id=qid)
+    with pytest.raises(TmuxDriverError, match="already answered"):
+        await backend.send_choice(session, "1,2", multi_question_id=qid)
+
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("1", ",", "2", "Enter"))]
+
+
+@pytest.mark.asyncio
 async def test_send_other_text_types_when_field_is_already_open(tmp_path):
     driver = FakeTmuxDriver()
     driver.capture_outputs = [_OTHER_TEXT_PROMPT, _OTHER_TEXT_PROMPT, "pasted"]

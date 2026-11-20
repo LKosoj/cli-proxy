@@ -54,6 +54,12 @@ _CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\
 _CONFIRM_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?([yn])[\.\)]\s+(\S.*)$', re.IGNORECASE)
 # Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
 _CHOICE_CURSOR_RE = re.compile(r'^[ \t]*(?:[❯▶►▌»][ \t]*(?:☐[ \t]*)?|☐[ \t]*)[1-9][\.\)][ \t]', re.M)
+_MULTI_SELECT_FOOTER_RE = re.compile(
+    r"^[ \t]*(Select with numbers \[[\d-]+\]\s+\(comma-\s+or\s+space-separated\s+for\s+several\)\."
+    r"\s+Then\s+Enter\s+to\s+(?:Next|submit)(?:,\s+bare\s+Enter\s+for\s+defaults,)?"
+    r"\s+or\s+Escape\s+to\s+cancel:)[ \t]*[\d, ]*\s*\Z",
+    re.IGNORECASE | re.MULTILINE,
+)
 _CHOICE_QUESTION_MAX_LINES = 12
 # «Running… (42s · timeout 10m)» и «(6s · timeout 10m)» перерисовываются
 # каждую секунду. Точка посередине у Claude — «·», у Codex — «•».
@@ -475,7 +481,7 @@ class SessionRunService:
         if _CHOICE_CURSOR_RE.search(text):
             return True
         lines = text.strip().splitlines()
-        return bool(lines and _is_choice_submit_footer(lines[-1]))
+        return bool((lines and _is_choice_submit_footer(lines[-1])) or cls._tmux_multi_select_footer(text))
 
     @staticmethod
     def _tmux_choice_question_id(session_key: str, question: str, options: List[str]) -> str:
@@ -501,7 +507,14 @@ class SessionRunService:
         return ""
 
     @staticmethod
-    def _choice_preview_text(question: str, options: List[str], other_number: str = "") -> str:
+    def _tmux_multi_select_footer(text: str) -> str:
+        match = _MULTI_SELECT_FOOTER_RE.search(text)
+        return " ".join(match.group(1).split()) if match else ""
+
+    @staticmethod
+    def _choice_preview_text(
+        question: str, options: List[str], other_number: str = "", multi_select_footer: str = "",
+    ) -> str:
         """Текст меню для повторного разбора: Other остаётся строкой, не кнопкой.
 
         Без этой строки номер «Chat about this» перестаёт идти по порядку,
@@ -522,7 +535,7 @@ class SessionRunService:
                 rows.insert(insert_at, other_line)
         if not rows:
             return str(question or "").strip()
-        return "\n".join([str(question or ""), f"❯ {rows[0]}", *rows[1:]]).strip()
+        return "\n".join([str(question or ""), f"❯ {rows[0]}", *rows[1:], multi_select_footer]).strip()
 
     @staticmethod
     def _parse_cli_choice_question(text: str) -> Tuple[str, List[str]]:
@@ -809,6 +822,7 @@ class SessionRunService:
                     "message_thread_id": dest.get("message_thread_id"),
                     "session_id": str(getattr(session, "id", "")),
                     "tmux_feed": True,
+                    "tmux_multi_select": bool(self._tmux_multi_select_footer(visible_choice_text)),
                 }
                 self.bot_app.ui_state.pending_questions[qid] = meta
                 try:

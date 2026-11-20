@@ -785,6 +785,8 @@
       "invalid": "未知语言代码。"
     },
     "ask": {
+      "multi_select": "勾选所需选项，然后点击“发送”。",
+      "submit_selection": "发送",
       "answer_already_received": "已收到回答。",
       "choice_selected": "已选择: {answer}",
       "enter_custom": "请用一条消息输入您自己的回答。",

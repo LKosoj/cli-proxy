@@ -151,15 +151,29 @@ class ProtocolActionsMixin:
             await self._edit_msg(context, query, t("msg.ask.enter_custom", lang))
             return True
         options = pending.get("options") or []
-        try:
-            idx = int(idx_str)
-        except ValueError:
-            await self._edit_msg(context, query, t("msg.ask.invalid_choice", lang))
-            return True
-        if idx < 0 or idx >= len(options):
-            await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
-            return True
-        answer = options[idx]
+        multi_select = pending.get("tmux_multi_select")
+        selected = set(pending.get("selected_indices", ()))
+        if multi_select and idx_str == "submit":
+            if not selected:
+                return True
+            answers = [options[idx] for idx in sorted(selected)]
+            answer = "\n".join(answers)
+        else:
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                await self._edit_msg(context, query, t("msg.ask.invalid_choice", lang))
+                return True
+            if idx < 0 or idx >= len(options):
+                await self._edit_msg(context, query, t("msg.error.choice_unavailable", lang))
+                return True
+            if multi_select:
+                selected.symmetric_difference_update([idx])
+                keyboard = self.bot_app._ask_question_keyboard(question_id, pending, lang, selected=selected)
+                if await self._edit_msg(context, query, pending["question"], reply_markup=keyboard):
+                    pending["selected_indices"] = sorted(selected)
+                return True
+            answer = options[idx]
         # Вопрос из меню tmux: цифра уходит в панель и на этом ответ закончен.
         # resolve_question для такого id всегда False — это не вопрос плагина,
         # и писать «ответ уже получен» здесь нельзя: клик тогда выглядит пустым,
@@ -185,14 +199,24 @@ class ProtocolActionsMixin:
                     from app.services.cli_backends import TmuxExecutionBackend
                     from sessions.session_run_service import SessionRunService
 
-                    await TmuxExecutionBackend().send_choice(tmux_sess, choice)
-                    SessionRunService.remember_answered_tmux_choice(tmux_sess, question_id)
+                    backend = TmuxExecutionBackend()
+                    if multi_select:
+                        numbers = ",".join(option.split(".", 1)[0] for option in answers)
+                        await backend.send_choice(tmux_sess, numbers, multi_question_id=question_id)
+                    else:
+                        await backend.send_choice(tmux_sess, choice)
+                        SessionRunService.remember_answered_tmux_choice(tmux_sess, question_id)
                     fed = True
             except Exception:
                 logging.getLogger("bot.ask").exception("failed to feed tmux choice from ask")
             if not fed:
                 # Карточка остаётся: повторный клик ещё может дойти до панели.
-                await self._edit_msg(context, query, t("msg.error.tmux_current_send_failed", lang))
+                text = t("msg.error.tmux_current_send_failed", lang)
+                if multi_select:
+                    keyboard = self.bot_app._ask_question_keyboard(question_id, pending, lang, selected=selected)
+                    await self._edit_msg(context, query, pending["question"] + "\n\n" + text, reply_markup=keyboard)
+                else:
+                    await self._edit_msg(context, query, text)
                 return True
             self.bot_app._clear_pending_question(question_id)
             await self._edit_msg(context, query, t("msg.ask.choice_selected", lang, answer=answer))

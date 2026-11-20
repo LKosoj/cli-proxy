@@ -1,5 +1,10 @@
 import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import pytest
+
+from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 from app.services.telegram_ui_scope import TelegramUiKey
 from bot import BotApp
 from config import AppConfig, DefaultsConfig, MCPConfig, TelegramConfig, ToolConfig
@@ -112,6 +117,45 @@ def test_send_ask_question_keeps_tmux_feed_flag(tmp_path):
         assert "tmux_feed" not in app.ui_state.pending_questions["q2"]
 
     asyncio.run(_run())
+
+
+@pytest.mark.asyncio
+async def test_tmux_multiple_choice_edits_the_same_rich_card(tmp_path, monkeypatch):
+    app = _build_app(tmp_path)
+    session = app.manager.create(1, "dummy", str(tmp_path))
+    app.resolve_telegram_callback_scope = lambda _query: (1, None, 1, session)
+    app.session_management.reread_tmux_output = AsyncMock()
+    send_choice = AsyncMock()
+    monkeypatch.setattr(TmuxExecutionBackend, "send_choice", send_choice)
+    calls = []
+
+    async def post(endpoint, *, data):
+        calls.append((endpoint, data))
+        return SimpleNamespace(message_id=10)
+
+    context = SimpleNamespace(bot=SimpleNamespace(_post=post, send_message=AsyncMock()))
+    query = SimpleNamespace(
+        message=SimpleNamespace(chat_id=1, message_id=10, message_thread_id=None),
+        from_user=SimpleNamespace(id=1, language_code="ru"),
+    )
+    qid = "tmux_choice_s1_example"
+    app.ui_state.pending_questions[qid] = {"tmux_feed": True, "tmux_multi_select": True}
+    await app._send_ask_question(
+        context, 1, session.id, qid, "Что сделать?", ["1. Первое", "2. Второе", "4. Четвёртое"],
+        allow_custom=False, system_options=False,
+    )
+    for action in ("0", "1", "2", "1"):
+        await app.callbacks._cb_ask(data=f"ask:{qid}:{action}", chat_id=1, query=query, context=context)
+
+    assert [endpoint for endpoint, _ in calls] == ["sendRichMessage"] + ["editMessageText"] * 4
+    assert all(payload["message_id"] == 10 and "rich_message" in payload for _, payload in calls[1:])
+    keyboard = calls[-1][1]["reply_markup"].inline_keyboard
+    assert [row[0].text for row in keyboard] == ["☑ 1. Первое", "☐ 2. Второе", "☑ 4. Четвёртое", "Отправить"]
+    send_choice.assert_not_awaited()
+    await app.callbacks._cb_ask(data=f"ask:{qid}:submit", chat_id=1, query=query, context=context)
+    send_choice.assert_awaited_once_with(session, "1,4", multi_question_id=qid)
+    app.session_management.reread_tmux_output.assert_awaited_once()
+    assert qid not in app.ui_state.pending_questions
 
 
 def test_send_ask_question_truncates_long_button_but_keeps_full_text(tmp_path):

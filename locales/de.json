@@ -785,6 +785,8 @@
       "invalid": "Unbekannter Sprachcode."
     },
     "ask": {
+      "multi_select": "Wählen Sie die gewünschten Optionen und drücken Sie dann auf „Senden“.",
+      "submit_selection": "Senden",
       "answer_already_received": "Antwort bereits erhalten.",
       "choice_selected": "Ausgewählt: {answer}",
       "enter_custom": "Geben Sie Ihre eigene Antwort in einer einzigen Nachricht ein.",
