@@ -244,6 +244,7 @@ async def watch_session_assistant_preview(
     build_text: Callable[[Any], Optional[str]] = build_assistant_preview_text,
     refresh_interval_sec: Optional[float] = None,
     include_elapsed_time: bool = False,
+    timer_without_text: bool = False,
     clock: Callable[[], float] = time.monotonic,
 ) -> None:
     last_sent_source: Optional[str] = None
@@ -255,26 +256,25 @@ async def watch_session_assistant_preview(
     if refresh_interval_sec is not None:
         refresh_interval = max(interval, float(refresh_interval_sec))
     while True:
-        source = build_text(getattr(session, "last_assistant_text_value", None))
+        source = build_text(getattr(session, "last_assistant_text_value", None)) or ""
         choice = str(getattr(session, "_tmux_choice_text", "") or "")
+        show_timer = include_elapsed_time and (
+            bool(source) or (timer_without_text and not choice and not stop_event.is_set())
+        )
         now = clock()
         should_refresh = (
-            source
+            (source or show_timer)
             and refresh_interval is not None
             and last_sent_source is not None
             and last_sent_at is not None
             and now - last_sent_at >= refresh_interval
         )
-        if (source or choice or last_sent_choice) and (
+        if (source or show_timer or choice or last_sent_choice) and (
             source != last_sent_source or choice != last_sent_choice or should_refresh
         ):
             if started_at is None:
                 started_at = now
-            current = (
-                _build_elapsed_preview_text(source or "", now - started_at)
-                if include_elapsed_time and source
-                else (source or "")
-            )
+            current = _build_elapsed_preview_text(source, now - started_at) if show_timer else source
             await emit_update(
                 current,
                 bool(should_refresh and source == last_sent_source and choice == last_sent_choice),

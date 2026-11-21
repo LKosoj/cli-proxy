@@ -171,13 +171,28 @@ async def test_recovered_tmux_send_failure_keeps_pending_queue(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_observed_tmux_silence_is_not_reported_to_chat(monkeypatch):
+async def test_observed_tmux_run_shows_timer_and_clears_it_without_final_text(monkeypatch):
     events: list[tuple] = []
     service = _run_service(events)
     session = _recovery_session()
+    session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
+    preview_sent = asyncio.Event()
+
+    async def _send_preview(_context, *, text, chat_id, message_thread_id, **_kwargs):
+        events.append(("preview", text, chat_id, message_thread_id))
+        preview_sent.set()
+        return SimpleNamespace(message_id=501)
+
+    async def _delete_preview(_context, chat_id, message_id):
+        events.append(("delete", chat_id, message_id))
+        return True
+
+    service.bot_app._send_message = _send_preview
+    service.bot_app._delete_message = _delete_preview
 
     async def _recover_silent(request):
         assert request.observe is True
+        await asyncio.wait_for(preview_sent.wait(), timeout=1)
         return "  \n"
 
     session.recover_tmux_request = _recover_silent
@@ -210,8 +225,12 @@ async def test_observed_tmux_silence_is_not_reported_to_chat(monkeypatch):
         recovery_request=recovery,
     )
 
-    assert [event for event in events if event[0] == "output"] == []
-    assert events == [("queue", "queued next", "run_prompt.queue_next")]
+    assert events == [
+        ("preview", "⏳ 00:00", 42, 9),
+        ("delete", 42, 501),
+        ("queue", "queued next", "run_prompt.queue_next"),
+    ]
+    assert session.assistant_preview_message_id is None
     assert delivered == ["observe-codex"]
     assert list(session.queue) == []
 

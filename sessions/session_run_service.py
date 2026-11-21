@@ -1214,6 +1214,7 @@ class SessionRunService:
                                 ),
                                 stop_event=preview_stop_event,
                                 include_elapsed_time=True,
+                                timer_without_text=managed_tmux,
                                 refresh_interval_sec=ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC,
                             ),
                             label=f"assistant_preview:{session.id}",

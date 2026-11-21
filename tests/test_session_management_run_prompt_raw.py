@@ -268,13 +268,16 @@ async def test_watch_session_assistant_preview_adds_and_refreshes_elapsed_timer(
 
 
 @pytest.mark.asyncio
-async def test_watch_session_assistant_preview_treats_new_text_as_text_update_after_timer_interval():
-    session = SimpleNamespace(last_assistant_text_value="Первый черновик")
+@pytest.mark.parametrize("initial_text", ["Первый черновик", ""])
+async def test_watch_session_assistant_preview_treats_new_text_as_text_update_after_timer_interval(initial_text):
+    session = SimpleNamespace(last_assistant_text_value=initial_text)
     stop_event = asyncio.Event()
+    updates: list[str] = []
     timer_only_values: list[bool] = []
     clock_values = iter((100.0, 220.0))
 
-    async def _emit_update(_text: str, timer_only: bool) -> None:
+    async def _emit_update(text: str, timer_only: bool) -> None:
+        updates.append(text)
         timer_only_values.append(timer_only)
         if len(timer_only_values) == 1:
             session.last_assistant_text_value = "Новый черновик"
@@ -288,12 +291,18 @@ async def test_watch_session_assistant_preview_treats_new_text_as_text_update_af
             stop_event=stop_event,
             poll_interval_sec=0.01,
             refresh_interval_sec=120.0,
+            include_elapsed_time=True,
+            timer_without_text=True,
             clock=lambda: next(clock_values, 220.0),
         ),
         timeout=1.0,
     )
 
     assert timer_only_values == [False, False]
+    assert updates == [
+        f"⏳ 00:00\n\n{initial_text}" if initial_text else "⏳ 00:00",
+        "⏳ 02:00\n\nНовый черновик",
+    ]
 
 
 @pytest.mark.asyncio
@@ -369,6 +378,7 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     assert final_outputs == ["FINAL OUTPUT"]
     assert watch_kwargs == {
         "include_elapsed_time": True,
+        "timer_without_text": False,
         "refresh_interval_sec": 120.0,
     }
     assert rich_drafts == []
