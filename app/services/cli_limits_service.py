@@ -61,6 +61,7 @@ def sample_workdirs(bot_app: Any) -> list[str]:
                 return found
     return found
 
+
 _RGLOB_ROLLOUT_LIMIT = 10_000
 _LIMITS_LANG: contextvars.ContextVar[str] = contextvars.ContextVar("cli_limits_lang", default="ru")
 _SAMPLE_WORKDIR_LIMIT = 20

@@ -328,12 +328,13 @@ def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_
             "message": {"content": [{"type": "tool_result", "tool_use_id": f"tool-{agent_id}"}]},
         }
 
-    def finish(agent_id, offset):
+    def finish(agent_id, offset, tool_id=None):
+        tool_id = tool_id or f"tool-{agent_id}"
         return {
             "type": "user", "sessionId": session_id, "timestamp": _iso_utc(started_at + offset),
             "origin": {"kind": "task-notification"},
             "message": {"content": (
-                f"<task-notification>\n<task-id>{agent_id}</task-id>\n<tool-use-id>tool-{agent_id}</tool-use-id>\n"
+                f"<task-notification>\n<task-id>{agent_id}</task-id>\n<tool-use-id>{tool_id}</tool-use-id>\n"
                 "<output-file>/tmp/task.output</output-file>\n<status>completed</status>\n</task-notification>"
             )},
         }
@@ -364,6 +365,25 @@ def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_
     assert final.complete is True
     assert final.background_pending == 0
     assert final.background_agents_settled is True
+
+    resumed = {
+        "type": "user", "sessionId": session_id, "timestamp": _iso_utc(started_at + 10),
+        "toolUseResult": {"success": True, "resumedAgentId": "a"},
+        "message": {"content": [{"type": "tool_result", "tool_use_id": "resumed-tool-a"}]},
+    }
+    _append_jsonl(path, resumed, duration(11, pendingBackgroundAgentCount=1), finish("a", 12))
+    assert reader.poll().background_pending == 1
+    _append_jsonl(path, finish("a", 13, tool_id="resumed-tool-a"))
+    if restore:
+        reader = CliTranscriptReader(
+            cli_name="claude", workdir="/srv/project", started_at=started_at, session_id=session_id, home_dir=tmp_path,
+            locator=TranscriptLocator("claude", str(path), path.stat().st_size, session_id),
+        )
+    _append_jsonl(path, duration(14))
+    finished = reader.poll()
+    assert finished.complete is True
+    assert finished.background_pending == 0
+    assert finished.background_agents_settled is True
 
 
 def test_claude_transcript_reader_skips_records_of_previous_turn(tmp_path):

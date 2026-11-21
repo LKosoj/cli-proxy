@@ -48,7 +48,7 @@ class UsageTrendTracker:
                 points = []
             if not points or now - points[-1][0] >= self.MIN_INTERVAL_SEC:
                 points.append([now, used])
-            bucket[item_key] = {"window": marker, "points": points[-self.MAX_POINTS :]}
+            bucket[item_key] = {"window": marker, "points": points[-self.MAX_POINTS:]}
             return bucket
 
         try:

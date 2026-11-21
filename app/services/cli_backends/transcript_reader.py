@@ -495,14 +495,22 @@ class CliTranscriptReader:
             content = message.get("content") if isinstance(message, dict) else None
             result = record.get("toolUseResult")
             origin = record.get("origin")
-            if isinstance(result, dict) and result.get("status") == "async_launched" and isinstance(content, list):
-                agent_id = str(result.get("agentId") or "")
+            if isinstance(result, dict) and isinstance(content, list):
+                if result.get("status") == "async_launched":
+                    agent_id = str(result.get("agentId") or "")
+                elif result.get("success") is True:
+                    # SendMessage возобновляет того же агента с новым tool_use_id.
+                    agent_id = str(result.get("resumedAgentId") or "")
+                else:
+                    return
+                if not agent_id:
+                    return
                 tool_id = next(
                     (str(item["tool_use_id"]) for item in content
                      if isinstance(item, dict) and item.get("type") == "tool_result" and item.get("tool_use_id")),
                     "",
                 )
-                if agent_id and tool_id:
+                if tool_id:
                     self._claude_running_agents[agent_id] = tool_id
             elif isinstance(origin, dict) and origin.get("kind") == "task-notification" and isinstance(content, str):
                 finished = _CLAUDE_AGENT_FINISHED_RE.match(content)
