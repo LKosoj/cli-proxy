@@ -316,7 +316,8 @@ def test_claude_transcript_reader_missing_agent_count_is_not_zero(tmp_path):
 
 
 @pytest.mark.parametrize("restore", [False, True])
-def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_path, restore):
+@pytest.mark.parametrize("queued_attachment", [False, True])
+def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_path, restore, queued_attachment):
     started_at = time.time() - 10
     session_id = "66666666-6666-4666-8666-666666666666"
     path = tmp_path / ".claude" / "projects" / "-srv-project" / f"{session_id}.jsonl"
@@ -373,7 +374,18 @@ def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_
     }
     _append_jsonl(path, resumed, duration(11, pendingBackgroundAgentCount=1), finish("a", 12))
     assert reader.poll().background_pending == 1
-    _append_jsonl(path, finish("a", 13, tool_id="resumed-tool-a"))
+    notification = finish("a", 13, tool_id="resumed-tool-a")
+    if queued_attachment:
+        notification = {
+            "type": "attachment", "sessionId": session_id, "timestamp": notification["timestamp"],
+            "attachment": {
+                "type": "queued_command",
+                "commandMode": "task-notification",
+                "origin": notification["origin"],
+                "prompt": notification["message"]["content"],
+            },
+        }
+    _append_jsonl(path, notification)
     if restore:
         reader = CliTranscriptReader(
             cli_name="claude", workdir="/srv/project", started_at=started_at, session_id=session_id, home_dir=tmp_path,

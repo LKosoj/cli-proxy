@@ -490,11 +490,19 @@ class CliTranscriptReader:
                     self._claude_running_agents.clear()
                 # Сохраняем и тех, чей запуск остался за пределами прочитанного журнала.
                 self._claude_unidentified_agents = max(0, pending - len(self._claude_running_agents))
-        elif event_type == "user":
-            message = record.get("message")
-            content = message.get("content") if isinstance(message, dict) else None
-            result = record.get("toolUseResult")
-            origin = record.get("origin")
+        elif event_type in {"user", "attachment"}:
+            if event_type == "attachment":
+                attachment = record.get("attachment")
+                if not isinstance(attachment, dict) or attachment.get("type") != "queued_command":
+                    return
+                content = attachment.get("prompt")
+                origin = attachment.get("origin")
+                result = None
+            else:
+                message = record.get("message")
+                content = message.get("content") if isinstance(message, dict) else None
+                result = record.get("toolUseResult")
+                origin = record.get("origin")
             if isinstance(result, dict) and isinstance(content, list):
                 if result.get("status") == "async_launched":
                     agent_id = str(result.get("agentId") or "")
