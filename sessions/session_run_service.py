@@ -812,8 +812,11 @@ class SessionRunService:
                     return  # ответ на этот кадр уже ушёл в tmux
                 if isinstance(answered, set) and answered:
                     answered.clear()
-                if qid in self.bot_app.ui_state.pending_questions:
-                    return  # этот вопрос уже отправлен, повтор кадра игнорируем
+                pending_questions = self.bot_app.ui_state.pending_questions
+                pending = pending_questions.get(qid)
+                explanation = str(getattr(session, "last_assistant_text_value", "") or "").strip()
+                if pending is not None and (not explanation or pending.get("tmux_explanation_sent")):
+                    return
                 other_number = self._claude_other_choice_number(visible_choice_text)
                 meta = {
                     "question": question,
@@ -824,16 +827,21 @@ class SessionRunService:
                     "tmux_feed": True,
                     "tmux_multi_select": bool(self._tmux_multi_select_footer(visible_choice_text)),
                 }
-                self.bot_app.ui_state.pending_questions[qid] = meta
+                if pending is None:
+                    pending_questions[qid] = meta
                 try:
                     cid = int(dest.get("chat_id") or 0)
                     # Полный ответ перед вопросом нельзя подменять меню или
                     # обрезанным превью. Transport сам делит длинные сообщения.
-                    explanation = str(getattr(session, "last_assistant_text_value", "") or "").strip()
                     if explanation:
-                        await self.bot_app._send_message(
-                            context, text=explanation, **self._telegram_reply_kwargs(dest, session=session),
+                        sent = await self.bot_app._send_message(
+                            context, text=explanation, prefer_rich=False,
+                            **self._telegram_reply_kwargs(dest, session=session),
                         )
+                        if sent is not None:
+                            (pending if pending is not None else meta)["tmux_explanation_sent"] = True
+                    if pending is not None:
+                        return
                     # Свой вариант только если в кадре был Other: следующее
                     # сообщение — текст для этого поля, а не новый запрос.
                     await self.bot_app._send_ask_question(
@@ -847,9 +855,12 @@ class SessionRunService:
                         system_options=False,
                         message_thread_id=dest.get("message_thread_id"),
                     )
-                    record = self.bot_app.ui_state.pending_questions.get(qid)
-                    if other_number and isinstance(record, dict):
-                        record["tmux_other_choice"] = other_number
+                    record = pending_questions.get(qid)
+                    if isinstance(record, dict):
+                        if other_number:
+                            record["tmux_other_choice"] = other_number
+                        if meta.get("tmux_explanation_sent"):
+                            record["tmux_explanation_sent"] = True
                 except Exception:
                     logging.getLogger("bot.preview").exception("failed to send tmux choice as ask from preview")
                 return  # do not show plain preview for the choice question

@@ -842,17 +842,20 @@ def test_tmux_answer_with_menu_example_stays_text() -> None:
 def test_tmux_sends_full_explanation_before_each_new_question() -> None:
     async def run() -> None:
         events = []
+        pending = {}
 
-        async def send(_context, *, text, **_kwargs):
+        async def send(_context, *, text, prefer_rich, **_kwargs):
+            assert prefer_rich is False
             events.append(("text", text))
             return SimpleNamespace(message_id=1)
 
-        async def ask(*args, **kwargs):
-            events.append(("question", args[4]))
+        async def ask(_context, _chat_id, _session_id, question_id, question, _options, **_kwargs):
+            events.append(("question", question))
+            pending[question_id] = {}
 
         service = _build_service(SimpleNamespace(
             _send_message=send, _send_ask_question=ask,
-            ui_state=SimpleNamespace(pending_questions={}),
+            ui_state=SimpleNamespace(pending_questions=pending),
         ))
         session = _preview_session(backend="tmux")
         explanation = "Значимое пояснение. " * 400
@@ -866,5 +869,38 @@ def test_tmux_sends_full_explanation_before_each_new_question() -> None:
             ("text", explanation.strip()), ("question", "Нехватка"),
             ("text", explanation.strip()), ("question", "План"),
         ]
+
+    asyncio.run(run())
+
+
+def test_tmux_saves_explanation_that_appears_after_question() -> None:
+    async def run() -> None:
+        events = []
+        pending = {}
+
+        async def send(_context, *, text, prefer_rich, **_kwargs):
+            assert prefer_rich is False
+            events.append(("text", text))
+            return SimpleNamespace(message_id=1)
+
+        async def ask(_context, _chat_id, _session_id, question_id, question, _options, **_kwargs):
+            events.append(("question", question))
+            pending[question_id] = {}
+
+        service = _build_service(SimpleNamespace(
+            _send_message=send, _send_ask_question=ask,
+            ui_state=SimpleNamespace(pending_questions=pending),
+        ))
+        session = _preview_session(backend="tmux")
+        session._tmux_choice_text = "Часть 2\n❯ 1. Да\n2. Есть правки"
+        dest = {"kind": "telegram", "chat_id": 123}
+        context = object()
+        await service._upsert_telegram_assistant_preview(session, dest, context, "")
+        explanation = "Часть 2. Привязка к словам.\n\n" + "Значимое пояснение. " * 400
+        session.last_assistant_text_value = explanation
+        for _ in range(2):
+            await service._upsert_telegram_assistant_preview(session, dest, context, "обрезанное превью")
+
+        assert events == [("question", "Часть 2"), ("text", explanation.strip())]
 
     asyncio.run(run())
