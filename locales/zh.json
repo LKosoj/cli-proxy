@@ -1064,7 +1064,8 @@
     },
     "tui": {
       "unavailable": "当前无法查看此会话的终端。",
-      "send_failed": "无法发送终端快照。"
+      "send_failed": "无法发送终端快照。",
+      "running_subagents": "🤖 正在运行的子代理：{count}"
     },
     "report": {
       "empty": "当前会话还没有报告。使用 /reports generate 从 Manager 计划创建报告。",

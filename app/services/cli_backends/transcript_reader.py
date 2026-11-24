@@ -17,6 +17,7 @@ from app.services.cli_json_stream import (
     _tool_label,
     _tool_result_detail,
     _tool_result_text,
+    update_codex_subagents,
 )
 from app.services.session_transfer.reader_claude import _project_key as _claude_project_key
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
@@ -66,6 +67,7 @@ class TranscriptPollResult:
     background_agents_settled: bool = True
     # Только события, прочитанные за этот опрос, в порядке журнала.
     activity: tuple[tuple[str, str], ...] = ()
+    subagent_labels: tuple[str, ...] = ()
 
 
 def _claude_pending_count(record: dict[str, Any]) -> Optional[int]:
@@ -215,8 +217,9 @@ class CliTranscriptReader:
         self.retry_prompt = ""
         self.background_pending = 0
         self.background_agents_settled = True
-        self._claude_running_agents: dict[str, str] = {}
+        self._claude_running_agents: dict[str, tuple[str, str]] = {}
         self._claude_unidentified_agents: Optional[int] = None
+        self._subagents: dict[str, str] = {}
         # Реплика пользователя текущего хода. task_started начинает ход заново.
         self._turn_user_text = ""
         if locator is not None:
@@ -543,11 +546,15 @@ class CliTranscriptReader:
                     "",
                 )
                 if tool_id:
-                    self._claude_running_agents[agent_id] = tool_id
+                    _, previous_label = self._claude_running_agents.get(agent_id, ("", agent_id))
+                    label = str(result.get("description") or "").strip() or previous_label
+                    self._claude_running_agents[agent_id] = (tool_id, label)
             elif isinstance(origin, dict) and origin.get("kind") == "task-notification" and isinstance(content, str):
                 finished = _CLAUDE_AGENT_FINISHED_RE.match(content)
-                if finished and self._claude_running_agents.get(finished[1]) == finished[2]:
-                    del self._claude_running_agents[finished[1]]
+                if finished:
+                    tool_id, _ = self._claude_running_agents.get(finished[1], ("", ""))
+                    if tool_id == finished[2]:
+                        del self._claude_running_agents[finished[1]]
             else:
                 return
         else:
@@ -688,10 +695,13 @@ class CliTranscriptReader:
                 self._turn_user_text = text
         elif event_type == "item_completed":
             item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+            update_codex_subagents(self._subagents, item)
             if str(item.get("type") or "").strip() == "UserMessage":
                 text = _codex_message_text(item.get("content"))
                 if text:
                     self._turn_user_text = text
+        elif event_type == "sub_agent_activity":
+            update_codex_subagents(self._subagents, payload)
         elif event_type == "agent_message":
             text = str(payload.get("message") or "").strip()
             if text:
@@ -719,6 +729,15 @@ class CliTranscriptReader:
         params = record.get("params") if isinstance(record.get("params"), dict) else {}
         update = params.get("update") if isinstance(params.get("update"), dict) else {}
         event_type = str(update.get("sessionUpdate") or "").strip()
+        if record.get("method") == "_x.ai/session/update":
+            attempt_id = update.get("attempt_id")
+            agent_id = update.get("subagent_id")
+            if isinstance(agent_id, str) and agent_id and isinstance(attempt_id, str):
+                key = f"{agent_id}:{attempt_id}"
+                if event_type == "subagent_spawned":
+                    self._subagents[key] = str(update.get("description") or update.get("subagent_type") or agent_id)
+                elif event_type == "subagent_finished":
+                    self._subagents.pop(key, None)
         if event_type:
             self.recognized = True
         self.activity_at = _event_timestamp(record.get("timestamp"))
@@ -1079,4 +1098,8 @@ class CliTranscriptReader:
             background_pending=self.background_pending,
             background_agents_settled=self.background_agents_settled,
             activity=tuple(self._activity),
+            subagent_labels=(
+                tuple(label for _, label in self._claude_running_agents.values()) if self.provider == "claude"
+                else tuple(self._subagents.values())
+            ),
         )

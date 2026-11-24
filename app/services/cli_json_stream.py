@@ -77,6 +77,10 @@ class CliJsonStreamEvent:
 class BaseCliJsonStreamAdapter:
     cli_name = ""
 
+    @property
+    def subagent_labels(self) -> tuple[str, ...]:
+        return ()
+
     def feed_line(self, line: str) -> list[CliJsonStreamEvent]:
         raise NotImplementedError
 
@@ -92,6 +96,38 @@ class BaseCliJsonStreamAdapter:
         return False
 
 
+def update_codex_subagents(active: dict[str, str], item: dict[str, Any]) -> None:
+    item_type = str(item.get("type") or "")
+    if item_type in {"sub_agent_activity", "SubAgentActivity"}:
+        agent_id = item.get("agent_thread_id")
+        if not isinstance(agent_id, str) or not agent_id:
+            return
+        if item.get("kind") in ("started", "interacted"):
+            active[agent_id] = str(item.get("agent_path") or agent_id)
+        elif item.get("kind") in ("completed", "interrupted"):
+            active.pop(agent_id, None)
+        return
+    if item_type not in {"collab_tool_call", "CollabAgentToolCall"}:
+        return
+    states = item.get("agents_states")
+    if not isinstance(states, dict):
+        return
+    receivers = item.get("receiver_agents")
+    names = {
+        agent["thread_id"]: agent.get("agent_nickname") or agent.get("agent_role")
+        for agent in (receivers if isinstance(receivers, list) else [])
+        if isinstance(agent, dict) and isinstance(agent.get("thread_id"), str)
+    }
+    for agent_id, state in states.items():
+        status = state.get("status") if isinstance(state, dict) else state
+        if status in ("pending_init", "running"):
+            active[agent_id] = str(names.get(agent_id) or active.get(agent_id) or agent_id)
+        elif status in ("completed", "errored", "interrupted", "shutdown", "not_found") or (
+            isinstance(state, dict) and ("completed" in state or "errored" in state)
+        ):
+            active.pop(agent_id, None)
+
+
 class CodexJsonStreamAdapter(BaseCliJsonStreamAdapter):
     cli_name = "codex"
 
@@ -99,6 +135,11 @@ class CodexJsonStreamAdapter(BaseCliJsonStreamAdapter):
         self._session_id: Optional[str] = None
         self._final_output_text = ""
         self._completed = False
+        self._subagents: dict[str, str] = {}
+
+    @property
+    def subagent_labels(self) -> tuple[str, ...]:
+        return tuple(self._subagents.values())
 
     @property
     def session_id(self) -> Optional[str]:
@@ -119,6 +160,9 @@ class CodexJsonStreamAdapter(BaseCliJsonStreamAdapter):
         event_type = str(payload.get("type") or "").strip()
         if not event_type:
             raise ValueError("CLI JSON stream event is missing type")
+
+        if event_type in {"item.started", "item.updated", "item.completed"} and isinstance(payload.get("item"), dict):
+            update_codex_subagents(self._subagents, payload["item"])
 
         if event_type == "thread.started":
             session_id = str(payload.get("thread_id") or "").strip() or None
@@ -669,6 +713,11 @@ class ClaudeJsonStreamAdapter(BaseCliJsonStreamAdapter):
         self._final_output_text = ""
         self._completed = False
         self._tool_labels: dict[str, str] = {}
+        self._subagents: dict[str, tuple[str | None, str]] = {}
+
+    @property
+    def subagent_labels(self) -> tuple[str, ...]:
+        return tuple(label for _, label in self._subagents.values())
 
     @property
     def session_id(self) -> Optional[str]:
@@ -820,6 +869,15 @@ class ClaudeJsonStreamAdapter(BaseCliJsonStreamAdapter):
 
         if event_type == "system":
             subtype = str(payload.get("subtype") or "").strip().lower()
+            task_id = payload.get("task_id")
+            if isinstance(task_id, str) and task_id:
+                run_id = payload.get("run_id")
+                if subtype == "task_started" and payload.get("task_type") in ("local_agent", "remote_agent"):
+                    self._subagents[task_id] = (run_id, str(payload.get("description") or task_id))
+                elif subtype == "task_notification" and task_id in self._subagents:
+                    active_run_id, _ = self._subagents[task_id]
+                    if not run_id or not active_run_id or run_id == active_run_id:
+                        self._subagents.pop(task_id)
             if subtype == "init":
                 return [
                     CliJsonStreamEvent(
@@ -1278,6 +1336,11 @@ class AgyJsonStreamAdapter(BaseCliJsonStreamAdapter):
         self._text = ""
         self._completed = False
         self._resume_failed = False
+        self._subagent_steps: dict[int, tuple[str, ...]] = {}
+
+    @property
+    def subagent_labels(self) -> tuple[str, ...]:
+        return tuple(label for labels in self._subagent_steps.values() for label in labels)
 
     @property
     def session_id(self) -> Optional[str]:
@@ -1317,6 +1380,19 @@ class AgyJsonStreamAdapter(BaseCliJsonStreamAdapter):
             events.append(CliJsonStreamEvent("session_started", self.cli_name, payload, session_id))
 
         if event == "step_update":
+            step = data.get("step_index")
+            if isinstance(step, int):
+                info = data.get("subagent_info")
+                if data.get("state") == "DONE":
+                    self._subagent_steps.pop(step, None)
+                elif data.get("state") == "ACTIVE" and isinstance(info, dict):
+                    agents = info.get("subagents")
+                    if isinstance(agents, list):
+                        self._subagent_steps[step] = tuple(
+                            str(agent.get("role") or agent.get("type_name") or agent["conversation_id"])
+                            for agent in agents
+                            if isinstance(agent, dict) and agent.get("conversation_id")
+                        )
             if data.get("step_type") == "agent_response":
                 delta = data.get("text_delta")
                 if isinstance(delta, str) and delta:
@@ -1335,6 +1411,7 @@ class AgyJsonStreamAdapter(BaseCliJsonStreamAdapter):
                     text=_tool_result_text(label, detail="", is_error=bool(error)),
                 ))
         elif event == "result":
+            self._subagent_steps.clear()
             self._completed = data.get("status") == "SUCCESS"
             if self._completed:
                 self._text = str(data.get("response") or "")

@@ -93,6 +93,8 @@ Instruction node for `app` area.
 - project-maintainers
 
 ## Last reviewed
+
+- 2026-11-25 — Превью получает работающих сабагентов из событий Claude, Codex, Grok в tmux и Antigravity в headless.
 - 2026-11-25 — Добавлен перенос диалогов Antigravity и сохранение изменений отдельных запросов очереди.
 - 2026-11-25 — Снимок читает только существующую панель tmux, текст очереди привязан к своей теме Telegram.
 - 2026-11-25 — Добавлены чтение потока Antigravity CLI в headless и поддержка интерактивной панели tmux.

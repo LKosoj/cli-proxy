@@ -45,6 +45,47 @@ def test_codex_json_stream_adapter_normalizes_semantic_events() -> None:
     assert adapter.final_output_text() == "OK"
 
 
+def test_codex_stream_reports_confirmed_subagent_statuses() -> None:
+    adapter = CodexJsonStreamAdapter()
+    for status, expected in [("running", ("agent-1",)), ("completed", ())]:
+        adapter.feed_line(json.dumps({
+            "type": "item.completed",
+            "item": {"type": "collab_tool_call", "agents_states": {"agent-1": {"status": status}}},
+        }))
+        assert adapter.subagent_labels == expected
+
+
+def test_claude_stream_tracks_agent_runs_without_counting_shell_tasks() -> None:
+    adapter = ClaudeJsonStreamAdapter()
+    adapter.feed_record({"type": "system", "subtype": "task_started", "task_id": "shell", "task_type": "local_bash"})
+    assert adapter.subagent_labels == ()
+    for run_id in ("first", "second"):
+        adapter.feed_record({
+            "type": "system", "subtype": "task_started", "task_id": "agent",
+            "task_type": "local_agent", "description": "Check tests", "run_id": run_id,
+        })
+    for run_id, expected in [("first", ("Check tests",)), ("second", ())]:
+        adapter.feed_record({
+            "type": "system", "subtype": "task_notification", "task_id": "agent", "run_id": run_id, "status": "completed",
+        })
+        assert adapter.subagent_labels == expected
+
+
+def test_agy_stream_tracks_active_subagent_steps() -> None:
+    adapter = build_cli_json_stream_adapter("agy")
+    assert adapter is not None
+    step = {
+        "step_index": 2, "state": "ACTIVE",
+        "subagent_info": {"subagents": [{"role": "reviewer", "conversation_id": "child"}]},
+    }
+    adapter.feed_line(json.dumps({"event": "step_update", "step_update": step}))
+    assert adapter.subagent_labels == ("reviewer",)
+    adapter.feed_line(json.dumps({"event": "step_update", "step_update": {"step_index": 3, "state": "DONE"}}))
+    assert adapter.subagent_labels == ("reviewer",)
+    adapter.feed_line(json.dumps({"event": "step_update", "step_update": {"step_index": 2, "state": "DONE"}}))
+    assert adapter.subagent_labels == ()
+
+
 def test_cli_json_stream_recorder_writes_raw_and_normalized_files(tmp_path) -> None:
     recorder = CliJsonStreamRecorder(
         enabled=True,

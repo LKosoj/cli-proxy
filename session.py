@@ -1317,6 +1317,8 @@ class Session:
             except Exception:
                 _log.exception("CLI JSON stream line parse failed cli=%s line=%r", self.tool.name, payload_line[:500])
                 return
+            agent_labels = stream_adapter.subagent_labels
+            self._assistant_preview_subagents = (len(agent_labels), agent_labels)
             for event in events:
                 _record_stream_event(event)
 

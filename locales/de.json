@@ -1064,7 +1064,8 @@
     },
     "tui": {
       "unavailable": "Das Terminal dieser Sitzung ist derzeit nicht verfügbar.",
-      "send_failed": "Die Terminalansicht konnte nicht gesendet werden."
+      "send_failed": "Die Terminalansicht konnte nicht gesendet werden.",
+      "running_subagents": "🤖 Aktive Unteragenten: {count}"
     },
     "report": {
       "empty": "Für die aktuelle Sitzung gibt es noch keine Berichte. Verwenden Sie /reports generate, um einen Bericht aus dem Manager-Plan zu erstellen.",

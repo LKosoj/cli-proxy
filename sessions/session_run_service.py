@@ -1169,6 +1169,7 @@ class SessionRunService:
                 session.last_assistant_text_ts = None
                 session.last_assistant_text_value = None
                 session._tmux_assistant_preview_text = None
+                session._assistant_preview_subagents = (0, ())
                 if not capacity_retry:
                     self._reset_assistant_preview_state(session)
                 clear_final_output_delivery_guard(session)
@@ -1228,6 +1229,7 @@ class SessionRunService:
                                 stop_event=preview_stop_event,
                                 include_elapsed_time=True,
                                 timer_without_text=managed_tmux,
+                                lang=self._dest_lang(dest),
                                 refresh_interval_sec=ASSISTANT_PREVIEW_TIMER_REFRESH_INTERVAL_SEC,
                             ),
                             label=f"assistant_preview:{session.id}",

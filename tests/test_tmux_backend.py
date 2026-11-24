@@ -777,6 +777,7 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
                 available=True,
                 recognized=True,
                 background_pending=pending["count"],
+                subagent_labels=("Проверить тесты",) if pending["count"] else (),
             )
 
         def get_all_relevant_paths(self):
@@ -807,6 +808,7 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
     )
     try:
         await _wait_for_preview(session)
+        assert session._assistant_preview_subagents == (2, ("Проверить тесты",))
         await asyncio.sleep(0.5)
         assert not monitor.done()
         stop_growth.set()
@@ -825,6 +827,7 @@ async def test_tmux_backend_keeps_turn_while_background_agent_log_grows(tmp_path
                 await monitor
 
     assert result.text == "Запустил агентов"
+    assert session._assistant_preview_subagents == (0, ())
     assert result.diagnostics["completion_source"] == "transcript"
 
 

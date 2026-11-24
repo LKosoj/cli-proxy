@@ -1064,7 +1064,8 @@
     },
     "tui": {
       "unavailable": "The terminal for this session is currently unavailable.",
-      "send_failed": "Could not send the terminal snapshot."
+      "send_failed": "Could not send the terminal snapshot.",
+      "running_subagents": "🤖 Running subagents: {count}"
     },
     "report": {
       "empty": "There are no reports for the current session yet. Use /reports generate to create one from the Manager plan.",

@@ -1708,6 +1708,7 @@ class TmuxExecutionBackend:
         session._tmux_choice_text = ""
         session.last_assistant_text_value = ""
         session._tmux_assistant_preview_text = ""
+        session._assistant_preview_subagents = (0, ())
         last_status_assistant = ""
         update_activity = getattr(session, "_update_activity", None)
 
@@ -1977,6 +1978,8 @@ class TmuxExecutionBackend:
                         background_pending = max(0, int(transcript_update.background_pending or 0))
                     except (TypeError, ValueError):
                         background_pending = 0
+                    agent_labels = transcript_update.subagent_labels
+                    session._assistant_preview_subagents = (max(background_pending, len(agent_labels)), agent_labels)
                     # Журнал подтверждает конец фоновой работы счётчиком
                     # или уведомлениями о завершении известных агентов.
                     background_agents_settled = bool(

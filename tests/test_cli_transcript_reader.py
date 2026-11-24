@@ -340,7 +340,10 @@ def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_
     def launch(agent_id, offset):
         return {
             "type": "user", "sessionId": session_id, "timestamp": _iso_utc(started_at + offset),
-            "toolUseResult": {"status": "async_launched", "agentId": agent_id, "isAsync": True},
+            "toolUseResult": {
+                "status": "async_launched", "agentId": agent_id, "isAsync": True,
+                **({"description": "Проверить тесты"} if agent_id == "a" else {}),
+            },
             "message": {"content": [{"type": "tool_result", "tool_use_id": f"tool-{agent_id}"}]},
         }
 
@@ -366,12 +369,15 @@ def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_
         cli_name="claude", workdir="/srv/project", started_at=started_at, session_id=session_id, home_dir=tmp_path,
         locator=TranscriptLocator("claude", str(path), path.stat().st_size, session_id) if restore else None,
     )
-    assert reader.poll().background_pending == 2
+    first = reader.poll()
+    assert first.background_pending == 2
+    assert first.subagent_labels == ("Проверить тесты", "b")
 
     _append_jsonl(path, finish("a", 4), finish("a", 5), finish("shell", 6), duration(7))
     partial = reader.poll()
     assert partial.complete is True
     assert partial.background_pending == 1
+    assert partial.subagent_labels == ("b",)
     assert partial.background_agents_settled is False
 
     _append_jsonl(path, finish("b", 8))
@@ -380,6 +386,7 @@ def test_claude_transcript_reader_settles_agents_by_completion_notification(tmp_
     final = reader.poll()
     assert final.complete is True
     assert final.background_pending == 0
+    assert final.subagent_labels == ()
     assert final.background_agents_settled is True
 
     resumed = {
@@ -840,6 +847,44 @@ def test_codex_transcript_reader_follows_thread_into_new_rollout(tmp_path):
     assert result.locator is not None and result.locator.path.endswith(f"{fresh_id}.jsonl")
     # Идентификатор треда переезжает вслед за журналом.
     assert result.session_id == fresh_id
+
+
+def test_codex_transcript_reader_tracks_subagents_without_delaying_the_turn(tmp_path):
+    path = tmp_path / ".codex" / "sessions" / "rollout.jsonl"
+    activity = {"kind": "started", "agent_thread_id": "agent-1", "agent_path": "/reviewer"}
+    _append_jsonl(path, {"type": "event_msg", "payload": {"type": "sub_agent_activity", **activity}})
+    reader = CliTranscriptReader(
+        cli_name="codex", workdir="/srv/project", started_at=time.time(), home_dir=tmp_path,
+        locator=TranscriptLocator("codex", str(path), 0),
+    )
+    active = reader.poll()
+    assert active.subagent_labels == ("/reviewer",)
+    assert active.background_pending == 0
+    _append_jsonl(path, {"type": "event_msg", "payload": {"type": "item_completed", "item": {
+        **activity, "type": "SubAgentActivity", "kind": "completed",
+    }}})
+    assert reader.poll().subagent_labels == ()
+
+
+def test_grok_transcript_reader_tracks_subagent_attempts(tmp_path):
+    path = tmp_path / ".grok" / "sessions" / "updates.jsonl"
+
+    def update(kind, attempt):
+        return {"method": "_x.ai/session/update", "params": {"update": {
+            "sessionUpdate": kind, "subagent_id": "child", "attempt_id": attempt, "description": "Run tests",
+        }}}
+
+    _append_jsonl(path, update("subagent_spawned", "first"))
+    reader = CliTranscriptReader(
+        cli_name="grok", workdir="/srv/project", started_at=time.time(), home_dir=tmp_path,
+        locator=TranscriptLocator("grok", str(path), 0),
+    )
+    assert reader.poll().subagent_labels == ("Run tests",)
+    _append_jsonl(path, update("subagent_finished", "first"), update("subagent_spawned", "second"))
+    _append_jsonl(path, update("subagent_finished", "first"))
+    assert reader.poll().subagent_labels == ("Run tests",)
+    _append_jsonl(path, update("subagent_finished", "second"))
+    assert reader.poll().subagent_labels == ()
 
 
 def test_grok_transcript_reader_uses_online_updates(tmp_path):

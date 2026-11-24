@@ -379,6 +379,7 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     assert watch_kwargs == {
         "include_elapsed_time": True,
         "timer_without_text": False,
+        "lang": "ru",
         "refresh_interval_sec": 120.0,
     }
     assert rich_drafts == []
@@ -391,7 +392,7 @@ async def test_run_prompt_telegram_assistant_preview_uses_legacy_message_before_
     ]
     assert preview_edits == []
     assert preview_deletes == [(1, 501)]
-    assert events == ["send_preview", "delete_preview", "send_output"]
+    assert events == ["send_preview", "send_output", "delete_preview"]
     app.shutdown_html_process_pool()
 
 
@@ -458,7 +459,7 @@ async def test_run_prompt_final_output_cancels_retry_after_preview(tmp_path, mon
 
     assert edit_calls == ["⏳ 00:01\n\nНовый черновик ответа"]
     assert final_outputs == ["FINAL OUTPUT"]
-    assert events == ["send_preview", "edit_preview", "delete_preview", "send_output"]
+    assert events == ["send_preview", "edit_preview", "send_output", "delete_preview"]
     app.shutdown_html_process_pool()
 
 
@@ -483,3 +484,35 @@ async def test_preview_watcher_delivers_menu_changes_without_new_answer(answer):
         session, emit_update=emit, stop_event=stop, poll_interval_sec=0.01,
     ), timeout=1)
     assert choices == ["Первый вопрос", "Второй вопрос", ""]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tmux", [False, True])
+async def test_preview_updates_when_subagents_finish_without_new_cli_text(tmux):
+    session = SimpleNamespace(
+        _tmux_assistant_preview_text="",
+        _assistant_preview_subagents=(2, ("Проверить тесты",)),
+    )
+    stop = asyncio.Event()
+    updates = []
+
+    async def emit(text, timer_only):
+        updates.append(text)
+        assert not timer_only
+        if len(updates) == 1:
+            session._assistant_preview_subagents = (1, ())
+        elif len(updates) == 2:
+            session._assistant_preview_subagents = (0, ())
+        else:
+            stop.set()
+
+    await asyncio.wait_for(watch_session_assistant_preview(
+        session, emit_update=emit, stop_event=stop, poll_interval_sec=0.01,
+        include_elapsed_time=True, timer_without_text=tmux, lang="ru", clock=lambda: 1.0,
+    ), timeout=1)
+
+    assert updates == [
+        "⏳ 00:00\n\n🤖 Сабагентов в работе: 2\n• Проверить тесты",
+        "⏳ 00:00\n\n🤖 Сабагентов в работе: 1",
+        "⏳ 00:00",
+    ]

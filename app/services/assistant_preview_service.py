@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from telegram.error import RetryAfter
 
+from i18n import t
 from utils.text import is_time_only_text, strip_ansi
 
 
@@ -245,12 +246,14 @@ async def watch_session_assistant_preview(
     refresh_interval_sec: Optional[float] = None,
     include_elapsed_time: bool = False,
     timer_without_text: bool = False,
+    lang: str = "en",
     clock: Callable[[], float] = time.monotonic,
 ) -> None:
     last_sent_source: Optional[str] = None
     last_sent_choice = ""
     last_sent_at: Optional[float] = None
     started_at: Optional[float] = None
+    had_subagents = False
     interval = max(0.05, float(poll_interval_sec))
     refresh_interval = None
     if refresh_interval_sec is not None:
@@ -260,9 +263,20 @@ async def watch_session_assistant_preview(
         if preview is None:
             preview = getattr(session, "last_assistant_text_value", None)
         source = build_text(preview) or ""
+        count, labels = getattr(session, "_assistant_preview_subagents", (0, ()))
+        if count:
+            had_subagents = True
+            banner = t("msg.tui.running_subagents", lang, count=count)
+            names = [" ".join(strip_ansi(label).split())[:72] for label in labels[:5]]
+            if names:
+                banner += "\n" + "\n".join(f"• {name}" for name in names)
+            body = source.removeprefix(ASSISTANT_PREVIEW_MARKER + " ")
+            source = f"{ASSISTANT_PREVIEW_MARKER} {banner}"
+            if body:
+                source += f"\n\n{body}"
         choice = str(getattr(session, "_tmux_choice_text", "") or "")
         show_timer = include_elapsed_time and (
-            bool(source) or (timer_without_text and not choice and not stop_event.is_set())
+            bool(source) or ((timer_without_text or had_subagents) and not choice and not stop_event.is_set())
         )
         now = clock()
         should_refresh = (
