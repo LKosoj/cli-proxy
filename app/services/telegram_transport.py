@@ -646,6 +646,7 @@ class TelegramTransportService:
         return message, last_exc, used_variant
 
     async def _send_message_now(self, context, **kwargs):
+        allow_thread_fallback = kwargs.pop("allow_thread_fallback", True)
         for attempt in range(5):
             current_kwargs = dict(kwargs or {})
             md2 = True
@@ -709,7 +710,7 @@ class TelegramTransportService:
                     self.bot_app._last_delivery_error = f"send_message bad request: {last_exc}"
                     if last_exc is not None:
                         self._mark_missing_thread(context, base_kwargs, last_exc)
-                        if self._is_missing_thread_error(last_exc):
+                        if allow_thread_fallback and self._is_missing_thread_error(last_exc):
                             fallback_message = await self._send_message_without_thread_fallback(
                                 context,
                                 current_kwargs=base_kwargs,
@@ -750,7 +751,7 @@ class TelegramTransportService:
                     return
                 self._mark_missing_thread(context, current_kwargs, exc)
                 route_log = self._route_log_fields(context, current_kwargs)
-                if self._is_missing_thread_error(exc):
+                if allow_thread_fallback and self._is_missing_thread_error(exc):
                     fallback_message = await self._send_message_without_thread_fallback(
                         context,
                         current_kwargs=current_kwargs,

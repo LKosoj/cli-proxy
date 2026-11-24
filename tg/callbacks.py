@@ -11,9 +11,7 @@ from telegram.ext import ContextTypes
 
 from app.services.input_dispatch_service import InputDispatchService
 from session import session_runtime_uid
-from sessions.queue_item import normalize_queue_item
 from sessions.session_state_access import (
-    get_active_mode,
     get_orchestrator_pending_input,
     set_orchestrator_enabled,
     set_orchestrator_pending_input,
@@ -419,86 +417,14 @@ class CallbackHandler(CallbackActionsMixin):
             logging.exception("failed to show next pending input chat_id=%s", int(chat_id))
 
     async def _kick_session_queue_if_idle(self, *, session, chat_id: int, context) -> None:
-        if InputDispatchService._is_session_running(session, self.bot_app):
-            return
-        queue = getattr(session, "queue", None)
-        if not queue:
-            return
-        if hasattr(queue, "__getitem__"):
-            raw_next_item = queue[0]
-        else:
+        if not getattr(session, "queue", None) or InputDispatchService._is_session_running(session, self.bot_app):
             return
         builder = getattr(self.bot_app, "build_telegram_reply_dest", None)
         if callable(builder):
             fallback_dest = builder(session, int(chat_id))
         else:
             fallback_dest = {"kind": "telegram", "chat_id": int(chat_id)}
-        next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
-        if hasattr(queue, "popleft"):
-            queue.popleft()
-        else:
-            queue.pop(0)
-        await self._persist_session_async(int(chat_id), session.id)
-        next_prompt = str(next_item.text or "")
-        next_dest = dict(next_item.dest)
-        if isinstance(raw_next_item, dict):
-            image_paths = (raw_next_item or {}).get("image_paths")
-            if image_paths:
-                next_dest["image_paths"] = list(image_paths)
-                next_dest["cleanup_images"] = True
-            image_path = (raw_next_item or {}).get("image_path")
-            if image_path:
-                next_dest["image_path"] = image_path
-                next_dest["cleanup_image"] = True
-        if next_dest.get("kind") == "telegram" and next_dest.get("chat_id") is None:
-            next_dest["chat_id"] = int(chat_id)
-        try:
-            active_mode = str(get_active_mode(session, "") or "").strip()
-            if active_mode:
-                await self.bot_app._handle_user_input(
-                    session,
-                    next_prompt,
-                    int(chat_id),
-                    context,
-                    dest=next_dest,
-                )
-                return
-            session_management = getattr(self.bot_app, "session_management", None)
-            start_prompt_task = getattr(session_management, "start_prompt_task", None)
-            if callable(start_prompt_task):
-                start_prompt_task(
-                    session,
-                    next_prompt,
-                    next_dest,
-                    context,
-                    task_name="callbacks.queue_kick.run_prompt",
-                )
-                return
-            dispatcher = getattr(self.bot_app, "input_dispatch_service", None)
-            run_coro = self.bot_app.run_prompt(session, next_prompt, next_dest, context)
-            if dispatcher is not None and hasattr(dispatcher, "_safe_create_task"):
-                task = dispatcher._safe_create_task(
-                    run_coro,
-                    label="callbacks.queue_kick.run_prompt",
-                )
-                if task is None:
-                    raise RuntimeError("failed to schedule queue kick run_prompt task")
-                return
-            asyncio.create_task(run_coro)
-        except Exception:
-            logging.exception("failed to kick queued input for idle session session_id=%s", getattr(session, "id", "?"))
-            try:
-                queue_ref = getattr(session, "queue", None)
-                if hasattr(queue_ref, "appendleft"):
-                    queue_ref.appendleft(raw_next_item)
-                elif isinstance(queue_ref, list):
-                    queue_ref.insert(0, raw_next_item)
-                await self._persist_session_async(int(chat_id), session.id)
-            except Exception:
-                logging.exception(
-                    "failed to restore queued input after dispatch failure session_id=%s",
-                    getattr(session, "id", "?"),
-                )
+        self.bot_app.session_management.start_queue_task(session, fallback_dest, context)
 
     def _resolve_dirs_mode_plugin(self, chat_id: int, message_thread_id: int | None = None):
         router = self._mode_callback_router()

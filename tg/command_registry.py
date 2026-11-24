@@ -128,6 +128,13 @@ def build_command_registry(bot_app) -> List[Dict[str, object]]:
             "menu": False,
         },
         {
+            "name": "tui",
+            "desc_key": "cmd.tui.desc",
+            "desc": "Скачать снимок терминала текущей tmux-сессии.",
+            "handler": bot_app.cmd_tui,
+            "menu": True,
+        },
+        {
             "name": "reports",
             "desc_key": "cmd.reports.desc",
             "desc": "Показать или отправить отчёты текущей сессии.",

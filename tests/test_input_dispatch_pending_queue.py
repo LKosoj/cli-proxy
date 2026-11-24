@@ -112,7 +112,8 @@ def test_append_queue_item_normalizes_payload_and_preserves_metadata() -> None:
 
     assert InputDispatchService.append_queue_item(session, item)
 
-    assert session.queue == [
+    assert len(session.queue[0]["queue_id"]) == 32
+    assert [{key: value for key, value in entry.items() if key != "queue_id"} for entry in session.queue] == [
         {
             "text": "caption",
             "dest": {"kind": "telegram", "chat_id": 1, "image_paths": ["/tmp/a.png", "/tmp/b.png"]},

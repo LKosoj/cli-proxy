@@ -191,6 +191,8 @@
       "session_unavailable": "会话未找到或不可用",
       "webmaster": "站长状态",
       "runtime_progress": "运行时进度",
+      "queue_manage": "管理队列",
+      "queue_close": "关闭",
       "queue_prefix": "队列(Queue:",
       "state_summary": "状态摘要",
       "last_tick_prefix": "最新 Tick 值 (",
@@ -526,6 +528,11 @@
       "rename": "✏️ 重命名",
       "resume": "🔗 连接历史",
       "resume_manual": "✍️ 手动输入 id",
+      "queue_first": "移到队首",
+      "queue_up": "上移",
+      "queue_down": "下移",
+      "queue_remove": "移除",
+      "queue_replace": "替换",
       "queue": "📋 请求队列",
       "clearqueue": "🧹 清空队列",
       "state": "💾 已保存状态",
@@ -632,6 +639,12 @@
       "orch_toggled": "高级编排器{status}。",
       "queue_cleared": "队列已清空。",
       "queue_count": "队列中有 {n} 条消息。",
+      "queue_more": "还有 {n} 条。",
+      "queue_no_text": "无文本",
+      "queue_gone": "请求已离开队列。",
+      "queue_save_failed": "无法保存队列。",
+      "queue_in_file": "文件中包含完整请求。",
+      "queue_replace_prompt": "请发送替换文本。附件将保留。",
       "queue_empty": "队列为空。",
       "rename_cancelled": "重命名已取消。",
       "rename_empty": "会话名称为空。",
@@ -1049,6 +1062,10 @@
       "send_failed": "发送文件失败。",
       "send_error": "发送文件时出错。"
     },
+    "tui": {
+      "unavailable": "当前无法查看此会话的终端。",
+      "send_failed": "无法发送终端快照。"
+    },
     "report": {
       "empty": "当前会话还没有报告。使用 /reports generate 从 Manager 计划创建报告。",
       "menu_title": "会话 {session_id} 的报告：",
@@ -1118,6 +1135,9 @@
     },
     "status": {
       "desc": "显示当前上下文会话的状态。"
+    },
+    "tui": {
+      "desc": "下载当前 tmux 会话的终端画面。"
     },
     "reports": {
       "desc": "显示或发送当前会话的报告。"
@@ -2262,6 +2282,8 @@
     }
   },
   "session_status": {
+    "resume_terminal": "在服务器终端中继续（使用 CLI Proxy 用户）",
+    "resume_terminal_user": "在服务器终端中继续（使用 {user}）",
     "resume": "Resume",
     "active_session": "活动会话",
     "session": "会话",

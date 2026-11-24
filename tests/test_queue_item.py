@@ -5,6 +5,18 @@ import pytest
 from sessions.queue_item import SessionQueueItem, normalize_queue_item
 
 
+def test_legacy_attachment_only_entry_keeps_its_queue_id_across_persistence() -> None:
+    from session import SessionManager
+    from sessions.queue_item import queue_entries
+
+    queue = [{"text": "", "image_paths": ["image.png"]}, "legacy"]
+    identified = queue_entries(queue)
+    stored = SessionManager._normalize_queue_items_for_persistence(queue)
+    assert stored == identified
+    assert queue_entries(stored) == identified
+    assert len({item["queue_id"] for item in stored}) == 2
+
+
 def test_normalize_queue_item_from_dict_payload_copies_dest() -> None:
     raw_dest = {"kind": "telegram", "chat_id": 10}
 

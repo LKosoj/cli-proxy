@@ -53,17 +53,18 @@ def _make_session(*, busy: bool = False) -> Any:
 def _make_service(
     *,
     tasks: list | None = None,
-    start_task_ok: bool = True,
 ) -> SessionRunService:
     if tasks is None:
         tasks = []
 
-    created_coros: list = []
+    drain_tasks: list = []
 
     def _mode_tasks_create(*, session_id, mode_id, coro, name):
-        created_coros.append((name, coro))
         tasks.append(name)
-        coro.close()  # prevent ResourceWarning; tests only verify scheduling, not execution
+        if name == "dispatch_queued_input":
+            drain_tasks.append(asyncio.create_task(coro))
+        else:
+            coro.close()
 
     def _mode_tasks_list(*, session_id, mode_id):
         return []
@@ -72,6 +73,7 @@ def _make_service(
     bot_app._shutdown_in_progress = False
     # Set config to None so hook_config resolves to None and the hook path is skipped.
     bot_app.config = None
+    bot_app.input_dispatch_service.dispatch_ready_input = AsyncMock(return_value=False)
 
     svc = SessionRunService(
         bot_app=bot_app,
@@ -82,8 +84,7 @@ def _make_service(
         log_cli_dialog=MagicMock(),
         reset_session_fields_like_sessions_reset=MagicMock(),
     )
-    # Expose created_coros for inspection
-    svc._test_created_coros = created_coros  # type: ignore[attr-defined]
+    svc._test_drain_tasks = drain_tasks
     return svc
 
 
@@ -126,13 +127,14 @@ async def test_queue_item_processed_exactly_once_on_normal_flow() -> None:
         svc.bot_app.send_output = AsyncMock()
 
         await svc.run_prompt(session, "first-prompt", dest, context=object())
+        await svc._test_drain_tasks.pop()
 
     # The queue should be empty (item was popped)
     assert len(session.queue) == 0, f"Queue should be empty, got: {list(session.queue)}"
 
     # A follow-up task was scheduled
-    followup_names = [n for n in tasks_started if "queue_next" in n]
-    assert len(followup_names) == 1, f"Expected exactly one queue_next task, got: {tasks_started}"
+    assert tasks_started.count("dispatch_queued_input") == 1
+    svc.bot_app.input_dispatch_service.dispatch_ready_input.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +144,7 @@ async def test_queue_item_processed_exactly_once_on_normal_flow() -> None:
 @pytest.mark.asyncio
 async def test_queue_item_rolled_back_when_task_start_rejected() -> None:
     """
-    If start_prompt_task returns False (e.g. shutting down), the item must be
+    If input dispatch fails, the item must be
     rolled back to the front of the queue so it is not lost.
     """
     session = _make_session()
@@ -169,9 +171,9 @@ async def test_queue_item_rolled_back_when_task_start_rejected() -> None:
         session.run_prompt = AsyncMock(return_value="done output")  # type: ignore[attr-defined]
         svc.bot_app.send_output = AsyncMock()
 
-        # Force start_prompt_task to return False (simulate shutdown rejection)
-        with patch.object(svc, "start_prompt_task", return_value=False):
-            await svc.run_prompt(session, "first-prompt", dest, context=object())
+        svc.bot_app.input_dispatch_service.dispatch_ready_input.side_effect = RuntimeError("dispatch rejected")
+        await svc.run_prompt(session, "first-prompt", dest, context=object())
+        await svc._test_drain_tasks.pop()
 
     # Item must be back in queue (rolled back via appendleft)
     assert len(session.queue) == 1, f"Queue should have 1 item after rollback, got: {list(session.queue)}"
@@ -218,6 +220,7 @@ async def test_queue_fifo_order_preserved() -> None:
         svc.bot_app.send_output = AsyncMock()
 
         await svc.run_prompt(session, "initial-prompt", dest, context=object())
+        await svc._test_drain_tasks.pop()
 
     # Exactly one item was dequeued (the first one)
     assert len(session.queue) == 2, f"Expected 2 remaining, got: {list(session.queue)}"
@@ -225,12 +228,8 @@ async def test_queue_fifo_order_preserved() -> None:
     remaining_texts = [q["text"] for q in list(session.queue)]
     assert remaining_texts == ["msg-1", "msg-2"], f"FIFO violated: {remaining_texts}"
 
-    # A queue_next task was scheduled for msg-0
-    followup_coroutines = [
-        name for name, _coro in svc._test_created_coros  # type: ignore[attr-defined]
-        if "queue_next" in name
-    ]
-    assert len(followup_coroutines) == 1
+    assert tasks_started.count("dispatch_queued_input") == 1
+    assert svc.bot_app.input_dispatch_service.dispatch_ready_input.await_args.kwargs["text"] == "msg-0"
 
 
 @pytest.mark.asyncio

@@ -1271,6 +1271,7 @@ class BotApp:
     def _cancel_menu_input(self, ui_key: TelegramUiKey) -> None:
         self.session_ui.pending_session_rename.pop(ui_key, None)
         self.session_ui.pending_session_resume.pop(ui_key, None)
+        self.session_ui.pending_queue_replace.pop(ui_key, None)
         self.ui_state.pending_dir_input.pop(ui_key, None)
         self.ui_state.pending_dir_create.pop(ui_key, None)
         self.ui_state.pending_git_clone.pop(ui_key, None)
@@ -2590,6 +2591,9 @@ class BotApp:
 
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_status(update, context)
+
+    async def cmd_tui(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_tui(update, context)
 
     async def cmd_reports(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_reports(update, context)

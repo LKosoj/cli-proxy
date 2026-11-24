@@ -2,7 +2,7 @@
 
 [English version](README_EN.MD) | [Russian version](README.md)
 
-Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Kimi / opencode) with multiple sessions, request queueing, and HTML output.
+Telegram bot for managing CLI agents (Codex / Gemini / Qwen / Claude / Grok / Kimi / opencode / Antigravity) with multiple sessions, request queueing, and HTML output.
 
 ## Features
 - Multiple CLI sessions in different directories.
@@ -239,6 +239,7 @@ After that, the main bot can continue running as root: `claude` commands are lau
 - Transfer is compact by default: the full transcript is read from the source CLI native file and stored as an evidence pack in `.cli-proxy/session-transfer/<transfer-id>/`, while the target CLI receives a short session capsule instead of the whole history.
 - The evidence pack contains `manifest.json`, `canonical.jsonl`, and `capsule.md`. The target agent gets these paths and should inspect them only when older context is needed.
 - Low-level native writers remain available for compatibility and tests, but the main user flow no longer injects the full transcript into the target CLI context.
+- Antigravity (`agy`) supports transfer in both directions. Context transferred into `agy` opens as a separate conversation with a new ID.
 
 ## Session Execution Backends
 Each CLI can expose a settings-level execution backend: `headless` or `tmux`. This does not replace `tools.<name>.mode`: `mode: headless` remains the compatibility mode for the existing headless path, while `execution_backends` controls which backends the CLI supports.
@@ -459,6 +460,17 @@ already rendered for this directory, otherwise from `default_model` in
 directory kimi asks whether the folder is trusted; in tmux mode the bridge detects
 that screen and asks you to open kimi in the workdir once.
 
+Google Antigravity CLI is configured under `tools.agy`. Follow the
+[Google installation guide](https://antigravity.google/docs/getting-started)
+and sign in to Google as the system user that will run the CLI.
+Select `agy` when creating a session in Telegram. Headless, which runs without
+an interactive terminal, is the default. Set
+`tools.agy.default_execution_backend: tmux` to work in an interactive pane.
+Both modes save the conversation ID so you can resume it. If `agy` asks whether
+you trust the workspace, open the CLI in that directory and answer the prompt.
+In a resumed headless conversation, run CLI commands such as `/model` and
+`/usage` separately with `agy -p` or use them in the tmux pane.
+
 opencode is configured as `tools.opencode`; headless mode uses
 `opencode run --format json --session "{resume}" "{prompt}"` - the prompt is a
 positional argument here, not a flag. `--format json` turns on a line-based
@@ -535,6 +547,7 @@ GitHub PAT for HTTPS git:
 - `/files` - file management in the working directory (send/save/rename/delete)
 - `/miniapp` - open MiniApp
 - `/reports` - show, create, or send reports for the current session (`latest`, `snapshot`, `generate`, `<filename.md>`)
+- `/tui` — download the visible part of the current tmux pane as `terminal.txt`.
 - `/limits` - limits and usage for the current CLI
 - `/tools` - list tools
 ### Available but hidden from menu
@@ -545,11 +558,12 @@ GitHub PAT for HTTPS git:
 - `/send <text>` - send text directly to CLI
 - `/resume [token]` - show/set resume token
 - `/close` - close a session and remove it from saved state (menu)
-- `/status` - current context session status (busy, last activity/seconds tick)
+- `/status` — show the current session status. An idle local Claude, Codex, or Grok session with a saved conversation shows a command to resume in the server terminal. An open tmux pane shows its attach command. The same commands appear in `/sessions`.
 - `/rename <id> <name>` or `/rename <name>` - rename session
 - `/state [tool path]` - state by tool+path or menu
 - `/clearqueue` - clear queue for the current context session
-- `/queue` - show queue
+- `/queue` and the Queue button in `/sessions` open the pending requests. Select a request to read the full text, reorder it, replace its text, or remove it. The same actions are available in MiniApp under Status → Queue. Replacing the text keeps existing attachments.
+- When a queued Telegram request reaches the front, the bot handles it like a regular message. For example, “send me `reports/result.txt`” uses the normal file delivery flow.
 - `/preset` - task templates for CLI
 - Presets are loaded from `config.yaml` (`presets` section).
 - `/metrics` - bot metrics

@@ -78,4 +78,5 @@ Instruction node for `modes` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-25 — Запрос из очереди остаётся в активном режиме и проходит проверку фактической занятости.
 - 2026-08-25T00:00:00Z

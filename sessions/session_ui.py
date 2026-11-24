@@ -1,14 +1,16 @@
 import logging
+import re
 from datetime import datetime
 from typing import Callable, Optional
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ContextTypes
 
 from i18n import t
 from utils.lang import resolve_user_lang
 
 from app.services.cli_session_history import CliSessionCandidate, list_recent_cli_sessions
+from app.services.session_mutation_service import SessionMutationService
 from app.services.state_repository import get_state_repository
 from app.services.telegram_ui_scope import TelegramUiKey
 from app.services.advanced_orchestrator_service import ORCHESTRATOR_MODE_ID
@@ -26,7 +28,8 @@ from sessions.session_state_access import (
     set_orchestrator_enabled,
     set_orchestrator_pending_input,
 )
-from sessions.session_status import build_session_status_text, visible_modes
+from sessions.session_status import build_session_queue_text, build_session_status_text, visible_modes
+from sessions.queue_item import queue_entries
 
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,7 @@ class SessionUI:
         self._state_repo = get_state_repository(self.config.defaults.state_path)
         self.pending_session_rename: dict[TelegramUiKey, dict[str, object]] = {}
         self.pending_session_resume: dict[TelegramUiKey, dict[str, object]] = {}
+        self.pending_queue_replace: dict[TelegramUiKey, tuple] = {}
 
     def _ui_key(self, chat_id: int, *, query=None, message_thread_id: Optional[int] = None) -> TelegramUiKey:
         if query is not None:
@@ -119,6 +123,143 @@ class SessionUI:
             md2=True,
             reply_markup=reply_markup,
         )
+
+    @staticmethod
+    def build_queue_panel(session, lang: str, offset: int = 0) -> tuple[str, Optional[InlineKeyboardMarkup]]:
+        items = queue_entries(session.queue)
+        offset = min(offset, max(0, (len(items) - 1) // 8 * 8))
+        buttons = [
+            InlineKeyboardButton(str(number), callback_data=f"sess_q:{session.id}:open:{item['queue_id']}")
+            for number, item in enumerate(items[offset:offset + 8], start=offset + 1)
+        ]
+        rows = [buttons[index:index + 4] for index in range(0, len(buttons), 4)]
+        pages = []
+        if offset:
+            pages.append(InlineKeyboardButton("←", callback_data=f"sess_q:{session.id}:page:{offset - 8}"))
+        if len(items) > offset + 8:
+            pages.append(InlineKeyboardButton("→", callback_data=f"sess_q:{session.id}:page:{offset + 8}"))
+        if pages:
+            rows.append(pages)
+        return build_session_queue_text(session, lang, offset=offset), InlineKeyboardMarkup(rows) if rows else None
+
+    async def _show_queue(self, context, query, session, lang: str, offset: int = 0) -> None:
+        text, markup = self.build_queue_panel(session, lang, offset)
+        await self._edit_msg(context, query, text, reply_markup=markup)
+
+    async def _handle_queue_action(self, context, query, owner_chat_id: int, lang: str) -> bool:
+        parts = query.data.split(":", 3)
+        if len(parts) != 4:
+            return False
+        _, session_id, action, value = parts
+        session = self.manager.get(owner_chat_id, session_id)
+        if session is None or not self._can_access_session(owner_chat_id, session):
+            await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+            return True
+        ui_key = self._ui_key(query.message.chat_id, query=query)
+        self.pending_queue_replace.pop(ui_key, None)
+        if action == "page" and value.isdecimal():
+            await self._show_queue(context, query, session, lang, int(value))
+            return True
+        back = [InlineKeyboardButton(t("btn.session.queue", lang), callback_data=f"sess_queue:{session.id}")]
+        match = next(
+            ((index, item) for index, item in enumerate(queue_entries(session.queue)) if item["queue_id"] == value),
+            None,
+        )
+        if match is None:
+            await self._edit_msg(context, query, t("msg.session.queue_gone", lang), reply_markup=InlineKeyboardMarkup([back]))
+            return True
+        index, item = match
+        if action in ("first", "up", "down", "remove"):
+            try:
+                SessionMutationService(self.manager).change_queue_item(session, value, action, chat_id=owner_chat_id)
+            except RuntimeError:
+                logger.exception("queue update failed session_id=%s", session.id)
+                await self._edit_msg(context, query, t("msg.session.queue_save_failed", lang), reply_markup=InlineKeyboardMarkup([back]))
+                return True
+            page_index = index if action == "remove" else session.queue.index(item)
+            await self._show_queue(context, query, session, lang, page_index // 8 * 8)
+            return True
+        if action == "replace":
+            cancel = getattr(self._bot_app, "_cancel_menu_input", None)
+            if callable(cancel):
+                cancel(ui_key)
+            user_id = getattr(getattr(query, "from_user", None), "id", None)
+            pending = (owner_chat_id, session.id, value, user_id, query)
+            self.pending_queue_replace[ui_key] = pending
+            if not await self._edit_msg(context, query, t("msg.session.queue_replace_prompt", lang),
+                                        reply_markup=InlineKeyboardMarkup([back])):
+                if self.pending_queue_replace.get(ui_key) is pending:
+                    self.pending_queue_replace.pop(ui_key)
+            return True
+        if action != "open":
+            return False
+        text = item["text"]
+        rows = [
+            [
+                InlineKeyboardButton(t("btn.session.queue_up", lang), callback_data=f"sess_q:{session.id}:up:{value}"),
+                InlineKeyboardButton(t("btn.session.queue_down", lang), callback_data=f"sess_q:{session.id}:down:{value}"),
+                InlineKeyboardButton(t("btn.session.queue_first", lang), callback_data=f"sess_q:{session.id}:first:{value}"),
+            ],
+            [
+                InlineKeyboardButton(t("btn.session.queue_replace", lang), callback_data=f"sess_q:{session.id}:replace:{value}"),
+                InlineKeyboardButton(t("btn.session.queue_remove", lang), callback_data=f"sess_q:{session.id}:remove:{value}"),
+            ],
+            back,
+        ]
+        fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
+        if len(text.encode("utf-16-le")) // 2 + 2 * len(fence) > 2900:
+            message = query.message
+            direct_topic = getattr(getattr(message, "direct_messages_topic", None), "topic_id", None)
+            sent = await self._bot_app._send_document(
+                context, chat_id=message.chat_id,
+                message_thread_id=getattr(message, "message_thread_id", None),
+                direct_messages_topic_id=direct_topic,
+                document=InputFile(text.encode(), filename="request.txt"),
+            )
+            detail = t("msg.session.queue_in_file" if sent else "msg.artifact.send_failed", lang)
+        elif text:
+            detail = f"{fence}text\n{text}\n{fence}"
+        else:
+            detail = t("msg.session.queue_no_text", lang)
+        await self._edit_msg(context, query, detail, reply_markup=InlineKeyboardMarkup(rows))
+        return True
+
+    async def handle_queue_replacement(
+        self, chat_id, text, context, *, message_thread_id=None, direct_topic_id=None, user_id=None,
+    ) -> bool:
+        ui_key = self._ui_key(chat_id, message_thread_id=message_thread_id)
+        pending = self.pending_queue_replace.get(ui_key)
+        if pending is None or pending[3] != user_id or not (text or "").strip():
+            return False
+        target_topic = getattr(getattr(pending[4].message, "direct_messages_topic", None), "topic_id", None)
+        if target_topic != direct_topic_id:
+            return False
+        owner_chat_id, session_id, queue_id, _, query = self.pending_queue_replace.pop(ui_key)
+        transport = getattr(self._bot_app, "transport_service", None)
+        if transport is not None:
+            panel = transport.menu_panel(ui_key)
+            if panel and panel.get("message_id") != query.message.message_id:
+                return False
+        lang = resolve_user_lang(self.config, chat_id=owner_chat_id)
+        session = self.manager.get(owner_chat_id, session_id)
+        if session is None or not self._can_access_session(owner_chat_id, session):
+            await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
+            return True
+        try:
+            changed = SessionMutationService(self.manager).change_queue_item(
+                session, queue_id, "replace", chat_id=owner_chat_id, text=text,
+            )
+        except RuntimeError:
+            logger.exception("queue replacement failed session_id=%s", session.id)
+            code = "queue_save_failed"
+        else:
+            if changed:
+                await self._show_queue(context, query, session, lang)
+                return True
+            code = "queue_gone"
+        back = InlineKeyboardButton(t("btn.session.queue", lang), callback_data=f"sess_queue:{session.id}")
+        await self._edit_msg(context, query, t(f"msg.session.{code}", lang), reply_markup=InlineKeyboardMarkup([[back]]))
+        return True
 
     def _resume_candidates(self, session) -> list[CliSessionCandidate]:
         return list_recent_cli_sessions(
@@ -478,6 +619,8 @@ class SessionUI:
             text = header + summary + footer
             await self._edit_msg(context, query, text)
             return True
+        if data.startswith("sess_q:"):
+            return await self._handle_queue_action(context, query, owner_chat_id, lang)
         if data.startswith("sess_queue:"):
             session_id = data.split(":", 1)[1]
             session = self.manager.get(owner_chat_id, session_id)
@@ -487,8 +630,9 @@ class SessionUI:
             if not self._can_access_session(owner_chat_id, session):
                 await self._edit_msg(context, query, t("msg.error.session_unavailable", lang))
                 return True
-            text = t("msg.session.queue_count", lang, n=len(session.queue)) if session.queue else t("msg.session.queue_empty", lang)
-            await self._edit_msg(context, query, text)
+            if self.pending_queue_replace:
+                self.pending_queue_replace.pop(self._ui_key(query.message.chat_id, query=query), None)
+            await self._show_queue(context, query, session, lang)
             return True
         if data.startswith("sess_clearqueue:"):
             session_id = data.split(":")[1]

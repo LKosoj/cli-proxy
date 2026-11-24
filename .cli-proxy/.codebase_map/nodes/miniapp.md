@@ -72,4 +72,6 @@ Instruction node for `miniapp` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-25 — В статусе доступно управление отдельными запросами очереди.
+- 2026-11-24 — Статус MiniApp получает историю активности CLI для headless и tmux через существующий WebSocket.
 - 2026-08-25T00:00:00Z

@@ -10,7 +10,7 @@ from .capsule import DEFAULT_CAPSULE_MAX_CHARS, build_transfer_package
 
 logger = logging.getLogger(__name__)
 
-_READERS: Dict[str, Callable[[str, str], Optional[CanonicalSession]]] = {}
+_READERS: Dict[str, Callable[..., Optional[CanonicalSession]]] = {}
 _WRITERS: Dict[str, Callable[..., Optional[str]]] = {}
 
 # CLI tools whose on-disk session files must live under another user's HOME and
@@ -22,10 +22,11 @@ _TARGET_USERNAMES: Dict[str, str] = {
 }
 
 
-def _ensure_readers() -> Dict[str, Callable[[str, str], Optional[CanonicalSession]]]:
+def _ensure_readers() -> Dict[str, Callable[..., Optional[CanonicalSession]]]:
     if _READERS:
         return _READERS
     from . import (
+        agy,
         reader_claude,
         reader_codex,
         reader_gemini,
@@ -35,6 +36,7 @@ def _ensure_readers() -> Dict[str, Callable[[str, str], Optional[CanonicalSessio
         reader_qwen,
     )
 
+    _READERS["agy"] = agy.read_session
     _READERS["claude"] = reader_claude.read_session
     _READERS["codex"] = reader_codex.read_session
     _READERS["gemini"] = reader_gemini.read_session
@@ -49,6 +51,7 @@ def _ensure_writers() -> Dict[str, Callable[..., Optional[str]]]:
     if _WRITERS:
         return _WRITERS
     from . import (
+        agy,
         writer_claude,
         writer_codex,
         writer_gemini,
@@ -58,6 +61,7 @@ def _ensure_writers() -> Dict[str, Callable[..., Optional[str]]]:
         writer_qwen,
     )
 
+    _WRITERS["agy"] = agy.write_session
     _WRITERS["claude"] = writer_claude.write_session
     _WRITERS["codex"] = writer_codex.write_session
     _WRITERS["gemini"] = writer_gemini.write_session
@@ -72,6 +76,8 @@ def extract_session(
     source_cli: str,
     session_id: str,
     workspace: str,
+    *,
+    username: Optional[str] = None,
 ) -> Optional[CanonicalSession]:
     """Read a CanonicalSession from the source CLI's native files."""
     cli_name = str(source_cli or "").strip().lower()
@@ -86,6 +92,8 @@ def extract_session(
         return None
 
     try:
+        if cli_name == "agy":
+            return reader(sid, ws, username)
         return reader(sid, ws)
     except Exception:
         logger.exception("session_transfer: reader failed for cli=%s session=%s", cli_name, sid)
@@ -99,6 +107,7 @@ def write_target_session(
     *,
     compact: bool = True,
     max_chars: int = DEFAULT_CAPSULE_MAX_CHARS,
+    username: Optional[str] = None,
 ) -> Optional[str]:
     """Write canonical session into the target CLI's native files. Returns new session id."""
     cli_name = str(target_cli or "").strip().lower()
@@ -111,7 +120,7 @@ def write_target_session(
         logger.info("session_transfer: no writer for cli=%s", cli_name)
         return None
 
-    username = _TARGET_USERNAMES.get(cli_name)
+    username = username if cli_name == "agy" else _TARGET_USERNAMES.get(cli_name)
     try:
         target_canonical = canonical
         if compact:

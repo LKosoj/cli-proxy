@@ -4,14 +4,19 @@ import hmac
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import quote
 
+import pytest
 import yaml
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from app.services.ssh_config_loader import save_ssh_config
+from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
+from app.services.cli_backends.transcript_reader import TranscriptLocator
 from app.services.logging_service import build_session_log_context
 from app.services.session_tick_history_store import append_session_tick
 from app.services.runtime_progress_service import emit_runtime_progress
@@ -892,7 +897,8 @@ def test_miniapp_status_ws_snapshot_exposes_last_assistant_text_and_tick_kinds(t
     asyncio.run(_run())
 
 
-def test_miniapp_status_ws_streams_gemini_ticks_while_session_runs(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("backend_name", ["headless", "tmux"])
+def test_miniapp_status_ws_streams_gemini_ticks_while_session_runs(tmp_path, monkeypatch, backend_name) -> None:
     async def _run() -> None:
         workdir = tmp_path / "repo"
         workdir.mkdir()
@@ -910,6 +916,41 @@ def test_miniapp_status_ws_streams_gemini_ticks_while_session_runs(tmp_path, mon
         session.busy = True
         session.started_at = time.time()
         session.last_output_ts = session.started_at
+        backend = TmuxExecutionBackend(driver=SimpleNamespace(capture_pane=AsyncMock(return_value="")), poll_interval_sec=0.03)
+        cmd = 'printf "tick-1\\ntick-2\\ntick-3"'
+        progress_seen = asyncio.Event()
+
+        async def run_tmux():
+            path = tmp_path / ".gemini" / "tmp" / "project" / "chats" / "session-test.json"
+            path.parent.mkdir(parents=True)
+            timestamp = datetime.now(timezone.utc).isoformat()
+            messages = [{
+                "id": "progress",
+                "type": "gemini",
+                "timestamp": timestamp,
+                "content": "Analyzing Command Execution",
+                "toolCalls": [{
+                    "id": "tool-1", "name": "run_shell_command", "args": {"command": cmd},
+                    "status": "success", "result": {"output": "tick-1\ntick-2\ntick-3"},
+                }],
+            }]
+            path.write_text(json.dumps({"messages": messages}), encoding="utf-8")
+            request = TmuxRecoveryRequest(
+                request_id="status-tmux", started_at=session.started_at, offset=0, prompt="hello", dest={},
+                transcript_locator=TranscriptLocator("gemini", str(path), 0),
+            )
+            task = asyncio.create_task(backend._monitor_request(session, backend.paths(session), request))
+            try:
+                await asyncio.wait_for(progress_seen.wait(), timeout=5)
+                messages.append({
+                    "id": "final", "type": "gemini", "timestamp": timestamp, "content": "Final answer from stdout",
+                })
+                path.write_text(json.dumps({"messages": messages}), encoding="utf-8")
+                return (await task).text
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
 
         async def _fake_create_subprocess_exec(*args, **_kwargs):
             return _FakeProc(
@@ -933,6 +974,7 @@ def test_miniapp_status_ws_streams_gemini_ticks_while_session_runs(tmp_path, mon
             )
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+        monkeypatch.setenv("HOME", str(tmp_path))
 
         web_app = web.Application()
         MiniAppRoutes(app).register(web_app)
@@ -950,18 +992,21 @@ def test_miniapp_status_ws_streams_gemini_ticks_while_session_runs(tmp_path, mon
             ws = await client.ws_connect(
                 f"/api/status/ws?ticket={quote(ticket)}&session_uid={_suid(session)}"
             )
-            run_task = asyncio.create_task(session._run_headless("hello"))
+            run_task = asyncio.create_task(run_tmux() if backend_name == "tmux" else session._run_headless("hello"))
             try:
                 saw_progress = False
                 saw_final_assistant = False
                 final_active = {}
                 for _ in range(12):
+                    if run_task.done():
+                        run_task.result()
                     payload = await ws.receive_json(timeout=2.0)
                     assert payload["type"] in {"snapshot", "update"}
                     final_active = payload.get("status", {}).get("active_session", {}) or {}
                     history = list(final_active.get("tick_history") or [])
                     if history and any("tick-1 tick-2 tick-3" in str(item.get("value")) for item in history):
                         saw_progress = True
+                        progress_seen.set()
                     if final_active.get("last_assistant_text_value") == "Final answer from stdout":
                         saw_final_assistant = True
                     if saw_progress and saw_final_assistant:
@@ -969,17 +1014,23 @@ def test_miniapp_status_ws_streams_gemini_ticks_while_session_runs(tmp_path, mon
                 assert saw_progress is True
                 assert saw_final_assistant is True
                 assert final_active.get("last_assistant_text_value") == "Final answer from stdout"
-                assert any(
-                    "Analyzing Command Execution" in str(item.get("value"))
-                    for item in list(final_active.get("tick_history") or [])
-                )
-                assert any(
-                    "tick-1 tick-2 tick-3" in str(item.get("value"))
-                    for item in list(final_active.get("tick_history") or [])
-                )
+                assert [(item["kind"], item["value"]) for item in final_active["tick_history"]] == [
+                    ("assistant_text", "Analyzing Command Execution"),
+                    ("tool_event", f"run_shell_command: {cmd}"),
+                    ("tool_event", f"run_shell_command: {cmd} result: tick-1 tick-2 tick-3"),
+                    ("assistant_text", "Final answer from stdout"),
+                ]
             finally:
                 await ws.close()
+                if not run_task.done() and not (saw_progress and saw_final_assistant):
+                    run_task.cancel()
+                    await asyncio.gather(run_task, return_exceptions=True)
             assert await run_task == "Final answer from stdout"
+            if backend_name == "tmux":
+                log = (tmp_path / "bot.log").read_text(encoding="utf-8")
+                assert "tmux request monitoring started request_id=status-tmux" in log
+                assert "tmux CLI activity request_id=status-tmux events=3 kinds=assistant_text,tool_event" in log
+                assert "tmux request finished session_id=" in log
         finally:
             session.busy = False
             await client.close()

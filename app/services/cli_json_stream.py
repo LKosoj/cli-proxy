@@ -289,8 +289,8 @@ def _tool_label(tool_name: Any, payload: Any) -> str:
     return name
 
 
-def _kimi_tool_arguments(value: Any) -> Any:
-    """Kimi отдаёт аргументы инструмента JSON-строкой, как в OpenAI tool_calls."""
+def _tool_arguments(value: Any) -> Any:
+    """Аргументы инструмента могут прийти готовым словарём или JSON-строкой."""
 
     if isinstance(value, dict):
         return value
@@ -701,7 +701,9 @@ class ClaudeJsonStreamAdapter(BaseCliJsonStreamAdapter):
         payload = loads_safe(line)
         if not isinstance(payload, dict):
             raise ValueError(f"CLI JSON stream line must decode to object, got {type(payload)!r}")
+        return self.feed_record(payload)
 
+    def feed_record(self, payload: dict[str, Any]) -> list[CliJsonStreamEvent]:
         event_type = str(payload.get("type") or "").strip().lower()
         if not event_type:
             raise ValueError("CLI JSON stream event is missing type")
@@ -1094,7 +1096,7 @@ class KimiJsonStreamAdapter(BaseCliJsonStreamAdapter):
                 function = call.get("function")
                 function = function if isinstance(function, dict) else {}
                 call_id = str(call.get("id") or "").strip()
-                tool_label = _tool_label(function.get("name"), _kimi_tool_arguments(function.get("arguments")))
+                tool_label = _tool_label(function.get("name"), _tool_arguments(function.get("arguments")))
                 if call_id:
                     self._tool_labels[call_id] = tool_label
                 events.append(
@@ -1267,7 +1269,87 @@ class OpencodeJsonStreamAdapter(BaseCliJsonStreamAdapter):
         return events
 
 
-def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAdapter]:
+class AgyJsonStreamAdapter(BaseCliJsonStreamAdapter):
+    cli_name = "agy"
+
+    def __init__(self, *, resume_token: Optional[str] = None) -> None:
+        self._expected_session_id = resume_token
+        self._session_id: Optional[str] = None
+        self._text = ""
+        self._completed = False
+        self._resume_failed = False
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._session_id
+
+    @property
+    def completed(self) -> bool:
+        return self._completed
+
+    def final_output_text(self) -> str:
+        return self._text
+
+    def feed_line(self, line: str) -> list[CliJsonStreamEvent]:
+        if self._resume_failed:
+            return []
+        payload = loads_safe(line)
+        if not isinstance(payload, dict):
+            raise ValueError("Antigravity stream line must decode to an object")
+
+        event = payload.get("event")
+        if event not in ("init", "step_update", "result"):
+            return []
+        data = payload.get(event)
+        if not isinstance(data, dict):
+            return []
+
+        events: list[CliJsonStreamEvent] = []
+        session_id = str(payload.get("conversation_id") or data.get("conversation_id") or "").strip()
+        if session_id and self._expected_session_id and session_id != self._expected_session_id:
+            self._resume_failed = True
+            self._text = f"Antigravity could not resume conversation {self._expected_session_id}."
+            return [CliJsonStreamEvent(
+                "failed", self.cli_name, payload, text=self._text, is_terminal=True,
+            )]
+        if session_id and session_id != self._session_id:
+            self._session_id = session_id
+            events.append(CliJsonStreamEvent("session_started", self.cli_name, payload, session_id))
+
+        if event == "step_update":
+            if data.get("step_type") == "agent_response":
+                delta = data.get("text_delta")
+                if isinstance(delta, str) and delta:
+                    self._text += delta
+                    events.append(CliJsonStreamEvent(
+                        "assistant_text", self.cli_name, {**payload, "delta": True},
+                        self._session_id, text=delta,
+                    ))
+            elif data.get("step_type") == "tool" and data.get("state") == "DONE":
+                info = data.get("tool_info")
+                info = info if isinstance(info, dict) else {}
+                label = _tool_label(data.get("tool_name") or info.get("name"), info.get("parameters"))
+                error = info.get("error")
+                events.append(CliJsonStreamEvent(
+                    "tool_event", self.cli_name, payload, self._session_id,
+                    text=_tool_result_text(label, detail="", is_error=bool(error)),
+                ))
+        elif event == "result":
+            self._completed = data.get("status") == "SUCCESS"
+            if self._completed:
+                self._text = str(data.get("response") or "")
+            else:
+                self._text = str(data.get("error") or f"Antigravity: {data.get('status') or 'ERROR'}")
+            events.append(CliJsonStreamEvent(
+                "completed" if self._completed else "failed", self.cli_name, payload,
+                self._session_id, text=None if self._completed else self._text, is_terminal=True,
+            ))
+        return events
+
+
+def build_cli_json_stream_adapter(
+    cli_name: str, *, resume_token: Optional[str] = None,
+) -> Optional[BaseCliJsonStreamAdapter]:
     name = str(cli_name or "").strip().lower()
     if name == "codex":
         return CodexJsonStreamAdapter()
@@ -1283,6 +1365,8 @@ def build_cli_json_stream_adapter(cli_name: str) -> Optional[BaseCliJsonStreamAd
         return KimiJsonStreamAdapter()
     if name == "opencode":
         return OpencodeJsonStreamAdapter()
+    if name == "agy":
+        return AgyJsonStreamAdapter(resume_token=resume_token)
     return None
 
 
@@ -1335,6 +1419,10 @@ def raw_cli_stream_is_protocol_only(raw_text: str) -> bool:
         if not (
             str(payload.get("type") or "").strip()
             or str(payload.get("role") or "").strip()
+            or (
+                payload.get("event") in ("init", "step_update", "result")
+                and isinstance(payload.get(payload["event"]), dict)
+            )
         ):
             return False
     return saw_line

@@ -20,6 +20,7 @@ from sessions.scoped_key import session_scoped_key
 from tg.command_registry import build_command_registry
 from tg.callbacks import CallbackHandler
 from tg.handlers import BotHandlers
+from tg.markdown import to_telegram_entities
 
 
 def _write_setprompt_config(tmp_path: Path, *, prompt_regex: str | None = "old") -> AppConfig:
@@ -101,6 +102,7 @@ def _make_full_app() -> types.SimpleNamespace:
         cmd_newpath=object(),
         cmd_close=object(),
         cmd_status=object(),
+        cmd_tui=object(),
         cmd_reports=object(),
         cmd_limits=object(),
         cmd_queue=object(),
@@ -1161,6 +1163,72 @@ def test_show_mode_menu_applies_simple_user_visibility_policy() -> None:
         assert visibility.allows("promote_skills") is False
 
     asyncio.run(_run())
+
+
+@pytest.mark.asyncio
+async def test_cmd_queue_shows_ordered_previews_in_current_topic() -> None:
+    from sessions.session_ui import SessionUI
+
+    queue = [
+        "first\nrequest",
+        {"text": r"second \ [link](https://example.com) `abc` *request*", "dest": {"chat_id": 7}},
+        {"text": "", "image_paths": ["private.jpg"]},
+        "long " + "a" * 300,
+        "fifth", "sixth", "seventh", "eighth", "ninth",
+    ]
+    route = types.SimpleNamespace(owner_chat_id=42, reply_kwargs=lambda: {"chat_id": -1001, "message_thread_id": 55})
+    session = types.SimpleNamespace(id="s1", queue=queue)
+    app = types.SimpleNamespace(
+        _send_menu=AsyncMock(), config=types.SimpleNamespace(),
+        session_ui=SessionUI,
+        ensure_telegram_inbound_session=AsyncMock(return_value=(route, session)),
+    )
+    await BotHandlers(app).cmd_queue(object(), object())
+
+    assert app.ensure_telegram_inbound_session.await_args.kwargs == {"auto_create": False, "scope": "queue"}
+    message = app._send_menu.await_args.kwargs
+    assert message["message_thread_id"] == 55
+    assert message["allow_thread_fallback"] is False
+    assert message["reply_markup"].inline_keyboard[0][0].callback_data.startswith("sess_q:s1:open:")
+    text, entities = to_telegram_entities(message["text"])
+    lines = [line for line in text.splitlines() if line]
+    assert lines[1:4] == ["1. first request", f"2. {queue[1]['text']}", "3. Без текста"]
+    assert [entity.type for entity in entities] == ["pre"]
+    assert lines[4].endswith("…")
+    assert lines[-2:] == ["8. eighth", "И ещё 1."]
+    assert len(queue) == 9
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scenario", ["available", "denied", "remote", "missing", "delivery_failed"])
+async def test_cmd_tui_uses_bound_session_and_sends_redacted_snapshot(monkeypatch, scenario) -> None:
+    from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+    route = types.SimpleNamespace(owner_chat_id=42, reply_kwargs=lambda: {"chat_id": -1001, "message_thread_id": 55})
+    session = types.SimpleNamespace(ssh_remote_enabled=scenario == "remote")
+    app = types.SimpleNamespace(
+        config=types.SimpleNamespace(),
+        ensure_telegram_inbound_session=AsyncMock(return_value=(None, None) if scenario == "denied" else (route, session)),
+        _send_message=AsyncMock(),
+        _send_document=AsyncMock(return_value=scenario != "delivery_failed"),
+    )
+    capture = AsyncMock(return_value=None if scenario == "missing" else "Ready\nAPI_KEY=my-key")
+    monkeypatch.setattr(TmuxExecutionBackend, "capture_screen", capture)
+    await BotHandlers(app).cmd_tui(object(), object())
+
+    assert app.ensure_telegram_inbound_session.await_args.kwargs == {"auto_create": False, "scope": "tui"}
+    if scenario in ("denied", "remote"):
+        capture.assert_not_awaited()
+    else:
+        capture.assert_awaited_once_with(session)
+    if scenario in ("available", "delivery_failed"):
+        document = app._send_document.await_args.kwargs["document"]
+        assert document.filename == "terminal.txt"
+        assert document.input_file_content == b"Ready\nAPI_KEY=[REDACTED]"
+        assert app._send_document.await_args.kwargs["message_thread_id"] == 55
+    else:
+        app._send_document.assert_not_awaited()
+    assert app._send_message.await_count == (1 if scenario in ("remote", "missing", "delivery_failed") else 0)
 
 
 @pytest.mark.asyncio

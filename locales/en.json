@@ -191,6 +191,8 @@
       "session_unavailable": "Session not found or unavailable",
       "webmaster": "Webmaster Status",
       "runtime_progress": "Runtime Progress",
+      "queue_manage": "Manage queue",
+      "queue_close": "Close",
       "queue_prefix": "Queue (",
       "state_summary": "State Summary",
       "last_tick_prefix": "Last Tick Value (",
@@ -526,6 +528,11 @@
       "status": "📊 Detailed status",
       "rename": "✏️ Rename",
       "resume": "🔗 Connect history",
+      "queue_first": "Move to front",
+      "queue_up": "Move up",
+      "queue_down": "Move down",
+      "queue_remove": "Remove",
+      "queue_replace": "Replace",
       "queue": "📋 Request queue",
       "clearqueue": "🧹 Clear queue",
       "state": "💾 Saved state",
@@ -632,6 +639,12 @@
       "orch_toggled": "Advanced orchestrator {status}.",
       "queue_cleared": "Queue cleared.",
       "queue_count": "{n} messages in queue.",
+      "queue_more": "And {n} more.",
+      "queue_no_text": "No text",
+      "queue_gone": "The request is no longer queued.",
+      "queue_save_failed": "Could not save the queue.",
+      "queue_in_file": "The file contains the full request.",
+      "queue_replace_prompt": "Send the replacement text. Attachments will be kept.",
       "queue_empty": "Queue is empty.",
       "rename_cancelled": "Rename cancelled.",
       "rename_empty": "Session name is empty.",
@@ -1049,6 +1062,10 @@
       "send_failed": "Failed to send the file.",
       "send_error": "Error while sending the file."
     },
+    "tui": {
+      "unavailable": "The terminal for this session is currently unavailable.",
+      "send_failed": "Could not send the terminal snapshot."
+    },
     "report": {
       "empty": "There are no reports for the current session yet. Use /reports generate to create one from the Manager plan.",
       "menu_title": "Reports for session {session_id}:",
@@ -1118,6 +1135,9 @@
     },
     "status": {
       "desc": "Show current context session status."
+    },
+    "tui": {
+      "desc": "Download the current tmux session screen."
     },
     "reports": {
       "desc": "Show or send reports for the current session."
@@ -2262,6 +2282,8 @@
     }
   },
   "session_status": {
+    "resume_terminal": "Resume in the server terminal (as the CLI Proxy user)",
+    "resume_terminal_user": "Resume in the server terminal (as {user})",
     "resume": "Resume",
     "active_session": "Active session",
     "session": "Session",

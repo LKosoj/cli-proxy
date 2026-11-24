@@ -21,7 +21,7 @@ from sessions.session_state_access import (
     set_ssh_remote_enabled,
 )
 from app.services.ssh_config_loader import ssh_remote_available
-from session import set_session_execution_backend
+from session import get_session_execution_backend, set_session_execution_backend
 from tg.handlers import build_lang_menu, format_session_state
 from i18n import t, SUPPORTED_LANGS, lang_from_query
 from i18n.resolver import resolve_language
@@ -507,12 +507,23 @@ class SessionActionsMixin:
                 await self._edit_msg(context, query, t("msg.error.transfer_extract_failed", lang))
                 return True
 
-            canonical = extract_session(source_cli, str(source_token), workspace)
+            def agy_options(cli, *, source=False):
+                if cli != "agy":
+                    return {}
+                users = getattr(session.cli, "tmux_users", None) or {}
+                if source and "agy" in users:
+                    return {"username": users["agy"]}
+                if get_session_execution_backend(session, "agy") == "tmux":
+                    tool = self.bot_app.config.tools.get("agy")
+                    return {"username": getattr(tool, "tmux_user", None)}
+                return {}
+
+            canonical = extract_session(source_cli, str(source_token), workspace, **agy_options(source_cli, source=True))
             if not canonical or not canonical.messages:
                 await self._edit_msg(context, query, t("msg.error.transfer_extract_failed", lang))
                 return True
 
-            new_token = write_target_session(canonical, target_cli, workspace)
+            new_token = write_target_session(canonical, target_cli, workspace, **agy_options(target_cli))
             if not new_token:
                 await self._edit_msg(context, query, t("msg.error.transfer_write_failed", lang, cli=target_cli))
                 return True

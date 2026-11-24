@@ -256,7 +256,10 @@ async def watch_session_assistant_preview(
     if refresh_interval_sec is not None:
         refresh_interval = max(interval, float(refresh_interval_sec))
     while True:
-        source = build_text(getattr(session, "last_assistant_text_value", None)) or ""
+        preview = getattr(session, "_tmux_assistant_preview_text", None) if timer_without_text else None
+        if preview is None:
+            preview = getattr(session, "last_assistant_text_value", None)
+        source = build_text(preview) or ""
         choice = str(getattr(session, "_tmux_choice_text", "") or "")
         show_timer = include_elapsed_time and (
             bool(source) or (timer_without_text and not choice and not stop_event.is_set())

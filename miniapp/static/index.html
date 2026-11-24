@@ -15,7 +15,7 @@
   <link href="./vendor/fontsource/css/ibm-plex-sans-700.css?v=b980f3bd79b2" rel="stylesheet">
   <link href="./vendor/fontsource/css/ibm-plex-mono-400.css?v=1acc30dbeeab" rel="stylesheet">
   <link href="./vendor/fontsource/css/ibm-plex-mono-600.css?v=e87d50a383c9" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260610-01" />
+  <link rel="stylesheet" href="./styles.css?v=20261125-01" />
 </head>
 <body>
   <header>
@@ -194,7 +194,16 @@
           <details class="status-card-details hidden" id="statusQueueDetails">
             <summary><span data-i18n-key="miniapp.status.queue_prefix">Очередь (Queue:</span> <span id="stQueueLen">0</span>)</summary>
             <div class="status-card-body pre-wrap" id="stQueueText"></div>
+            <button type="button" class="btn-sm" id="statusQueueOpen" data-i18n-key="miniapp.status.queue_manage">Управлять очередью</button>
           </details>
+          <dialog id="statusQueueDialog" aria-labelledby="statusQueueTitle">
+            <h3 id="statusQueueTitle" data-i18n-key="miniapp.status.queue_manage">Управлять очередью</h3>
+            <div id="statusQueueItems"></div>
+            <p id="statusQueueError" role="status"></p>
+            <form method="dialog">
+              <button type="submit" class="btn-sm" data-i18n-key="miniapp.status.queue_close">Закрыть</button>
+            </form>
+          </dialog>
 
           <details class="status-card-details" id="statusSummaryDetails">
             <summary data-i18n-key="miniapp.status.state_summary">State Summary</summary>
@@ -534,6 +543,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260817-02"></script>
+  <script src="./app.js?v=20261125-01"></script>
 </body>
 </html>

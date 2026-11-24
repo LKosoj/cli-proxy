@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import shlex
 import time
 from typing import Any, Optional
 
 from app.services.trace_contract import adapt_runtime_event
 from i18n import t
+from sessions.queue_item import normalize_queue_item
 from sessions.session_state_access import (
     get_active_mode,
     is_orchestrator_enabled,
+    is_remote_control_enabled,
     is_session_unread,
     is_ssh_remote_enabled,
 )
@@ -17,6 +20,24 @@ from app.services.ssh_config_loader import load_ssh_config
 
 def get_session_queue_len(session: Any) -> int:
     return len(getattr(session, "queue", []) or [])
+
+
+def build_session_queue_text(session: Any, lang: str, *, offset: int = 0) -> str:
+    items = list(session.queue)
+    if not items:
+        return t("msg.session.queue_empty", lang)
+
+    lines = [t("msg.session.queue_count", lang, n=len(items)), "```text"]
+    for number, raw in enumerate(items[offset:offset + 8], start=offset + 1):
+        item = normalize_queue_item(raw, fallback_dest={})
+        preview = " ".join(item.text.split())
+        if len(preview) > 280:
+            preview = preview[:279].rstrip() + "…"
+        lines.append(f"{number}. {preview or t('msg.session.queue_no_text', lang)}")
+    lines.append("```")
+    if len(items) > offset + 8:
+        lines.append(t("msg.session.queue_more", lang, n=len(items) - offset - 8))
+    return "\n".join(lines)
 
 
 def build_common_mode_stage(
@@ -164,6 +185,38 @@ def _runtime_progress_brief(session: Any) -> str:
     return prefix or message
 
 
+def _native_resume_command(session: Any, backend: str, active_cli: str) -> tuple[str, str] | None:
+    commands = {
+        "claude": ("claude", "--resume"),
+        "codex": ("codex", "resume"),
+        "grok": ("grok", "--resume"),
+    }
+    workdir = str(getattr(session, "workdir", "") or "")
+    token = str(getattr(session, "resume_token", "") or "").strip()
+    tool = session.tool
+    if (
+        backend not in {"headless", "tmux"}
+        or active_cli not in commands
+        or active_cli != str(getattr(tool, "name", "")).lower()
+        or not workdir
+        or not token
+        or token.startswith("-")
+        or any(char in workdir + token for char in "\r\n\x00")
+    ):
+        return None
+    user = ""
+    if backend == "tmux":
+        user = str(getattr(tool, "tmux_user", "") or "").strip()
+    elif active_cli == "claude":
+        if getattr(tool, "no_session_persistence_on_fresh", False):
+            return None
+        from app.services.session_transfer.reader_claude import CLAUDE_RUN_USER
+
+        user = CLAUDE_RUN_USER
+    command = f"cd -- {shlex.quote(workdir)} && {shlex.join([*commands[active_cli], token])}"
+    return command, user
+
+
 def build_session_status_text(
     session: Any,
     *,
@@ -186,7 +239,8 @@ def build_session_status_text(
     title = title_prefix if title_prefix is not None else t("session_status.active_session", lang)
     if is_session_unread(session, False):
         title = f"🔵 {title}"
-    busy_txt = t("session_status.busy", lang) if bool(getattr(session, "busy", False)) else t("session_status.free", lang)
+    busy = bool(getattr(session, "busy", False))
+    busy_txt = t("session_status.busy", lang) if busy else t("session_status.free", lang)
     git_state = getattr(session, "git", None)
     git_busy = bool(getattr(git_state, "busy", getattr(session, "git_busy", False)))
     git_txt = t("session_status.git_busy", lang) if git_busy else t("session_status.git_free", lang)
@@ -224,9 +278,10 @@ def build_session_status_text(
     queue_len = get_session_queue_len(session)
     resume_txt = str(getattr(session, "resume_token", None) or t("session_status.no", lang))
     try:
-        from session import available_execution_backends, get_session_execution_backend, has_live_tmux
+        from session import available_execution_backends, get_session_execution_backend, has_live_tmux, session_active_cli_name
         from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
 
+        active_cli = session_active_cli_name(session)
         selected_backend = get_session_execution_backend(session)
         available_backends = ", ".join(available_execution_backends(session)) or "-"
         live_tmux = has_live_tmux(session)
@@ -237,6 +292,7 @@ def build_session_status_text(
         else:
             runtime_label = None
     except Exception:
+        active_cli = ""
         selected_backend = "-"
         available_backends = "-"
         live_tmux = False
@@ -254,6 +310,15 @@ def build_session_status_text(
         from app.services.cli_backends.tmux_backend import build_tmux_attach_command
 
         lines.append(f"Tmux attach: `{build_tmux_attach_command(session)}`")
+    elif (
+        not (busy or active_mode or is_orchestrator_enabled(session))
+        and not (is_ssh_remote_enabled(session) or is_remote_control_enabled(session))
+    ):
+        native_resume = _native_resume_command(session, selected_backend, active_cli)
+        if native_resume:
+            command, user = native_resume
+            key = "session_status.resume_terminal_user" if user else "session_status.resume_terminal"
+            lines.extend([t(key, lang, user=user), "```sh", command, "```"])
     queue_line = f"{t('session_status.queue', lang)}: {queue_len} | {t('session_status.resume', lang)}: {resume_txt}"
     if show_orchestrator:
         orchestrator = (

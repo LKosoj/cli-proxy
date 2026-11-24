@@ -110,6 +110,16 @@ tools:
     help_cmd: "/help"
     env:
       KIMI_API_KEY: null
+  agy:
+    mode: headless
+    cmd: ["agy", "--output-format", "stream-json", "--print={prompt}"]
+    resume_cmd: ["agy", "--output-format", "stream-json", "--input-format", "stream-json", "--conversation", "{resume}"]
+    enabled: true
+    interactive_cmd: ["agy"]
+    interactive_resume_cmd: ["agy", "--conversation", "{resume}"]
+    execution_backends: ["headless", "tmux"]
+    default_execution_backend: "headless"
+    help_cmd: "/help"
   opencode:
     mode: headless
     # Промпт у `opencode run` - позиционный аргумент, а не флаг. `--format json`

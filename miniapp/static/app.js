@@ -371,6 +371,75 @@
     body.textContent = hasValue ? value : "";
   }
 
+  async function showStatusQueue(path, itemId) {
+    const dialog = document.getElementById("statusQueueDialog");
+    const items = document.getElementById("statusQueueItems");
+    const error = document.getElementById("statusQueueError");
+    const itemPath = itemId ? `${path}/${encodeURIComponent(itemId)}` : path;
+    items.replaceChildren();
+    error.textContent = "";
+    const button = (label, action) => {
+      const node = document.createElement("button");
+      node.type = "button";
+      node.className = "btn-sm";
+      node.textContent = label;
+      node.onclick = action;
+      return node;
+    };
+    try {
+      const data = await api(itemPath);
+      if (!dialog.open || dialog.dataset.path !== path) return;
+      if (itemId) {
+        const text = document.createElement("pre");
+        text.className = "pre-wrap";
+        text.textContent = data.text || t("msg.session.queue_no_text", "Без текста");
+        const change = async (action, replacement) => {
+          items.querySelectorAll("button").forEach((node) => { node.disabled = true; });
+          try {
+            await api(itemPath, { method: "POST", body: JSON.stringify({ action, text: replacement }) });
+            if (dialog.open && dialog.dataset.path === path) await showStatusQueue(path);
+          } catch (err) {
+            if (!dialog.open || dialog.dataset.path !== path) return;
+            await showStatusQueue(path);
+            error.textContent = err.status === 404
+              ? t("msg.session.queue_gone", "Запрос уже вышел из очереди.") : err.message;
+          }
+        };
+        items.append(
+          text,
+          button(t("btn.session.queue_up", "Выше"), () => change("up")),
+          button(t("btn.session.queue_down", "Ниже"), () => change("down")),
+          button(t("btn.session.queue_first", "В начало"), () => change("first")),
+          button(t("btn.session.queue_replace", "Заменить"), () => {
+            const field = document.createElement("textarea");
+            field.value = data.text;
+            field.setAttribute("aria-label", t("btn.session.queue_replace", "Заменить"));
+            const save = button(t("btn.session.queue_replace", "Заменить"), () => change("replace", field.value));
+            save.disabled = !field.value.trim();
+            field.oninput = () => { save.disabled = !field.value.trim(); };
+            items.replaceChildren(field, save, button(t("btn.session.back", "Назад"), () => showStatusQueue(path, itemId)));
+            field.focus();
+          }),
+          button(t("btn.session.queue_remove", "Удалить"), () => change("remove")),
+          button(t("btn.session.back", "Назад"), () => showStatusQueue(path)),
+        );
+      } else {
+        if (!data.items.length) items.textContent = t("msg.session.queue_empty", "Очередь пуста.");
+        data.items.forEach((item, index) => {
+          const row = document.createElement("div");
+          row.append(button(`${index + 1}. ${item.preview || t("msg.session.queue_no_text", "Без текста")}`,
+            () => showStatusQueue(path, item.id)));
+          items.append(row);
+        });
+      }
+    } catch (err) {
+      if (!dialog.open || dialog.dataset.path !== path) return;
+      error.textContent = err.status === 404 && itemId
+        ? t("msg.session.queue_gone", "Запрос уже вышел из очереди.") : err.message;
+      if (itemId) items.append(button(t("btn.session.back", "Назад"), () => showStatusQueue(path)));
+    }
+  }
+
   function setStatusAccordionHtml(detailsId, bodyId, htmlContent) {
     const details = document.getElementById(detailsId);
     const body = document.getElementById(bodyId);
@@ -2113,6 +2182,8 @@
     renderSettingsSessionOptions(payload || {});
     renderReportsSessionOptions(payload || {});
     if (String(state.statusSessionUid || "") !== previousStatusSessionUid) {
+      const queueDialog = document.getElementById("statusQueueDialog");
+      if (queueDialog?.open) queueDialog.close();
       state.runsSessionUid = String(state.statusSessionUid || "");
       state.runsSelectedRunId = "";
       state.runsSelectedModeId = "";
@@ -4217,6 +4288,14 @@
       applyStatusStateFromControls();
       void connectStatusWs();
       void fetchRuns();
+    };
+    document.getElementById("statusQueueOpen").onclick = () => {
+      if (!state.statusSessionUid) return;
+      const dialog = document.getElementById("statusQueueDialog");
+      const path = `/session/${encodeURIComponent(state.statusSessionUid)}/queue`;
+      dialog.dataset.path = path;
+      dialog.showModal();
+      void showStatusQueue(path);
     };
     document.getElementById("settingsApply").onclick = async () => {
       applySettingsStateFromControls();

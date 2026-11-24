@@ -49,4 +49,5 @@ Instruction node for `config_example.yaml` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-25 — Antigravity CLI настроен в `tools.agy` с вариантами headless и tmux.
 - 2026-08-08T00:00:00Z

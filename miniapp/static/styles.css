@@ -947,6 +947,23 @@ pre {
   margin: 0;
 }
 
+#statusQueueDialog {
+  box-sizing: border-box;
+  width: min(40rem, calc(100% - 24px));
+  max-height: 85dvh;
+  overflow: auto;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+}
+
+#statusQueueDialog::backdrop { background: rgb(0 0 0 / 45%); }
+#statusQueueItems > div { margin-bottom: 0.35rem; }
+#statusQueueItems button { margin: 0 0.3rem 0.3rem 0; overflow-wrap: anywhere; text-align: start; }
+#statusQueueItems pre { overflow-wrap: anywhere; }
+#statusQueueItems textarea { box-sizing: border-box; width: 100%; min-height: 8rem; }
+
 .status-cards-grid {
   display: flex;
   flex-direction: column;

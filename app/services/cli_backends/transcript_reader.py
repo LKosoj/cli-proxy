@@ -11,6 +11,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from app.services.cli_json_stream import (
+    ClaudeJsonStreamAdapter,
+    _tool_arguments,
+    _tool_label,
+    _tool_result_detail,
+    _tool_result_text,
+)
 from app.services.session_transfer.reader_claude import _project_key as _claude_project_key
 from app.services.session_transfer.reader_kimi import _workspace_key as _kimi_workspace_key
 from app.services.session_transfer.reader_qwen import _project_key_candidates as _qwen_project_keys
@@ -19,10 +26,11 @@ from modes.sdk.runtime.json_normalizer import loads_safe
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_PROVIDERS = {"claude", "codex", "grok", "qwen", "gemini", "kimi"}
+_SUPPORTED_PROVIDERS = {"claude", "codex", "grok", "qwen", "gemini", "kimi", "agy"}
 _DISCOVERY_TAIL_BYTES = 4 * 1024 * 1024
 _DISCOVERY_CANDIDATE_LIMIT = 30
 _CODEX_SESSION_ID_RE = re.compile(r"-([0-9a-fA-F-]{36})\.jsonl$")
+AGY_CONVERSATION_ID_PATTERN = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
 _CLAUDE_AGENT_FINISHED_RE = re.compile(
     r"^<task-notification>\s*<task-id>([^<]+)</task-id>\s*<tool-use-id>([^<]+)</tool-use-id>"
     r"(?:\s*<output-file>[^<]*</output-file>)?\s*<status>(?:completed|failed|stopped|killed|cancelled)</status>",
@@ -40,7 +48,6 @@ class TranscriptLocator:
 @dataclass(frozen=True)
 class TranscriptPollResult:
     assistant_text: str = ""
-    progress_text: str = ""
     complete: bool = False
     available: bool = False
     recognized: bool = False
@@ -57,6 +64,8 @@ class TranscriptPollResult:
     background_pending: int = 0
     # False: журнал ещё не подтвердил, что все фоновые агенты завершились.
     background_agents_settled: bool = True
+    # Только события, прочитанные за этот опрос, в порядке журнала.
+    activity: tuple[tuple[str, str], ...] = ()
 
 
 def _claude_pending_count(record: dict[str, Any]) -> Optional[int]:
@@ -190,7 +199,6 @@ class CliTranscriptReader:
         self.cursor = 0
         self.latest_assistant_text = ""
         self.latest_thinking_text = ""
-        self.latest_progress_text = ""
         self.complete = False
         self.recognized = False
         self.has_claude_turn_activity = False
@@ -199,6 +207,10 @@ class CliTranscriptReader:
         self._grok_stream_chunks: list[str] = []
         self._kimi_step_parts: list[str] = []
         self._gemini_turn_end: tuple[str, str] = ("", "")
+        self._activity: list[tuple[str, str]] = []
+        self._tool_labels: dict[str, str] = {}
+        self._gemini_seen: set[tuple[str, str, str]] = set()
+        self._claude_stream = ClaudeJsonStreamAdapter() if self.provider == "claude" else None
         self.terminal_error = ""
         self.retry_prompt = ""
         self.background_pending = 0
@@ -234,6 +246,8 @@ class CliTranscriptReader:
             return self.home_dir / ".gemini" / "tmp"
         if self.provider == "kimi":
             return self.home_dir / ".kimi-code" / "sessions"
+        if self.provider == "agy":
+            return self.home_dir / ".gemini" / "antigravity-cli" / "brain"
         return self.home_dir / ".cli-proxy-unsupported-transcript"
 
     def _path_is_allowed(self, path: Path) -> bool:
@@ -275,6 +289,11 @@ class CliTranscriptReader:
             workspace_key = urllib.parse.quote(self.workdir, safe="")
             direct = self.root / workspace_key / self.session_id / "updates.jsonl"
             return [direct] if direct.is_file() else []
+        if self.provider == "agy":
+            if not re.fullmatch(AGY_CONVERSATION_ID_PATTERN, self.session_id):
+                return []
+            direct = self.root / self.session_id / ".system_generated" / "logs" / "transcript_full.jsonl"
+            return [direct] if self._path_is_allowed(direct) and direct.is_file() else []
         direct = (
             self.root
             / _kimi_workspace_key(self.workdir)
@@ -330,7 +349,7 @@ class CliTranscriptReader:
 
     def _recent_paths(self) -> list[Path]:
         """Свежие журналы провайдера — когда тред по идентификатору не найден."""
-        if self.provider not in _SUPPORTED_PROVIDERS:
+        if self.provider not in _SUPPORTED_PROVIDERS or self.provider == "agy":
             return []
 
         if self.provider == "grok":
@@ -381,7 +400,7 @@ class CliTranscriptReader:
             raw = record.get("time")
             stamp = _parse_timestamp(raw)
             return stamp / 1000.0 if stamp and stamp > 0 else None
-        return _parse_timestamp(record.get("timestamp"))
+        return _parse_timestamp(record.get("created_at" if self.provider == "agy" else "timestamp"))
 
     def _start_offset(self, path: Path) -> Optional[int]:
         """Смещение первой записи журнала, появившейся после старта запроса.
@@ -407,12 +426,15 @@ class CliTranscriptReader:
             data = data[head + 1:]
         offset = None
         position = start + len(data)
+        # agy пишет время с точностью до секунды. При известном журнале
+        # на момент отправки смещение сохраняется отдельно.
+        started_at = int(self.started_at) if self.provider == "agy" else self.started_at
         for raw_line in reversed(data.splitlines(keepends=True)):
             position -= len(raw_line)
             stamp = self._line_timestamp(raw_line)
             if stamp is None:
                 continue
-            if stamp < self.started_at:
+            if stamp < started_at:
                 break
             offset = position
         return offset
@@ -426,6 +448,8 @@ class CliTranscriptReader:
             # <sessions>/<workspace key>/<session id>/agents/<agent id>/wire.jsonl
             parents = path.parents
             return parents[2].name if len(parents) > 2 else ""
+        if self.provider == "agy":
+            return self.session_id
         if self.provider == "gemini":
             return path.stem[len("session-"):] if path.stem.startswith("session-") else path.stem
         match = _CODEX_SESSION_ID_RE.search(path.name)
@@ -555,6 +579,15 @@ class CliTranscriptReader:
         # Тред мог уехать в другой журнал: CLI умеет продолжить его новым файлом.
         self._attach_new_records(self._recent_paths())
 
+    def agy_transcript_tail(self) -> Optional[TranscriptLocator]:
+        """Смещение перед отправкой запроса в уже известный разговор agy."""
+        for path in self._exact_paths():
+            try:
+                return TranscriptLocator(self.provider, str(path.resolve()), path.stat().st_size, self.session_id)
+            except OSError:
+                continue
+        return None
+
     def _handle_claude(self, record: dict[str, Any]) -> None:
         event_type = str(record.get("type") or "").strip()
         self._update_claude_background_agents(record)
@@ -577,15 +610,26 @@ class CliTranscriptReader:
             elif text:
                 # Новая реплика без заметок: старые заметки к ней уже не относятся.
                 self.latest_thinking_text = ""
-            if isinstance(content, list):
-                for item in content:
-                    if not isinstance(item, dict) or str(item.get("type") or "").strip() != "tool_use":
-                        continue
-                    tool_name = str(item.get("name") or "").strip()
-                    if tool_name:
-                        self.latest_progress_text = tool_name
         elif event_type == "system" and str(record.get("subtype") or "").strip() == "turn_duration":
             self.complete = True
+        if self._claude_stream is not None and event_type:
+            self._activity.extend(
+                (event.kind, event.text)
+                for event in self._claude_stream.feed_record(record)
+                if event.text and event.kind in {"tool_event", "progress", "failed"}
+            )
+
+    def _record_tool_call(self, call_id: Any, name: Any, arguments: Any) -> None:
+        label = _tool_label(name, arguments)
+        if call_id:
+            self._tool_labels[str(call_id)] = label
+        self._activity.append(("tool_event", label))
+
+    def _record_tool_result(self, call_id: Any, name: Any, output: Any, *, failed: bool = False) -> None:
+        label = self._tool_labels.pop(str(call_id), "") or str(name or "tool")
+        self._activity.append(("tool_event", _tool_result_text(
+            label, detail=_tool_result_detail(output), is_error=failed,
+        )))
 
     def _handle_codex(self, record: dict[str, Any]) -> None:
         record_type = str(record.get("type") or "").strip()
@@ -600,6 +644,17 @@ class CliTranscriptReader:
                 if text:
                     self._turn_user_text = text
                 return
+            if item_type in {"function_call", "custom_tool_call"}:
+                arguments = _tool_arguments(payload.get("arguments"))
+                self._record_tool_call(payload.get("call_id"), payload.get("name"), arguments)
+            elif item_type in {"function_call_output", "custom_tool_call_output"}:
+                self._record_tool_result(payload.get("call_id"), None, payload.get("output"))
+            elif item_type == "reasoning":
+                summary = payload.get("summary")
+                if isinstance(summary, list):
+                    for part in summary:
+                        if isinstance(part, dict) and part.get("text"):
+                            self._activity.append(("thinking", str(part["text"])))
             if item_type != "message" or role != "assistant":
                 return
             text = "\n".join(
@@ -626,6 +681,7 @@ class CliTranscriptReader:
             self.terminal_error = ""
             self.retry_prompt = ""
             self._turn_user_text = ""
+            self._activity.append(("progress", "Codex turn started"))
         elif event_type == "user_message":
             text = str(payload.get("message") or "").strip()
             if text:
@@ -650,6 +706,7 @@ class CliTranscriptReader:
                 self.latest_assistant_text = error_message
                 self.terminal_error = error_message
                 self.retry_prompt = str(self._turn_user_text or "").strip()
+                self._activity.append(("failed", error_message))
             else:
                 self.terminal_error = ""
                 self.retry_prompt = ""
@@ -668,9 +725,12 @@ class CliTranscriptReader:
         if event_type in {"user_message", "user_message_chunk", "agent_message_chunk", "tool_call"}:
             self.complete = False
         if event_type == "tool_call":
-            title = str(update.get("title") or "").strip()
-            if title:
-                self.latest_progress_text = title
+            self._record_tool_call(update.get("toolCallId"), update.get("title"), update.get("rawInput"))
+        elif event_type == "tool_call_update" and update.get("status") in {"completed", "failed"}:
+            self._record_tool_result(
+                update.get("toolCallId"), update.get("title"), update.get("rawOutput") or update.get("content"),
+                failed=update.get("status") == "failed",
+            )
         elif event_type == "agent_message_chunk":
             text = _content_text(update.get("content"), strip=False)
             if text:
@@ -692,7 +752,7 @@ class CliTranscriptReader:
         self.activity_at = _event_timestamp(record.get("timestamp"))
         if event_type in {"user", "assistant", "tool_result"}:
             self.complete = False
-        if event_type != "assistant":
+        if event_type not in {"assistant", "tool_result"}:
             return
         message = record.get("message") if isinstance(record.get("message"), dict) else {}
         parts = message.get("parts")
@@ -703,15 +763,23 @@ class CliTranscriptReader:
         for part in parts:
             if not isinstance(part, dict):
                 continue
+            response = part.get("functionResponse")
+            if isinstance(response, dict):
+                output = response.get("response")
+                failed = isinstance(output, dict) and bool(output.get("error"))
+                self._record_tool_result(response.get("id"), response.get("name"), output, failed=failed)
+                continue
+            if event_type != "assistant":
+                continue
             call = part.get("functionCall")
             if isinstance(call, dict):
                 called_tool = True
-                tool_name = str(call.get("name") or "").strip()
-                if tool_name:
-                    self.latest_progress_text = tool_name
+                self._record_tool_call(call.get("id"), call.get("name"), call.get("args"))
                 continue
             # thought=true — внутренние рассуждения модели, в ответ пользователю они не идут.
             if part.get("thought"):
+                if part.get("text"):
+                    self._activity.append(("thinking", str(part["text"])))
                 continue
             text = str(part.get("text") or "").strip()
             if text:
@@ -759,11 +827,17 @@ class CliTranscriptReader:
         if event_type == "step.begin":
             self._kimi_step_parts = []
         elif event_type == "tool.call":
-            tool_name = str(event.get("name") or "").strip()
-            if tool_name:
-                self.latest_progress_text = tool_name
+            self._record_tool_call(event.get("toolCallId"), event.get("name"), event.get("args"))
+        elif event_type == "tool.result":
+            result = event.get("result")
+            failed = isinstance(result, dict) and bool(result.get("isError"))
+            self._record_tool_result(event.get("toolCallId"), None, result, failed=failed)
         elif event_type == "content.part":
             part = event.get("part")
+            if isinstance(part, dict) and part.get("type") == "thinking":
+                thinking = _content_thinking(part)
+                if thinking:
+                    self._activity.append(("thinking", thinking))
             text = _content_text([part]) if isinstance(part, dict) else ""
             if not text:
                 return
@@ -781,6 +855,18 @@ class CliTranscriptReader:
             self._handle_grok(record)
         elif self.provider == "kimi":
             self._handle_kimi(record)
+        elif self.provider == "agy":
+            record_type = record.get("type")
+            if record_type == "USER_INPUT":
+                self.recognized = True
+                self.activity_at = _event_timestamp(record.get("created_at"))
+                self.latest_assistant_text = ""
+            elif record.get("source") == "MODEL" and record_type == "PLANNER_RESPONSE" and record.get("status") == "DONE":
+                self.recognized = True
+                self.activity_at = _event_timestamp(record.get("created_at"))
+                text = record.get("content")
+                if isinstance(text, str) and text.strip():
+                    self.latest_assistant_text = text.strip()
 
     def _read_gemini_snapshot(self) -> None:
         """Перечитывает файл сессии gemini целиком.
@@ -818,16 +904,38 @@ class CliTranscriptReader:
                 start = index
         self.recognized = True
         turn_end: tuple[str, str] = ("", "")
-        for item in messages[start + 1:]:
+        for index, item in enumerate(messages[start + 1:], start + 1):
             if not isinstance(item, dict):
                 continue
             self.activity_at = _event_timestamp(item.get("timestamp"))
             item_type = str(item.get("type") or "").strip()
+            item_id = str(item.get("id") or index)
+            if item_type == "error":
+                self._record_gemini_activity(item_id, "failed", _content_text(item.get("content")))
             if item_type != "gemini":
                 if item_type == "user":
                     turn_end = ("", "")
                 continue
-            text = str(item.get("content") or "").strip()
+            for thought in item.get("thoughts") or []:
+                if isinstance(thought, dict):
+                    self._record_gemini_activity(
+                        item_id, "thinking", str(thought.get("description") or thought.get("subject") or ""),
+                    )
+            text = _content_text(item.get("content"))
+            self._record_gemini_activity(item_id, "assistant_text", text)
+            for index_in_item, call in enumerate(item.get("toolCalls") or []):
+                if not isinstance(call, dict):
+                    continue
+                call_id = f"{item_id}:{call.get('id') or index_in_item}"
+                label = _tool_label(call.get("name"), call.get("args"))
+                self._record_gemini_activity(call_id, "tool_event", label)
+                status = str(call.get("status") or "").lower()
+                if status in {"success", "completed", "error", "failed", "cancelled"}:
+                    result = _tool_result_text(
+                        label, detail=_tool_result_detail(call.get("resultDisplay") or call.get("result") or call),
+                        is_error=status in {"error", "failed", "cancelled"},
+                    )
+                    self._record_gemini_activity(call_id, "tool_event", result)
             if not text:
                 continue
             self.latest_assistant_text = text
@@ -837,6 +945,12 @@ class CliTranscriptReader:
         # модели не изменился между чтениями и инструментов в нём так и нет.
         self.complete = bool(turn_end[1] and turn_end == self._gemini_turn_end)
         self._gemini_turn_end = turn_end
+
+    def _record_gemini_activity(self, item_id: str, kind: str, text: str) -> None:
+        key = (item_id, kind, text)
+        if text and key not in self._gemini_seen:
+            self._gemini_seen.add(key)
+            self._activity.append((kind, text))
 
     def _read_new_records(self) -> None:
         if self.locator is None:
@@ -880,7 +994,13 @@ class CliTranscriptReader:
                 continue
             consumed += len(raw_line)
             if isinstance(record, dict):
+                previous_text = self.latest_assistant_text
+                previous_thinking = self.latest_thinking_text
                 self._handle_record(record)
+                if self.latest_thinking_text and self.latest_thinking_text != previous_thinking:
+                    self._activity.append(("thinking", self.latest_thinking_text))
+                if self.latest_assistant_text and self.latest_assistant_text != previous_text and not self.terminal_error:
+                    self._activity.append(("assistant_text", self.latest_assistant_text))
         self.cursor += consumed
 
     def get_all_relevant_paths(self) -> list[str]:
@@ -938,6 +1058,7 @@ class CliTranscriptReader:
     def poll(self) -> TranscriptPollResult:
         if self.provider not in _SUPPORTED_PROVIDERS:
             return TranscriptPollResult()
+        self._activity.clear()
         if self.locator is None:
             self._discover()
         if self.provider == "gemini":
@@ -946,7 +1067,6 @@ class CliTranscriptReader:
             self._read_new_records()
         return TranscriptPollResult(
             assistant_text=self.latest_assistant_text,
-            progress_text=self.latest_progress_text,
             complete=self.complete,
             available=self.locator is not None,
             recognized=self.recognized,
@@ -958,4 +1078,5 @@ class CliTranscriptReader:
             thinking_text=self.latest_thinking_text,
             background_pending=self.background_pending,
             background_agents_settled=self.background_agents_settled,
+            activity=tuple(self._activity),
         )

@@ -44,7 +44,9 @@ from sessions.session_state_access import (
     is_orchestrator_enabled,
     is_session_unread,
 )
+from sessions.queue_item import queue_entries
 from sessions.session_status import build_session_status_text
+from app.services.session_mutation_service import SessionMutationService
 from utils.ui import format_session_selector_label
 from app.services.session_files_service import (
     FilesServiceError,
@@ -1907,6 +1909,44 @@ class MiniAppRoutes:
                 continue
             await asyncio.sleep(float(self._status_poll_interval_sec))
 
+    async def session_queue(self, request: web.Request) -> web.Response:
+        user = await self._require_access(request)
+        _, session = self._resolve_visible_session(
+            user_id=int(user["user_id"]),
+            is_admin=bool(user.get("is_admin", False)),
+            session_uid=request.match_info["uid"],
+        )
+        if session is None:
+            return await self._json_error(404, "session not found")
+        queue_id = request.match_info.get("queue_id")
+        if request.method == "POST":
+            try:
+                body = await self._read_json_object(request)
+            except web.HTTPException as exc:
+                return await self._json_error(exc.status, exc.reason)
+            action = body.get("action")
+            text = body.get("text", "")
+            if action not in ("first", "up", "down", "remove", "replace") or not isinstance(text, str):
+                return await self._json_error(400, "unknown queue action")
+            try:
+                if not SessionMutationService(self.bot_app.manager).change_queue_item(session, queue_id, action, text=text):
+                    return await self._json_error(404, "queue item not found")
+            except ValueError as exc:
+                return await self._json_error(400, str(exc))
+            except RuntimeError:
+                logger.exception("miniapp queue update failed session_id=%s", session.id)
+                return await self._json_error(500, "could not save queue")
+            return web.json_response({"ok": True})
+        items = queue_entries(session.queue)
+        if queue_id is None:
+            return web.json_response({"items": [
+                {"id": item["queue_id"], "preview": " ".join(item["text"].split())[:280]} for item in items
+            ]})
+        item = next((item for item in items if item["queue_id"] == queue_id), None)
+        if item is None:
+            return await self._json_error(404, "queue item not found")
+        return web.json_response({"text": item["text"]})
+
     async def session_settings_get(self, request: web.Request) -> web.Response:
         user = await self._require_access(request)
         session_uid = str(request.match_info.get("uid", "") or "").strip()
@@ -2987,6 +3027,9 @@ class MiniAppRoutes:
         app.router.add_post("/api/modes/launch", self.modes_launch)
 
         app.router.add_get("/api/session/{uid}/settings", self.session_settings_get)
+        app.router.add_get("/api/session/{uid}/queue", self.session_queue)
+        app.router.add_get("/api/session/{uid}/queue/{queue_id}", self.session_queue)
+        app.router.add_post("/api/session/{uid}/queue/{queue_id}", self.session_queue)
         app.router.add_put("/api/session/{uid}/settings", self.session_settings_update)
         app.router.add_post("/api/session/{uid}/remote-control/recheck", self.remote_control_recheck)
 

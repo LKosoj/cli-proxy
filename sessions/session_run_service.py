@@ -18,7 +18,7 @@ from app.services.assistant_preview_service import (
 )
 from app.services.cli_backends.terminal_screen import DEFAULT_HEIGHT
 from app.services.cli_backends.tmux_backend import TmuxExecutionBackend, TmuxRecoveryRequest
-from app.services.input_dispatch_models import DIRECT_TMUX_DEST_KEY
+from app.services.input_dispatch_models import DIRECT_TMUX_DEST_KEY, QueuedInputBlocked
 from app.services.logging_service import bind_session_log_context
 
 from app.services.runtime_progress_service import clear_runtime_progress, emit_runtime_progress
@@ -48,6 +48,7 @@ from utils.lang import resolve_user_lang
 from utils.text import build_preview, strip_ansi
 
 _SESSION_TASK_MODE_ID = "__session__"
+_QUEUE_TASK_NAME = "dispatch_queued_input"
 # Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева.
 _CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(\S.*)$')
 # Подтверждение ответов Claude: «y. Submit answers» / «n. Cancel», не цифры.
@@ -1167,6 +1168,7 @@ class SessionRunService:
                 session.last_tick_value = None
                 session.last_assistant_text_ts = None
                 session.last_assistant_text_value = None
+                session._tmux_assistant_preview_text = None
                 if not capacity_retry:
                     self._reset_assistant_preview_state(session)
                 clear_final_output_delivery_guard(session)
@@ -1401,49 +1403,10 @@ class SessionRunService:
                     if not send_output_scheduled:
                         await self._clear_telegram_assistant_preview(session, dest, context)
                     session.busy = False
-                    try:
-                        if queue_drain_allowed and session.queue:
-                            raw_next_item = session.queue.popleft()
-                            try:
-                                fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
-                                next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
-                                next_prompt = next_item.text
-                                next_dest = self._merge_fallback_dest(next_item.dest, dest)
-                                if isinstance(raw_next_item, Mapping):
-                                    image_paths = raw_next_item.get("image_paths")
-                                    if image_paths:
-                                        next_dest["image_paths"] = list(image_paths)
-                                        next_dest["cleanup_images"] = True
-                                    image_path = raw_next_item.get("image_path")
-                                    if image_path:
-                                        next_dest["image_path"] = image_path
-                                        next_dest["cleanup_image"] = True
-                                if not self.start_prompt_task(
-                                    session,
-                                    next_prompt,
-                                    next_dest,
-                                    context,
-                                    task_name="run_prompt.queue_next",
-                                ):
-                                    session.queue.appendleft(raw_next_item)
-                                    _log.warning(
-                                        "prompt queue drain: task start rejected, item rolled back session=%s",
-                                        session.id,
-                                    )
-                                else:
-                                    self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
-                            except Exception:
-                                session.queue.appendleft(raw_next_item)
-                                _log.exception(
-                                    "prompt queue drain: item prep failed, rolled back session=%s", session.id,
-                                )
-                    except Exception:
-                        _log.exception(
-                            "prompt queue drain failed session=%s", session.id,
-                        )
+                    queue_scheduled = queue_drain_allowed and self.start_queue_task(session, dest, context)
                     if recovery_request is not None:
                         setattr(session, "_tmux_recovery_request_id", None)
-                    if not session.busy:
+                    if not session.busy and not queue_scheduled:
                         self._watch_idle_tmux(session, context)
 
     async def run_mode_pipeline(self, session, prompt: str, dest: dict, context, *, mode_id: str) -> None:
@@ -1578,58 +1541,74 @@ class SessionRunService:
                         )
                 finally:
                     session.busy = False
-                    try:
-                        if session.queue:
-                            raw_next_item = session.queue.popleft()
-                            try:
-                                fallback_dest = self._merge_fallback_dest({"kind": "telegram"}, dest)
-                                next_item = normalize_queue_item(raw_next_item, fallback_dest=fallback_dest)
-                                next_prompt = next_item.text
-                                next_dest = self._merge_fallback_dest(next_item.dest, dest)
-                                if not self.start_session_task(
-                                    session,
-                                    coro=self.dispatch_queued_input(session, next_prompt, next_dest, context, fallback_dest=dest),
-                                    name="dispatch_queued_input",
-                                ):
-                                    session.queue.appendleft(raw_next_item)
-                                    _log.warning(
-                                        "mode pipeline queue drain: task start rejected, item rolled back session=%s mode=%s",
-                                        session.id,
-                                        mode_id,
-                                    )
-                                else:
-                                    self._persist_for_session(session, fallback_chat_id=dest.get("chat_id"))
-                            except Exception:
-                                session.queue.appendleft(raw_next_item)
-                                _log.exception(
-                                    "mode pipeline queue drain: item prep failed, rolled back session=%s mode=%s",
-                                    session.id,
-                                    mode_id,
-                                )
-                    except Exception:
-                        _log.exception(
-                            "mode pipeline queue drain failed session=%s mode=%s", session.id, mode_id,
-                        )
+                    self.start_queue_task(session, dest, context)
 
-    async def dispatch_queued_input(self, session, next_prompt: str, next_dest: dict, context, *, fallback_dest: dict) -> None:
-        next_dest = self._merge_fallback_dest(next_dest, fallback_dest)
-        chat_id = next_dest.get("chat_id")
-        if chat_id is None:
-            self.start_prompt_task(
-                session,
-                next_prompt,
-                next_dest,
-                context,
-                task_name="dispatch_queued_input.no_chat_id",
-            )
-            return
-        await self.bot_app._handle_user_input(
+    def start_queue_task(self, session, fallback_dest: dict, context) -> bool:
+        if not getattr(session, "queue", None) or self._is_shutting_down():
+            return False
+        if _QUEUE_TASK_NAME in self._mode_tasks_list(
+            session_id=session_runtime_uid(session), mode_id=_SESSION_TASK_MODE_ID,
+        ):
+            return False
+        return self.start_session_task(
             session,
-            next_prompt,
-            int(chat_id),
-            context,
-            dest=next_dest,
+            coro=self._drain_queue(session, fallback_dest, context),
+            name=_QUEUE_TASK_NAME,
         )
+
+    async def _drain_queue(self, session, fallback_dest: dict, context) -> None:
+        # Отложенное извлечение сохраняет очередь, если задачу отменят до её первого шага.
+        run_lock = getattr(session, "run_lock", None)
+        if getattr(session, "_queue_dispatch_task", None) is not None or getattr(session, "busy", False):
+            return
+        if run_lock is not None and run_lock.locked():
+            return
+        session._queue_dispatch_task = asyncio.current_task()
+        try:
+            while session.queue and not self._is_shutting_down():
+                queue = session.queue
+                raw = queue.popleft() if hasattr(queue, "popleft") else queue.pop(0)
+                try:
+                    default_dest = self._merge_fallback_dest({"kind": "telegram"}, fallback_dest)
+                    item = normalize_queue_item(raw, fallback_dest=default_dest)
+                    dest = self._merge_fallback_dest(item.dest, fallback_dest)
+                    if isinstance(raw, Mapping):
+                        if raw.get("image_paths"):
+                            dest["image_paths"] = list(raw["image_paths"])
+                            dest["cleanup_images"] = True
+                        if raw.get("image_path"):
+                            dest["image_path"] = raw["image_path"]
+                            dest["cleanup_image"] = True
+                    if dest.get("kind") == "telegram" and dest.get("chat_id") is not None:
+                        handled = await self.bot_app.input_dispatch_service.dispatch_ready_input(
+                            session=session, text=item.text, chat_id=int(dest["chat_id"]), context=context, dest=dest,
+                        )
+                    else:
+                        handled = False
+                        if not self.start_prompt_task(session, item.text, dest, context):
+                            raise RuntimeError("could not start queued input")
+                except asyncio.CancelledError:
+                    # При явном прерывании очередь очищена. При остановке бота
+                    # оставляем незавершённый запрос доступным после перезапуска.
+                    if self._is_shutting_down():
+                        queue.insert(0, raw)
+                    raise
+                except QueuedInputBlocked:
+                    queue.insert(0, raw)
+                    break
+                except Exception:
+                    queue.insert(0, raw)
+                    _log.exception("queued input dispatch failed, item restored session=%s", session.id)
+                    break
+                finally:
+                    self._persist_for_session(session, fallback_chat_id=fallback_dest.get("chat_id"))
+                if not handled:
+                    # Обычный запуск продолжит очередь сам после своей работы.
+                    return
+        finally:
+            session._queue_dispatch_task = None
+        if not get_active_mode(session, ""):
+            self._watch_idle_tmux(session, context)
 
     def start_mode_task(self, session, prompt: str, dest: dict, context, *, mode_id=None) -> None:
         mode_id = str(mode_id or get_active_mode(session, "") or "").strip()

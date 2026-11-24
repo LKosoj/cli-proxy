@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from typing import Any
+from uuid import uuid4
 
 from sessions.queue_item import append_session_queue_item
 from sessions.session_state_access import set_active_mode as set_session_active_mode
@@ -100,6 +101,31 @@ class SessionMutationService:
         if persist:
             self.persist_session(session)
         return True
+
+    def change_queue_item(
+        self, session: Any, queue_id: str, action: str, *, chat_id: int | None = None, text: str = "",
+    ) -> bool:
+        if action not in ("first", "up", "down", "remove", "replace") or (action == "replace" and not text.strip()):
+            raise ValueError("invalid queue action")
+        queue = session.queue
+        for index, item in enumerate(queue):
+            if not isinstance(item, dict) or item.get("queue_id") != queue_id:
+                continue
+            target = {"first": 0, "up": max(0, index - 1), "down": min(len(queue) - 1, index + 1)}.get(action, index)
+            if target == index and action in ("first", "up", "down"):
+                return True
+            del queue[index]
+            if action != "remove":
+                updated = {**item, "text": text, "queue_id": uuid4().hex} if action == "replace" else item
+                queue.insert(target, updated)
+            if not self.persist_session(session, chat_id=chat_id):
+                if action != "remove":
+                    del queue[target]
+                queue.insert(index, item)
+                self.persist_session(session, chat_id=chat_id)
+                raise RuntimeError("could not persist session queue")
+            return True
+        return False
 
 
 __all__ = ("SessionMutationService",)

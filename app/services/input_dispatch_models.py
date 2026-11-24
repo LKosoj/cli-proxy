@@ -15,6 +15,10 @@ PENDING_ACTION_ORCHESTRATOR_TRANSITION = "orchestrator_transition"
 DIRECT_TMUX_DEST_KEY = "direct_tmux"
 
 
+class QueuedInputBlocked(Exception):
+    """An interactive choice prevents a queued request from being dispatched."""
+
+
 @dataclass
 class PendingInput:
     session_id: str

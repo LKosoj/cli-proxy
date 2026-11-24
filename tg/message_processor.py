@@ -35,8 +35,16 @@ class MessageProcessor:
     def _ui_key(self, ui_chat_id: int, message_thread_id=None) -> TelegramUiKey:
         return self.bot_app.telegram_ui_key(int(ui_chat_id), message_thread_id)
 
-    async def _handle_pending_session_message(self, ui_chat_id: int, text: str, context, *, message_thread_id=None) -> bool:
-        handler = getattr(getattr(self.bot_app, "session_ui", None), "handle_pending_message", None)
+    async def _handle_pending_session_message(
+        self, ui_chat_id: int, text: str, context, *, message_thread_id=None, direct_topic_id=None, user_id=None,
+    ) -> bool:
+        session_ui = getattr(self.bot_app, "session_ui", None)
+        replace = getattr(session_ui, "handle_queue_replacement", None)
+        if callable(replace) and await replace(
+            ui_chat_id, text, context, message_thread_id=message_thread_id, direct_topic_id=direct_topic_id, user_id=user_id,
+        ):
+            return True
+        handler = getattr(session_ui, "handle_pending_message", None)
         if not callable(handler):
             return False
         return bool(
@@ -301,6 +309,8 @@ class MessageProcessor:
             text,
             context,
             message_thread_id=route_thread_id,
+            direct_topic_id=route_direct_topic_id,
+            user_id=getattr(getattr(update, "effective_user", None), "id", None),
         ):
             return
         feeder = getattr(self.bot_app, "feed_tmux_other_answer", None)

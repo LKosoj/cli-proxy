@@ -466,6 +466,7 @@ def _make_registry_app():
         cmd_newpath=object(),
         cmd_close=object(),
         cmd_status=object(),
+        cmd_tui=object(),
         cmd_reports=object(),
         cmd_limits=object(),
         cmd_queue=object(),

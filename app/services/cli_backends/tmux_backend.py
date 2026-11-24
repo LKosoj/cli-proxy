@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import codecs
 import hashlib
 import json
@@ -16,14 +18,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.services.assistant_preview_service import assistant_preview_enabled
+from app.services.logging_service import build_session_log_context
 from session import session_runtime_uid
 from utils.cli import resolve_env_value
-from utils.text import strip_ansi
+from utils.text import is_time_only_text, strip_ansi
 
 from .models import ExecutionBackendStatus, ExecutionResult
 from .pane_signals import PaneSignalScanner
 from .pane_title_status import PaneTitleStatus, classify_pane_title
-from .transcript_reader import CliTranscriptReader, TranscriptLocator
+from .transcript_reader import AGY_CONVERSATION_ID_PATTERN, CliTranscriptReader, TranscriptLocator
 from .tmux_driver import TmuxDriver, TmuxDriverError, resolve_user_identity, write_prompt_temp
 from .tmux_parser import TmuxDeltaReader, normalize_terminal_text
 
@@ -47,12 +50,21 @@ _PANE_LOG_MAX_BYTES = 16_000_000
 # обычного запуска с отслеживанием ответа.
 _OBSERVE_ACTIVITY_WINDOW_SEC = 30.0
 _MONITOR_INACTIVITY_SEC = 3600.0
+_AGY_TITLE_PREFIX = "cli-proxy-agy"
+_AGY_TITLE_RE = re.compile(rf"{_AGY_TITLE_PREFIX} ({AGY_CONVERSATION_ID_PATTERN})")
+_AGY_TITLE_COMMAND = shlex.join([
+    "python3", "-c", "import json, sys; "
+    f"print({_AGY_TITLE_PREFIX!r}, json.load(sys.stdin).get('conversation_id') or '')",
+])
+_AGY_RESUME_MISSING_RE = re.compile(rf'warning: conversation "({AGY_CONVERSATION_ID_PATTERN})" not found')
+_AGY_TRUST_PROMPT = "Do you trust the contents of this project?"
 _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--resume", "-r", "--continue", "-c"},
     "gemini": {"--resume", "-r"},
     "qwen": {"--resume", "-r", "--continue", "-c"},
     "grok": {"--resume", "-r", "--continue", "-c"},
     "kimi": {"--session", "-S", "--resume", "-r", "--continue", "-c"},
+    "agy": {"--conversation", "--resume", "-r", "--continue", "-c"},
 }
 _SESSION_ID_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--session-id"},
@@ -65,13 +77,14 @@ _RESUME_FLAGS_BY_CLI: dict[str, list[str]] = {
     "qwen": ["--resume"],
     "grok": ["--resume"],
     "kimi": ["--resume"],
+    "agy": ["--conversation"],
 }
 _SESSION_ID_FLAGS_BY_CLI: dict[str, list[str]] = {
     "claude": ["--session-id"],
     "qwen": ["--session-id"],
     "grok": ["--session-id"],
 }
-_READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok", "kimi"}
+_READY_WAIT_CLI_NAMES = {"claude", "codex", "qwen", "grok", "kimi", "agy"}
 _CODEX_HEADER_LOADING_RE = re.compile(r"\b(?:model|directory):\s+loading\b")
 _CODEX_DUMB_TERM_PROMPT = (
     'warning: term is set to "dumb". codex\'s interactive tui may not work in this terminal. '
@@ -152,6 +165,7 @@ class _PaneAdvance:
     # "был, но не распознан" — а для сброса удержания хода важно именно это.
     title_seen: bool = False
     bell_seen: bool = False
+    agy_statuses: tuple[str, ...] = ()
 
 
 class _PaneStream:
@@ -233,6 +247,7 @@ class _PaneStream:
         title_status: Optional[PaneTitleStatus] = None
         title_seen = False
         bell_seen = False
+        agy_statuses: tuple[str, ...] = ()
         chunk = self._decoder.decode(chunk_bytes)
         if chunk:
             # OSC-заголовок и BEL читаются из того же decoded-чанка, что и
@@ -245,6 +260,11 @@ class _PaneStream:
             # Хвост предыдущего куска нужен, чтобы токен, разрезанный границей
             # чтения, всё равно попал под регулярку.
             resume_token = _find_resume_token(self._resume_tail + chunk, resume_regex)
+            if cli_name == "agy":
+                title = _AGY_TITLE_RE.fullmatch(str(signals.title or "").strip())
+                if title:
+                    resume_token = title.group(1)
+                agy_statuses = signals.agy_statuses
             self._resume_tail = (self._resume_tail + chunk)[-_RESUME_SCAN_TAIL_CHARS:]
             self._reader.feed(chunk)
         parsed = self._reader.parse(claude_screen_reader=claude_screen_reader, tui_chrome=tui_chrome)
@@ -262,6 +282,7 @@ class _PaneStream:
             title_status=title_status,
             title_seen=title_seen,
             bell_seen=bell_seen,
+            agy_statuses=agy_statuses,
         )
 
 
@@ -359,10 +380,8 @@ def _get_resume_token(session: Any) -> Optional[str]:
     return None
 
 
-def _set_resume_token(session: Any, token: str) -> None:
-    value = str(token or "").strip()
-    if not value:
-        return
+def _set_resume_token(session: Any, token: Optional[str]) -> None:
+    value = str(token or "").strip() or None
     try:
         setattr(session, "resume_token", value)
     except Exception:
@@ -496,6 +515,13 @@ def _session_resume_regex(session: Any) -> str:
     return str(getattr(getattr(session, "tool", None), "resume_regex", "") or "").strip()
 
 
+def _agy_panel_status(raw: str) -> tuple[str, str]:
+    fields = dict(field.split("=", 1) for field in raw.split(":") if "=" in field)
+    if fields.get("app") != "antigravity":
+        return "", ""
+    return fields.get("state", ""), fields.get("msg", "")
+
+
 def _new_request_id() -> str:
     return uuid.uuid4().hex[:16]
 
@@ -573,6 +599,12 @@ def _start_command(session: Any, state: Optional[dict[str, Any]] = None, *, forc
         value = resolve_env_value(raw_value)
         if value is not None:
             env_cmd.append(f"{key}={value}")
+    if _command_cli_name(session, command) == "agy":
+        env_cmd.append("AGY_CLI_OSC7501=on")
+        if _has_flag(command, {"--settings"}):
+            raise TmuxDriverError("agy tmux uses --settings to read the conversation ID; edit agy's settings.json instead")
+        settings = {"title": {"type": "command", "enabled": True, "command": _AGY_TITLE_COMMAND}}
+        command.extend(["--settings", json.dumps(settings)])
     return env_cmd + command
 
 
@@ -761,6 +793,13 @@ class TmuxExecutionBackend:
             return bool(driver.has_session_sync(paths["session_name"]))
         except Exception:
             return False
+
+    async def capture_screen(self, session: Any) -> Optional[str]:
+        """Capture the current visible pane of an existing managed session."""
+        paths = self.paths(session)
+        if self._read_state(paths).get("backend") != self.name:
+            return None
+        return await self._capture_pane_text(session, paths)
 
     async def _deliver_prompt(
         self,
@@ -1102,6 +1141,17 @@ class TmuxExecutionBackend:
         text = normalize_terminal_text(pane)
         lower = text.lower()
         compact = "".join(lower.split())
+        if cli_name == "agy":
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            if lines and _AGY_RESUME_MISSING_RE.fullmatch(lines[0]):
+                raise TmuxDriverError(lines[0])
+            if _AGY_TRUST_PROMPT in lines[-12:] and "↑/↓ Navigate · enter Confirm" in lines[-6:]:
+                raise TmuxDriverError("agy workspace trust is required; open agy in this workdir and confirm the folder")
+            return any(
+                line == ">" and lines[index - 1].startswith("──") and lines[index + 1].startswith("──")
+                for index, line in enumerate(lines)
+                if 0 < index < len(lines) - 1
+            )
         if "doyoutrust" in compact or "trustthisfolder?" in compact:
             # У Codex та же фраза бывает цитатой в ответе. Живой экран
             # подтверждается раньше, до этого вызова.
@@ -1408,6 +1458,18 @@ class TmuxExecutionBackend:
             return recovery
         if delivery_state != "pending":
             return None
+        if _active_cli(session) == "agy":
+            # Завершение agy отмечает в панели. Сам журнал содержит только шаги.
+            stream = _PaneStream(paths["pane_log"], request_id, offset=recovery.offset)
+            update = await asyncio.to_thread(stream.advance, cli_name="agy")
+            previous_status = ""
+            for raw in update.agy_statuses:
+                panel_status, _ = _agy_panel_status(raw)
+                if panel_status in {"done", "error"} or (panel_status == "idle" and previous_status == "working"):
+                    return recovery
+                if panel_status:
+                    previous_status = panel_status
+            return None
         try:
             transcript_reader = self._build_transcript_reader(session, recovery)
             transcript = await asyncio.to_thread(transcript_reader.poll) if transcript_reader is not None else None
@@ -1603,6 +1665,11 @@ class TmuxExecutionBackend:
             }
         )
         self._write_state(paths, monitor_state)
+        log_context = build_session_log_context(session=session, chat_id=(request.dest or {}).get("chat_id"))
+        logger.info(
+            "tmux request monitoring started request_id=%s cli=%s pane=%s observe=%s",
+            request.request_id, _active_cli(session), paths["pane_target"], request.observe, extra=log_context,
+        )
 
         idle_probe_interval = self.idle_fallback_sec
         if idle_probe_interval is None:
@@ -1620,6 +1687,7 @@ class TmuxExecutionBackend:
         log_path = paths["pane_log"]
         last_size = request.offset
         last_change = time.time()
+        last_idle_probe_at = last_change
         last_real_activity = self._last_real_activity_at(session) or request.started_at
         from sessions.session_run_service import SessionRunService as _SRS
 
@@ -1636,11 +1704,31 @@ class TmuxExecutionBackend:
         transcript_latest_text = ""
         transcript_thinking_text = ""
         latest_text = ""
-        last_reported_text = ""
         # Одноразовый снимок экрана для превью; после подхвата он читается заново.
         session._tmux_choice_text = ""
         session.last_assistant_text_value = ""
-        last_progress_text = ""
+        session._tmux_assistant_preview_text = ""
+        last_status_assistant = ""
+        update_activity = getattr(session, "_update_activity", None)
+
+        def report_activity(kind: str, text: str) -> None:
+            nonlocal last_status_assistant
+            is_assistant = kind == "assistant_text"
+            if is_assistant and (text == last_status_assistant or is_time_only_text(text)):
+                return
+            if callable(update_activity):
+                try:
+                    update_activity(
+                        text, tick_kind=kind, allow_short=True,
+                        replace_last=is_assistant and bool(last_status_assistant) and text.startswith(last_status_assistant),
+                    )
+                except Exception:
+                    logger.exception("tmux status update failed request_id=%s kind=%s", request.request_id, kind)
+            if is_assistant:
+                last_status_assistant = text
+                session.last_assistant_text_value = text
+                session.last_assistant_text_ts = time.time()
+                session.last_output_ts = session.last_assistant_text_ts
         # Один ответ на один показ. Пока экран не сменился, клавиши второй раз не шлём.
         folder_trust_sent = False
         answer_review_sent: Optional[bool] = None
@@ -1649,6 +1737,10 @@ class TmuxExecutionBackend:
         # Ошибка, которой Codex закрыл ход. Пустая, пока в журнале её нет.
         terminal_error = ""
         retry_prompt = ""
+        agy = self._interactive_cli_name(session) == "agy"
+        agy_state = ""
+        agy_error = ""
+        agy_terminal_at = 0.0
         transcript_authoritative = False
         transcript_reader = None
         persisted_locator = request.transcript_locator
@@ -1772,6 +1864,26 @@ class TmuxExecutionBackend:
                 )
                 if advance.resume_token:
                     _set_resume_token(session, advance.resume_token)
+                    if agy and getattr(transcript_reader, "session_id", "") != advance.resume_token:
+                        transcript_reader = self._build_transcript_reader(
+                            session, replace(request, transcript_locator=None),
+                        )
+                        transcript_latest_text = ""
+                if agy:
+                    for status in advance.agy_statuses:
+                        state_name, message = _agy_panel_status(status)
+                        if state_name in {"done", "error"} or (state_name == "idle" and agy_state == "working"):
+                            agy_terminal_at = time.time()
+                            agy_state = state_name
+                        elif state_name in {"blocked", "working"}:
+                            agy_state = state_name
+                            agy_terminal_at = 0.0
+                        if state_name == "error":
+                            try:
+                                agy_error = base64.b64decode(message, validate=True).decode("utf-8")
+                            except (binascii.Error, UnicodeError):
+                                agy_error = ""
+                            agy_error = agy_error or "Antigravity CLI reported an error"
                 pane_latest_text = advance.parsed or pane_latest_text
                 if advance.bell_seen:
                     total_bell_count += 1
@@ -1826,20 +1938,18 @@ class TmuxExecutionBackend:
                         terminal_error = transcript_update.terminal_error
                         retry_prompt = str(transcript_update.retry_prompt or request.prompt or "").strip()
                         transcript_latest_text = terminal_error
-                    elif transcript_update.assistant_text:
+                    elif transcript_update.assistant_text or agy:
                         transcript_latest_text = transcript_update.assistant_text
                     transcript_thinking_text = str(transcript_update.thinking_text or "")
-                    if transcript_update.progress_text and transcript_update.progress_text != last_progress_text:
-                        last_progress_text = transcript_update.progress_text
-                        update_activity = getattr(session, "_update_activity", None)
-                        if callable(update_activity):
-                            try:
-                                update_activity(last_progress_text)
-                            except Exception:
-                                logger.exception(
-                                    "structured transcript progress update failed session_id=%s",
-                                    getattr(session, "id", "?"),
-                                )
+                    activity = transcript_update.activity
+                    for kind, text in activity:
+                        report_activity(kind, text)
+                    if activity:
+                        logger.info(
+                            "tmux CLI activity request_id=%s events=%d kinds=%s",
+                            request.request_id, len(activity), ",".join(dict.fromkeys(kind for kind, _ in activity)),
+                            extra=log_context,
+                        )
                     if transcript_update.session_id and transcript_update.session_id != _get_resume_token(session):
                         _set_resume_token(session, transcript_update.session_id)
                         active_state = self._read_state(paths)
@@ -1912,7 +2022,7 @@ class TmuxExecutionBackend:
                     session._tmux_choice_text = ""
                     continue
                 # Перерисованный терминал содержит историю, а не новый ответ.
-                latest_text = transcript_latest_text if request.observe else (transcript_latest_text or pane_latest_text)
+                latest_text = transcript_latest_text if request.observe or agy else (transcript_latest_text or pane_latest_text)
                 # Меню ищется на текущем экране: в события транскрипта его нет,
                 # а копия в истории прокрутки уже не ждёт ответа.
                 # Меню хранится отдельно от текста ответа и не закрывает ход.
@@ -1959,6 +2069,19 @@ class TmuxExecutionBackend:
                 # ход завис бы бессрочно. Статус остаётся в diagnostics.
                 if awaiting_choice:
                     complete = False
+                elif agy and agy_terminal_at:
+                    if agy_state == "error":
+                        # OSC может прийти до заголовка с идентификатором разговора.
+                        if advance.resume_token or time.time() - agy_terminal_at >= 1.0:
+                            terminal_error = agy_error
+                    elif transcript_latest_text:
+                        complete = True
+                        completion_source = "agy-transcript"
+                    elif time.time() - agy_terminal_at >= max(1.0, answer_idle):
+                        terminal_error = "Antigravity CLI finished without a reply in its transcript"
+                    if terminal_error:
+                        retry_prompt = request.prompt
+                        report_activity("failed", terminal_error)
                 # Превью показывает ответ агента и его заметки (thinking).
                 # Пока распознанный транскрипт ведёт ход, этот текст авторитетен:
                 # экран панели в это время содержит вывод инструментов, и пускать
@@ -1981,18 +2104,22 @@ class TmuxExecutionBackend:
                     latest_text = terminal_error
                     preview_text = terminal_error
                     complete = True
-                    completion_source = "transcript-error"
-                if preview_text != last_reported_text:
-                    last_reported_text = preview_text
-                    setattr(session, "last_output_ts", time.time())
-                    setattr(session, "last_assistant_text_ts", time.time())
-                    setattr(session, "last_assistant_text_value", preview_text)
+                    completion_source = "agy-error" if agy else "transcript-error"
+                session._tmux_assistant_preview_text = preview_text
+                status_text = transcript_latest_text if transcript_authoritative else preview_text
+                if status_text and status_text != last_status_assistant and not terminal_error:
+                    report_activity("assistant_text", status_text)
+                    if not transcript_authoritative:
+                        logger.info(
+                            "tmux CLI activity request_id=%s source=pane output_chars=%d",
+                            request.request_id, len(status_text), extra=log_context,
+                        )
                 shells_running = bool(_RUNNING_SHELLS_RE.search(pane_for_choice or ""))
                 if shells_running and completion_source == "transcript":
                     complete = False
                 # Поле Other — то же ожидание, что меню: CLI ждёт строку, журнал молчит.
                 other_text_open = bool(_OTHER_TEXT_PROMPT_RE.search(pane_for_choice or ""))
-                if other_text_open and completion_source != "transcript-error":
+                if other_text_open and not terminal_error:
                     complete = False
                 if complete:
                     break
@@ -2005,7 +2132,8 @@ class TmuxExecutionBackend:
                 choice_blocking = (awaiting_choice or other_text_open) and choice_holds_turn
                 idle_for = time.time() - last_change
                 if (
-                    not choice_blocking
+                    not agy
+                    and not choice_blocking
                     and not shells_running
                     and background_pending == 0
                     and (
@@ -2020,7 +2148,14 @@ class TmuxExecutionBackend:
                     completion_source = "answer-idle"
                     break
                 if not choice_blocking and idle_for >= quiet_timeout:
-                    if not complete:
+                    if agy:
+                        terminal_error = "Antigravity CLI did not report completion before the timeout"
+                        latest_text = terminal_error
+                        retry_prompt = request.prompt
+                        complete = True
+                        completion_source = "agy-error"
+                        report_activity("failed", terminal_error)
+                    elif not complete:
                         complete = True
                         has_json = bool(watched_transcript_paths or transcript_path)
                         completion_source = "json-quiet-timeout" if has_json else "pane-quiet-timeout"
@@ -2028,7 +2163,8 @@ class TmuxExecutionBackend:
 
                 # Проверка панели стоит после предела тишины: оба срока могут
                 # совпасть, и сброс таймера здесь не должен отменять уже наступивший предел.
-                if time.time() - last_change >= idle_probe_interval:
+                if time.time() - max(last_change, last_idle_probe_at) >= idle_probe_interval:
+                    last_idle_probe_at = time.time()
                     if not await driver.has_session(paths["session_name"]):
                         logger.warning(
                             "tmux session disappeared while request was active session_id=%s request_id=%s",
@@ -2036,7 +2172,8 @@ class TmuxExecutionBackend:
                             request.request_id,
                         )
                         break
-                    last_change = time.time()
+                    if not agy:
+                        last_change = time.time()
         except asyncio.CancelledError:
             await self._handle_request_cancellation(session, paths)
             raise
@@ -2079,6 +2216,7 @@ class TmuxExecutionBackend:
             completion_source or "none",
             latest_title_status or "none",
             total_bell_count,
+            extra=log_context,
         )
         if completion_source == "monitor-idle-timeout":
             # Остановить только чтение: вне обработчика отмены, который шлёт Ctrl+C.
@@ -2125,12 +2263,16 @@ class TmuxExecutionBackend:
         paths = self.paths(session)
         if force_fresh:
             await self.close(session)
+            if self._interactive_cli_name(session) == "agy":
+                _set_resume_token(session, None)
         async with self._pane_lock(session):
             fresh_start = await self._ensure_started(session, paths, force_fresh=force_fresh)
         if self._uses_ready_wait(session):
             try:
                 await self._wait_for_interactive_ready(session, paths, fresh_start=fresh_start)
             except Exception:
+                if fresh_start and self._interactive_cli_name(session) == "agy":
+                    await self.close(session)
                 failed_at = time.time()
                 state = self._read_state(paths)
                 state.update(
@@ -2148,6 +2290,18 @@ class TmuxExecutionBackend:
         log_path = paths["pane_log"]
         offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0
         buffer_name = f"cli-proxy-{request_id}"
+        request = TmuxRecoveryRequest(
+            request_id=request_id,
+            started_at=started_at,
+            offset=offset,
+            prompt=str((request_context or {}).get("prompt") or ""),
+            dest=dict((request_context or {}).get("dest") or {}),
+        )
+        if not force_fresh and self._interactive_cli_name(session) == "agy":
+            reader = self._build_transcript_reader(session, request)
+            if reader is not None:
+                locator = await asyncio.to_thread(reader.agy_transcript_tail)
+                request = replace(request, transcript_locator=locator)
         state = self._read_state(paths)
         state.update(
             {
@@ -2166,6 +2320,8 @@ class TmuxExecutionBackend:
                 **_request_recovery_payload(request_context),
             },
         )
+        if request.transcript_locator is not None:
+            self._persist_transcript_locator(paths, request_id, request.transcript_locator)
 
         try:
             async with self._pane_lock(session):
@@ -2191,17 +2347,7 @@ class TmuxExecutionBackend:
             )
             self._write_state(paths, state)
             raise
-        return await self._monitor_request(
-            session,
-            paths,
-            TmuxRecoveryRequest(
-                request_id=request_id,
-                started_at=started_at,
-                offset=offset,
-                prompt=str((request_context or {}).get("prompt") or ""),
-                dest=dict((request_context or {}).get("dest") or {}),
-            ),
-        )
+        return await self._monitor_request(session, paths, request)
 
     async def interrupt(self, session: Any) -> bool:
         paths = self.paths(session)

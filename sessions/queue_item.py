@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
-_QUEUE_ITEM_METADATA_FIELDS = ("image_path", "image_paths", "attachments")
+_QUEUE_ITEM_METADATA_FIELDS = ("image_path", "image_paths", "attachments", "queue_id")
 
 
 @dataclass(frozen=True)
@@ -113,8 +114,25 @@ def append_session_queue_item(
     queue = getattr(session, "queue", None)
     if queue is None or not hasattr(queue, "append"):
         return False
-    queue.append(normalize_queue_item_payload(raw, fallback_dest=fallback_dest))
+    payload = normalize_queue_item_payload(raw, fallback_dest=fallback_dest)
+    payload["queue_id"] = uuid4().hex
+    queue.append(payload)
     return True
+
+
+def queue_entries(queue: Any) -> list[dict[str, Any]]:
+    """Give legacy entries the same stable identifiers as newly queued requests."""
+    entries = []
+    seen = set()
+    for index, raw in enumerate(queue):
+        queue_id = raw.get("queue_id") if isinstance(raw, dict) else None
+        if not isinstance(queue_id, str) or len(queue_id) != 32 or queue_id in seen:
+            raw = normalize_queue_item_payload(raw, fallback_dest={"kind": "telegram"})
+            queue_id = raw["queue_id"] = uuid4().hex
+            queue[index] = raw
+        seen.add(queue_id)
+        entries.append(raw)
+    return entries
 
 
 __all__ = (

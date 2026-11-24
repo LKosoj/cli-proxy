@@ -407,22 +407,8 @@ class SessionManagement:
                 finally:
                     session.busy = prev_busy
 
-    async def _dispatch_queued_input(
-        self,
-        session: Session,
-        next_prompt: str,
-        next_dest: dict,
-        context: ContextTypes.DEFAULT_TYPE,
-        *,
-        fallback_dest: dict,
-    ) -> None:
-        await self._run_service.dispatch_queued_input(
-            session=session,
-            next_prompt=next_prompt,
-            next_dest=next_dest,
-            context=context,
-            fallback_dest=fallback_dest,
-        )
+    def start_queue_task(self, session: Session, fallback_dest: dict, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        return self._run_service.start_queue_task(session, fallback_dest, context)
 
     def _clear_agent_session_cache(self, session_id: str) -> None:
         for runtime in (getattr(self.bot_app, "iter_mode_runtimes", lambda: [])() or []):

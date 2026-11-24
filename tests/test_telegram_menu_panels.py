@@ -210,7 +210,7 @@ async def test_callback_result_closes_rich_menu_unless_keyboard_is_explicit(tmp_
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("queue", [[], ["Запрос"]])
-async def test_queue_result_closes_menu(tmp_path, queue):
+async def test_queue_result_keeps_buttons_only_when_there_are_requests(tmp_path, queue):
     session = SimpleNamespace(id="s1", queue=queue)
     manager = SimpleNamespace(get=lambda *_args: session)
     config = SimpleNamespace(
@@ -221,4 +221,62 @@ async def test_queue_result_closes_menu(tmp_path, queue):
     ui = SessionUI(config, manager, AsyncMock(), edit, str, str)
     query = SimpleNamespace(data="sess_queue:s1", message=SimpleNamespace(chat_id=1, message_id=10))
     await ui.handle_callback(query, 1, object())
-    assert edit.call_args.kwargs["reply_markup"] is None
+    assert bool(edit.call_args.kwargs["reply_markup"]) == bool(queue)
+    assert edit.call_args.kwargs["text"] == ("Запросов в очереди — 1.\n```text\n1. Запрос\n```" if queue else "Очередь пуста.")
+
+
+@pytest.mark.asyncio
+async def test_queue_actions_edit_the_same_rich_menu_and_reject_stale_ids(tmp_path):
+    from bot import BotApp
+
+    service, context, calls = transport(tmp_path)
+    app = service.bot_app
+    app.transport_service = service
+    app.telegram_ui_key = TelegramUiKey.from_parts
+    app.telegram_ui_key_from_query = TelegramUiKey.from_query
+    app.config = SimpleNamespace(
+        telegram=TelegramConfig(token="t", whitelist_chat_ids=[1]),
+        defaults=DefaultsConfig(workdir=str(tmp_path), state_path=str(tmp_path / "state.sqlite3")),
+    )
+    session = SimpleNamespace(id="s1", chat_id=1, queue=[
+        "same text", {"text": "same text", "image_paths": ["a.png"]}, "third",
+    ])
+    app.manager = SimpleNamespace(get=lambda *_: session, persist_session=MagicMock(return_value=True))
+
+    async def edit(*args, **kwargs):
+        return await BotApp._edit_message(app, *args, **kwargs)
+
+    ui = SessionUI(app.config, app.manager, app._send_message, edit, str, str, bot_app=app)
+    panel = await service.send_menu(context, chat_id=1, message_thread_id=7, text="Queue", reply_markup=keyboard("sess_queue:s1"))
+    query = SimpleNamespace(
+        data="sess_queue:s1", message=SimpleNamespace(chat_id=1, message_id=panel.message_id, message_thread_id=7),
+        from_user=SimpleNamespace(id=42),
+    )
+    await ui.handle_callback(query, 1, context)
+    second = session.queue[1]["queue_id"]
+    prefix = "sess_q:s1:"
+    query.data = f"{prefix}open:{second}"
+    await ui.handle_callback(query, 1, context)
+    detail = calls[-1][1]["rich_message"]["markdown"]
+    assert "same text" in detail and "<tg-button" in detail and f"{prefix}replace:{second}" in detail
+
+    query.data = f"{prefix}first:{second}"
+    await ui.handle_callback(query, 1, context)
+    assert session.queue[0]["queue_id"] == second
+
+    query.data = f"{prefix}replace:{second}"
+    await ui.handle_callback(query, 1, context)
+    assert not await ui.handle_queue_replacement(1, "other", context, message_thread_id=7, user_id=43)
+    assert not await ui.handle_queue_replacement(1, "other", context, message_thread_id=8, user_id=42)
+    assert await ui.handle_queue_replacement(1, "replacement", context, message_thread_id=7, user_id=42)
+    edited = session.queue[0]
+    assert edited["text"] == "replacement" and edited["image_paths"] == ["a.png"]
+    assert edited["queue_id"] != second
+
+    query.data = f"{prefix}remove:{second}"
+    await ui.handle_callback(query, 1, context)
+    assert len(session.queue) == 3
+    query.data = f"{prefix}remove:{edited['queue_id']}"
+    await ui.handle_callback(query, 1, context)
+    assert [item["text"] for item in session.queue] == ["same text", "third"]
+    assert all(call[0] == "editMessageText" and call[1]["message_id"] == panel.message_id for call in calls[1:])

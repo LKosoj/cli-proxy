@@ -15,7 +15,7 @@ import time
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
-from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
 from telegram.ext import (
     Application,
     ContextTypes,
@@ -33,6 +33,7 @@ from app.services.menu_visibility_policy import (
 from app.services.input_dispatch_models import PendingInput as PendingInput  # noqa: F401
 from app.services.session_files_service import FilesServiceError
 from app.services.path_normalization import normalize_optional_state_path
+from app.services.redaction import redact_text
 from app.services.state_repository import get_state_repository
 from session import (
     Session,
@@ -41,7 +42,7 @@ from session import (
     session_scoped_key,
 )
 from app.services.report_history_service import InvalidReportIdError, ReportNotFoundError
-from sessions.session_state_access import get_active_mode, is_session_unread, is_ssh_remote_enabled
+from sessions.session_state_access import get_active_mode, is_remote_control_enabled, is_session_unread, is_ssh_remote_enabled
 from app.services.ssh_config_loader import ssh_remote_available
 from tg.command_registry import build_command_registry
 from tg.markdown import escape_markdown_v2_all
@@ -1079,6 +1080,29 @@ class BotHandlers:
             **self._reply_kwargs(update, s),
         )
 
+    async def cmd_tui(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+
+        route, session = await self.bot_app.ensure_telegram_inbound_session(
+            update, context, auto_create=False, scope="tui",
+        )
+        if route is None or session is None:
+            return
+        lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
+        pane = None
+        if not (is_ssh_remote_enabled(session) or is_remote_control_enabled(session)):
+            pane = await TmuxExecutionBackend().capture_screen(session)
+        if not pane or not pane.strip():
+            await self.bot_app._send_message(context, text=t("msg.tui.unavailable", lang), **route.reply_kwargs())
+            return
+        sent = await self.bot_app._send_document(
+            context,
+            document=InputFile(redact_text(pane).encode(), filename="terminal.txt"),
+            **route.reply_kwargs(),
+        )
+        if not sent:
+            await self.bot_app._send_message(context, text=t("msg.tui.send_failed", lang), **route.reply_kwargs())
+
     async def cmd_reports(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         route, session = await self.bot_app.ensure_telegram_inbound_session(
             update,
@@ -1441,20 +1465,24 @@ class BotHandlers:
         await self.bot_app._send_message(context, text=message_text, **reply_kwargs)
 
     async def cmd_queue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        chat_id = update.effective_chat.id
-        if not await self._ensure_allowed(chat_id, context, update=update):
+        route, session = await self.bot_app.ensure_telegram_inbound_session(
+            update, context, auto_create=False, scope="queue",
+        )
+        if route is None or session is None:
             return
-        s = await self._require_scope_session(chat_id, context, auto_create=False, update=update)
-        if not s:
-            return
-        try:
-            lang = resolve_user_lang(self.bot_app.config, chat_id=chat_id)
-        except Exception:
-            lang = "ru"
-        if not s.queue:
-            await self.bot_app._send_message(context, text=t("msg.session.queue_empty", lang), **self._reply_kwargs(update, s))
-            return
-        await self.bot_app._send_message(context, text=t("msg.session.queue_count", lang, n=len(s.queue)), **self._reply_kwargs(update, s))
+        lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
+        cancel_input = getattr(self.bot_app, "_cancel_menu_input", None)
+        if callable(cancel_input):
+            cancel_input(self.bot_app.telegram_ui_key_from_route(route, fallback_chat_id=route.reply_chat_id))
+        text, markup = self.bot_app.session_ui.build_queue_panel(session, lang)
+        send = self.bot_app._send_menu if markup else self.bot_app._send_message
+        await send(
+            context,
+            text=text,
+            reply_markup=markup,
+            allow_thread_fallback=False,
+            **route.reply_kwargs(),
+        )
 
     async def cmd_clearqueue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id

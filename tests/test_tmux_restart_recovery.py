@@ -15,9 +15,15 @@ from bot import BotApp
 from sessions.session_run_service import SessionRunService
 
 
-def _run_service(events: list[tuple]) -> SessionRunService:
+def _run_service(events: list[tuple], *, drain_tasks: list | None = None) -> SessionRunService:
     async def _send_output(_session, dest, output, _context):
         events.append(("output", str(output), dict(dest)))
+
+    def _schedule(*, name, coro, **kwargs):
+        if name == "dispatch_queued_input" and drain_tasks is not None:
+            drain_tasks.append(asyncio.create_task(coro))
+        else:
+            coro.close()
 
     bot_app = SimpleNamespace(
         _shutdown_in_progress=False,
@@ -31,7 +37,7 @@ def _run_service(events: list[tuple]) -> SessionRunService:
         persist_sessions=lambda: None,
         persist_session=lambda _chat_id, _session_id: True,
         mode_tasks_list=lambda **_kwargs: [],
-        mode_tasks_create=lambda **_kwargs: None,
+        mode_tasks_create=_schedule,
         log_cli_dialog=lambda *_args, **_kwargs: None,
         reset_session_fields_like_sessions_reset=lambda *_args, **_kwargs: None,
     )
@@ -88,7 +94,8 @@ def _recovery_session() -> SimpleNamespace:
 @pytest.mark.asyncio
 async def test_recovered_tmux_result_is_delivered_before_queue_continues(monkeypatch):
     events: list[tuple] = []
-    service = _run_service(events)
+    drain_tasks: list = []
+    service = _run_service(events, drain_tasks=drain_tasks)
     session = _recovery_session()
     recovery = TmuxRecoveryRequest(
         request_id="recover-codex",
@@ -105,11 +112,11 @@ async def test_recovered_tmux_result_is_delivered_before_queue_continues(monkeyp
         lambda _session, request_id: delivered.append(str(request_id)) or True,
     )
 
-    def _start_prompt_task(_session, prompt, dest, _context, *, task_name="run_prompt"):
-        events.append(("queue", str(prompt), dict(dest), str(task_name)))
-        return True
+    async def _dispatch(*, text, dest, **kwargs):
+        events.append(("queue", text, dict(dest)))
+        return False
 
-    service.start_prompt_task = _start_prompt_task
+    service.bot_app.input_dispatch_service = SimpleNamespace(dispatch_ready_input=_dispatch)
 
     await service.run_prompt(
         session,
@@ -119,13 +126,13 @@ async def test_recovered_tmux_result_is_delivered_before_queue_continues(monkeyp
         recovery_request=recovery,
     )
 
+    await drain_tasks.pop()
     assert events == [
         ("output", "recovered codex answer", recovery.dest),
         (
             "queue",
             "queued next",
             {**recovery.dest, "user_id": None},
-            "run_prompt.queue_next",
         ),
     ]
     assert delivered == ["recover-codex"]
@@ -173,7 +180,8 @@ async def test_recovered_tmux_send_failure_keeps_pending_queue(monkeypatch):
 @pytest.mark.asyncio
 async def test_observed_tmux_run_shows_timer_and_clears_it_without_final_text(monkeypatch):
     events: list[tuple] = []
-    service = _run_service(events)
+    drain_tasks: list = []
+    service = _run_service(events, drain_tasks=drain_tasks)
     session = _recovery_session()
     session.config = SimpleNamespace(defaults=SimpleNamespace(assistant_preview_enabled=True))
     preview_sent = asyncio.Event()
@@ -211,11 +219,11 @@ async def test_observed_tmux_run_shows_timer_and_clears_it_without_final_text(mo
         lambda _session, request_id: delivered.append(str(request_id)) or True,
     )
 
-    def _start_prompt_task(_session, prompt, dest, _context, *, task_name="run_prompt"):
-        events.append(("queue", str(prompt), str(task_name)))
-        return True
+    async def _dispatch(*, text, dest, **kwargs):
+        events.append(("queue", text))
+        return False
 
-    service.start_prompt_task = _start_prompt_task
+    service.bot_app.input_dispatch_service = SimpleNamespace(dispatch_ready_input=_dispatch)
 
     await service.run_prompt(
         session,
@@ -225,10 +233,11 @@ async def test_observed_tmux_run_shows_timer_and_clears_it_without_final_text(mo
         recovery_request=recovery,
     )
 
+    await drain_tasks.pop()
     assert events == [
         ("preview", "⏳ 00:00", 42, 9),
         ("delete", 42, 501),
-        ("queue", "queued next", "run_prompt.queue_next"),
+        ("queue", "queued next"),
     ]
     assert session.assistant_preview_message_id is None
     assert delivered == ["observe-codex"]

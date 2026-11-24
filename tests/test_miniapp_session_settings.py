@@ -136,6 +136,36 @@ def test_session_settings_update_ssh_remote_enabled(tmp_path) -> None:
     asyncio.run(_run())
 
 
+def test_session_queue_api_shows_full_text_and_mutates_by_id(tmp_path) -> None:
+    async def run():
+        app = BotApp(_build_config(tmp_path))
+        session = app.manager.create(1, "dummy", str(tmp_path))
+        session.queue.extend(["same", "same\nmore", "third"])
+        path = f"/api/session/{session_runtime_uid(session)}/queue"
+        web_app = web.Application()
+        MiniAppRoutes(app).register(web_app)
+        headers = {"X-Telegram-Init-Data": _build_init_data("t", 1)}
+        other = {"X-Telegram-Init-Data": _build_init_data("t", 2)}
+        async with TestClient(TestServer(web_app)) as client:
+            assert (await client.get(path, headers=other)).status == 404
+            response = await client.get(path, headers=headers)
+            items = (await response.json())["items"]
+            assert [item["preview"] for item in items] == ["same", "same more", "third"]
+            target = f"{path}/{items[1]['id']}"
+            response = await client.get(target, headers=headers)
+            assert (await response.json())["text"] == "same\nmore"
+            assert (await client.post(target, json={"action": "first"}, headers=headers)).status == 200
+            assert session.queue[0]["queue_id"] == items[1]["id"]
+            assert (await client.post(target, json={"action": "replace", "text": "new"}, headers=headers)).status == 200
+            assert (await client.post(target, json={"action": "remove"}, headers=headers)).status == 404
+            assert session.queue[0]["text"] == "new"
+            current = f"{path}/{session.queue[0]['queue_id']}"
+            assert (await client.post(current, json={"action": "down"}, headers=headers)).status == 200
+            assert (await client.post(current, json={"action": "remove"}, headers=headers)).status == 200
+            assert [item["text"] for item in session.queue] == ["same", "third"]
+    asyncio.run(run())
+
+
 def test_session_settings_get(tmp_path) -> None:
     async def _run() -> None:
         cfg = _build_config(tmp_path)

@@ -191,6 +191,8 @@
       "session_unavailable": "Sitzung nicht gefunden oder nicht verfügbar",
       "webmaster": "Webmaster-Status",
       "runtime_progress": "Laufzeit-Fortschritt",
+      "queue_manage": "Warteschlange verwalten",
+      "queue_close": "Schließen",
       "queue_prefix": "Warteschlange (Queue:",
       "state_summary": "Statuszusammenfassung",
       "last_tick_prefix": "Letzter Tick-Wert (",
@@ -526,6 +528,11 @@
       "rename": "✏️ Umbenennen",
       "resume": "🔗 Verlauf verbinden",
       "resume_manual": "✍️ ID manuell eingeben",
+      "queue_first": "An den Anfang",
+      "queue_up": "Nach oben",
+      "queue_down": "Nach unten",
+      "queue_remove": "Entfernen",
+      "queue_replace": "Ersetzen",
       "queue": "📋 Anfragewarteschlange",
       "clearqueue": "🧹 Warteschlange leeren",
       "state": "💾 Gespeicherter Zustand",
@@ -632,6 +639,12 @@
       "orch_toggled": "Erweiterter Orchestrator {status}.",
       "queue_cleared": "Warteschlange geleert.",
       "queue_count": "{n} Nachrichten in der Warteschlange.",
+      "queue_more": "Und {n} weitere.",
+      "queue_no_text": "Ohne Text",
+      "queue_gone": "Die Anfrage ist nicht mehr in der Warteschlange.",
+      "queue_save_failed": "Die Warteschlange konnte nicht gespeichert werden.",
+      "queue_in_file": "Die Datei enthält die vollständige Anfrage.",
+      "queue_replace_prompt": "Sende den neuen Text. Anhänge bleiben erhalten.",
       "queue_empty": "Die Warteschlange ist leer.",
       "rename_cancelled": "Umbenennen abgebrochen.",
       "rename_empty": "Der Sitzungsname ist leer.",
@@ -1049,6 +1062,10 @@
       "send_failed": "Datei konnte nicht gesendet werden.",
       "send_error": "Fehler beim Senden der Datei."
     },
+    "tui": {
+      "unavailable": "Das Terminal dieser Sitzung ist derzeit nicht verfügbar.",
+      "send_failed": "Die Terminalansicht konnte nicht gesendet werden."
+    },
     "report": {
       "empty": "Für die aktuelle Sitzung gibt es noch keine Berichte. Verwenden Sie /reports generate, um einen Bericht aus dem Manager-Plan zu erstellen.",
       "menu_title": "Berichte für Sitzung {session_id}:",
@@ -1118,6 +1135,9 @@
     },
     "status": {
       "desc": "Status der aktuellen Kontextsitzung anzeigen."
+    },
+    "tui": {
+      "desc": "Terminalansicht der aktuellen tmux-Sitzung herunterladen."
     },
     "reports": {
       "desc": "Berichte der aktuellen Sitzung anzeigen oder senden."
@@ -2262,6 +2282,8 @@
     }
   },
   "session_status": {
+    "resume_terminal": "Im Serverterminal fortsetzen (als CLI-Proxy-Benutzer)",
+    "resume_terminal_user": "Im Serverterminal fortsetzen (als {user})",
     "resume": "Resume",
     "active_session": "Aktive Sitzung",
     "session": "Sitzung",

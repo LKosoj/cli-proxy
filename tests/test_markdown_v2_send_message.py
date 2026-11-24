@@ -715,6 +715,26 @@ def test_private_missing_thread_retries_without_thread_routing(tmp_path):
     asyncio.run(_run())
 
 
+@pytest.mark.asyncio
+async def test_send_message_can_keep_queue_text_in_its_topic(tmp_path):
+    app = _build_transport_test_app(tmp_path)
+    calls = []
+
+    async def send_message(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("message_thread_id") == 55:
+            raise BadRequest("Message thread not found")
+        pytest.fail("queue text was sent outside its topic")
+
+    context = types.SimpleNamespace(bot=types.SimpleNamespace(send_message=send_message))
+    result = await app._send_message(
+        context, chat_id=-1001, message_thread_id=55, text="Queued request",
+        allow_thread_fallback=False,
+    )
+    assert result is None
+    assert calls and all("allow_thread_fallback" not in call for call in calls)
+
+
 def test_md2_false_missing_thread_retries_without_thread_routing(tmp_path):
     async def _run():
         cfg = AppConfig(

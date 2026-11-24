@@ -394,6 +394,12 @@ class BaseMode(ABC):
         dest: Dict[str, Any],
         notify_text: str = "Сессия занята. Добавил запрос в очередь.",
     ) -> bool:
+        dispatcher = getattr(bot_app, "input_dispatch_service", None)
+        is_dequeued = getattr(dispatcher, "_is_dequeued_input", None)
+        if callable(is_dequeued) and is_dequeued(session):
+            if dispatcher._is_session_busy(session, bot_app):
+                raise RuntimeError("session became busy while dispatching queued mode input")
+            return False
         run_lock = getattr(session, "run_lock", None)
         queue_busy = bool(getattr(session, "queue", None))
 
@@ -410,7 +416,6 @@ class BaseMode(ABC):
         busy = is_session_busy(session, run_lock) or queue_busy or mode_task_busy
         if not busy:
             return False
-        dispatcher = getattr(bot_app, "input_dispatch_service", None)
         if dispatcher is not None and getattr(ms, "transport_context", None) is not None:
             try:
                 await dispatcher.handle_cli_input(

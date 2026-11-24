@@ -50,20 +50,27 @@ class _SessionStub(types.SimpleNamespace):
         return (now_ts - float(ts)) <= int(window_sec)
 
 
-def _make_prompt_drain_service(started: list[dict], persisted: list[tuple[int, str]]) -> SessionRunService:
+def _make_prompt_drain_service(started: list[dict], persisted: list[tuple[int, str]], drain_tasks: list) -> SessionRunService:
     def _mode_tasks_create(*, session_id: str, mode_id: str, coro, name: str) -> None:
-        _ = session_id, mode_id, name
-        coro.close()
+        if name == "dispatch_queued_input":
+            drain_tasks.append(asyncio.create_task(coro))
+        else:
+            coro.close()
 
     async def _send_output(*_args, **_kwargs):
         return None
+
+    async def _dispatch(*, session, text: str, dest: dict, **kwargs) -> bool:
+        started.append({"session_id": session.id, "text": text, "dest": dict(dest)})
+        return False
 
     bot_app = types.SimpleNamespace(
         config=None,
         send_output=_send_output,
         _send_message=(lambda *_a, **_k: asyncio.sleep(0)),
+        input_dispatch_service=types.SimpleNamespace(dispatch_ready_input=_dispatch),
     )
-    service = SessionRunService(
+    return SessionRunService(
         bot_app=bot_app,
         persist_sessions=(lambda: None),
         persist_session=(lambda chat_id, session_id: persisted.append((int(chat_id), str(session_id))) or True),
@@ -72,21 +79,6 @@ def _make_prompt_drain_service(started: list[dict], persisted: list[tuple[int, s
         log_cli_dialog=(lambda *_args, **_kwargs: None),
         reset_session_fields_like_sessions_reset=(lambda *_args, **_kwargs: None),
     )
-
-    def _start_prompt_task(session, prompt: str, dest: dict, context, *, task_name: str = "run_prompt") -> bool:
-        _ = context
-        started.append(
-            {
-                "session_id": str(getattr(session, "id", "") or ""),
-                "text": str(prompt or ""),
-                "dest": dict(dest or {}),
-                "task_name": str(task_name or ""),
-            }
-        )
-        return True
-
-    service.start_prompt_task = _start_prompt_task
-    return service
 
 
 def _make_prompt_session(tmp_path, queue) -> _SessionStub:
@@ -206,7 +198,8 @@ async def _wait_until_three_flags_released(session: _SessionStub, *, timeout_s: 
 async def test_run_prompt_drain_normalizes_legacy_string_queue_with_fallback_dest(tmp_path) -> None:
     started: list[dict] = []
     persisted: list[tuple[int, str]] = []
-    service = _make_prompt_drain_service(started, persisted)
+    drain_tasks = []
+    service = _make_prompt_drain_service(started, persisted, drain_tasks)
     restored_queue = SessionManager._normalize_queue_items_for_persistence(["legacy queued"])
     session = _make_prompt_session(tmp_path, restored_queue)
 
@@ -217,12 +210,12 @@ async def test_run_prompt_drain_normalizes_legacy_string_queue_with_fallback_des
         context=None,
     )
 
+    await drain_tasks.pop()
     assert started == [
         {
             "session_id": "s1",
             "text": "legacy queued",
             "dest": {"kind": "telegram", "chat_id": 101, "user_id": None, "message_thread_id": 7},
-            "task_name": "run_prompt.queue_next",
         }
     ]
     assert list(session.queue) == []
@@ -270,7 +263,8 @@ def test_serialize_session_payload_includes_unread_flag() -> None:
 async def test_run_prompt_drains_two_queued_inputs_with_independent_dest(tmp_path) -> None:
     started: list[dict] = []
     persisted: list[tuple[int, str]] = []
-    service = _make_prompt_drain_service(started, persisted)
+    drain_tasks = []
+    service = _make_prompt_drain_service(started, persisted, drain_tasks)
     session = _make_prompt_session(
         tmp_path,
         [
@@ -280,7 +274,9 @@ async def test_run_prompt_drains_two_queued_inputs_with_independent_dest(tmp_pat
     )
 
     await service.run_prompt(session, "current", {"kind": "telegram", "chat_id": 999}, context=None)
+    await drain_tasks.pop()
     await service.run_prompt(session, "after first", started[0]["dest"], context=None)
+    await drain_tasks.pop()
 
     assert [(item["text"], item["dest"]) for item in started] == [
         ("first queued", {"kind": "telegram", "chat_id": 201, "nested": {"run": "first"}, "user_id": None}),

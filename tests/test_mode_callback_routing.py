@@ -11,6 +11,7 @@ from app.security.interfaces import AuthDecision
 from app.services.input_dispatch_service import InputDispatchService
 from app.services.telegram_ui_scope import TelegramUiKey
 from session import session_runtime_uid
+from sessions.session_run_service import SessionRunService
 from tg import callbacks as tg_callbacks
 from tg.callbacks import CallbackHandler
 from modes.registry import ModeRegistry
@@ -1734,7 +1735,10 @@ def test_queue_input_callback_consumes_pending_head_only():
     asyncio.run(handler.handle_callback(update, context=object()))
 
     assert edited["text"] == "Ввод поставлен в очередь."
-    assert list(session.queue) == [{"text": "first", "dest": {"kind": "telegram", "chat_id": 1}}]
+    assert len(session.queue) == 1
+    assert session.queue[0]["text"] == "first"
+    assert session.queue[0]["dest"] == {"kind": "telegram", "chat_id": 1}
+    assert session.queue[0]["queue_id"]
     ui_key = TelegramUiKey.from_parts(1)
     assert ui_key in app.ui_state.pending
     rest = app.ui_state.pending[ui_key]
@@ -1768,6 +1772,13 @@ def test_queue_input_callback_enqueues_before_dispatch_when_session_is_idle():
             )
         ]
     )
+    _configure_queue_service(app)
+
+    async def _dispatch(*, session, text, chat_id, context, dest):
+        await app._handle_user_input(session, text, chat_id, context, dest=dest)
+        return False
+
+    app.input_dispatch_service.dispatch_ready_input = _dispatch
     handler = CallbackHandler(app)
 
     edited = {"text": None}
@@ -1780,7 +1791,13 @@ def test_queue_input_callback_enqueues_before_dispatch_when_session_is_idle():
 
     handler._edit_msg = _fake_edit_msg
     update = types.SimpleNamespace(callback_query=_FakeQuery("queue_input"))
-    asyncio.run(handler.handle_callback(update, context=object()))
+
+    async def run():
+        await handler.handle_callback(update, context=object())
+        for record in app.mode_tasks.tasks[(session_runtime_uid(session), "__session__")]:
+            await record.task
+
+    asyncio.run(run())
 
     assert edited["text"] == "Ввод поставлен в очередь."
     assert session.queue == []
@@ -1790,7 +1807,7 @@ def test_queue_input_callback_enqueues_before_dispatch_when_session_is_idle():
             "session_id": "s1",
             "text": "first",
             "chat_id": 1,
-            "dest": {"kind": "telegram", "chat_id": 1},
+            "dest": {"kind": "telegram", "chat_id": 1, "user_id": None},
         }
     ]
 
@@ -1840,7 +1857,10 @@ def test_queue_input_callback_purges_stale_pending_before_live_item():
     asyncio.run(handler.handle_callback(update, context=object()))
 
     assert edited["text"] == "Ввод поставлен в очередь."
-    assert list(session.queue) == [{"text": "live", "dest": {"kind": "telegram", "chat_id": 1}}]
+    assert len(session.queue) == 1
+    assert session.queue[0]["text"] == "live"
+    assert session.queue[0]["dest"] == {"kind": "telegram", "chat_id": 1}
+    assert session.queue[0]["queue_id"]
     assert TelegramUiKey.from_parts(1) not in app.ui_state.pending
 
 
@@ -1943,8 +1963,25 @@ def test_queue_input_callback_resolves_live_session_by_session_runtime_uid():
 
     assert edited["text"] == "Ввод поставлен в очередь."
     assert app.manager.lookups == [session_runtime_uid(session)]
-    assert list(session.queue) == [{"text": "live", "dest": {"kind": "telegram", "chat_id": 1}}]
+    assert len(session.queue) == 1
+    assert session.queue[0]["text"] == "live"
+    assert session.queue[0]["dest"] == {"kind": "telegram", "chat_id": 1}
+    assert session.queue[0]["queue_id"]
     assert TelegramUiKey.from_parts(1) not in app.ui_state.pending
+
+
+def _configure_queue_service(app):
+    app.mode_tasks = ModeTaskService()
+    service = SessionRunService(
+        bot_app=app,
+        persist_sessions=lambda: None,
+        mode_tasks_list=lambda **kwargs: app.mode_tasks.list(**kwargs),
+        mode_tasks_create=lambda **kwargs: app.mode_tasks.create(**kwargs),
+        log_cli_dialog=lambda *args, **kwargs: None,
+        reset_session_fields_like_sessions_reset=lambda *args, **kwargs: None,
+    )
+    app.session_management = service
+    return service
 
 
 def test_queue_kick_cli_run_registers_session_task_for_interrupt_cancellation():
@@ -1960,7 +1997,7 @@ def test_queue_kick_cli_run_registers_session_task_for_interrupt_cancellation():
             conversation_scope=types.SimpleNamespace(session_uid="forum:-100777000111:101"),
         )
         app = _FakeBotApp(session)
-        app.mode_tasks = ModeTaskService()
+        service = _configure_queue_service(app)
 
         async def _cancel_session(*, session_id: str, timeout_s: float) -> None:
             await app.mode_tasks.cancel_session(session_id=session_id, timeout_s=timeout_s)
@@ -1968,7 +2005,6 @@ def test_queue_kick_cli_run_registers_session_task_for_interrupt_cancellation():
         app.mode_session_control = types.SimpleNamespace(persist=(lambda: None), cancel_session=_cancel_session)
 
         started = asyncio.Event()
-        started_tasks: list[asyncio.Task] = []
 
         async def _run_prompt(_session, _text, _dest, _context):
             async with _session.run_lock:
@@ -1990,17 +2026,12 @@ def test_queue_kick_cli_run_registers_session_task_for_interrupt_cancellation():
             )
             return True
 
-        app.session_management = types.SimpleNamespace(start_prompt_task=_start_prompt_task)
+        service.start_prompt_task = _start_prompt_task
 
-        original_safe_create_task = app.input_dispatch_service._safe_create_task
+        async def _route(*, session, text, chat_id, context, dest, user_id):
+            await app.input_dispatch_service.handle_cli_input(session, text, chat_id, context, dest=dest)
 
-        def _capture_task(coro, *, label: str):
-            task = original_safe_create_task(coro, label=label)
-            if task is not None:
-                started_tasks.append(task)
-            return task
-
-        app.input_dispatch_service._safe_create_task = _capture_task
+        app.input_dispatch_service._route_mode_or_cli = _route
         handler = CallbackHandler(app)
 
         try:
@@ -2008,7 +2039,7 @@ def test_queue_kick_cli_run_registers_session_task_for_interrupt_cancellation():
             await asyncio.wait_for(started.wait(), timeout=0.5)
 
             session_uid = session_runtime_uid(session)
-            assert app.mode_tasks.list(session_uid=session_uid, mode_id="__session__") == ["callbacks.queue_kick.run_prompt"]
+            assert app.mode_tasks.list(session_uid=session_uid, mode_id="__session__") == ["input_dispatch.handle_cli_input.run_prompt"]
             assert session.busy is True
 
             await handler._cancel_mode_tasks_session(session_uid)
@@ -2017,9 +2048,7 @@ def test_queue_kick_cli_run_registers_session_task_for_interrupt_cancellation():
             assert app.mode_tasks.list(session_uid=session_uid, mode_id="__session__") == []
             assert session.busy is False
         finally:
-            for task in started_tasks:
-                task.cancel()
-            await asyncio.gather(*started_tasks, return_exceptions=True)
+            await app.mode_tasks.cancel_session(session_uid=session_runtime_uid(session))
 
     asyncio.run(_run())
 

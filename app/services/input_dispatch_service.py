@@ -17,6 +17,7 @@ from app.services.input_dispatch_models import (
     PENDING_ACTION_TMUX_QUEUE_CONFIRM as MODEL_PENDING_ACTION_TMUX_QUEUE_CONFIRM,
     PendingInput,
     PendingInputDecision,
+    QueuedInputBlocked,
 )
 from i18n import t
 from utils.cli import build_attachment_ref
@@ -114,6 +115,12 @@ class InputDispatchService:
     def _is_session_running(cls, session, bot_app=None) -> bool:
         run_lock = getattr(session, "run_lock", None)
         run_lock_busy = bool(run_lock and run_lock.locked())
+        dispatch_task = getattr(session, "_queue_dispatch_task", None)
+        if dispatch_task is not None:
+            if not cls._is_dequeued_input(session):
+                return True
+            # Старый тик ещё может быть виден после завершения предыдущего хода.
+            return bool(getattr(session, "busy", False) or run_lock_busy)
         tick_busy = False
         try:
             is_active_by_tick = getattr(session, "is_active_by_tick", None)
@@ -127,8 +134,13 @@ class InputDispatchService:
 
     @classmethod
     def _is_session_busy(cls, session, bot_app=None) -> bool:
-        queue_busy = bool(getattr(session, "queue", None))
+        queue_busy = bool(getattr(session, "queue", None)) and not cls._is_dequeued_input(session)
         return bool(cls._is_session_running(session, bot_app) or queue_busy)
+
+    @staticmethod
+    def _is_dequeued_input(session) -> bool:
+        task = getattr(session, "_queue_dispatch_task", None)
+        return task is not None and task is asyncio.current_task()
 
     def _is_shutting_down(self) -> bool:
         return bool(getattr(self.bot_app, "_shutdown_in_progress", False))
@@ -989,23 +1001,30 @@ class InputDispatchService:
             )
             return
 
-        if await self._live_tmux_direct_available(session):
-            await self._send_to_live_tmux(
-                session=session,
-                text=str(getattr(pending_input, "text", "") or ""),
-                chat_id=chat_id,
-                context=context,
-                dest=dict(getattr(pending_input, "dest", {}) or {}),
-            )
-            return
-
-        await self._handle_user_input_impl(
+        await self.dispatch_ready_input(
             session=session,
             text=str(getattr(pending_input, "text", "") or ""),
             chat_id=chat_id,
             context=context,
             dest=dict(getattr(pending_input, "dest", {}) or {}),
-            allow_orchestration=True,
+        )
+
+    async def dispatch_ready_input(self, *, session, text: str, chat_id: Any, context, dest: dict) -> bool:
+        """Dispatch ready input. True means the queue can continue without a CLI turn."""
+        if self._is_dequeued_input(session) and await self._reject_choice_menu_text(
+            session,
+            text,
+            context=context,
+            dest=dest,
+            chat_id=chat_id,
+            lang=resolve_user_lang(getattr(self.bot_app, "config", None), chat_id=chat_id),
+            image_paths=self._normalize_image_paths(image_path=None, image_paths=None, dest=dest),
+        ):
+            raise QueuedInputBlocked
+        if await self._live_tmux_direct_available(session):
+            return await self._send_to_live_tmux(session=session, text=text, chat_id=chat_id, context=context, dest=dest)
+        return await self._handle_user_input_impl(
+            session=session, text=text, chat_id=chat_id, context=context, dest=dest, allow_orchestration=True,
         )
 
     @staticmethod
@@ -1018,7 +1037,7 @@ class InputDispatchService:
         # has_live_tmux синхронно дёргает tmux has-session — не блокируем event loop.
         return await asyncio.to_thread(has_live_tmux, session)
 
-    async def _send_to_live_tmux(self, *, session, text: str, chat_id: Any, context, dest: dict) -> None:
+    async def _send_to_live_tmux(self, *, session, text: str, chat_id: Any, context, dest: dict) -> bool:
         """Ввод сразу в живой tmux: без оркестратора и подбора скиллов.
 
         Проверка «пришли файл» остаётся (без пути в тексте она не зовёт LLM).
@@ -1033,10 +1052,10 @@ class InputDispatchService:
                 dest=dest,
             )
             if handled:
-                return
+                return True
         dest[DIRECT_TMUX_DEST_KEY] = True
         user_id = dest.get("user_id")
-        await self._route_mode_or_cli(
+        return await self._route_mode_or_cli(
             session=session,
             text=text,
             chat_id=chat_id,
@@ -1106,7 +1125,7 @@ class InputDispatchService:
         image_path: Optional[str] = None,
         image_paths: Optional[list[str]] = None,
         enforce_direct_cli_policy: bool = True,
-    ) -> None:
+    ) -> bool:
         if dest is None:
             dest = self._reply_dest(session, chat_id)
         effective_image_paths = self._normalize_image_paths(
@@ -1134,8 +1153,9 @@ class InputDispatchService:
                     dest=dest,
                     chat_id=chat_id,
                 )
-                return
+                return True
         dest = self._apply_images_to_dest(dict(dest or {}), image_paths=effective_image_paths)
+        dequeued = self._is_dequeued_input(session)
         if await self._reject_choice_menu_text(
             session,
             text,
@@ -1145,8 +1165,12 @@ class InputDispatchService:
             lang=lang,
             image_paths=effective_image_paths,
         ):
-            return
+            if dequeued:
+                raise QueuedInputBlocked
+            return False
         if self._is_session_busy(session, self.bot_app):
+            if dequeued:
+                raise RuntimeError("session became busy while dispatching queued input")
             # Поле Other уже открыто: очередь сюда не дойдёт, а ход из-за поля не кончается.
             if (
                 not effective_image_paths
@@ -1160,7 +1184,7 @@ class InputDispatchService:
                     lang=lang,
                 )
             ):
-                return
+                return False
             await self._handle_busy_pending_input(
                 session=session,
                 pending_input=self._build_pending_input(
@@ -1176,22 +1200,27 @@ class InputDispatchService:
                 context=context,
                 lang=lang,
             )
-            return
+            return False
         session_management = getattr(self.bot_app, "session_management", None)
         start_prompt_task = getattr(session_management, "start_prompt_task", None)
         if callable(start_prompt_task):
-            start_prompt_task(
+            started = start_prompt_task(
                 session,
                 text,
                 dest,
                 context,
                 task_name="input_dispatch.handle_cli_input.run_prompt",
             )
-            return
-        self._safe_create_task(
+            if dequeued and started is False:
+                raise RuntimeError("could not start queued CLI input")
+            return False
+        task = self._safe_create_task(
             self.bot_app.run_prompt(session, text, dest, context),
             label="input_dispatch.handle_cli_input.run_prompt",
         )
+        if dequeued and task is None:
+            raise RuntimeError("could not schedule queued CLI input")
+        return False
 
     async def handle_user_input(
         self,
@@ -1238,7 +1267,7 @@ class InputDispatchService:
         context,
         dest: Optional[dict],
         allow_orchestration: bool,
-    ) -> None:
+    ) -> bool:
         msg_user_id = None
         try:
             if isinstance(dest, dict) and (dest or {}).get("user_id") is not None:
@@ -1293,7 +1322,7 @@ class InputDispatchService:
                                 dest=dest,
                                 chat_id=chat_id,
                             )
-                            return
+                            return False
 
         # Artifact intent: detect "send me a file" requests for non-Desktop transports.
         active_mode = str(get_active_mode(session, "") or "").strip()
@@ -1326,13 +1355,13 @@ class InputDispatchService:
                         dest=resolved_dest,
                     )
                     if handled:
-                        return
+                        return True
                     if artifact_trace:
                         self._log_artifact_intent(session, "fallthrough_cli", text=text)
             elif artifact_trace:
                 self._log_artifact_intent(session, "skip_desktop_dest", text=text, dest_kind=dest_kind)
 
-        await self._route_mode_or_cli(
+        return await self._route_mode_or_cli(
             session=session,
             text=str(text or ""),
             chat_id=str(chat_id),
@@ -1477,9 +1506,15 @@ class InputDispatchService:
         context,
         dest: Optional[dict],
         user_id: Optional[int],
-    ) -> None:
+    ) -> bool:
+        handled_without_run = False
+
         async def _cli_fallback(_session, _text: str, _chat_id: int, _context) -> None:
-            await self.bot_app._handle_cli_input(_session, _text, _chat_id, _context, dest=dest)
+            nonlocal handled_without_run
+            if self._is_dequeued_input(_session):
+                handled_without_run = await self.handle_cli_input(_session, _text, _chat_id, _context, dest=dest)
+            else:
+                await self.bot_app._handle_cli_input(_session, _text, _chat_id, _context, dest=dest)
 
         # Keep router dependencies dynamic so tests/runtime monkeypatching
         # of bot_app services is respected.
@@ -1499,6 +1534,8 @@ class InputDispatchService:
                 user_id=user_id,
                 cli_fallback=_cli_fallback,
             )
+        except QueuedInputBlocked:
+            raise
         except Exception:
             logger.exception(
                 "input dispatch mode routing failed session_id=%s active_mode=%s",
@@ -1506,3 +1543,4 @@ class InputDispatchService:
                 str(get_active_mode(session, "") or ""),
             )
             raise
+        return handled_without_run

@@ -47,7 +47,7 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
                 "role": "assistant",
                 "content": [
                     {"type": "thinking", "thinking": "private thought"},
-                    {"type": "tool_use", "name": "Bash", "input": {"command": "pytest"}},
+                    {"type": "tool_use", "id": "call-1", "name": "Bash", "input": {"command": "pytest"}},
                     {"type": "text", "text": "Промежуточный статус"},
                 ],
             },
@@ -65,13 +65,26 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
 
     assert first.available is True
     assert first.assistant_text == "Промежуточный статус"
-    assert first.progress_text == "Bash"
     assert first.complete is False
     assert "private thought" not in first.assistant_text
     assert first.thinking_text == "private thought"
+    assert first.activity == (
+        ("tool_event", "Bash: pytest"),
+        ("thinking", "private thought"),
+        ("assistant_text", "Промежуточный статус"),
+    )
 
     _append_jsonl(
         path,
+        {
+            "type": "user",
+            "sessionId": session_id,
+            "timestamp": _iso_utc(started_at + 2.5),
+            "message": {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "call-1", "content": "2 passed"}],
+            },
+        },
         {
             "type": "assistant",
             "sessionId": session_id,
@@ -93,6 +106,8 @@ def test_claude_transcript_reader_streams_clean_text_and_completion(tmp_path):
     final = reader.poll()
 
     assert final.assistant_text == "Финальный ответ"
+    assert final.activity == (("tool_event", "Bash: pytest result: 2 passed"), ("assistant_text", "Финальный ответ"))
+    assert reader.poll().activity == ()
     assert final.thinking_text == ""
     assert final.complete is True
     assert final.background_pending == 0
@@ -151,7 +166,7 @@ def test_claude_transcript_reader_keeps_thinking_until_next_reply(tmp_path):
 
     assert noted.assistant_text == "Задача E готова."
     assert noted.thinking_text == "Замечания по H устранены."
-    assert noted.progress_text == "Bash"
+    assert ("tool_event", "Bash: pytest") in noted.activity
 
     _append_jsonl(
         path,
@@ -473,6 +488,19 @@ def test_codex_transcript_reader_uses_task_complete(tmp_path):
             "type": "event_msg",
             "payload": {"type": "agent_message", "message": "Проверяю тесты", "phase": "commentary"},
         },
+        {
+            "timestamp": _iso_utc(started_at + 2.1),
+            "type": "response_item",
+            "payload": {
+                "type": "function_call", "call_id": "call-1", "name": "exec_command",
+                "arguments": '{"command":"pytest"}',
+            },
+        },
+        {
+            "timestamp": _iso_utc(started_at + 2.2),
+            "type": "response_item",
+            "payload": {"type": "function_call_output", "call_id": "call-1", "output": "2 passed"},
+        },
     )
     reader = CliTranscriptReader(
         cli_name="codex",
@@ -488,6 +516,11 @@ def test_codex_transcript_reader_uses_task_complete(tmp_path):
     assert intermediate.assistant_text == "Проверяю тесты"
     assert intermediate.complete is False
     assert intermediate.session_id == session_id
+    assert intermediate.activity == (
+        ("assistant_text", "Проверяю тесты"),
+        ("tool_event", "exec_command: pytest"),
+        ("tool_event", "exec_command: pytest result: 2 passed"),
+    )
 
     _append_jsonl(
         path,
@@ -871,7 +904,7 @@ def test_grok_transcript_reader_uses_online_updates(tmp_path):
     intermediate = reader.poll()
 
     assert intermediate.available is True
-    assert intermediate.progress_text == "Run tests"
+    assert intermediate.activity[0] == ("tool_event", "Run tests")
     # Чанки склеиваются встык, поэтому пробел на границе обязан уцелеть.
     assert intermediate.assistant_text == "Grok готов"
     assert intermediate.complete is False
@@ -953,7 +986,7 @@ def test_kimi_transcript_reader_merges_step_parts(tmp_path):
     assert intermediate.available is True
     assert intermediate.recognized is True
     assert intermediate.session_id == session_id
-    assert intermediate.progress_text == "Bash"
+    assert intermediate.activity == (("tool_event", "Bash"), ("assistant_text", "Собираю."))
     assert intermediate.assistant_text == "Собираю."
     assert intermediate.complete is False
     # Kimi stamps epoch milliseconds; the backend compares activity in seconds.
@@ -1228,7 +1261,7 @@ def test_qwen_transcript_reader_reads_parts_and_skips_thoughts(tmp_path):
     assert first.recognized is True
     # Размышления модели в ответ не попадают, имя инструмента идёт в прогресс.
     assert first.assistant_text == ""
-    assert first.progress_text == "glob"
+    assert first.activity == (("thinking", "надо сначала поискать"), ("tool_event", "glob: *.py"))
     assert first.complete is False
 
     _append_jsonl(

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import errno
 import signal
@@ -1085,7 +1086,11 @@ class Session:
                         break
         if is_grok:
             cmd = self._ensure_grok_streaming_json_command(cmd)
-        stream_adapter = build_cli_json_stream_adapter(self.tool.name)
+        stream_adapter = build_cli_json_stream_adapter(self.tool.name, resume_token=resume)
+        agy_stream_input = (
+            self.tool.name == "agy" and use_stdin
+            and ("--input-format", "stream-json") in zip(cmd, cmd[1:])
+        )
         expected_cli_response_format = _extract_cli_response_format(prompt)
         stream_recorder = CliJsonStreamRecorder(
             enabled=bool(stream_adapter) and cli_json_stream_archive_enabled(self.config),
@@ -1179,7 +1184,7 @@ class Session:
         self._headless_interrupt_flag = False
         self._active_execution_backend = "headless"
         _log.info("PID=%s started (separate_stderr=%s)", proc.pid, use_separate_stderr)
-        if use_stdin and proc.stdin:
+        if use_stdin and proc.stdin and not agy_stream_input:
             proc.stdin.write((prompt + "\n").encode())
             await proc.stdin.drain()
             proc.stdin.close()
@@ -1202,6 +1207,12 @@ class Session:
                 _log.exception("CLI JSON stream event archive failed")
             if event.kind == "session_started":
                 session_id = str(event.session_id or "").strip() or None
+                if agy_stream_input and proc.stdin and not proc.stdin.is_closing():
+                    # agy сообщает ID до чтения stdin. При несовпадении
+                    # адаптер возвращает failed и запрос не отправляется.
+                    record = {"event": "user", "message": {"content": prompt}}
+                    proc.stdin.write((json.dumps(record) + "\n").encode())
+                    proc.stdin.close()
                 if session_id and not force_fresh:
                     # Фиксируем resume_token сразу, как только CLI сообщил о старте
                     # сессии (для Claude это событие system/init). С этого момента
@@ -1314,14 +1325,14 @@ class Session:
             if not proc.stdout:
                 _log.warning("no stdout pipe")
                 return
-            text_buf = ""
+            line_buf = b""
             try:
                 while True:
                     chunk = await proc.stdout.read(4096)
                     last_stdout_at = time.monotonic()
                     if not chunk:
-                        if stream_adapter and text_buf.strip():
-                            _consume_stream_line(text_buf)
+                        if stream_adapter and line_buf.strip():
+                            _consume_stream_line(line_buf.decode(errors="ignore"))
                         try:
                             await stream_recorder.flush_pending()
                         except Exception:
@@ -1330,21 +1341,15 @@ class Session:
                         _log.info("drain: EOF received, total %d bytes", len(out_buf))
                         break
                     out_buf.extend(chunk)
-                    decoded = chunk.decode(errors="ignore")
                     if stream_adapter:
-                        text_buf += decoded
-                        while True:
-                            line, sep, remainder = text_buf.partition("\n")
-                            if not sep:
-                                text_buf = line
-                                break
-                            _consume_stream_line(line)
-                            text_buf = remainder
-                    try:
-                        if not stream_adapter:
-                            self._update_activity(decoded)
-                    except Exception:
-                        _log.exception("stdout drain activity update failed")
+                        *lines, line_buf = (line_buf + chunk).split(b"\n")
+                        for line in lines:
+                            _consume_stream_line(line.decode(errors="ignore"))
+                    else:
+                        try:
+                            self._update_activity(chunk.decode(errors="ignore"))
+                        except Exception:
+                            _log.exception("stdout drain activity update failed")
                     try:
                         await stream_recorder.flush_pending()
                     except Exception:
@@ -2876,7 +2881,9 @@ class SessionManager:
             except (TypeError, ValueError):
                 logger.exception("invalid session queue item skipped during persistence")
                 continue
-            if not payload.get("text"):
+            if not (payload.get("text") or any(
+                payload.get(key) or payload["dest"].get(key) for key in ("image_path", "image_paths", "attachments")
+            )):
                 continue
             queue_items.append(payload)
         return queue_items

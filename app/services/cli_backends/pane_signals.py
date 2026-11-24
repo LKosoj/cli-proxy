@@ -1,5 +1,5 @@
 """Разбор escape-последовательностей сырого pane.log: заголовок терминала
-(OSC 0/1/2) и настоящие BEL-звонки.
+(OSC 0/1/2), статусы Antigravity (OSC 7501) и настоящие BEL-звонки.
 
 Сканер stateful и рассчитан на вызовы по кускам: PTY отдаёт данные
 произвольными порциями, и escape-последовательность может оборваться на
@@ -7,10 +7,8 @@
 следующем. Пересоздаётся сканер целиком (см. `_PaneStream._restart`), метод
 reset() не нужен.
 
-Роль этих сигналов — диагностика и один узкий case в tmux_backend.py.
-Транскрипт CLI остаётся единственным источником завершения хода: эти байты
-и так попадают в pane.log и сами двигают таймер тишины, отдельный код для
-этого не нужен.
+Antigravity сообщает об окончании хода в OSC 7501, текст ответа хранит
+в транскрипте. Для остальных CLI сигналы панели служат диагностикой.
 """
 
 from __future__ import annotations
@@ -47,6 +45,7 @@ def _extract_title(buffer: str) -> Optional[str]:
 class PaneSignals:
     title: Optional[str] = None
     bell_count: int = 0
+    agy_statuses: tuple[str, ...] = ()
 
 
 class PaneSignalScanner:
@@ -62,6 +61,17 @@ class PaneSignalScanner:
     def feed(self, chunk: str) -> PaneSignals:
         title: Optional[str] = None
         bell_count = 0
+        agy_statuses: list[str] = []
+
+        def finish_osc() -> None:
+            nonlocal title
+            if self._osc_buffer.startswith("7501;"):
+                agy_statuses.append(self._osc_buffer[len("7501;"):])
+            elif not self._osc_overflowed:
+                extracted = _extract_title(self._osc_buffer)
+                if extracted is not None:
+                    title = extracted
+
         pos = 0
         length = len(chunk)
         while pos < length:
@@ -117,27 +127,21 @@ class PaneSignalScanner:
             elif self._state == "osc":
                 if char == "\x07":
                     # BEL здесь — терминатор ST, а не звонок: не считаем его.
-                    if not self._osc_overflowed:
-                        extracted = _extract_title(self._osc_buffer)
-                        if extracted is not None:
-                            title = extracted
+                    finish_osc()
                     self._state = "text"
                 elif char == "\x1b":
                     self._state = "osc_esc"
-                elif len(self._osc_buffer) < _OSC_BUFFER_LIMIT:
+                elif not self._osc_overflowed and len(self._osc_buffer) < _OSC_BUFFER_LIMIT:
                     self._osc_buffer += char
                 else:
-                    # Лимит превышен — последовательность испорчена: буфер
-                    # отбрасываем и молча ждём терминатора, title из мусора
-                    # не выдаём (реальный заголовок терминала короче лимита).
-                    self._osc_buffer = ""
+                    # У agy состояние стоит перед длинным опциональным msg.
+                    # Храним начальные поля, пока не придёт терминатор.
+                    if not self._osc_buffer.startswith("7501;"):
+                        self._osc_buffer = ""
                     self._osc_overflowed = True
             elif self._state == "osc_esc":
                 if char == "\\":
-                    if not self._osc_overflowed:
-                        extracted = _extract_title(self._osc_buffer)
-                        if extracted is not None:
-                            title = extracted
+                    finish_osc()
                     self._state = "text"
                 elif char == "\x1b":
                     # Не ST: предыдущий OSC не был завершён корректно, этот
@@ -150,4 +154,4 @@ class PaneSignalScanner:
                 else:
                     self._state = "text"
 
-        return PaneSignals(title=title, bell_count=bell_count)
+        return PaneSignals(title=title, bell_count=bell_count, agy_statuses=tuple(agy_statuses))

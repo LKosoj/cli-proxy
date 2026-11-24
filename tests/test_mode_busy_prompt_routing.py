@@ -237,7 +237,10 @@ def test_enqueue_if_busy_fallback_adds_queue_when_dispatcher_missing() -> None:
     )
 
     assert result is True
-    assert session.queue == [{"text": "hello", "dest": {"kind": "telegram", "chat_id": 101}}]
+    assert len(session.queue) == 1
+    assert session.queue[0]["text"] == "hello"
+    assert session.queue[0]["dest"] == {"kind": "telegram", "chat_id": 101}
+    assert len(session.queue[0]["queue_id"]) == 32
     assert persisted["ok"] is True
     assert sent == [(101, "Сессия занята. Добавил запрос в очередь.", True)]
 

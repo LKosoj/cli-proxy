@@ -320,12 +320,137 @@ def _session(tmp_path):
     )
 
 
+@pytest.mark.asyncio
+async def test_capture_screen_reads_only_the_managed_session_pane(tmp_path):
+    session = _session(tmp_path)
+    captured = []
+
+    async def capture_pane(pane_target):
+        captured.append(pane_target)
+        return "Visible terminal screen\n"
+
+    backend = TmuxExecutionBackend(driver=SimpleNamespace(capture_pane=capture_pane))
+    paths = backend.paths(session)
+    assert await backend.capture_screen(session) is None
+    assert captured == []
+    assert not Path(paths["runtime_dir"]).exists()
+
+    backend._write_state(paths, {"backend": "tmux", "pane_target": "other:1.0"})
+    assert await backend.capture_screen(session) == "Visible terminal screen\n"
+    assert captured == [paths["pane_target"]]
+
+
+@pytest.mark.asyncio
+async def test_capture_screen_returns_none_when_the_pane_disappeared(tmp_path):
+    session = _session(tmp_path)
+
+    async def capture_pane(_pane_target):
+        raise TmuxDriverError("can't find pane")
+
+    backend = TmuxExecutionBackend(driver=SimpleNamespace(capture_pane=capture_pane))
+    backend._write_state(backend.paths(session), {"backend": "tmux"})
+    assert await backend.capture_screen(session) is None
+
+
+@pytest.mark.asyncio
+async def test_agy_tmux_waits_for_done_and_delivers_only_current_native_reply(tmp_path, _isolated_home):
+    conversation = "da2359f9-a925-46d9-a871-43d2292d34c1"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    submitted = asyncio.Event()
+
+    class AgyDriver(FakeTmuxDriver):
+        async def send_enter(self, pane_target):
+            await super().send_enter(pane_target)
+            with open(self.log_path, "a", encoding="utf-8") as handle:
+                handle.write("\x1b]7501;state=idle:app=antigravity\x07")
+                handle.write("\x1b]7501;state=working:app=antigravity\x07")
+                handle.write(f"\x1b]2;cli-proxy-agy {conversation}\x07")
+            submitted.set()
+
+        def append_reply(self, text):
+            records = [
+                {"type": "USER_INPUT", "source": "USER_EXPLICIT", "content": self.sent_prompts[-1]},
+                {"type": "PLANNER_RESPONSE", "source": "MODEL", "content": text},
+            ]
+            with transcript.open("a", encoding="utf-8") as handle:
+                for record in records:
+                    record.update(created_at=_iso_utc(int(time.time())), status="DONE")
+                    handle.write(json.dumps(record) + "\n")
+
+    driver = AgyDriver()
+    driver.autowrite_transcript = False
+    driver.response_text = "TUI chrome"
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=5, answer_idle_sec=0)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    for text in ("first", "second"):
+        submitted.clear()
+        driver.capture_outputs = ["────\n>\n────"]
+        task = asyncio.create_task(backend.run(
+            session, text, request_context={"prompt": text, "dest": {"kind": "telegram", "chat_id": 42}},
+        ))
+        try:
+            await asyncio.wait_for(submitted.wait(), timeout=1)
+            driver.append_reply(text)
+            assert await _wait_for_preview(session) == text
+            assert not task.done()
+            with open(driver.log_path, "a", encoding="utf-8") as handle:
+                handle.write("\x1b]7501;state=done:app=antigravity:msg=" + "A" * 600 + "\x07")
+            result = await asyncio.wait_for(task, timeout=1)
+            assert result.text == text
+            assert result.diagnostics["completion_source"] == "agy-transcript"
+            assert result.diagnostics["transcript_path"] == str(transcript)
+            assert session.resume_token == conversation
+            recovery = await backend.get_recovery_request(session)
+            assert recovery is not None and recovery.request_id == result.request_id
+            assert (await backend.recover(session, recovery)).text == text
+            assert backend.mark_request_delivered(session, result.request_id)
+        finally:
+            if not task.done():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+    assert len(driver.new_session_commands) == 1
+    command = driver.new_session_commands[0][2]
+    assert "AGY_CLI_OSC7501=on" in command
+    assert "cli-proxy-agy" in command[command.index("--settings") + 1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("pane", "error"),
+    [
+        ('warning: conversation "da2359f9-a925-46d9-a871-43d2292d34c1" not found\n────\n>\n────', "not found"),
+        ("Do you trust the contents of this project?\n> Yes, I trust this folder\n"
+         "  No, exit\n  ↑/↓ Navigate · enter Confirm\nGPT-OSS 120B", "workspace trust is required"),
+    ],
+)
+async def test_agy_tmux_does_not_send_input_to_a_blocked_startup(tmp_path, pane, error):
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, startup_timeout_sec=1)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    session.resume_token = "da2359f9-a925-46d9-a871-43d2292d34c1"
+    driver.capture_outputs = [pane, pane]
+    for _ in range(2):
+        with pytest.raises(TmuxDriverError, match=error):
+            await backend.run(session, "stay in the original conversation")
+    assert driver.sent_prompts == []
+    assert driver.sent_key_sequences == []
+
+
 async def _wait_for_preview(session, timeout: float = 5.0) -> str:
     """Ждёт текст, который монитор отдаёт в превью, не дожидаясь конца хода."""
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        value = str(getattr(session, "last_assistant_text_value", "") or getattr(session, "_tmux_choice_text", ""))
+        value = str(getattr(session, "_tmux_assistant_preview_text", "") or getattr(session, "_tmux_choice_text", ""))
         if value:
             return value
         await asyncio.sleep(0.01)
@@ -464,7 +589,7 @@ async def test_tmux_backend_prefers_structured_transcript_and_persists_locator(t
         def poll(self):
             return TranscriptPollResult(
                 assistant_text="Чистый структурированный ответ",
-                progress_text="Bash",
+                activity=(("tool_event", "Bash"), ("assistant_text", "Чистый структурированный ответ")),
                 complete=True,
                 available=True,
                 recognized=True,
@@ -476,7 +601,7 @@ async def test_tmux_backend_prefers_structured_transcript_and_persists_locator(t
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, idle_fallback_sec=0.05)
     session = _session(tmp_path)
     progress_updates = []
-    session._update_activity = progress_updates.append
+    session._update_activity = lambda text, **kwargs: progress_updates.append((kwargs["tick_kind"], text))
 
     result = await asyncio.wait_for(
         backend.run(
@@ -495,7 +620,7 @@ async def test_tmux_backend_prefers_structured_transcript_and_persists_locator(t
     assert result.abnormal_stop is False
     assert result.diagnostics["completion_source"] == "transcript"
     assert driver.sent_ctrl_c is False
-    assert progress_updates == ["Bash"]
+    assert progress_updates == [("tool_event", "Bash"), ("assistant_text", "Чистый структурированный ответ")]
     assert session.last_assistant_text_value == "Чистый структурированный ответ"
     assert session.resume_token == "structured-session"
     assert last_request["transcript_provider"] == "claude"
@@ -1652,7 +1777,8 @@ async def test_tmux_backend_preview_includes_thinking_and_final_answer_does_not(
     result = await asyncio.wait_for(backend.run(session, "do work"), timeout=5)
 
     assert result.text == "Задача E готова."
-    assert session.last_assistant_text_value == "Задача E готова.\n\nЗамечания по H устранены."
+    assert session.last_assistant_text_value == "Задача E готова."
+    assert session._tmux_assistant_preview_text == "Задача E готова.\n\nЗамечания по H устранены."
     assert result.diagnostics["completion_source"] == "transcript"
 
 
