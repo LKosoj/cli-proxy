@@ -874,7 +874,18 @@ class TmuxExecutionBackend:
                     raise TmuxDriverError("tmux multiple-choice menu changed or already has input")
                 if multi_question_id in getattr(session, "_answered_tmux_choice_ids", ()):
                     raise TmuxDriverError("tmux multiple-choice menu already answered")
-                await driver.send_keys(paths["pane_target"], *value, "Enter")
+                # Claude принимает цифры и запятые по одной клавише.
+                await driver.type_text(paths["pane_target"], value)
+                expected = "".join(footer.split()) + value
+                deadline = time.monotonic() + 3.0
+                while time.monotonic() < deadline:
+                    current = await self._capture_pane_text(session, paths)
+                    if current and "".join(current.split()).endswith(expected):
+                        break
+                    await asyncio.sleep(min(self.poll_interval_sec, 0.25))
+                else:
+                    raise TmuxDriverError("tmux multiple-choice input was not accepted")
+                await driver.send_enter(paths["pane_target"])
                 SessionRunService.remember_answered_tmux_choice(session, multi_question_id)
             else:
                 await driver.send_keys(paths["pane_target"], *value)

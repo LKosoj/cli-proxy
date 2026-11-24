@@ -1941,13 +1941,19 @@ def _activate_tmux(backend, session, driver):
 
 
 @pytest.mark.asyncio
-async def test_tmux_multiple_choice_sends_numbers_in_one_submission(tmp_path):
+async def test_tmux_multiple_choice_waits_for_typed_numbers_before_enter(tmp_path):
     from sessions.session_run_service import SessionRunService
 
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver)
     session = _session(tmp_path)
     paths = _activate_tmux(backend, session, driver)
+
+    async def send_enter(pane_target):
+        assert pane_target == paths["pane_target"]
+        driver.events.append("send_enter")
+
+    driver.send_enter = send_enter
     pane = (
         "Questions: Changes, Details\n> Which changes?\n1. First\n2. Second\n3. Other\n"
         "Select with numbers [1-3] (comma- or space-separated\n"
@@ -1962,14 +1968,44 @@ async def test_tmux_multiple_choice_sends_numbers_in_one_submission(tmp_path):
     assert SessionRunService._parse_cli_choice_question(preview) == (question, options)
     qid = SessionRunService._tmux_choice_question_id(session.id, question, options)
 
-    driver.capture_outputs = [pane + " 1,2", pane, pane]
+    driver.capture_outputs = [pane + " 1,2", pane, pane, pane + " 1", pane + " 1,\n2", pane]
     with pytest.raises(TmuxDriverError, match="changed or already has input"):
         await backend.send_choice(session, "1,2", multi_question_id=qid)
     await backend.send_choice(session, "1,2", multi_question_id=qid)
     with pytest.raises(TmuxDriverError, match="already answered"):
         await backend.send_choice(session, "1,2", multi_question_id=qid)
 
-    assert driver.sent_key_sequences == [(paths["pane_target"], ("1", ",", "2", "Enter"))]
+    assert driver.sent_prompts == ["1,2"]
+    assert driver.sent_key_sequences == []
+    typed = driver.events.index("type_text")
+    submitted = driver.events.index("send_enter")
+    assert driver.events[typed + 1:submitted] == ["capture_pane"] * 3
+
+
+@pytest.mark.asyncio
+async def test_tmux_multiple_choice_does_not_submit_partial_input(tmp_path, monkeypatch):
+    from sessions.session_run_service import SessionRunService
+
+    driver = FakeTmuxDriver()
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    _activate_tmux(backend, session, driver)
+    pane = (
+        "Question: Items\n> Which items?\n1. First\n2. Second\n3. Other\n"
+        "Select with numbers [1-3] (comma- or space-separated for several). Then Enter to Submit or Escape to cancel:"
+    )
+    question, options = SessionRunService._parse_cli_choice_question(pane)
+    qid = SessionRunService._tmux_choice_question_id(session.id, question, options)
+    driver.capture_outputs = [pane, pane + " 1"]
+    ticks = iter([0.0, 1.0, 3.0])
+    monkeypatch.setattr(tmux_backend_module, "time", SimpleNamespace(time=time.time, monotonic=lambda: next(ticks)))
+
+    with pytest.raises(TmuxDriverError, match="multiple-choice input was not accepted"):
+        await backend.send_choice(session, "1,2", multi_question_id=qid)
+
+    assert driver.sent_prompts == ["1,2"]
+    assert "send_enter" not in driver.events
+    assert qid not in getattr(session, "_answered_tmux_choice_ids", ())
 
 
 @pytest.mark.asyncio
