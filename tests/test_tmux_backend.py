@@ -976,28 +976,15 @@ async def test_tmux_backend_waits_when_agent_count_is_missing(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_tmux_backend_holds_turn_while_pane_shells_are_running(tmp_path, monkeypatch):
-    """Надпись на экране «shells still running» держит превью, даже если журнал молчит про агентов."""
+@pytest.mark.parametrize(
+    ("cli", "answer", "pane"),
+    [
+        ("claude", "Готово", "Cooked for 10m 42s · done 7:14 AM · 4 shells still running"),
+        ("codex", "Бот видит фразу 4 shells still running.", "• Бот видит фразу 4 shells still running."),
+    ],
+)
+async def test_tmux_backend_returns_completed_answer_with_shells_message(tmp_path, cli, answer, pane):
     driver = FakeTmuxDriver()
-
-    class SettledReader:
-        def __init__(self, **kwargs):
-            pass
-
-        def poll(self):
-            return TranscriptPollResult(
-                assistant_text="Готово",
-                complete=True,
-                available=True,
-                recognized=True,
-                background_pending=0,
-                background_agents_settled=True,
-            )
-
-        def get_all_relevant_paths(self):
-            return []
-
-    monkeypatch.setattr(tmux_backend_module, "CliTranscriptReader", SettledReader)
     backend = TmuxExecutionBackend(
         driver=driver,
         poll_interval_sec=0.01,
@@ -1006,25 +993,29 @@ async def test_tmux_backend_holds_turn_while_pane_shells_are_running(tmp_path, m
         answer_idle_sec=0.1,
     )
     session = _session(tmp_path)
+    session.tool.name = cli
+    session.cli.active_cli = cli
     paths = backend.paths(session)
     driver.sessions.add(paths["session_name"])
     os.makedirs(paths["runtime_dir"], exist_ok=True)
-    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
-        handle.write("Baked for 35s · done\n5 shells still running\n")
+    Path(paths["pane_log"]).write_text(f"{pane}\n", encoding="utf-8")
 
+    started_at = time.time()
+    transcript = _write_cli_transcript(
+        cli=cli, workdir=session.workdir, session_id=driver.fallback_session_id, text=answer,
+    )
     request = tmux_backend_module.TmuxRecoveryRequest(
         request_id="shells-1",
-        started_at=time.time(),
+        started_at=started_at,
         offset=0,
         prompt="",
         dest={"kind": "telegram", "chat_id": 42},
+        transcript_locator=TranscriptLocator(provider=cli, path=str(transcript), start_offset=0),
     )
-    started_at = time.time()
     result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
 
-    assert result.text == "Готово"
-    assert result.diagnostics["completion_source"].endswith("quiet-timeout")
-    assert time.time() - started_at >= 0.45
+    assert result.text == answer
+    assert result.diagnostics["completion_source"] == "transcript"
 
 
 @pytest.mark.asyncio

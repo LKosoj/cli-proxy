@@ -2118,9 +2118,6 @@ class TmuxExecutionBackend:
                             "tmux CLI activity request_id=%s source=pane output_chars=%d",
                             request.request_id, len(status_text), extra=log_context,
                         )
-                shells_running = bool(_RUNNING_SHELLS_RE.search(pane_for_choice or ""))
-                if shells_running and completion_source == "transcript":
-                    complete = False
                 # Поле Other — то же ожидание, что меню: CLI ждёт строку, журнал молчит.
                 other_text_open = bool(_OTHER_TEXT_PROMPT_RE.search(pane_for_choice or ""))
                 if other_text_open and not terminal_error:
@@ -2133,6 +2130,7 @@ class TmuxExecutionBackend:
                 # Ответ уже есть, живых агентов нет и файлы замерли ненадолго — отдаём его.
                 # Пока счётчик агентов больше нуля, эту короткую паузу не используем.
                 # Если текста нет или агенты так и не закончились, ждём десять минут.
+                shells_running = bool(_RUNNING_SHELLS_RE.search(pane_for_choice or ""))
                 choice_blocking = (awaiting_choice or other_text_open) and choice_holds_turn
                 idle_for = time.time() - last_change
                 if (
