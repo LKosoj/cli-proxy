@@ -5315,7 +5315,8 @@ async def test_existing_tmux_session_reconnects_pipe_before_submitting_input(tmp
 
 
 @pytest.mark.asyncio
-async def test_other_answer_is_submitted_automatically_with_monitor_running(tmp_path, monkeypatch):
+@pytest.mark.parametrize("hint", ["", "Answer y or n.\n"])
+async def test_other_answer_is_submitted_automatically_with_monitor_running(tmp_path, monkeypatch, hint):
     driver = FakeTmuxDriver()
     backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
     session = _session(tmp_path)
@@ -5328,7 +5329,7 @@ async def test_other_answer_is_submitted_automatically_with_monitor_running(tmp_
     confirmation_seen_again = asyncio.Event()
     confirmation = (
         "Questions: Действие (answered)\nReview your answers\n> Что сделать?\n→ Мой ответ\n"
-        "y. Submit answers\nn. Cancel\nEnter y/n:"
+        f"y. Submit answers\nn. Cancel\n{hint}Enter y/n:"
     )
 
     async def capture(_target):

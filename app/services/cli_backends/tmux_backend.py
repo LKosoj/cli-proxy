@@ -118,7 +118,8 @@ _OTHER_TEXT_PROMPT_RE = re.compile(
 _OTHER_TEXT_WAIT_SEC = 3.0
 _CLAUDE_ANSWER_REVIEW_RE = re.compile(
     r"^[ \t]*Review your answers[ \t]*\n(?:.*\n)*?^[ \t]*→[ \t]+\S.*\n"
-    r"(?:.*\n)*?^[ \t]*y\. Submit answers[ \t]*\n[ \t]*n\. Cancel[ \t]*\n[ \t]*Enter y/n:\s*\Z",
+    r"(?:.*\n)*?^[ \t]*y\. Submit answers[ \t]*\n[ \t]*n\. Cancel[ \t]*\n"
+    r"(?:[ \t]*Answer y or n\.[ \t]*\n)?[ \t]*Enter y/n:\s*\Z",
     re.MULTILINE,
 )
 

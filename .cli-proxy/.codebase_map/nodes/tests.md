@@ -92,6 +92,7 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-25 — Проверены автоподтверждение и разбор экрана Claude с подсказкой `Answer y or n.`.
 - 2026-11-25 — Проверено чтение событий сабагентов Claude, Codex, Grok и Antigravity и обновление превью.
 - 2026-11-25 — Проверены мутации очереди через Telegram и MiniApp и перенос диалогов Antigravity.
 - 2026-11-25 — Проверены предпросмотр очереди, снимок панели tmux и команды продолжения диалога.

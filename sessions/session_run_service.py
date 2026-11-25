@@ -92,6 +92,15 @@ def _is_choice_submit_footer(line: str) -> bool:
     )
 
 
+def _answer_confirm_lines(text: str) -> List[str]:
+    lines = text.strip().splitlines()
+    if lines and lines[-1].strip().lower() == "enter y/n:":
+        lines.pop()
+        if lines and lines[-1].strip().lower() == "answer y or n.":
+            lines.pop()
+    return lines
+
+
 def _is_answer_confirm(text: str) -> bool:
     """Экран Claude «подтвердите ответы»: y/n под заголовком сверки.
 
@@ -99,9 +108,7 @@ def _is_answer_confirm(text: str) -> bool:
     но это не сверка ответов, и его сюда не берём.
     """
 
-    lines = str(text or "").strip().lower().splitlines()
-    if lines and lines[-1].strip() == "enter y/n:":
-        lines.pop()
+    lines = _answer_confirm_lines(str(text or "").lower())
     if len(lines) < 3:
         return False
     return (
@@ -114,9 +121,7 @@ def _is_answer_confirm(text: str) -> bool:
 def _parse_answer_confirm(text: str) -> Tuple[str, List[str]]:
     """Вопрос — сверка ответов. Кнопки — отправить или отменить."""
 
-    lines = text.strip().splitlines()
-    if lines[-1].strip().lower() == "enter y/n:":
-        lines.pop()
+    lines = _answer_confirm_lines(text)
     opts = [
         f"{match.group(1).lower()}. {match.group(2).strip()}"
         for line in lines[-2:]

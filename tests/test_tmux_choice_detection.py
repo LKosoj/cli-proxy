@@ -1,3 +1,5 @@
+import pytest
+
 from sessions.session_run_service import SessionRunService
 
 
@@ -245,7 +247,7 @@ def test_claude_question_list_keeps_wrapped_options_and_round_trips() -> None:
     assert "Other" not in "\n".join(SessionRunService._parse_cli_choice_question(preview)[1])
 
 
-def _claude_answer_confirm_frame() -> str:
+def _claude_answer_confirm_frame(hint: str) -> str:
     # После списка вопросов Claude просит подтвердить ответы: y или n, не цифры.
     return (
         "claude: Ещё одно замечание по третьей вставке.\n"
@@ -258,12 +260,14 @@ def _claude_answer_confirm_frame() -> str:
         "Ready to submit your answers?\n"
         "y. Submit answers\n"
         "n. Cancel\n"
+        f"{hint}"
         "Enter y/n:\n"
     )
 
 
-def test_claude_answer_confirm_is_a_choice_and_round_trips() -> None:
-    text = _claude_answer_confirm_frame()
+@pytest.mark.parametrize("hint", ["", "Answer y or n.\n"])
+def test_claude_answer_confirm_is_a_choice_and_round_trips(hint: str) -> None:
+    text = _claude_answer_confirm_frame(hint)
 
     assert SessionRunService._is_cli_choice_question(text) is True
     question, options = SessionRunService._parse_cli_choice_question(text)
@@ -272,6 +276,7 @@ def test_claude_answer_confirm_is_a_choice_and_round_trips() -> None:
     assert "Ready to submit your answers?" in question
     assert "Упростить промпт" in question
     assert "Ещё одно замечание" not in question
+    assert "Answer y or n." not in question
     assert options == ["y. Submit answers", "n. Cancel"]
     preview = "\n".join([question, f"❯ {options[0]}", *options[1:]])
     assert SessionRunService._is_cli_choice_question(preview) is True
