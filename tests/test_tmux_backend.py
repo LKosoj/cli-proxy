@@ -472,6 +472,22 @@ def test_tmux_backend_recognizes_agy_folder_trust_prompt(tmp_path) -> None:
         TmuxExecutionBackend._is_interactive_ready(session, AGY_FOLDER_TRUST_PANE)
 
 
+def test_tmux_backend_recognizes_agy_ready_prompt_with_placeholder(tmp_path) -> None:
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+
+    accept_edits_pane = (
+        "────\n"
+        "> Accept-edits mode: file edits auto-approved (shift+tab to cycle)\n"
+        "────\n"
+        "? for shortcuts    accept-edits · Gemini 4 Neon · medium\n"
+    )
+    assert TmuxExecutionBackend._is_interactive_ready(session, AGY_READY_PANE) is True
+    assert TmuxExecutionBackend._is_interactive_ready(session, accept_edits_pane) is True
+    assert TmuxExecutionBackend._is_interactive_ready(session, "────\n? for shortcuts\n") is False
+    assert TmuxExecutionBackend._is_agy_folder_trust_prompt(AGY_FOLDER_TRUST_PANE + "\n" + accept_edits_pane) is False
+
+
 @pytest.mark.asyncio
 async def test_tmux_backend_confirms_agy_folder_trust_prompt(tmp_path) -> None:
     driver = FakeTmuxDriver()

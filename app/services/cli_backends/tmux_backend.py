@@ -1171,7 +1171,9 @@ class TmuxExecutionBackend:
     @staticmethod
     def _has_agy_input_prompt(lines: list[str]) -> bool:
         return any(
-            line == ">" and lines[index - 1].startswith("──") and lines[index + 1].startswith("──")
+            (line == ">" or line.startswith("> "))
+            and lines[index - 1].startswith("──")
+            and lines[index + 1].startswith("──")
             for index, line in enumerate(lines)
             if 0 < index < len(lines) - 1
         )

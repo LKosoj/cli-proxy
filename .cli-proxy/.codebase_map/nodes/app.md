@@ -94,6 +94,7 @@ Instruction node for `app` area.
 
 ## Last reviewed
 
+- 2026-11-27 — `TmuxExecutionBackend._has_agy_input_prompt` принимает поле ввода `agy` с подсказкой-плейсхолдером вида `> Accept-edits mode: ...` между рамками `──`.
 - 2026-11-26 — `TmuxExecutionBackend` завершает ход `agy` по экрану простоя (`? for shortcuts`, 0 сабагентов, замерший транскрипт с ответом), если сам `agy` не прислал OSC 7501 `done` (например после `blocked`).
 - 2026-11-26 — Поддержана отправка множественного выбора для вопросов `agy` в `TmuxExecutionBackend.send_choice`.
 - 2026-11-26 — Добавлен `app/services/cli_model_service.py` (каталог моделей/effort и подстановка флагов для `agy`, `claude`, `codex`, `grok` в headless и tmux) и `TmuxExecutionBackend.restart_for_settings`.
