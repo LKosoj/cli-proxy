@@ -175,3 +175,48 @@ async def test_timer_only_preview_update_uses_longer_interval() -> None:
     assert completed["timer"].is_set() is False
     await asyncio.wait_for(completed["timer"].wait(), timeout=1.0)
     assert calls[1][1] - calls[0][1] >= 0.07
+
+
+@pytest.mark.asyncio
+async def test_preview_rate_limiter_preserves_pending_updates_for_different_owners_in_same_chat() -> None:
+    limiter = AssistantPreviewRateLimiter(
+        text_edit_interval_sec=0.03,
+        timer_edit_interval_sec=0.09,
+    )
+    calls: list[str] = []
+    completed = {name: asyncio.Event() for name in ("base", "s45_subagents", "s20_timer")}
+
+    def update(name: str):
+        async def _apply() -> None:
+            calls.append(name)
+            completed[name].set()
+
+        return _apply
+
+    await limiter.submit(
+        chat_id=1,
+        owner="session-a",
+        timer_only=False,
+        apply_update=update("base"),
+    )
+    await asyncio.wait_for(completed["base"].wait(), timeout=1.0)
+
+    # Две разные сессии в одном чате ставят обновления в очередь одновременно:
+    # таймер s20 не должен затирать обновление сабагентов s45 и не должен тормозить его.
+    await limiter.submit(
+        chat_id=1,
+        owner="session-s45",
+        timer_only=False,
+        apply_update=update("s45_subagents"),
+    )
+    await limiter.submit(
+        chat_id=1,
+        owner="session-s20",
+        timer_only=True,
+        apply_update=update("s20_timer"),
+    )
+
+    await asyncio.wait_for(completed["s45_subagents"].wait(), timeout=1.0)
+    assert completed["s20_timer"].is_set() is False
+    await asyncio.wait_for(completed["s20_timer"].wait(), timeout=1.0)
+    assert calls == ["base", "s45_subagents", "s20_timer"]

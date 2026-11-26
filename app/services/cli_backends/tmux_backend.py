@@ -1179,8 +1179,26 @@ class TmuxExecutionBackend:
         )
 
     @staticmethod
+    def _is_agy_idle_screen(pane: Optional[str], *, subagent_count: int) -> bool:
+        return (
+            subagent_count == 0
+            and pane is not None
+            and "? for shortcuts" in pane
+            and "esc to cancel" not in pane.lower()
+        )
+
+    @staticmethod
     def _parse_agy_pane_subagents(pane: str) -> tuple[int, tuple[str, ...]]:
         """Читает список и счётчик живых сабагентов из нижней панели Antigravity CLI."""
+
+        def _extract_label(line: str) -> str:
+            agent_match = _AGY_PANE_SUBAGENT_RE.match(line)
+            if agent_match is None:
+                return ""
+            raw_label = agent_match.group(1).strip()
+            if ": " in raw_label:
+                raw_label = raw_label.split(": ", 1)[1].strip() or raw_label
+            return raw_label
 
         text = normalize_terminal_text(pane)
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -1192,6 +1210,7 @@ class TmuxExecutionBackend:
             if is_prompt and lines[index - 1].startswith("──") and lines[index + 1].startswith("──"):
                 prompt_index = index
                 break
+        hidden_candidates: list[str] = []
         if prompt_index >= 0:
             footer = lines[prompt_index + 2:]
         else:
@@ -1203,16 +1222,15 @@ class TmuxExecutionBackend:
             sep_idx = next((i for i in range(len(tail) - 1, -1, -1) if tail[i].startswith("──")), -1)
             if sep_idx >= 0:
                 footer = tail[sep_idx + 1:]
+                prev_sep_idx = next((i for i in range(sep_idx - 1, -1, -1) if tail[i].startswith("──")), -1)
+                if prev_sep_idx >= 0:
+                    hidden_candidates = tail[prev_sep_idx + 1:sep_idx]
         labels: list[str] = []
         status_count = 0
         for line in footer:
-            agent_match = _AGY_PANE_SUBAGENT_RE.match(line)
-            if agent_match is not None:
-                raw_label = agent_match.group(1).strip()
-                if ": " in raw_label:
-                    raw_label = raw_label.split(": ", 1)[1].strip() or raw_label
-                if raw_label:
-                    labels.append(raw_label)
+            raw_label = _extract_label(line)
+            if raw_label:
+                labels.append(raw_label)
                 continue
             count_match = _AGY_PANE_SUBAGENT_COUNT_RE.search(line)
             if count_match is not None:
@@ -1220,6 +1238,11 @@ class TmuxExecutionBackend:
                     status_count = max(status_count, int(count_match.group(1)))
                 except ValueError:
                     pass
+        if not labels and status_count > 0 and hidden_candidates:
+            for line in hidden_candidates:
+                raw_label = _extract_label(line)
+                if raw_label:
+                    labels.append(raw_label)
         count = max(status_count, len(labels))
         return (count, tuple(labels))
 
@@ -1728,11 +1751,13 @@ class TmuxExecutionBackend:
                 return None
             if self._interactive_cli_name(session) == "agy":
                 last_state = await asyncio.to_thread(_last_agy_panel_state, paths["pane_log"])
-                if last_state in {"done", "idle", "error"}:
-                    live_pane = await self._capture_pane_text(session, paths) or ""
-                    subagent_count, _ = self._parse_agy_pane_subagents(live_pane)
-                    if subagent_count == 0:
-                        return None
+                live_pane = await self._capture_pane_text(session, paths) or ""
+                subagent_count, _ = self._parse_agy_pane_subagents(live_pane)
+                if subagent_count == 0 and (
+                    last_state in {"done", "idle", "error"}
+                    or self._is_agy_idle_screen(live_pane, subagent_count=subagent_count)
+                ):
+                    return None
             logger.info(
                 "tmux observe: live pane picked up session_id=%s request_id=%s",
                 getattr(session, "id", "?"),
@@ -2280,11 +2305,8 @@ class TmuxExecutionBackend:
                     and not awaiting_choice
                     and not other_text_open
                     and not terminal_error
-                    and agy_subagent_count == 0
                     and bool(transcript_latest_text)
-                    and live_pane is not None
-                    and "? for shortcuts" in live_pane
-                    and "esc to cancel" not in live_pane.lower()
+                    and self._is_agy_idle_screen(live_pane, subagent_count=agy_subagent_count)
                     and last_transcript_change > 0
                     and time.time() - last_transcript_change >= max(answer_idle, 3.0)
                 ):
@@ -2317,13 +2339,20 @@ class TmuxExecutionBackend:
                     complete = True
                     completion_source = "answer-idle"
                     break
+                agy_observe_idle_for = time.time() - max(request.started_at, last_transcript_change)
                 if (
                     agy
                     and request.observe
                     and not choice_blocking
                     and agy_subagent_count == 0
-                    and agy_state not in {"working", "blocked"}
-                    and idle_for >= max(answer_idle, 2.0)
+                    and (
+                        (agy_state not in {"working", "blocked"} and idle_for >= max(answer_idle, 2.0))
+                        or (
+                            not transcript_latest_text
+                            and self._is_agy_idle_screen(live_pane, subagent_count=agy_subagent_count)
+                            and agy_observe_idle_for >= max(answer_idle, 2.0)
+                        )
+                    )
                 ):
                     complete = True
                     completion_source = "agy-observe-idle"

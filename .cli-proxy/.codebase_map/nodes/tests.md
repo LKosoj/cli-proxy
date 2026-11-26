@@ -92,6 +92,7 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-27 — Добавлены тесты пропуска стоящей панели `agy` после `blocked`, выхода `observe` при шуме `pane.log`, извлечения имён сабагентов при скрытом поле ввода `>` и независимой очереди владельцев в `AssistantPreviewRateLimiter`.
 - 2026-11-26 — Проверены разбор и отправка одиночных и множественных вопросов `agy` в `tests/test_tmux_backend.py`.
 - 2026-11-26 — Добавлены тесты выбора модели и уровня рассуждений (`tests/test_cli_model_selection.py`).
 - 2026-11-26 — Проверены игнорирование служебных записей `agy` в `wait_for_output`, пропуск стоящей панели на старте и завершение `observe` в `tests/test_tmux_backend.py`.

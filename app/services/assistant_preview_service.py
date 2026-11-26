@@ -34,7 +34,7 @@ class _PendingPreviewUpdate:
 class _ChatPreviewRateState:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     wake_event: asyncio.Event = field(default_factory=asyncio.Event)
-    pending: Optional[_PendingPreviewUpdate] = None
+    pending_by_owner: dict[str, _PendingPreviewUpdate] = field(default_factory=dict)
     worker: Optional[asyncio.Task] = None
     last_request_at: Optional[float] = None
     cooldown_started_at: Optional[float] = None
@@ -66,7 +66,7 @@ class AssistantPreviewRateLimiter:
         async with state.lock:
             if time.monotonic() < state.cooldown_until:
                 state.cooldown_suppressed_updates += 1
-            state.pending = _PendingPreviewUpdate(
+            state.pending_by_owner[owner] = _PendingPreviewUpdate(
                 owner=owner,
                 owner_version=state.owner_versions.get(owner, 0),
                 timer_only=timer_only,
@@ -85,8 +85,7 @@ class AssistantPreviewRateLimiter:
             return
         async with state.lock:
             state.owner_versions[owner] = state.owner_versions.get(owner, 0) + 1
-            if state.pending is not None and state.pending.owner == owner:
-                state.pending = None
+            state.pending_by_owner.pop(owner, None)
             state.wake_event.set()
 
     def _request_due_at(
@@ -104,14 +103,27 @@ class AssistantPreviewRateLimiter:
             rate_due_at = state.last_request_at + interval
         return max(rate_due_at, state.cooldown_until)
 
+    def _next_pending(
+        self,
+        state: _ChatPreviewRateState,
+    ) -> tuple[Optional[_PendingPreviewUpdate], float]:
+        chosen: Optional[_PendingPreviewUpdate] = None
+        chosen_due_at = 0.0
+        for candidate in state.pending_by_owner.values():
+            due_at = self._request_due_at(state, candidate)
+            if chosen is None or due_at < chosen_due_at:
+                chosen = candidate
+                chosen_due_at = due_at
+        return chosen, chosen_due_at
+
     async def _run_worker(self, chat_id: int, state: _ChatPreviewRateState) -> None:
         while True:
             async with state.lock:
-                update = state.pending
+                update, due_at = self._next_pending(state)
                 if update is None:
                     state.worker = None
                     return
-                delay = self._request_due_at(state, update) - time.monotonic()
+                delay = due_at - time.monotonic()
                 state.wake_event.clear()
             if delay > 0:
                 try:
@@ -121,13 +133,13 @@ class AssistantPreviewRateLimiter:
                 continue
 
             async with state.lock:
-                update = state.pending
+                update, due_at = self._next_pending(state)
                 if update is None:
                     continue
                 now = time.monotonic()
-                if self._request_due_at(state, update) > now:
+                if due_at > now:
                     continue
-                state.pending = None
+                state.pending_by_owner.pop(update.owner, None)
                 state.last_request_at = now
                 if state.cooldown_started_at is not None:
                     duration = max(0.0, state.cooldown_until - state.cooldown_started_at)
@@ -165,8 +177,8 @@ class AssistantPreviewRateLimiter:
         async with state.lock:
             now = time.monotonic()
             if state.owner_versions.get(update.owner, 0) == update.owner_version:
-                if state.pending is None:
-                    state.pending = update
+                if update.owner not in state.pending_by_owner:
+                    state.pending_by_owner[update.owner] = update
                 else:
                     state.cooldown_suppressed_updates += 1
             state.cooldown_started_at = now

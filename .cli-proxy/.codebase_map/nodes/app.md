@@ -94,6 +94,7 @@ Instruction node for `app` area.
 
 ## Last reviewed
 
+- 2026-11-27 — `TmuxExecutionBackend` отбрасывает стоящую панель `agy` по экрану простоя (`? for shortcuts` без `esc to cancel` и 0 сабагентов) даже после `blocked` и при шуме `pane.log`; `_parse_agy_pane_subagents` сохраняет имена сабагентов при скрытом поле ввода `>`; `AssistantPreviewRateLimiter` хранит отложенные обновления отдельно по каждому `owner` (сессии/топику) внутри `chat_id`.
 - 2026-11-27 — `TmuxExecutionBackend._has_agy_input_prompt` принимает поле ввода `agy` с подсказкой-плейсхолдером вида `> Accept-edits mode: ...` между рамками `──`.
 - 2026-11-26 — `TmuxExecutionBackend` завершает ход `agy` по экрану простоя (`? for shortcuts`, 0 сабагентов, замерший транскрипт с ответом), если сам `agy` не прислал OSC 7501 `done` (например после `blocked`).
 - 2026-11-26 — Поддержана отправка множественного выбора для вопросов `agy` в `TmuxExecutionBackend.send_choice`.

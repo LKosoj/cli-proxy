@@ -532,6 +532,19 @@ def test_tmux_backend_parses_agy_pane_subagents() -> None:
         "? for shortcuts                                      Gemini 4 Neon · medium · 1 subagent(s)\n"
     )
     assert TmuxExecutionBackend._parse_agy_pane_subagents(survey_overlay) == (1, ())
+    hidden_prompt_with_agents = (
+        "How's the CLI experience so far? Help us improve:\n"
+        "[1] Good  [2] Fine  [3] Bad  [0] Skip\n"
+        "────\n"
+        "  ● Agent(self: Package A Worker) · Gemini 4 Neon  Reading file · 7s\n"
+        "  ● Agent(research: Package B Reviewer) · Gemini 4 Neon  Working · 9s\n"
+        "────\n"
+        "? for shortcuts                                      Gemini 4 Neon · medium · 2 subagent(s)\n"
+    )
+    assert TmuxExecutionBackend._parse_agy_pane_subagents(hidden_prompt_with_agents) == (
+        2,
+        ("Package A Worker", "Package B Reviewer"),
+    )
     assert TmuxExecutionBackend._parse_agy_pane_subagents(AGY_READY_PANE) == (0, ())
 
 
@@ -622,6 +635,13 @@ async def test_agy_build_observe_request_skips_idle_panel_on_startup(tmp_path) -
 
     with open(paths["pane_log"], "w", encoding="utf-8") as handle:
         handle.write("\x1b]7501;state=working:app=antigravity\x07\x1b]7501;state=done:app=antigravity\x07")
+    assert await backend.build_observe_request(session, require_recent_activity=True) is None
+
+    # Даже если последний OSC был blocked (или потерян), стоящая панель с `? for shortcuts` и 0 сабагентов не подхватывается.
+    driver.capture_outputs = [AGY_READY_PANE]
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=blocked:kind=permission:app=antigravity:msg=QXBwcm92ZSBwbGFu\x07")
+        handle.write("\x1b[?2004h\x1b[>4;2m" * 20)
     assert await backend.build_observe_request(session, require_recent_activity=True) is None
 
     with open(paths["pane_log"], "a", encoding="utf-8") as handle:
@@ -774,6 +794,69 @@ async def test_agy_observe_exits_quietly_on_done_without_reply(tmp_path, _isolat
         observe=True,
     )
     result = await backend.recover(session, request)
+    assert result.text == ""
+    assert result.diagnostics["completion_source"] == "agy-observe-idle"
+    assert not result.diagnostics.get("terminal_error")
+
+
+@pytest.mark.asyncio
+async def test_agy_observe_exits_quietly_on_idle_screen_despite_pane_log_noise(
+    tmp_path, _isolated_home, monkeypatch
+) -> None:
+    conversation = "1e0abde0-33ea-4ccf-a275-14653da7b6c5"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("", encoding="utf-8")
+
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.capture_outputs = [AGY_READY_PANE] * 20
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=10, answer_idle_sec=0)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    session.resume_token = conversation
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=blocked:kind=permission:app=antigravity:msg=QXBwcm92ZSBwbGFu\x07")
+
+    base_now = time.time()
+    clock = {"now": base_now}
+    monkeypatch.setattr("app.services.cli_backends.tmux_backend.time.time", lambda: clock["now"])
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="obs-noise",
+        started_at=base_now,
+        offset=0,
+        prompt="hi",
+        dest={"kind": "telegram", "chat_id": 42},
+        transcript_locator=TranscriptLocator(
+            provider="agy",
+            path=str(transcript),
+            start_offset=0,
+            session_id=conversation,
+        ),
+        observe=True,
+    )
+
+    async def write_noise_and_advance() -> None:
+        for step in range(4):
+            await asyncio.sleep(0.015)
+            with open(paths["pane_log"], "a", encoding="utf-8") as handle:
+                handle.write("\x1b[?2004h\x1b[>4;2m")
+            clock["now"] = base_now + (step + 1) * 0.7
+
+    task = asyncio.create_task(write_noise_and_advance())
+    try:
+        result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
+    finally:
+        await task
+
     assert result.text == ""
     assert result.diagnostics["completion_source"] == "agy-observe-idle"
     assert not result.diagnostics.get("terminal_error")
