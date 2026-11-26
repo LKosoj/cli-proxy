@@ -94,6 +94,7 @@ Instruction node for `app` area.
 
 ## Last reviewed
 
+- 2026-11-26 — Добавлен сбор квот и получасовой сэмплинг для Antigravity CLI (`agy`) в `CliLimitsService`.
 - 2026-11-25 — Подтверждённый журналом конец хода освобождает превью при надписи `shells still running`.
 - 2026-11-25 — Автоподтверждение ответов Claude распознаёт экран с подсказкой `Answer y or n.`.
 - 2026-11-25 — Превью получает работающих сабагентов из событий Claude, Codex, Grok в tmux и Antigravity в headless.

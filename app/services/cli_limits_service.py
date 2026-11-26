@@ -86,7 +86,7 @@ class CliLimitsSnapshot:
 class CliLimitsService:
     """Собирает доступные лимиты и usage по активным CLI-сессиям."""
 
-    SUPPORTED_CLI_NAMES = ("claude", "codex", "gemini", "grok", "kimi", "opencode", "qwen")
+    SUPPORTED_CLI_NAMES = ("agy", "claude", "codex", "gemini", "grok", "kimi", "opencode", "qwen")
     _CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
     _CLAUDE_OAUTH_BETA = "oauth-2025-04-20"
     _CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
@@ -101,6 +101,13 @@ class CliLimitsService:
         re.IGNORECASE | re.MULTILINE,
     )
     _GROK_USAGE_RESET_RE = re.compile(r"^\s*Next\s+reset:\s*([^\r\n]+?)\s*$", re.IGNORECASE | re.MULTILINE)
+    _AGY_WINDOW_RE = re.compile(
+        r"^\s*(Weekly|Five\s+Hour|5[- ]Hour|Daily|Monthly)\s+Limit\s+Remaining\s*$",
+        re.IGNORECASE,
+    )
+    _AGY_PERCENT_RE = re.compile(r"(\d+(?:\.\d+)?)%")
+    _AGY_REFRESH_RE = re.compile(r"Refreshes\s+in\s+(.+?)\s*$", re.IGNORECASE)
+    _AGY_DURATION_PART_RE = re.compile(r"(\d+)\s*([dhms])", re.IGNORECASE)
     _QWEN_QUOTA_NOTE = "⚠️ квоты недоступны (non-interactive)"
     _QWEN_CHAT_FILE_LIMIT = 200
     _OPENCODE_QUOTA_NOTE = "⚠️ квоты недоступны: лимиты держит выбранный в opencode провайдер"
@@ -193,7 +200,7 @@ class CliLimitsService:
             return
 
     def _sample_sync(self, workdirs: Sequence[str]) -> None:
-        for sample in (self._sample_claude, self._sample_codex, self._sample_grok):
+        for sample in (self._sample_agy, self._sample_claude, self._sample_codex, self._sample_grok):
             try:
                 sample()
             except Exception:
@@ -210,6 +217,36 @@ class CliLimitsService:
                 self._sample_gemini(real)
             except Exception:
                 logger.exception("cli limits gemini sample failed workdir=%s", real)
+
+    def _sample_agy(self) -> None:
+        usage = self._read_agy_direct_usage()
+        if not isinstance(usage, dict):
+            return
+        groups = usage.get("groups")
+        if not isinstance(groups, list):
+            return
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            group_slug = self._agy_group_slug(str(group.get("name") or ""))
+            windows = group.get("windows")
+            if not group_slug or not isinstance(windows, list):
+                continue
+            for item in windows:
+                if not isinstance(item, dict) or item.get("remaining_percent") is None:
+                    continue
+                window_key = str(item.get("window") or "").strip().lower()
+                if not window_key:
+                    continue
+                try:
+                    remaining = max(0.0, min(100.0, float(item.get("remaining_percent"))))
+                except (TypeError, ValueError):
+                    continue
+                self._trends.record(
+                    f"agy:{group_slug}:{window_key}",
+                    100.0 - remaining,
+                    window_marker=self._reset_timestamp(item.get("reset_at")) or "",
+                )
 
     def _sample_claude(self) -> None:
         usage = self._read_claude_direct_usage()
@@ -395,6 +432,8 @@ class CliLimitsService:
         return "\n".join(lines).strip()
 
     async def _collect_cli_snapshot(self, cli_name: str, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
+        if cli_name == "agy":
+            return await asyncio.to_thread(self._collect_agy_snapshot, refs)
         if cli_name == "codex":
             return await asyncio.to_thread(self._collect_codex_snapshot, refs)
         if cli_name == "claude":
@@ -507,6 +546,297 @@ class CliLimitsService:
             if cli_name not in ordered:
                 ordered.append(cli_name)
         return ordered
+
+    def _collect_agy_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
+        del refs
+        usage = self._read_agy_direct_usage()
+        model = self._read_agy_active_model() or str((usage or {}).get("model") or "").strip()
+        quota_lines = self._format_agy_usage_lines(usage)
+        if not quota_lines:
+            return CliLimitsSnapshot(
+                cli_name="agy",
+                status="unavailable",
+                lines=("⚠️ квоты недоступны",),
+                subtitle=model,
+            )
+        return CliLimitsSnapshot(
+            cli_name="agy",
+            status="ok",
+            lines=tuple(quota_lines),
+            subtitle=model,
+        )
+
+    @staticmethod
+    def _read_agy_active_model() -> Optional[str]:
+        settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+        data = CliLimitsService._read_json_file(settings_path)
+        if not isinstance(data, dict):
+            return None
+        model = str(data.get("model") or "").strip()
+        return model or None
+
+    def _read_agy_direct_usage(self) -> Optional[dict[str, Any]]:
+        tmux_path = shutil.which("tmux")
+        agy_path = shutil.which("agy")
+        if not tmux_path or not agy_path:
+            return None
+        deadline = time.monotonic() + self._network_timeout_sec
+        temp_dir = tempfile.mkdtemp(prefix="cli-proxy-agy-usage-")
+        pane_pid: Optional[int] = None
+        try:
+            tmux_socket = str(Path(temp_dir) / "tmux.sock")
+            log_file = str(Path(temp_dir) / "cli.log")
+            probe_workdir = Path(temp_dir) / "workdir"
+            probe_workdir.mkdir()
+            tmux_prefix = [tmux_path, "-S", tmux_socket]
+            probe_env = os.environ.copy()
+            settings_payload = json.dumps(
+                {
+                    "altScreenMode": "never",
+                    "trustedWorkspaces": [str(probe_workdir)],
+                }
+            )
+
+            def run_tmux(*args: str) -> subprocess.CompletedProcess[str]:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Antigravity usage query timed out")
+                return subprocess.run(
+                    [*tmux_prefix, *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=max(0.1, remaining),
+                    env=probe_env,
+                )
+
+            try:
+                run_tmux(
+                    "new-session",
+                    "-d",
+                    "-x",
+                    "140",
+                    "-y",
+                    "80",
+                    "-s",
+                    "agy-usage",
+                    "-c",
+                    str(probe_workdir),
+                    agy_path,
+                    "--log-file",
+                    log_file,
+                    "--settings",
+                    settings_payload,
+                )
+                pane_pid = self._read_probe_pane_pid(tmux_prefix, "agy-usage:0.0", probe_env, label="Antigravity")
+                while time.monotonic() < deadline:
+                    pane_text = run_tmux("capture-pane", "-p", "-t", "agy-usage:0.0").stdout
+                    if "? for shortcuts" in pane_text:
+                        break
+                    time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+                else:
+                    raise TimeoutError("Antigravity interactive prompt did not become ready")
+
+                run_tmux("send-keys", "-l", "-t", "agy-usage:0.0", "--", "/usage")
+                run_tmux("send-keys", "-t", "agy-usage:0.0", "Enter")
+                last_usage: Optional[dict[str, Any]] = None
+                last_text = ""
+                while time.monotonic() < deadline:
+                    pane_text = run_tmux("capture-pane", "-p", "-t", "agy-usage:0.0").stdout
+                    usage = self._parse_agy_direct_usage_output(pane_text)
+                    if usage is not None:
+                        if "esc Close" in pane_text or (last_usage is not None and pane_text == last_text):
+                            return usage
+                        last_usage = usage
+                        last_text = pane_text
+                    time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+                if last_usage is not None:
+                    return last_usage
+                raise TimeoutError("Antigravity usage output did not become ready")
+            except Exception:
+                logger.warning("failed to query Antigravity usage through isolated TUI", exc_info=True)
+                return None
+            finally:
+                self._stop_probe(tmux_prefix, pane_pid, log_file, label="Antigravity")
+        finally:
+            self._remove_probe_dir(Path(temp_dir))
+
+    @classmethod
+    def _parse_agy_direct_usage_output(
+        cls,
+        text: str,
+        *,
+        now: Optional[float] = None,
+    ) -> Optional[dict[str, Any]]:
+        raw = str(text or "")
+        marker_idx = raw.find("Models & Quota")
+        body = raw[marker_idx:] if marker_idx >= 0 else raw
+        reference_now = time.time() if now is None else float(now)
+
+        groups: list[dict[str, Any]] = []
+        current_group: Optional[dict[str, Any]] = None
+        current_window: Optional[dict[str, Any]] = None
+        last_non_empty = ""
+
+        for raw_line in body.splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("Models within this group:"):
+                group_name = last_non_empty or "Models"
+                if current_group is None or current_group["name"] != group_name:
+                    current_group = {"name": group_name, "windows": []}
+                    groups.append(current_group)
+                current_window = None
+                last_non_empty = stripped
+                continue
+
+            window_match = cls._AGY_WINDOW_RE.match(stripped)
+            if window_match is not None:
+                if current_group is None:
+                    current_group = {"name": "Models", "windows": []}
+                    groups.append(current_group)
+                window_key = cls._normalize_agy_window_key(window_match.group(1))
+                current_window = {
+                    "window": window_key,
+                    "remaining_percent": None,
+                    "reset_at": None,
+                }
+                current_group["windows"].append(current_window)
+                last_non_empty = stripped
+                continue
+
+            if current_window is not None:
+                if current_window["remaining_percent"] is None:
+                    pct_match = cls._AGY_PERCENT_RE.search(stripped)
+                    if pct_match is not None:
+                        current_window["remaining_percent"] = max(0.0, min(100.0, float(pct_match.group(1))))
+                        last_non_empty = stripped
+                        continue
+                refresh_match = cls._AGY_REFRESH_RE.search(stripped)
+                if refresh_match is not None:
+                    duration_sec = cls._parse_agy_refresh_duration(refresh_match.group(1))
+                    if duration_sec is not None:
+                        current_window["reset_at"] = reference_now + duration_sec
+                    last_non_empty = stripped
+                    continue
+
+            if stripped.endswith("MODELS") and stripped == stripped.upper():
+                current_group = {"name": stripped, "windows": []}
+                groups.append(current_group)
+                current_window = None
+            last_non_empty = stripped
+
+        cleaned_groups: list[dict[str, Any]] = []
+        for group in groups:
+            valid_windows = [
+                window
+                for window in group["windows"]
+                if window.get("remaining_percent") is not None
+            ]
+            if valid_windows:
+                cleaned_groups.append({"name": group["name"], "windows": valid_windows})
+        if not cleaned_groups:
+            return None
+        return {"groups": cleaned_groups}
+
+    @staticmethod
+    def _normalize_agy_window_key(raw: str) -> str:
+        lowered = re.sub(r"[\s-]+", "_", str(raw or "").strip().lower())
+        if lowered in ("five_hour", "5_hour"):
+            return "five_hour"
+        if lowered in ("weekly", "daily", "monthly"):
+            return lowered
+        return lowered or "window"
+
+    @classmethod
+    def _parse_agy_refresh_duration(cls, text: str) -> Optional[int]:
+        raw = str(text or "").strip().lower()
+        if not raw:
+            return None
+        total = 0
+        for amount_str, unit in cls._AGY_DURATION_PART_RE.findall(raw):
+            amount = int(amount_str)
+            if unit.lower() == "d":
+                total += amount * 86400
+            elif unit.lower() == "h":
+                total += amount * 3600
+            elif unit.lower() == "m":
+                total += amount * 60
+            elif unit.lower() == "s":
+                total += amount
+        if total > 0:
+            return total
+        if "< 1m" in raw or "less than a minute" in raw:
+            return 60
+        return None
+
+    @staticmethod
+    def _agy_group_slug(name: str) -> str:
+        cleaned = re.sub(r"\bmodels\b", "", str(name or ""), flags=re.IGNORECASE).strip()
+        slug = re.sub(r"[^a-z0-9]+", "_", cleaned.lower()).strip("_")
+        return slug or "default"
+
+    @staticmethod
+    def _agy_group_title(name: str) -> str:
+        upper = str(name or "").strip().upper()
+        if upper == "GEMINI MODELS":
+            return "Gemini"
+        if upper == "CLAUDE AND GPT MODELS":
+            return "Claude & GPT"
+        cleaned = re.sub(r"\s+MODELS$", "", str(name or "").strip(), flags=re.IGNORECASE).strip()
+        return cleaned.title() if cleaned.isupper() else (cleaned or "Models")
+
+    def _format_agy_usage_lines(self, usage: Optional[dict[str, Any]]) -> list[str]:
+        if not isinstance(usage, dict):
+            return []
+        groups = usage.get("groups")
+        if not isinstance(groups, list):
+            return []
+        window_order = {"five_hour": 0, "daily": 1, "weekly": 2, "monthly": 3}
+        window_labels = {"five_hour": "5ч", "daily": "1д", "weekly": "7д", "monthly": "30д"}
+        lines: list[str] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            raw_name = str(group.get("name") or "").strip()
+            group_slug = self._agy_group_slug(raw_name)
+            windows = group.get("windows")
+            if not isinstance(windows, list):
+                continue
+            sorted_windows = sorted(
+                (item for item in windows if isinstance(item, dict)),
+                key=lambda item: window_order.get(str(item.get("window") or "").lower(), 99),
+            )
+            group_lines: list[str] = []
+            for item in sorted_windows:
+                if item.get("remaining_percent") is None:
+                    continue
+                try:
+                    remaining = max(0.0, min(100.0, float(item.get("remaining_percent"))))
+                except (TypeError, ValueError):
+                    continue
+                window_key = str(item.get("window") or "").strip().lower()
+                label = window_labels.get(window_key, window_key or "limit")
+                indicator = self._status_indicator(remaining)
+                bar = self._progress_bar(remaining)
+                pct = self._format_percent(remaining)
+                group_lines.append(
+                    self._finish_quota_line(
+                        f"{indicator} {label} {bar} {pct}",
+                        key=f"agy:{group_slug}:{window_key}",
+                        used=100.0 - remaining,
+                        reset=item.get("reset_at"),
+                        long=window_key in ("weekly", "monthly"),
+                    )
+                )
+            if not group_lines:
+                continue
+            if lines:
+                lines.append("")
+            lines.append(self._agy_group_title(raw_name))
+            lines.extend(group_lines)
+        return lines
 
     def _collect_codex_snapshot(self, refs: Sequence[CliProjectRef]) -> CliLimitsSnapshot:
         direct_usage = self._read_codex_rpc_usage() or self._read_codex_direct_usage()
@@ -1072,7 +1402,7 @@ class CliLimitsService:
                     # и приглашения ❯, с которого читается /usage show, не появляется.
                     "--trust",
                 )
-                pane_pid = self._read_grok_pane_pid(tmux_prefix, probe_env)
+                pane_pid = self._read_probe_pane_pid(tmux_prefix, "grok-usage:0.0", probe_env, label="Grok")
                 while time.monotonic() < deadline:
                     pane_text = run_tmux("capture-pane", "-p", "-t", "grok-usage:0.0").stdout
                     if "❯" in pane_text:
@@ -1094,16 +1424,22 @@ class CliLimitsService:
                 logger.warning("failed to query Grok usage through isolated TUI", exc_info=True)
                 return None
             finally:
-                self._stop_grok_probe(tmux_prefix, pane_pid, grok_socket)
+                self._stop_probe(tmux_prefix, pane_pid, grok_socket, label="Grok")
         finally:
             self._remove_probe_dir(Path(temp_dir))
 
     @staticmethod
-    def _read_grok_pane_pid(tmux_prefix: Sequence[str], env: dict[str, str]) -> Optional[int]:
-        """Возвращает pid процесса grok в панели: по нему проба гасит его вместе с потомками."""
+    def _read_probe_pane_pid(
+        tmux_prefix: Sequence[str],
+        target: str,
+        env: dict[str, str],
+        *,
+        label: str = "CLI",
+    ) -> Optional[int]:
+        """Возвращает pid процесса CLI в панели: по нему проба гасит его вместе с потомками."""
         try:
             result = subprocess.run(
-                [*tmux_prefix, "list-panes", "-t", "grok-usage:0.0", "-F", "#{pane_pid}"],
+                [*tmux_prefix, "list-panes", "-t", target, "-F", "#{pane_pid}"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -1112,7 +1448,7 @@ class CliLimitsService:
             )
             return int(str(result.stdout or "").strip().splitlines()[0])
         except Exception:
-            logger.warning("failed to read Grok usage probe pane pid", exc_info=True)
+            logger.warning("failed to read %s usage probe pane pid", label, exc_info=True)
             return None
 
     @staticmethod
@@ -1125,8 +1461,15 @@ class CliLimitsService:
             return False
 
     @classmethod
-    def _stop_grok_probe(cls, tmux_prefix: Sequence[str], pane_pid: Optional[int], probe_marker: str) -> None:
-        """Гасит tmux и сам grok: без этого grok переживает kill-server и продолжает писать в temp-каталог."""
+    def _stop_probe(
+        cls,
+        tmux_prefix: Sequence[str],
+        pane_pid: Optional[int],
+        probe_marker: str,
+        *,
+        label: str = "CLI",
+    ) -> None:
+        """Гасит tmux и сам процесс CLI: без этого процесс переживает kill-server и пишет в temp-каталог."""
         try:
             subprocess.run(
                 [*tmux_prefix, "kill-server"],
@@ -1136,19 +1479,19 @@ class CliLimitsService:
                 timeout=1.0,
             )
         except Exception:
-            logger.warning("failed to stop isolated Grok usage tmux server", exc_info=True)
+            logger.warning("failed to stop isolated %s usage tmux server", label, exc_info=True)
         if pane_pid is None or not cls._probe_process_matches(pane_pid, probe_marker):
             return
         try:
             group_pid = os.getpgid(pane_pid)
             if group_pid in (0, 1) or group_pid == os.getpgrp():
-                logger.warning("Grok usage probe shares process group with the bot pid=%s", pane_pid)
+                logger.warning("%s usage probe shares process group with the bot pid=%s", label, pane_pid)
                 return
             os.killpg(group_pid, signal.SIGKILL)
         except ProcessLookupError:
             return
         except Exception:
-            logger.warning("failed to kill Grok usage probe process pid=%s", pane_pid, exc_info=True)
+            logger.warning("failed to kill %s usage probe process pid=%s", label, pane_pid, exc_info=True)
             return
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
@@ -1159,7 +1502,7 @@ class CliLimitsService:
             except Exception:
                 return
             time.sleep(0.05)
-        logger.warning("Grok usage probe process is still alive pid=%s", pane_pid)
+        logger.warning("%s usage probe process is still alive pid=%s", label, pane_pid)
 
     @staticmethod
     def _remove_probe_dir(path: Path) -> None:
@@ -2293,6 +2636,7 @@ class CliLimitsService:
             return float(default)
 
     _CLI_ICONS: dict[str, str] = {
+        "agy": "🚀",
         "codex": "📦",
         "claude": "🤖",
         "gemini": "♊",

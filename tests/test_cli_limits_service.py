@@ -1128,6 +1128,21 @@ def test_sample_sync_records_each_cli_and_skips_a_failed_one(
     reset = clock["now"] + 5 * 3600.0
     monkeypatch.setattr(
         service,
+        "_read_agy_direct_usage",
+        lambda: {
+            "groups": [
+                {
+                    "name": "GEMINI MODELS",
+                    "windows": [
+                        {"window": "five_hour", "remaining_percent": 48.86, "reset_at": reset},
+                        {"window": "weekly", "remaining_percent": 86.89, "reset_at": reset + 86400},
+                    ],
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        service,
         "_read_claude_direct_usage",
         lambda: (_ for _ in ()).throw(RuntimeError("claude down")),
     )
@@ -1167,8 +1182,213 @@ def test_sample_sync_records_each_cli_and_skips_a_failed_one(
 
     service._sample_sync(["/tmp/one", "/tmp/one"])
 
+    assert service._trends.load_points("agy:gemini:five_hour", reset, clock["now"]) == [[clock["now"], pytest.approx(51.14)]]
+    assert service._trends.load_points("agy:gemini:weekly", reset + 86400, clock["now"]) == [[clock["now"], pytest.approx(13.11)]]
     assert service._trends.load_points("claude:five_hour", reset, clock["now"]) == []
     assert service._trends.load_points("codex:primary", int(reset), clock["now"]) == [[clock["now"], 33.0]]
     assert service._trends.load_points("grok:weekly", "", clock["now"]) == [[clock["now"], 4.0]]
     assert service._trends.load_points("gemini:proj:gemini-2.5-pro", "", clock["now"]) == [[clock["now"], 50.0]]
     assert seen == [os.path.realpath("/tmp/one")]
+
+
+def test_parse_agy_direct_usage_output_parses_groups_and_windows() -> None:
+    sample = """
+└ Models & Quota
+  Account: user@example.com
+GEMINI MODELS
+  Models within this group: Gemini 4 Neon, Gemini 4 Carbon
+  Weekly Limit Remaining
+    [███████████████████████████████████████████░░░░░░░] 86.89%
+    Refreshes in 6d 19h 49m
+  Five Hour Limit Remaining
+    [████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░] 48.86%
+    Refreshes in 49m
+CLAUDE AND GPT MODELS
+  Models within this group: Claude Opus 5.5, GPT-OSS 120B
+  Weekly Limit Remaining
+    [██████████████████████████████████████████████████] 100.00%
+    Refreshes in 6d 23h 12m
+  Five Hour Limit Remaining
+    [██████████████████████████████████████████████████] 100.00%
+    Refreshes in < 1m
+  ↑/↓ Scroll · esc Close
+"""
+    now = 1_700_000_000.0
+    parsed = CliLimitsService._parse_agy_direct_usage_output(sample, now=now)
+
+    assert parsed == {
+        "groups": [
+            {
+                "name": "GEMINI MODELS",
+                "windows": [
+                    {
+                        "window": "weekly",
+                        "remaining_percent": 86.89,
+                        "reset_at": now + 6 * 86400 + 19 * 3600 + 49 * 60,
+                    },
+                    {
+                        "window": "five_hour",
+                        "remaining_percent": 48.86,
+                        "reset_at": now + 49 * 60,
+                    },
+                ],
+            },
+            {
+                "name": "CLAUDE AND GPT MODELS",
+                "windows": [
+                    {
+                        "window": "weekly",
+                        "remaining_percent": 100.0,
+                        "reset_at": now + 6 * 86400 + 23 * 3600 + 12 * 60,
+                    },
+                    {
+                        "window": "five_hour",
+                        "remaining_percent": 100.0,
+                        "reset_at": now + 60,
+                    },
+                ],
+            },
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_describe_for_sessions_formats_agy_quotas(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir = tmp_path / "repo-agy"
+    project_dir.mkdir()
+    service = CliLimitsService()
+    now = 1_700_000_000.0
+    monkeypatch.setattr(service, "_read_agy_active_model", lambda: "Gemini 4 Neon (Medium)")
+    monkeypatch.setattr(
+        service,
+        "_read_agy_direct_usage",
+        lambda: {
+            "groups": [
+                {
+                    "name": "GEMINI MODELS",
+                    "windows": [
+                        {"window": "weekly", "remaining_percent": 86.89, "reset_at": now + 86400},
+                        {"window": "five_hour", "remaining_percent": 48.86, "reset_at": now + 3000},
+                    ],
+                },
+                {
+                    "name": "CLAUDE AND GPT MODELS",
+                    "windows": [
+                        {"window": "weekly", "remaining_percent": 100.0, "reset_at": now + 86400},
+                        {"window": "five_hour", "remaining_percent": 100.0, "reset_at": now + 3600},
+                    ],
+                },
+            ]
+        },
+    )
+
+    text = await service.describe_for_sessions([_session("agy", project_dir)], available_clis=["agy"])
+
+    assert "agy" in CliLimitsService.SUPPORTED_CLI_NAMES
+    assert "🟢 agy" in text
+    assert "🚀 agy — Gemini 4 Neon (Medium)" in text
+    assert "Gemini" in text
+    assert "Claude & GPT" in text
+    assert "🟡 5ч" in text
+    assert "48.9%" in text
+    assert "🟢 7д" in text
+    assert "86.9%" in text
+    assert text.index("5ч") < text.index("7д")
+
+
+@pytest.mark.asyncio
+async def test_collect_agy_snapshot_returns_unavailable_when_usage_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService()
+    monkeypatch.setattr(service, "_read_agy_direct_usage", lambda: None)
+    monkeypatch.setattr(service, "_read_agy_active_model", lambda: "Gemini 4 Neon (Medium)")
+
+    snapshot = await service._collect_cli_snapshot("agy", [])
+
+    assert snapshot.cli_name == "agy"
+    assert snapshot.status == "unavailable"
+    assert snapshot.subtitle == "Gemini 4 Neon (Medium)"
+    assert snapshot.lines == ("⚠️ квоты недоступны",)
+
+
+def test_read_agy_direct_usage_uses_isolated_tmux_and_cleans_up(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService(network_timeout_sec=2.0)
+    commands: list[list[str]] = []
+    capture_count = 0
+
+    monkeypatch.setattr("app.services.cli_limits_service.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr(
+        "app.services.cli_limits_service.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+
+    def fake_run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        nonlocal capture_count
+        commands.append(list(argv))
+        stdout = ""
+        if "list-panes" in argv:
+            stdout = "5151\n"
+        elif "capture-pane" in argv:
+            capture_count += 1
+            stdout = (
+                "? for shortcuts\n"
+                if capture_count == 1
+                else (
+                    "└ Models & Quota\n"
+                    "GEMINI MODELS\n"
+                    "  Models within this group: Gemini 4 Neon\n"
+                    "  Five Hour Limit Remaining\n"
+                    "    [██████████] 75.50%\n"
+                    "    Refreshes in 2h 10m\n"
+                    "  esc Close\n"
+                )
+            )
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr("app.services.cli_limits_service.subprocess.run", fake_run)
+    sent_signals = _patch_grok_probe_process(monkeypatch)
+
+    usage = service._read_agy_direct_usage()
+
+    assert usage is not None
+    assert len(usage["groups"]) == 1
+    assert usage["groups"][0]["windows"][0]["remaining_percent"] == 75.5
+    new_session_cmd = next(cmd for cmd in commands if "new-session" in cmd)
+    assert "--log-file" in new_session_cmd
+    settings_idx = new_session_cmd.index("--settings") + 1
+    settings = json.loads(new_session_cmd[settings_idx])
+    assert settings["altScreenMode"] == "never"
+    assert len(settings["trustedWorkspaces"]) == 1
+    assert any("/usage" in cmd for cmd in commands)
+    assert (5151, signal.SIGKILL) in sent_signals
+    assert list(tmp_path.glob("cli-proxy-agy-usage-*")) == []
+
+
+def test_read_agy_direct_usage_removes_temp_dir_when_probe_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CliLimitsService(network_timeout_sec=2.0)
+    monkeypatch.setattr("app.services.cli_limits_service.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr(
+        "app.services.cli_limits_service.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+
+    def fake_run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        if "new-session" in argv:
+            raise TimeoutError("tmux hangs")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.services.cli_limits_service.subprocess.run", fake_run)
+    _patch_grok_probe_process(monkeypatch)
+
+    assert service._read_agy_direct_usage() is None
+    assert list(tmp_path.glob("cli-proxy-agy-usage-*")) == []
