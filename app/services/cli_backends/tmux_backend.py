@@ -58,6 +58,8 @@ _AGY_TITLE_COMMAND = shlex.join([
 ])
 _AGY_RESUME_MISSING_RE = re.compile(rf'warning: conversation "({AGY_CONVERSATION_ID_PATTERN})" not found')
 _AGY_TRUST_PROMPT = "Do you trust the contents of this project?"
+_AGY_PANE_SUBAGENT_RE = re.compile(r"^\s*●\s*Agent\(([^)\r\n]+)\)")
+_AGY_PANE_SUBAGENT_COUNT_RE = re.compile(r"\b(\d+)\s+subagent(?:\(s\)|s)?\b", re.IGNORECASE)
 _RESUME_CONTROL_FLAGS_BY_CLI: dict[str, set[str]] = {
     "claude": {"--resume", "-r", "--continue", "-c"},
     "gemini": {"--resume", "-r"},
@@ -1130,6 +1132,42 @@ class TmuxExecutionBackend:
             if 0 < index < len(lines) - 1
         )
 
+    @staticmethod
+    def _parse_agy_pane_subagents(pane: str) -> tuple[int, tuple[str, ...]]:
+        """Читает список и счётчик живых сабагентов из нижней панели Antigravity CLI."""
+
+        text = normalize_terminal_text(pane)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return (0, ())
+        prompt_index = -1
+        for index in range(len(lines) - 2, 0, -1):
+            if lines[index] == ">" and lines[index - 1].startswith("──") and lines[index + 1].startswith("──"):
+                prompt_index = index
+                break
+        if prompt_index < 0:
+            return (0, ())
+        footer = lines[prompt_index + 2:]
+        labels: list[str] = []
+        status_count = 0
+        for line in footer:
+            agent_match = _AGY_PANE_SUBAGENT_RE.match(line)
+            if agent_match is not None:
+                raw_label = agent_match.group(1).strip()
+                if ": " in raw_label:
+                    raw_label = raw_label.split(": ", 1)[1].strip() or raw_label
+                if raw_label:
+                    labels.append(raw_label)
+                continue
+            count_match = _AGY_PANE_SUBAGENT_COUNT_RE.search(line)
+            if count_match is not None:
+                try:
+                    status_count = max(status_count, int(count_match.group(1)))
+                except ValueError:
+                    pass
+        count = max(status_count, len(labels))
+        return (count, tuple(labels))
+
     @classmethod
     def _is_agy_folder_trust_prompt(cls, pane: str) -> bool:
         """Живой экран Antigravity CLI «Yes, I trust this folder». Цитата в ответе — не он.
@@ -2021,6 +2059,12 @@ class TmuxExecutionBackend:
                         # Живые фоновые агенты этот конец откладывают.
                         complete = True
                         completion_source = "transcript"
+
+                if agy and live_pane is not None:
+                    agy_subagent_count, agy_subagent_labels = self._parse_agy_pane_subagents(live_pane)
+                    session._assistant_preview_subagents = (agy_subagent_count, agy_subagent_labels)
+                    if agy_subagent_count > 0:
+                        last_real_activity = time.time()
 
                 last_real_activity = max(last_real_activity, self._last_real_activity_at(session))
                 if last_read_at - last_real_activity >= _MONITOR_INACTIVITY_SEC:

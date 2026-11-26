@@ -492,6 +492,97 @@ async def test_tmux_backend_confirms_agy_folder_trust_prompt(tmp_path) -> None:
     assert driver.sent_key_sequences == [(paths["pane_target"], ("Enter",))]
 
 
+def test_tmux_backend_parses_agy_pane_subagents() -> None:
+    pane = (
+        "  ● Agent(self: Quoted Above Input) · Gemini 4 Neon  old text · 1m\n"
+        "────\n"
+        ">\n"
+        "────\n"
+        "  ● Agent(self: UI Server & Web Reviewer) · Gemini 4 Neon  Running command · 4m49s\n"
+        "  ● Agent(research: Greetings Bot Reviewer) · Gemini 4 Neon  Reading file · 4m50s\n"
+        "────\n"
+        "? for shortcuts                                         Gemini 4 Neon · medium · 2 subagent(s)\n"
+    )
+    assert TmuxExecutionBackend._parse_agy_pane_subagents(pane) == (
+        2,
+        ("UI Server & Web Reviewer", "Greetings Bot Reviewer"),
+    )
+    collapsed = "────\n>\n────\n? for shortcuts   Gemini 4 Neon · medium · 3 subagent(s)\n"
+    assert TmuxExecutionBackend._parse_agy_pane_subagents(collapsed) == (3, ())
+    assert TmuxExecutionBackend._parse_agy_pane_subagents(AGY_READY_PANE) == (0, ())
+
+
+@pytest.mark.asyncio
+async def test_agy_tmux_updates_preview_subagents_from_live_pane(tmp_path, _isolated_home) -> None:
+    conversation = "1e0abde0-33ea-4ccf-a275-14653da7b6c5"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    pane_with_subagents = (
+        "────\n>\n────\n"
+        "  ● Agent(self: UI Server & Web Reviewer) · Gemini 4 Neon  Running command · 1m00s\n"
+        "  ● Agent(self: Greetings Bot Reviewer) · Gemini 4 Neon  Reading file · 1m01s\n"
+        "────\n"
+        "? for shortcuts                                         Gemini 4 Neon · medium · 2 subagent(s)\n"
+    )
+    seen_subagents: list[tuple[int, tuple[str, ...]]] = []
+    submitted = asyncio.Event()
+    done_event = asyncio.Event()
+
+    class AgySubagentsDriver(FakeTmuxDriver):
+        async def capture_pane(self, target: str) -> str:
+            if submitted.is_set() and not done_event.is_set():
+                return pane_with_subagents
+            return await super().capture_pane(target)
+
+        async def send_enter(self, pane_target: str) -> None:
+            await super().send_enter(pane_target)
+            with open(self.log_path, "a", encoding="utf-8") as handle:
+                handle.write("\x1b]7501;state=working:app=antigravity\x07")
+                handle.write(f"\x1b]2;cli-proxy-agy {conversation}\x07")
+            submitted.set()
+
+    driver = AgySubagentsDriver()
+    driver.autowrite_transcript = False
+    driver.capture_outputs = [AGY_READY_PANE]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=5, answer_idle_sec=0)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+
+    async def watcher() -> None:
+        await asyncio.wait_for(submitted.wait(), timeout=2)
+        while True:
+            current = getattr(session, "_assistant_preview_subagents", (0, ()))
+            if current[0] > 0:
+                seen_subagents.append(current)
+                done_event.set()
+                with transcript.open("a", encoding="utf-8") as handle:
+                    for record in (
+                        {"type": "USER_INPUT", "source": "USER_EXPLICIT", "content": "review with subagents"},
+                        {"type": "PLANNER_RESPONSE", "source": "MODEL", "content": "Готово"},
+                    ):
+                        record.update(created_at=_iso_utc(int(time.time())), status="DONE")
+                        handle.write(json.dumps(record) + "\n")
+                with open(driver.log_path, "a", encoding="utf-8") as handle:
+                    handle.write("\x1b]7501;state=done:app=antigravity\x07")
+                return
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(watcher())
+    try:
+        result = await backend.run(session, "review with subagents")
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    assert seen_subagents == [(2, ("UI Server & Web Reviewer", "Greetings Bot Reviewer"))]
+    assert result.text == "Готово"
+
+
 async def _wait_for_preview(session, timeout: float = 5.0) -> str:
     """Ждёт текст, который монитор отдаёт в превью, не дожидаясь конца хода."""
 

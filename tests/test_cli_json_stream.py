@@ -503,6 +503,27 @@ def test_grok_json_stream_adapter_ignores_available_commands_handshake() -> None
     assert raw_cli_stream_is_protocol_only("hello\n" + catalog) is False
 
 
+def test_grok_json_stream_adapter_tracks_running_subagents() -> None:
+    adapter = GrokJsonStreamAdapter()
+    adapter.feed_line(
+        '{"type":"tool_call","toolCallId":"call-1","title":"spawn_subagent","kind":"task",'
+        '"status":"pending","toolName":"spawn_subagent","rawInput":{"description":"Review diff"}}'
+    )
+    assert adapter.subagent_labels == ("Review diff",)
+    adapter.feed_line('{"type":"tool_call_update","toolCallId":"call-1","status":null}')
+    assert adapter.subagent_labels == ("Review diff",)
+    adapter.feed_line('{"type":"tool_call_update","toolCallId":"call-1","status":"completed"}')
+    assert adapter.subagent_labels == ()
+
+    adapter.feed_line(
+        '{"type":"tool_call","toolCallId":"call-2","title":"spawn_subagent","kind":"task",'
+        '"status":"pending","toolName":"spawn_subagent","rawInput":{"subagent_type":"explorer"}}'
+    )
+    assert adapter.subagent_labels == ("explorer",)
+    adapter.feed_line('{"type":"end","stopReason":"end_turn","sessionId":"s-1","requestId":"r-1"}')
+    assert adapter.subagent_labels == ()
+
+
 def test_kimi_json_stream_adapter_normalizes_chat_messages() -> None:
     adapter = KimiJsonStreamAdapter()
     events = []

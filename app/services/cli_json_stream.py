@@ -971,6 +971,11 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
         self._completed = False
         self._saw_available_commands = False
         self._end_request_id = ""
+        self._subagents: dict[str, str] = {}
+
+    @property
+    def subagent_labels(self) -> tuple[str, ...]:
+        return tuple(self._subagents.values())
 
     @property
     def session_id(self) -> Optional[str]:
@@ -1028,6 +1033,7 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
             return []
 
         if event_type == "end":
+            self._subagents.clear()
             self._end_request_id = str(
                 payload.get("requestId") or payload.get("request_id") or ""
             ).strip()
@@ -1061,6 +1067,7 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
             return events
 
         if event_type in {"error", "failed"}:
+            self._subagents.clear()
             return [
                 CliJsonStreamEvent(
                     kind="failed",
@@ -1076,6 +1083,31 @@ class GrokJsonStreamAdapter(BaseCliJsonStreamAdapter):
         # expose chain-of-thought-like data to user-visible activity ticks.
         if event_type in {"thought", "thinking"}:
             return []
+
+        if event_type == "tool_call":
+            call_id = str(payload.get("toolCallId") or payload.get("tool_call_id") or "").strip()
+            tool_name = str(payload.get("toolName") or payload.get("title") or "").strip().lower()
+            kind = str(payload.get("kind") or "").strip().lower()
+            status = str(payload.get("status") or "").strip().lower()
+            if (
+                call_id
+                and (tool_name == "spawn_subagent" or kind == "task")
+                and status not in {"completed", "failed", "error", "cancelled"}
+            ):
+                raw_input = payload.get("rawInput") if isinstance(payload.get("rawInput"), dict) else {}
+                label = str(
+                    raw_input.get("description")
+                    or raw_input.get("subagent_type")
+                    or raw_input.get("role")
+                    or payload.get("title")
+                    or call_id
+                ).strip()
+                self._subagents[call_id] = label or call_id
+        elif event_type == "tool_call_update":
+            call_id = str(payload.get("toolCallId") or payload.get("tool_call_id") or "").strip()
+            status = str(payload.get("status") or "").strip().lower()
+            if call_id and status in {"completed", "failed", "error", "cancelled"}:
+                self._subagents.pop(call_id, None)
 
         return [
             CliJsonStreamEvent(

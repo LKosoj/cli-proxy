@@ -94,6 +94,8 @@ Instruction node for `app` area.
 
 ## Last reviewed
 
+- 2026-11-26 — Добавлен учёт работающих сабагентов `grok` в `headless` (`GrokJsonStreamAdapter.subagent_labels`).
+- 2026-11-26 — Превью в `tmux` получает работающих сабагентов `agy` из нижней панели живого экрана (`_parse_agy_pane_subagents`).
 - 2026-11-26 — Добавлено автоподтверждение экрана доверия новому каталогу для `agy` в `TmuxExecutionBackend`.
 - 2026-11-26 — Добавлен сбор квот и получасовой сэмплинг для Antigravity CLI (`agy`) в `CliLimitsService`.
 - 2026-11-25 — Подтверждённый журналом конец хода освобождает превью при надписи `shells still running`.
