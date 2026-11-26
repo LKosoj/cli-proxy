@@ -581,6 +581,179 @@ async def test_agy_tmux_updates_preview_subagents_from_live_pane(tmp_path, _isol
 
     assert seen_subagents == [(2, ("UI Server & Web Reviewer", "Greetings Bot Reviewer"))]
     assert result.text == "Готово"
+    assert session._assistant_preview_subagents == (0, ())
+
+
+@pytest.mark.asyncio
+async def test_agy_build_observe_request_skips_idle_panel_on_startup(tmp_path) -> None:
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [AGY_READY_PANE]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    backend._write_last_request(paths, {"request_id": "req-1", "delivery_state": "delivered", "prompt": "hi"})
+
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=working:app=antigravity\x07\x1b]7501;state=done:app=antigravity\x07")
+    assert await backend.build_observe_request(session, require_recent_activity=True) is None
+
+    with open(paths["pane_log"], "a", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=working:app=antigravity\x07")
+    observed = await backend.build_observe_request(session, require_recent_activity=True)
+    assert observed is not None
+    assert observed.observe is True
+
+
+@pytest.mark.asyncio
+async def test_agy_wait_for_output_ignores_service_transcript_records(tmp_path, _isolated_home, monkeypatch) -> None:
+    conversation = "1e0abde0-33ea-4ccf-a275-14653da7b6c5"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("", encoding="utf-8")
+
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [AGY_READY_PANE]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    session.resume_token = conversation
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    now = time.time()
+    backend._write_last_request(
+        paths,
+        {
+            "request_id": "req-agy-watch",
+            "delivery_state": "delivered",
+            "started_at": now,
+            "transcript_provider": "agy",
+            "transcript_path": str(transcript),
+            "transcript_offset": 0,
+            "transcript_session_id": conversation,
+        },
+    )
+
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr("app.services.cli_backends.tmux_backend.asyncio.sleep", lambda _s: real_sleep(0.01))
+
+    watch_task = asyncio.create_task(backend.wait_for_output(session))
+    await real_sleep(0.03)
+    with transcript.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": "Reminder"}) + "\n")
+        handle.write(json.dumps({"type": "GENERIC", "source": "MODEL", "content": "meta"}) + "\n")
+    await real_sleep(0.05)
+    assert not watch_task.done()
+
+    with transcript.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps({
+                "type": "PLANNER_RESPONSE", "source": "MODEL", "status": "DONE",
+                "content": "Новый ответ", "created_at": _iso_utc(int(time.time())),
+            }) + "\n"
+        )
+    woke = await asyncio.wait_for(watch_task, timeout=1)
+    assert woke is not None
+    assert woke.observe is True
+
+
+@pytest.mark.asyncio
+async def test_agy_observe_completes_on_idle_after_reply_without_working_marker(tmp_path, _isolated_home) -> None:
+    conversation = "1e0abde0-33ea-4ccf-a275-14653da7b6c5"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(
+        json.dumps({
+            "type": "PLANNER_RESPONSE", "source": "MODEL", "status": "DONE",
+            "content": "Финальный ответ", "created_at": _iso_utc(int(time.time())),
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [AGY_READY_PANE]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=5, answer_idle_sec=0)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    session.resume_token = conversation
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=idle:app=antigravity\x07")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="obs-idle",
+        started_at=time.time() - 1,
+        offset=0,
+        prompt="hi",
+        dest={"kind": "telegram", "chat_id": 42},
+        transcript_locator=TranscriptLocator(
+            provider="agy",
+            path=str(transcript),
+            start_offset=0,
+            session_id=conversation,
+        ),
+        observe=True,
+    )
+    result = await backend.recover(session, request)
+    assert result.text == "Финальный ответ"
+    assert result.diagnostics["completion_source"] == "agy-transcript"
+
+
+@pytest.mark.asyncio
+async def test_agy_observe_exits_quietly_on_done_without_reply(tmp_path, _isolated_home) -> None:
+    conversation = "1e0abde0-33ea-4ccf-a275-14653da7b6c5"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("", encoding="utf-8")
+
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [AGY_READY_PANE]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=5, answer_idle_sec=0)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    session.resume_token = conversation
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=done:app=antigravity\x07")
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="obs-empty",
+        started_at=time.time(),
+        offset=0,
+        prompt="hi",
+        dest={"kind": "telegram", "chat_id": 42},
+        transcript_locator=TranscriptLocator(
+            provider="agy",
+            path=str(transcript),
+            start_offset=0,
+            session_id=conversation,
+        ),
+        observe=True,
+    )
+    result = await backend.recover(session, request)
+    assert result.text == ""
+    assert result.diagnostics["completion_source"] == "agy-observe-idle"
+    assert not result.diagnostics.get("terminal_error")
 
 
 async def _wait_for_preview(session, timeout: float = 5.0) -> str:

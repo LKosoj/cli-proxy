@@ -204,6 +204,7 @@ class CliTranscriptReader:
         self.complete = False
         self.recognized = False
         self.has_claude_turn_activity = False
+        self.has_agy_turn_activity = False
         self.activity_at: Optional[float] = None
         self._grok_stream_key = ""
         self._grok_stream_chunks: list[str] = []
@@ -878,14 +879,17 @@ class CliTranscriptReader:
             record_type = record.get("type")
             if record_type == "USER_INPUT":
                 self.recognized = True
+                self.has_agy_turn_activity = True
                 self.activity_at = _event_timestamp(record.get("created_at"))
                 self.latest_assistant_text = ""
-            elif record.get("source") == "MODEL" and record_type == "PLANNER_RESPONSE" and record.get("status") == "DONE":
+            elif record.get("source") == "MODEL" and record_type == "PLANNER_RESPONSE":
                 self.recognized = True
+                self.has_agy_turn_activity = True
                 self.activity_at = _event_timestamp(record.get("created_at"))
-                text = record.get("content")
-                if isinstance(text, str) and text.strip():
-                    self.latest_assistant_text = text.strip()
+                if record.get("status") == "DONE":
+                    text = record.get("content")
+                    if isinstance(text, str) and text.strip():
+                        self.latest_assistant_text = text.strip()
 
     def _read_gemini_snapshot(self) -> None:
         """Перечитывает файл сессии gemini целиком.

@@ -525,6 +525,28 @@ def _agy_panel_status(raw: str) -> tuple[str, str]:
     return fields.get("state", ""), fields.get("msg", "")
 
 
+def _last_agy_panel_state(log_path: str, *, max_bytes: int = 65536) -> str:
+    """Последний известный статус OSC 7501 в хвосте pane.log."""
+    if not log_path or not os.path.exists(log_path):
+        return ""
+    try:
+        size = os.path.getsize(log_path)
+        start = max(0, size - max_bytes)
+        with open(log_path, "rb") as handle:
+            if start:
+                handle.seek(start)
+            chunk = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    signals = PaneSignalScanner().feed(chunk)
+    last_state = ""
+    for raw in signals.agy_statuses:
+        state_name, _ = _agy_panel_status(raw)
+        if state_name:
+            last_state = state_name
+    return last_state
+
+
 def _new_request_id() -> str:
     return uuid.uuid4().hex[:16]
 
@@ -1571,7 +1593,7 @@ class TmuxExecutionBackend:
         transcript_mtime = os.path.getmtime(locator.path) if locator and os.path.exists(locator.path) else None
         if state.get("observed_request_id") == request.request_id and locator and state.get("observed_transcript_path") == locator.path:
             transcript_mtime = state.get("observed_transcript_mtime", transcript_mtime)
-        claude_reader = None
+        watch_reader = None
         pane_before = await self._capture_pane_text(session, paths)
         while True:
             await asyncio.sleep(1.0)
@@ -1586,18 +1608,23 @@ class TmuxExecutionBackend:
             pane = await self._capture_pane_text(session, paths)
             transcript_changed = bool(
                 locator and os.path.exists(locator.path) and (
-                    os.path.getsize(locator.path) != (claude_reader.cursor if claude_reader else locator.start_offset)
+                    os.path.getsize(locator.path) != (watch_reader.cursor if watch_reader else locator.start_offset)
                     or (locator.provider == "gemini" and os.path.getmtime(locator.path) != transcript_mtime)
                 )
             )
-            if transcript_changed and locator.provider == "claude":
-                # Claude дописывает служебные записи (например, away_summary)
-                # и после завершения хода. Они не должны занимать сессию.
-                if claude_reader is None:
-                    claude_reader = await asyncio.to_thread(self._build_transcript_reader, session, request)
-                if claude_reader is not None and claude_reader.locator is not None:
-                    await asyncio.to_thread(claude_reader.poll)
-                    transcript_changed = claude_reader.has_claude_turn_activity
+            if transcript_changed and locator.provider in {"claude", "agy"}:
+                # Claude и Antigravity дописывают служебные записи (away_summary,
+                # SYSTEM_MESSAGE, GENERIC) после завершения хода. Они не должны
+                # занимать сессию и вешать превью на стоящий процесс.
+                if watch_reader is None:
+                    watch_reader = await asyncio.to_thread(self._build_transcript_reader, session, request)
+                if watch_reader is not None and watch_reader.locator is not None:
+                    await asyncio.to_thread(watch_reader.poll)
+                    transcript_changed = (
+                        watch_reader.has_claude_turn_activity
+                        if locator.provider == "claude"
+                        else watch_reader.has_agy_turn_activity
+                    )
             if transcript_changed:
                 logger.info("tmux watch woke on transcript session_id=%s request_id=%s", getattr(session, "id", "?"), request.request_id)
                 return request
@@ -1666,6 +1693,13 @@ class TmuxExecutionBackend:
         if require_recent_activity:
             if not self._pane_works_now(paths, payload):
                 return None
+            if self._interactive_cli_name(session) == "agy":
+                last_state = await asyncio.to_thread(_last_agy_panel_state, paths["pane_log"])
+                if last_state in {"done", "idle", "error"}:
+                    live_pane = await self._capture_pane_text(session, paths) or ""
+                    subagent_count, _ = self._parse_agy_pane_subagents(live_pane)
+                    if subagent_count == 0:
+                        return None
             logger.info(
                 "tmux observe: live pane picked up session_id=%s request_id=%s",
                 getattr(session, "id", "?"),
@@ -1938,12 +1972,16 @@ class TmuxExecutionBackend:
                 if agy:
                     for status in advance.agy_statuses:
                         state_name, message = _agy_panel_status(status)
-                        if state_name in {"done", "error"} or (state_name == "idle" and agy_state == "working"):
+                        if (
+                            state_name in {"done", "error"}
+                            or (state_name == "idle" and (agy_state == "working" or bool(transcript_latest_text)))
+                        ):
                             agy_terminal_at = time.time()
                             agy_state = state_name
-                        elif state_name in {"blocked", "working"}:
+                        elif state_name in {"blocked", "working", "idle"}:
                             agy_state = state_name
-                            agy_terminal_at = 0.0
+                            if state_name in {"blocked", "working"}:
+                                agy_terminal_at = 0.0
                         if state_name == "error":
                             try:
                                 agy_error = base64.b64decode(message, validate=True).decode("utf-8")
@@ -2060,6 +2098,7 @@ class TmuxExecutionBackend:
                         complete = True
                         completion_source = "transcript"
 
+                agy_subagent_count = 0
                 if agy and live_pane is not None:
                     agy_subagent_count, agy_subagent_labels = self._parse_agy_pane_subagents(live_pane)
                     session._assistant_preview_subagents = (agy_subagent_count, agy_subagent_labels)
@@ -2141,6 +2180,8 @@ class TmuxExecutionBackend:
                 # правило оказалось бы недостижимым, а блокировать им
                 # quiet_timeout нельзя: заголовок может перестать обновляться, и
                 # ход завис бы бессрочно. Статус остаётся в diagnostics.
+                if agy and agy_state == "idle" and transcript_latest_text and not agy_terminal_at:
+                    agy_terminal_at = time.time()
                 if awaiting_choice:
                     complete = False
                 elif agy and agy_terminal_at:
@@ -2152,7 +2193,11 @@ class TmuxExecutionBackend:
                         complete = True
                         completion_source = "agy-transcript"
                     elif time.time() - agy_terminal_at >= max(1.0, answer_idle):
-                        terminal_error = "Antigravity CLI finished without a reply in its transcript"
+                        if request.observe:
+                            complete = True
+                            completion_source = "agy-observe-idle"
+                        else:
+                            terminal_error = "Antigravity CLI finished without a reply in its transcript"
                     if terminal_error:
                         retry_prompt = request.prompt
                         report_activity("failed", terminal_error)
@@ -2219,14 +2264,28 @@ class TmuxExecutionBackend:
                     complete = True
                     completion_source = "answer-idle"
                     break
+                if (
+                    agy
+                    and request.observe
+                    and not choice_blocking
+                    and agy_subagent_count == 0
+                    and agy_state not in {"working", "blocked"}
+                    and idle_for >= max(answer_idle, 2.0)
+                ):
+                    complete = True
+                    completion_source = "agy-observe-idle"
+                    break
                 if not choice_blocking and idle_for >= quiet_timeout:
-                    if agy:
+                    if agy and not request.observe:
                         terminal_error = "Antigravity CLI did not report completion before the timeout"
                         latest_text = terminal_error
                         retry_prompt = request.prompt
                         complete = True
                         completion_source = "agy-error"
                         report_activity("failed", terminal_error)
+                    elif agy:
+                        complete = True
+                        completion_source = "agy-observe-idle"
                     elif not complete:
                         complete = True
                         has_json = bool(watched_transcript_paths or transcript_path)
@@ -2250,6 +2309,7 @@ class TmuxExecutionBackend:
             await self._handle_request_cancellation(session, paths)
             raise
         finally:
+            session._assistant_preview_subagents = (0, ())
             state = self._read_state(paths)
             state.update({
                 "observed_request_id": request.request_id,

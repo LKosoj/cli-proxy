@@ -92,6 +92,7 @@ Instruction node for `tests` area.
 - project-maintainers
 
 ## Last reviewed
+- 2026-11-26 — Проверены игнорирование служебных записей `agy` в `wait_for_output`, пропуск стоящей панели на старте и завершение `observe` в `tests/test_tmux_backend.py`.
 - 2026-11-26 — Проверен учёт сабагентов `grok` в `headless` (`tests/test_cli_json_stream.py`).
 - 2026-11-26 — Проверены разбор и передача в превью работающих сабагентов `agy` в `tests/test_tmux_backend.py`.
 - 2026-11-26 — Проверено автоподтверждение экрана доверия новому каталогу `agy` в `tests/test_tmux_backend.py`.
