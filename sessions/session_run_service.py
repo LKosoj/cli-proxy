@@ -49,8 +49,8 @@ from utils.text import build_preview, strip_ansi
 
 _SESSION_TASK_MODE_ID = "__session__"
 _QUEUE_TASK_NAME = "dispatch_queued_input"
-# Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева.
-_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(\S.*)$')
+# Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева/справа.
+_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»>]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(?:\[[ xX]\]\s+)?(\S.*)$')
 # Подтверждение ответов Claude: «y. Submit answers» / «n. Cancel», не цифры.
 _CONFIRM_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?([yn])[\.\)]\s+(\S.*)$', re.IGNORECASE)
 # Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
@@ -61,6 +61,15 @@ _MULTI_SELECT_FOOTER_RE = re.compile(
     r"\s+or\s+Escape\s+to\s+cancel:)[ \t]*[\d, ]*\s*\Z",
     re.IGNORECASE | re.MULTILINE,
 )
+_AGY_SINGLE_SELECT_FOOTER_RE = re.compile(
+    r"^[ \t]*(↑/↓\s+Navigate\s*·\s*enter\s+Select(?:\s*·\s*esc\s+Skip)?)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_AGY_MULTI_SELECT_FOOTER_RE = re.compile(
+    r"^[ \t]*(↑/↓\s+Navigate\s*·\s*space\s+Toggle\s*·\s*enter\s+Submit(?:\s*·\s*esc\s+Skip)?)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_OTHER_OPTION_LABELS = frozenset({"other", "write-in", "write-in..."})
 _CHOICE_QUESTION_MAX_LINES = 12
 # «Running… (42s · timeout 10m)» и «(6s · timeout 10m)» перерисовываются
 # каждую секунду. Точка посередине у Claude — «·», у Codex — «•».
@@ -89,6 +98,8 @@ def _is_choice_submit_footer(line: str) -> bool:
         lowered.startswith("select with numbers [")
         or lowered.startswith("enter to submit")
         or lowered.startswith("enter selection [")
+        or _AGY_SINGLE_SELECT_FOOTER_RE.match(line) is not None
+        or _AGY_MULTI_SELECT_FOOTER_RE.match(line) is not None
     )
 
 
@@ -486,8 +497,11 @@ class SessionRunService:
         # отличают курсор выбора или чекбоксы.
         if _CHOICE_CURSOR_RE.search(text):
             return True
-        lines = text.strip().splitlines()
-        return bool((lines and _is_choice_submit_footer(lines[-1])) or cls._tmux_multi_select_footer(text))
+        lines = [line for line in text.strip().splitlines() if line.strip()]
+        return bool(
+            any(_is_choice_submit_footer(line) for line in lines[-3:])
+            or cls._tmux_multi_select_footer(text)
+        )
 
     @staticmethod
     def _tmux_choice_question_id(session_key: str, question: str, options: List[str]) -> str:
@@ -506,7 +520,7 @@ class SessionRunService:
             return ""
         for line in reversed(str(text or "").splitlines()):
             match = _CHOICE_OPTION_RE.match(line.strip())
-            if match and match.group(2).strip().casefold() == "other":
+            if match and match.group(2).strip().casefold() in _OTHER_OPTION_LABELS:
                 return match.group(1)
             if match and match.group(1) == "1":
                 break
@@ -515,7 +529,10 @@ class SessionRunService:
     @staticmethod
     def _tmux_multi_select_footer(text: str) -> str:
         match = _MULTI_SELECT_FOOTER_RE.search(text)
-        return " ".join(match.group(1).split()) if match else ""
+        if match:
+            return " ".join(match.group(1).split())
+        agy_match = _AGY_MULTI_SELECT_FOOTER_RE.search(text)
+        return " ".join(agy_match.group(1).split()) if agy_match else ""
 
     @staticmethod
     def _choice_preview_text(
@@ -601,9 +618,9 @@ class SessionRunService:
             if m and int(m.group(1)) == next_number:
                 next_number += 1
                 label = m.group(2).strip()
-                # Other — служебная строка Claude, не ответ. Номер всё равно
-                # считаем, иначе следующий пункт «Chat about this» выпадет.
-                if label.casefold() == "other":
+                # Other / Write-in... — служебная строка «свой вариант», не кнопка.
+                # Номер всё равно считаем, иначе следующий пункт выпадет.
+                if label.casefold() in _OTHER_OPTION_LABELS:
                     continue
                 opts.append(f"{m.group(1)}. {label}")
                 continue
@@ -626,7 +643,7 @@ class SessionRunService:
             question_at = next(
                 (
                     idx for idx, line in enumerate(q_lines)
-                    if line.strip().lower().startswith(("question:", "questions:"))
+                    if line.strip().lower().startswith(("question:", "questions:", "question "))
                 ),
                 None,
             )

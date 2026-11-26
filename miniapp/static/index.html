@@ -392,6 +392,17 @@
                 <select id="settingsExecutionBackend"></select>
                 <small id="settingsExecutionBackendNote">Configured in Config settings.</small>
               </div>
+              <div id="settingsCliModelGroup" class="hidden">
+                <div class="field">
+                  <label for="settingsCliModel">Модель CLI</label>
+                  <select id="settingsCliModel"></select>
+                  <small id="settingsCliModelNote">Применяется для headless и tmux (живая панель перезапустится с сохранением диалога).</small>
+                </div>
+                <div class="field">
+                  <label for="settingsCliEffort">Уровень рассуждений</label>
+                  <select id="settingsCliEffort"></select>
+                </div>
+              </div>
               <div class="field">
                 <label for="settingsSshEnabled" data-i18n-key="miniapp.label.ssh_remote">SSH Remote</label>
                 <input type="checkbox" id="settingsSshEnabled" />

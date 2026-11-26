@@ -2017,10 +2017,18 @@ class MiniAppRoutes:
 
         from session import (
             available_execution_backends,
+            get_session_cli_effort,
+            get_session_cli_model,
             get_session_execution_backend,
+            session_active_cli_name,
         )
         from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+        from app.services.cli_model_service import get_cli_model_catalog
 
+        active_cli_name = str(session_active_cli_name(session) or "").strip().lower()
+        model_catalog = await asyncio.to_thread(get_cli_model_catalog, active_cli_name)
+        selected_cli_model = get_session_cli_model(session, active_cli_name) or ""
+        selected_cli_effort = get_session_cli_effort(session, active_cli_name) or ""
         execution_backend = get_session_execution_backend(session)
         available_backends = available_execution_backends(session)
         backend_blockers = ["configured in settings"]
@@ -2044,6 +2052,8 @@ class MiniAppRoutes:
                 "name": str(getattr(session, "name", "") or ""),
                 "active_cli": str(getattr(session, "active_cli", "") or ""),
                 "active_mode": str(get_active_mode(session, "") or ""),
+                "cli_model": selected_cli_model,
+                "cli_effort": selected_cli_effort,
                 "execution_backend": execution_backend,
                 "has_live_tmux": TmuxExecutionBackend().is_tmux_live(session),
                 "active_execution_backend": active_execution_backend,
@@ -2060,6 +2070,14 @@ class MiniAppRoutes:
                 "modes": mode_items,
                 "direct_cli_allowed": direct_cli_allowed,
                 "execution_backends": available_backends,
+                "model_supported": bool(model_catalog.supported),
+                "cli_models": [
+                    {"id": item.id, "label": item.label, "efforts": list(item.efforts)}
+                    for item in model_catalog.models
+                ],
+                "cli_efforts": list(model_catalog.efforts_for_model(selected_cli_model or None)),
+                "default_cli_model": model_catalog.default_model,
+                "default_cli_effort": model_catalog.default_effort,
                 "backend_switch_allowed": False,
                 "backend_switch_blockers": backend_blockers,
             },
@@ -2184,6 +2202,64 @@ class MiniAppRoutes:
         settings_snapshot = self._snapshot_session_settings_state(session)
         if "execution_backend" in body:
             return await self._json_error(400, "execution backend is configured in settings")
+
+        if "cli_model" in body or "cli_effort" in body:
+            from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+            from app.services.cli_model_service import get_cli_model_catalog
+            from session import (
+                get_session_cli_effort,
+                get_session_cli_model,
+                get_session_execution_backend,
+                session_active_cli_name,
+                set_session_cli_model_settings,
+            )
+
+            active_cli_name = str(session_active_cli_name(session) or "").strip().lower()
+            catalog = await asyncio.to_thread(get_cli_model_catalog, active_cli_name)
+            if not catalog.supported:
+                return await self._json_error(400, f"model selection is not supported for cli {active_cli_name or 'unknown'}")
+            if getattr(session, "busy", False):
+                return await self._json_error(409, "session is busy")
+            next_model: Any = ...
+            next_effort: Any = ...
+            if "cli_model" in body:
+                raw_model = str(body.get("cli_model") or "").strip() or None
+                allowed_ids = {item.id for item in catalog.models}
+                if raw_model is not None and allowed_ids and raw_model not in allowed_ids:
+                    return await self._json_error(400, f"unknown model: {raw_model}")
+                next_model = raw_model
+            effective_model = (
+                next_model if next_model is not ... else get_session_cli_model(session, active_cli_name)
+            )
+            allowed_efforts = catalog.efforts_for_model(effective_model)
+            if "cli_effort" in body:
+                raw_effort = str(body.get("cli_effort") or "").strip().lower() or None
+                if raw_effort is not None and allowed_efforts and raw_effort not in allowed_efforts:
+                    return await self._json_error(400, f"unsupported reasoning effort: {raw_effort}")
+                next_effort = raw_effort
+            elif next_model is not ...:
+                cur_eff = get_session_cli_effort(session, active_cli_name)
+                if cur_eff and allowed_efforts and cur_eff not in allowed_efforts:
+                    next_effort = None
+            model_changed, _, _ = set_session_cli_model_settings(
+                session,
+                model=next_model,
+                effort=next_effort,
+                cli_name=active_cli_name,
+            )
+            if model_changed:
+                if "cli_model" in body:
+                    changed.append("cli_model")
+                if "cli_effort" in body or next_effort is None:
+                    changed.append("cli_effort")
+                if get_session_execution_backend(session, active_cli_name) == "tmux":
+                    try:
+                        await TmuxExecutionBackend().restart_for_settings(session)
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "miniapp failed to restart tmux panel after model change session_id=%s",
+                            getattr(session, "id", "?"),
+                        )
 
         if "active_mode" in body:
             from sessions.session_state_access import get_active_mode

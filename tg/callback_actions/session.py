@@ -151,6 +151,105 @@ class SessionActionsMixin:
         await self._edit_msg(context, query, text=text, reply_markup=keyboard)
         return True
 
+    async def _cb_sess_model(self, *, data: str, chat_id: int, query, context) -> bool:
+        from app.services.cli_backends.tmux_backend import TmuxExecutionBackend
+        from app.services.cli_model_service import get_cli_model_catalog
+        from session import (
+            get_session_cli_effort,
+            get_session_cli_model,
+            get_session_execution_backend,
+            session_active_cli_name,
+            set_session_cli_model_settings,
+        )
+
+        lang = lang_from_query(query, self.bot_app.config)
+        _reply_chat_id, owner_chat_id, scope_session = self._callback_scope(chat_id, query)
+        parts = str(data or "").split(":")
+        # Формат: sess_model:<action>:<sid>[:<value>[:<page>]]
+        action = parts[1] if len(parts) > 1 else ""
+        token = parts[2] if len(parts) > 2 else ""
+        session = (
+            self.bot_app.manager.get(owner_chat_id, token)
+            or self.bot_app.manager.get_by_uid(token)
+            or scope_session
+        )
+        if session is None:
+            await self._edit_msg(context, query, t("msg.error.session_not_found", lang))
+            return True
+        if not await self._ensure_session_visible(session, owner_chat_id, lang, query, context, "sess_model"):
+            return True
+
+        page = 0
+        notice = ""
+        cli_name = str(session_active_cli_name(session) or "").strip().lower()
+        catalog = await asyncio.to_thread(get_cli_model_catalog, cli_name)
+
+        if action == "p":
+            try:
+                page = max(0, int(parts[3]))
+            except Exception:
+                page = 0
+        elif action in {"m", "e"}:
+            try:
+                page = max(0, int(parts[4])) if len(parts) > 4 else 0
+            except Exception:
+                page = 0
+            if getattr(session, "busy", False):
+                notice = "⚠️ Сессия сейчас занята — дождитесь завершения запроса."
+            elif catalog.supported:
+                changed = False
+                if action == "m":
+                    try:
+                        idx = int(parts[3])
+                    except Exception:
+                        idx = -2
+                    if idx == -1:
+                        changed, _, _ = set_session_cli_model_settings(session, model=None, cli_name=cli_name)
+                    elif 0 <= idx < len(catalog.models):
+                        picked = catalog.models[idx]
+                        current_effort = get_session_cli_effort(session, cli_name)
+                        allowed_efforts = catalog.efforts_for_model(picked.id)
+                        new_effort = current_effort if (not current_effort or current_effort in allowed_efforts) else None
+                        changed, _, _ = set_session_cli_model_settings(
+                            session, model=picked.id, effort=new_effort, cli_name=cli_name,
+                        )
+                elif action == "e":
+                    raw_eff = str(parts[3] if len(parts) > 3 else "").strip().lower()
+                    if raw_eff == "default":
+                        changed, _, _ = set_session_cli_model_settings(session, effort=None, cli_name=cli_name)
+                    else:
+                        allowed = catalog.efforts_for_model(get_session_cli_model(session, cli_name))
+                        if raw_eff in allowed:
+                            changed, _, _ = set_session_cli_model_settings(session, effort=raw_eff, cli_name=cli_name)
+                if changed:
+                    if hasattr(self.bot_app.manager, "save"):
+                        self.bot_app.manager.save()
+                    if get_session_execution_backend(session, cli_name) == "tmux":
+                        try:
+                            restarted = await TmuxExecutionBackend().restart_for_settings(session)
+                        except Exception:
+                            logging.getLogger(__name__).exception(
+                                "failed to restart tmux panel after model change session_id=%s",
+                                getattr(session, "id", "?"),
+                            )
+                            restarted = False
+                        if restarted:
+                            notice = "✅ Сохранено. Живая панель tmux перезапустится с сохранением диалога."
+                        else:
+                            notice = "✅ Сохранено."
+                    else:
+                        notice = "✅ Сохранено."
+
+        text, keyboard = await asyncio.to_thread(
+            self.bot_app.handlers.build_session_model_card,
+            session,
+            page=page,
+            notice=notice,
+            lang=lang,
+        )
+        await self._edit_msg(context, query, text, reply_markup=keyboard)
+        return True
+
     async def _cb_sess_manage(self, *, data: str, chat_id: int, query, context) -> bool:
         lang = lang_from_query(query, self.bot_app.config)
         _reply_chat_id, owner_chat_id, _scope_session = self._callback_scope(chat_id, query)

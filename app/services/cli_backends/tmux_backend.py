@@ -624,7 +624,17 @@ def _start_command(session: Any, state: Optional[dict[str, Any]] = None, *, forc
         value = resolve_env_value(raw_value)
         if value is not None:
             env_cmd.append(f"{key}={value}")
-    if _command_cli_name(session, command) == "agy":
+    cli_name = _command_cli_name(session, command)
+    from app.services.cli_model_service import apply_cli_model_args
+    from session import get_session_cli_effort, get_session_cli_model
+
+    command = apply_cli_model_args(
+        cli_name,
+        command,
+        model=get_session_cli_model(session, cli_name),
+        effort=get_session_cli_effort(session, cli_name),
+    )
+    if cli_name == "agy":
         env_cmd.append("AGY_CLI_OSC7501=on")
         if _has_flag(command, {"--settings"}):
             raise TmuxDriverError("agy tmux uses --settings to read the conversation ID; edit agy's settings.json instead")
@@ -934,22 +944,34 @@ class TmuxExecutionBackend:
                 footer = SessionRunService._tmux_multi_select_footer(pane)
                 question, options = SessionRunService._parse_cli_choice_question(pane)
                 current_id = SessionRunService._tmux_choice_question_id(str(session.id), question, options)
-                if not footer or not pane.rstrip().endswith(":") or current_id != multi_question_id:
+                is_agy = self._interactive_cli_name(session) == "agy"
+                if (
+                    not footer
+                    or (not is_agy and not pane.rstrip().endswith(":"))
+                    or current_id != multi_question_id
+                ):
                     raise TmuxDriverError("tmux multiple-choice menu changed or already has input")
                 if multi_question_id in getattr(session, "_answered_tmux_choice_ids", ()):
                     raise TmuxDriverError("tmux multiple-choice menu already answered")
-                # Claude принимает цифры и запятые по одной клавише.
-                await driver.type_text(paths["pane_target"], value)
-                expected = "".join(footer.split()) + value
-                deadline = time.monotonic() + 3.0
-                while time.monotonic() < deadline:
-                    current = await self._capture_pane_text(session, paths)
-                    if current and "".join(current.split()).endswith(expected):
-                        break
-                    await asyncio.sleep(min(self.poll_interval_sec, 0.25))
+                if is_agy:
+                    # Antigravity переключает чекбоксы нажатием отдельных цифр и отправляет по Enter.
+                    for digit in value.split(","):
+                        await driver.send_keys(paths["pane_target"], digit)
+                        await asyncio.sleep(0.05)
+                    await driver.send_keys(paths["pane_target"], "Enter")
                 else:
-                    raise TmuxDriverError("tmux multiple-choice input was not accepted")
-                await driver.send_enter(paths["pane_target"])
+                    # Claude принимает цифры и запятые по одной клавише.
+                    await driver.type_text(paths["pane_target"], value)
+                    expected = "".join(footer.split()) + value
+                    deadline = time.monotonic() + 3.0
+                    while time.monotonic() < deadline:
+                        current = await self._capture_pane_text(session, paths)
+                        if current and "".join(current.split()).endswith(expected):
+                            break
+                        await asyncio.sleep(min(self.poll_interval_sec, 0.25))
+                    else:
+                        raise TmuxDriverError("tmux multiple-choice input was not accepted")
+                    await driver.send_enter(paths["pane_target"])
                 SessionRunService.remember_answered_tmux_choice(session, multi_question_id)
             else:
                 await driver.send_keys(paths["pane_target"], *value)
@@ -2502,6 +2524,19 @@ class TmuxExecutionBackend:
             )
             self._write_state(paths, state)
         return sent
+
+    async def restart_for_settings(self, session: Any) -> bool:
+        """Закрывает живую tmux-панель с сохранением resume_token, чтобы новый ход стартовал с новыми флагами."""
+        paths = self.paths(session)
+        driver = self._driver(session)
+        if not await driver.has_session(paths["session_name"]):
+            return False
+        existing_state = self._read_state(paths)
+        if not _get_resume_token(session):
+            state_token = _state_resume_token(existing_state)
+            if state_token:
+                _set_resume_token(session, state_token)
+        return await self.close(session)
 
     async def close(self, session: Any) -> bool:
         paths = self.paths(session)

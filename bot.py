@@ -2601,6 +2601,9 @@ class BotApp:
     async def cmd_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.handlers.cmd_limits(update, context)
 
+    async def cmd_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self.handlers.cmd_model(update, context)
+
     async def cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mode_id: str) -> None:
         await self.handlers.cmd_mode(update, context, mode_id)
 

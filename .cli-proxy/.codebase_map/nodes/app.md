@@ -94,6 +94,8 @@ Instruction node for `app` area.
 
 ## Last reviewed
 
+- 2026-11-26 — Поддержана отправка множественного выбора для вопросов `agy` в `TmuxExecutionBackend.send_choice`.
+- 2026-11-26 — Добавлен `app/services/cli_model_service.py` (каталог моделей/effort и подстановка флагов для `agy`, `claude`, `codex`, `grok` в headless и tmux) и `TmuxExecutionBackend.restart_for_settings`.
 - 2026-11-26 — Исправлено завершение хода и фоновое наблюдение `agy` в `tmux`: фильтр служебных записей, пропуск стоящей панели и тихий сброс превью при `observe`.
 - 2026-11-26 — Добавлен учёт работающих сабагентов `grok` в `headless` (`GrokJsonStreamAdapter.subagent_labels`).
 - 2026-11-26 — Превью в `tmux` получает работающих сабагентов `agy` из нижней панели живого экрана (`_parse_agy_pane_subagents`).

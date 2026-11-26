@@ -149,6 +149,13 @@ def build_command_registry(bot_app) -> List[Dict[str, object]]:
             "menu": True,
         },
         {
+            "name": "model",
+            "desc_key": "cmd.model.desc",
+            "desc": "Выбрать модель и уровень рассуждений CLI.",
+            "handler": bot_app.cmd_model,
+            "menu": True,
+        },
+        {
             "name": "queue",
             "desc_key": "cmd.queue.desc",
             "desc": "Показать очередь.",

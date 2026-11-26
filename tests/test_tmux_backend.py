@@ -756,6 +756,91 @@ async def test_agy_observe_exits_quietly_on_done_without_reply(tmp_path, _isolat
     assert not result.diagnostics.get("terminal_error")
 
 
+def test_agy_choice_questions_single_and_multi_select_parsing() -> None:
+    from sessions.session_run_service import SessionRunService as SRS
+
+    single_pane = (
+        "────\n"
+        "Question 1/1: What is your favorite fruit?\n"
+        "> 1. Apple\n"
+        "  2. Banana\n"
+        "  3. Cherry\n"
+        "  4. Write-in...\n"
+        "  ↑/↓ Navigate · enter Select · esc Skip\n"
+        "esc to cancel                                              Gemini 4 Neon · medium\n"
+    )
+    assert SRS._is_cli_choice_question(single_pane) is True
+    q, opts = SRS._parse_cli_choice_question(single_pane)
+    assert q == "Question 1/1: What is your favorite fruit?"
+    assert opts == ["1. Apple", "2. Banana", "3. Cherry"]
+    assert SRS._claude_other_choice_number(single_pane) == "4"
+    assert SRS._tmux_multi_select_footer(single_pane) == ""
+
+    preview = SRS._choice_preview_text(q, opts, "4", "")
+    assert SRS._is_cli_choice_question(preview) is True
+    assert SRS._claude_other_choice_number(preview) == "4"
+
+    # Экран доверия папке не должен путаться с вопросом выбора.
+    assert SRS._is_cli_choice_question(AGY_FOLDER_TRUST_PANE) is False
+
+    multi_pane = (
+        "────\n"
+        "Question 1/1: Pick toppings\n"
+        "> 1. [ ] Cheese\n"
+        "  2. [ ] Pepperoni\n"
+        "  3. [ ] Olives\n"
+        "  4. Write-in...\n"
+        "  ↑/↓ Navigate · space Toggle · enter Submit · esc Skip\n"
+        "esc to cancel                                              Gemini 4 Neon · medium\n"
+    )
+    assert SRS._is_cli_choice_question(multi_pane) is True
+    mq, mopts = SRS._parse_cli_choice_question(multi_pane)
+    assert mq == "Question 1/1: Pick toppings"
+    assert mopts == ["1. Cheese", "2. Pepperoni", "3. Olives"]
+    footer = SRS._tmux_multi_select_footer(multi_pane)
+    assert "space Toggle" in footer
+    mpreview = SRS._choice_preview_text(mq, mopts, "4", footer)
+    assert SRS._tmux_multi_select_footer(mpreview) == footer
+
+
+@pytest.mark.asyncio
+async def test_agy_send_choice_submits_multi_select_digits_and_enter(tmp_path) -> None:
+    from sessions.session_run_service import SessionRunService as SRS
+
+    multi_pane = (
+        "────\n"
+        "Question 1/1: Pick toppings\n"
+        "> 1. [ ] Cheese\n"
+        "  2. [ ] Pepperoni\n"
+        "  3. [ ] Olives\n"
+        "  4. Write-in...\n"
+        "  ↑/↓ Navigate · space Toggle · enter Submit · esc Skip\n"
+        "esc to cancel                                              Gemini 4 Neon · medium\n"
+    )
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [multi_pane]
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    session._active_execution_backend = "tmux"
+    backend._write_state(paths, {"state": "active", "active_request_id": "req-q"})
+
+    q, opts = SRS._parse_cli_choice_question(multi_pane)
+    qid = SRS._tmux_choice_question_id(str(session.id), q, opts)
+
+    await backend.send_choice(session, "1,3", multi_question_id=qid)
+
+    assert driver.sent_key_sequences == [
+        (paths["pane_target"], ("1",)),
+        (paths["pane_target"], ("3",)),
+        (paths["pane_target"], ("Enter",)),
+    ]
+
+
 async def _wait_for_preview(session, timeout: float = 5.0) -> str:
     """Ждёт текст, который монитор отдаёт в превью, не дожидаясь конца хода."""
 

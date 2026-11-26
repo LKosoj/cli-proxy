@@ -429,9 +429,73 @@ class CliState:
     active_cli: Optional[str] = None
     resume_tokens: Dict[str, Optional[str]] = field(default_factory=dict)
     tmux_users: Dict[str, Optional[str]] = field(default_factory=dict)
+    models: Dict[str, Optional[str]] = field(default_factory=dict)
+    efforts: Dict[str, Optional[str]] = field(default_factory=dict)
     cli_work_type: Optional[str] = None
     auto_commands_ran: bool = False
     pending_switch_notice: Optional[Dict[str, str]] = field(default=None, repr=False)
+
+
+def get_session_cli_model(session: Any, cli_name: Optional[str] = None) -> Optional[str]:
+    active_cli = str(cli_name or session_active_cli_name(session) or "").strip().lower()
+    if not active_cli:
+        return None
+    cli_state = getattr(session, "cli", None)
+    models = getattr(cli_state, "models", None)
+    if not isinstance(models, dict):
+        return None
+    value = str(models.get(active_cli) or "").strip()
+    return value or None
+
+
+def get_session_cli_effort(session: Any, cli_name: Optional[str] = None) -> Optional[str]:
+    active_cli = str(cli_name or session_active_cli_name(session) or "").strip().lower()
+    if not active_cli:
+        return None
+    cli_state = getattr(session, "cli", None)
+    efforts = getattr(cli_state, "efforts", None)
+    if not isinstance(efforts, dict):
+        return None
+    value = str(efforts.get(active_cli) or "").strip().lower()
+    return value or None
+
+
+def set_session_cli_model_settings(
+    session: Any,
+    *,
+    model: Any = ...,
+    effort: Any = ...,
+    cli_name: Optional[str] = None,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Обновляет выбранную модель и/или уровень рассуждений CLI в сессии."""
+    active_cli = str(cli_name or session_active_cli_name(session) or "").strip().lower()
+    if not active_cli:
+        return (False, None, None)
+    cli_state = getattr(session, "cli", None)
+    if cli_state is None:
+        return (False, None, None)
+    if not isinstance(getattr(cli_state, "models", None), dict):
+        cli_state.models = {}
+    if not isinstance(getattr(cli_state, "efforts", None), dict):
+        cli_state.efforts = {}
+    prev_model = get_session_cli_model(session, active_cli)
+    prev_effort = get_session_cli_effort(session, active_cli)
+    if model is not ...:
+        cleaned_model = str(model or "").strip() or None
+        if cleaned_model is None:
+            cli_state.models.pop(active_cli, None)
+        else:
+            cli_state.models[active_cli] = cleaned_model
+    if effort is not ...:
+        cleaned_effort = str(effort or "").strip().lower() or None
+        if cleaned_effort is None:
+            cli_state.efforts.pop(active_cli, None)
+        else:
+            cli_state.efforts[active_cli] = cleaned_effort
+    new_model = get_session_cli_model(session, active_cli)
+    new_effort = get_session_cli_effort(session, active_cli)
+    changed = (new_model != prev_model) or (new_effort != prev_effort)
+    return (changed, new_model, new_effort)
 
 
 @dataclass
@@ -1086,6 +1150,14 @@ class Session:
                         break
         if is_grok:
             cmd = self._ensure_grok_streaming_json_command(cmd)
+        from app.services.cli_model_service import apply_cli_model_args
+
+        cmd = apply_cli_model_args(
+            self.tool.name,
+            cmd,
+            model=get_session_cli_model(self, self.tool.name),
+            effort=get_session_cli_effort(self, self.tool.name),
+        )
         stream_adapter = build_cli_json_stream_adapter(self.tool.name, resume_token=resume)
         agy_stream_input = (
             self.tool.name == "agy" and use_stdin
@@ -2900,6 +2972,8 @@ class SessionManager:
             "active_cli": session.cli.active_cli or session.tool.name,
             "resume_tokens": dict(session.cli.resume_tokens or {}),
             "tmux_users": dict(getattr(session.cli, "tmux_users", None) or {}),
+            "models": dict(getattr(session.cli, "models", None) or {}),
+            "efforts": dict(getattr(session.cli, "efforts", None) or {}),
             "cli_work_type": session.cli.cli_work_type,
             "auto_commands_ran": bool(session.cli.auto_commands_ran),
         }
@@ -3099,6 +3173,18 @@ class SessionManager:
                         for cli_name, tmux_user in tmux_users.items()
                         if str(cli_name or "").strip()
                     }
+                    raw_models = cli_payload.get("models")
+                    cli_models = {
+                        str(cli_name).strip().lower(): str(model_val or "").strip()
+                        for cli_name, model_val in (raw_models.items() if isinstance(raw_models, dict) else ())
+                        if str(cli_name or "").strip() and str(model_val or "").strip()
+                    }
+                    raw_efforts = cli_payload.get("efforts")
+                    cli_efforts = {
+                        str(cli_name).strip().lower(): str(eff_val or "").strip().lower()
+                        for cli_name, eff_val in (raw_efforts.items() if isinstance(raw_efforts, dict) else ())
+                        if str(cli_name or "").strip() and str(eff_val or "").strip()
+                    }
                     cli_work_type = cli_payload.get("cli_work_type", val.get("cli_work_type"))
                     cli_work_type = str(cli_work_type).strip() if cli_work_type is not None else None
                     auto_commands_ran = bool(cli_payload.get("auto_commands_ran", val.get("auto_commands_ran", False)))
@@ -3150,6 +3236,8 @@ class SessionManager:
                         scoped_key=str(val.get("scoped_key") or "").strip() or None,
                     )
                     session.cli.tmux_users.update(tmux_users)
+                    session.cli.models.update(cli_models)
+                    session.cli.efforts.update(cli_efforts)
                     if requested_cli and requested_cli != active_cli:
                         if requested_cli in self.config.tools:
                             try:

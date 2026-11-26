@@ -787,6 +787,13 @@ class BotHandlers:
         overview_buttons: list[InlineKeyboardButton] = []
         if visibility.allows("status"):
             overview_buttons.append(InlineKeyboardButton(t("btn.session.status", lang), callback_data=f"sess_status:{s.id}"))
+        from app.services.cli_model_service import is_model_supported_cli
+        from session import session_active_cli_name
+
+        if is_model_supported_cli(session_active_cli_name(s)):
+            overview_buttons.append(
+                InlineKeyboardButton("🧠 Модель", callback_data=f"sess_model:o:{s.id}")
+            )
         if visibility.allows("rename"):
             overview_buttons.append(InlineKeyboardButton(t("btn.session.rename", lang), callback_data=f"sess_rename:{s.id}"))
         if visibility.allows("resume"):
@@ -1322,6 +1329,140 @@ class BotHandlers:
                 text=t("msg.report.send_failed", lang),
                 **route.reply_kwargs(),
             )
+
+    def build_session_model_card(
+        self,
+        session: Session,
+        *,
+        page: int = 0,
+        notice: str = "",
+        lang: str = "ru",
+    ) -> tuple[str, InlineKeyboardMarkup]:
+        from app.services.cli_model_service import get_cli_model_catalog
+        from session import (
+            get_session_cli_effort,
+            get_session_cli_model,
+            get_session_execution_backend,
+            session_active_cli_name,
+        )
+
+        cli_name = str(session_active_cli_name(session) or "").strip().lower()
+        catalog = get_cli_model_catalog(cli_name)
+        backend = get_session_execution_backend(session, cli_name)
+        selected_model = get_session_cli_model(session, cli_name)
+        selected_effort = get_session_cli_effort(session, cli_name)
+
+        if not catalog.supported:
+            text = (
+                f"🧠 **Модель и рассуждения**\n\n"
+                f"CLI `{cli_name or '?'}` не поддерживает выбор модели и уровня рассуждений.\n"
+                f"Доступно для: `agy`, `claude`, `codex`, `grok`."
+            )
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton(t("btn.session.back", lang), callback_data=build_session_overview_callback_data(session))],
+                [InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu")],
+            ])
+            return text, kb
+
+        model_display = (
+            catalog.label_for_model(selected_model)
+            if selected_model
+            else (f"По умолчанию ({catalog.default_model})" if catalog.default_model else "По умолчанию")
+        )
+        effort_display = (
+            selected_effort
+            if selected_effort
+            else (f"По умолчанию ({catalog.default_effort})" if catalog.default_effort else "По умолчанию")
+        )
+        lines = [
+            f"🧠 **Модель и рассуждения** · `{cli_name}` ({backend})",
+            f"• Модель: `{model_display}`",
+            f"• Рассуждения: `{effort_display}`",
+        ]
+        if notice:
+            lines.extend(["", notice])
+
+        rows: list[list[InlineKeyboardButton]] = []
+        efforts = catalog.efforts_for_model(selected_model)
+        if efforts:
+            effort_row: list[InlineKeyboardButton] = [
+                InlineKeyboardButton(
+                    ("✓ Авто" if not selected_effort else "Авто"),
+                    callback_data=f"sess_model:e:{session.id}:default:{page}",
+                )
+            ]
+            for eff in efforts:
+                prefix = "✓ " if selected_effort == eff else ""
+                effort_row.append(
+                    InlineKeyboardButton(
+                        f"{prefix}{eff}",
+                        callback_data=f"sess_model:e:{session.id}:{eff}:{page}",
+                    )
+                )
+            for idx in range(0, len(effort_row), 3):
+                rows.append(effort_row[idx:idx + 3])
+
+        page_size = 8
+        total_models = len(catalog.models)
+        total_pages = max(1, (total_models + page_size - 1) // page_size)
+        current_page = max(0, min(int(page), total_pages - 1))
+        rows.append([
+            InlineKeyboardButton(
+                "✓ По умолчанию" if not selected_model else "По умолчанию",
+                callback_data=f"sess_model:m:{session.id}:-1:{current_page}",
+            )
+        ])
+        start = current_page * page_size
+        end = min(total_models, start + page_size)
+        for idx in range(start, end):
+            item = catalog.models[idx]
+            prefix = "✓ " if selected_model == item.id else ""
+            label = item.label if len(item.label) <= 38 else item.label[:35] + "..."
+            rows.append([
+                InlineKeyboardButton(
+                    f"{prefix}{label}",
+                    callback_data=f"sess_model:m:{session.id}:{idx}:{current_page}",
+                )
+            ])
+
+        if total_pages > 1:
+            nav: list[InlineKeyboardButton] = []
+            if current_page > 0:
+                nav.append(InlineKeyboardButton("◀️", callback_data=f"sess_model:p:{session.id}:{current_page - 1}"))
+            nav.append(
+                InlineKeyboardButton(
+                    f"{current_page + 1}/{total_pages}",
+                    callback_data=f"sess_model:p:{session.id}:{current_page}",
+                )
+            )
+            if current_page + 1 < total_pages:
+                nav.append(InlineKeyboardButton("▶️", callback_data=f"sess_model:p:{session.id}:{current_page + 1}"))
+            rows.append(nav)
+
+        rows.append([
+            InlineKeyboardButton(t("btn.session.back", lang), callback_data=build_session_overview_callback_data(session)),
+            InlineKeyboardButton(t("btn.session.close_menu", lang), callback_data="sess_close_menu"),
+        ])
+        return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+    async def cmd_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        route, session = await self.bot_app.ensure_telegram_inbound_session(
+            update, context, auto_create=False, scope="model",
+        )
+        if route is None or session is None:
+            return
+        try:
+            lang = resolve_user_lang(self.bot_app.config, chat_id=int(route.owner_chat_id))
+        except Exception:
+            lang = "ru"
+        text, keyboard = await asyncio.to_thread(self.build_session_model_card, session, page=0, lang=lang)
+        await self.bot_app._send_menu(
+            context,
+            text=text,
+            md2=True,
+            reply_markup=keyboard,
+            **route.reply_kwargs(),
+        )
 
     async def cmd_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         route = await self.bot_app.ensure_telegram_inbound_authorized(

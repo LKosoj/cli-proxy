@@ -577,6 +577,9 @@
     const sshHostsCard = document.getElementById("settingsSshHostsCard");
     const executionBackend = document.getElementById("settingsExecutionBackend");
     const executionBackendNote = document.getElementById("settingsExecutionBackendNote");
+    const cliModelGroup = document.getElementById("settingsCliModelGroup");
+    const cliModelSelect = document.getElementById("settingsCliModel");
+    const cliEffortSelect = document.getElementById("settingsCliEffort");
 
     // NEW Remote Control elements
     const rcEnabled = document.getElementById("settingsRemoteControlEnabled");
@@ -620,6 +623,44 @@
     executionBackendNote.textContent = backendBlockers.length
       ? `${t("miniapp.settings.backend_configured", "Backend настраивается в Config settings")}: ${backendBlockers.join(", ")}`
       : t("miniapp.settings.backend_configured", "Backend настраивается в Config settings");
+
+    const modelSupported = !!data.available?.model_supported;
+    if (cliModelGroup && cliModelSelect && cliEffortSelect) {
+      if (modelSupported) {
+        cliModelGroup.classList.remove("hidden");
+        const cliModels = Array.isArray(data.available?.cli_models) ? data.available.cli_models : [];
+        const defaultModel = String(data.available?.default_cli_model || "");
+        const defaultModelLabel = defaultModel ? `По умолчанию (${defaultModel})` : "По умолчанию";
+        const modelOptions = [
+          `<option value="">${escapeHtml(defaultModelLabel)}</option>`,
+          ...cliModels.map((item) => {
+            const id = String(item?.id || "");
+            const label = String(item?.label || id);
+            return id ? `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>` : "";
+          }).filter(Boolean),
+        ];
+        cliModelSelect.innerHTML = modelOptions.join("");
+        cliModelSelect.value = String(data.settings.cli_model || "");
+
+        const fillEfforts = (selectedModelId, preserveEffort) => {
+          const matched = cliModels.find((item) => String(item?.id || "") === String(selectedModelId || ""));
+          const efforts = Array.isArray(matched?.efforts) && matched.efforts.length
+            ? matched.efforts
+            : (Array.isArray(data.available?.cli_efforts) ? data.available.cli_efforts : []);
+          const defaultEffort = String(data.available?.default_cli_effort || "");
+          const defaultEffortLabel = defaultEffort ? `По умолчанию (${defaultEffort})` : "По умолчанию";
+          cliEffortSelect.innerHTML = [
+            `<option value="">${escapeHtml(defaultEffortLabel)}</option>`,
+            ...efforts.map((eff) => `<option value="${escapeHtml(String(eff))}">${escapeHtml(String(eff))}</option>`),
+          ].join("");
+          cliEffortSelect.value = efforts.includes(preserveEffort) ? preserveEffort : "";
+        };
+        fillEfforts(cliModelSelect.value, String(data.settings.cli_effort || ""));
+        cliModelSelect.onchange = () => fillEfforts(cliModelSelect.value, cliEffortSelect.value);
+      } else {
+        cliModelGroup.classList.add("hidden");
+      }
+    }
 
     sshEnabled.checked = sshRemoteEnabled;
     sshEnabled.disabled = false;
@@ -689,6 +730,8 @@
     const isBusy = !!state.statusLastPayload?.active_session?.busy;
     activeMode.disabled = isBusy;
     executionBackend.disabled = true;
+    if (cliModelSelect) cliModelSelect.disabled = isBusy;
+    if (cliEffortSelect) cliEffortSelect.disabled = isBusy;
     sshEnabled.disabled = isBusy;
     rcEnabled.disabled = isBusy;
     rcHostSelect.disabled = isBusy || validHosts.length === 0;
@@ -703,6 +746,18 @@
     const sshEnabled = document.getElementById("settingsSshEnabled").checked;
     const rcEnabled = document.getElementById("settingsRemoteControlEnabled").checked;
     const rcHost = document.getElementById("settingsRemoteControlHost").value;
+    const payload = {
+      active_mode: activeMode,
+      ssh_remote_enabled: sshEnabled,
+      remote_control_enabled: rcEnabled,
+      remote_control_host_alias: rcHost
+    };
+    if (state.settingsData?.available?.model_supported) {
+      const cliModelEl = document.getElementById("settingsCliModel");
+      const cliEffortEl = document.getElementById("settingsCliEffort");
+      if (cliModelEl) payload.cli_model = cliModelEl.value;
+      if (cliEffortEl) payload.cli_effort = cliEffortEl.value;
+    }
 
     const rcError = document.getElementById("settingsRemoteControlError");
     rcError.style.display = "none";
@@ -711,12 +766,7 @@
     try {
       await api(`/session/${uid}/settings`, {
         method: "PUT",
-        body: JSON.stringify({
-          active_mode: activeMode,
-          ssh_remote_enabled: sshEnabled,
-          remote_control_enabled: rcEnabled,
-          remote_control_host_alias: rcHost
-        })
+        body: JSON.stringify(payload)
       });
       tg.showScanResult?.(t("miniapp.settings.saved", "Настройки сохранены"));
       await fetchSessionSettings();
