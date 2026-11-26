@@ -1186,12 +1186,21 @@ class TmuxExecutionBackend:
             return (0, ())
         prompt_index = -1
         for index in range(len(lines) - 2, 0, -1):
-            if lines[index] == ">" and lines[index - 1].startswith("──") and lines[index + 1].startswith("──"):
+            is_prompt = lines[index] == ">" or lines[index].startswith("> ")
+            if is_prompt and lines[index - 1].startswith("──") and lines[index + 1].startswith("──"):
                 prompt_index = index
                 break
-        if prompt_index < 0:
-            return (0, ())
-        footer = lines[prompt_index + 2:]
+        if prompt_index >= 0:
+            footer = lines[prompt_index + 2:]
+        else:
+            # Когда agy временно скрывает поле ввода `>` (например, показывает
+            # опрос «How's the CLI experience so far?»), счётчик в статус-баре
+            # в самом низу экрана всё равно остаётся.
+            footer = lines[-1:]
+            tail = lines[-12:]
+            sep_idx = next((i for i in range(len(tail) - 1, -1, -1) if tail[i].startswith("──")), -1)
+            if sep_idx >= 0:
+                footer = tail[sep_idx + 1:]
         labels: list[str] = []
         status_count = 0
         for line in footer:

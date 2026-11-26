@@ -509,6 +509,13 @@ def test_tmux_backend_parses_agy_pane_subagents() -> None:
     )
     collapsed = "────\n>\n────\n? for shortcuts   Gemini 4 Neon · medium · 3 subagent(s)\n"
     assert TmuxExecutionBackend._parse_agy_pane_subagents(collapsed) == (3, ())
+    survey_overlay = (
+        "● Spawned 2 subagents (ctrl+o to expand)\n"
+        "How's the CLI experience so far? Help us improve:\n"
+        "[1] Good  [2] Fine  [3] Bad  [0] Skip\n"
+        "? for shortcuts                                      Gemini 4 Neon · medium · 1 subagent(s)\n"
+    )
+    assert TmuxExecutionBackend._parse_agy_pane_subagents(survey_overlay) == (1, ())
     assert TmuxExecutionBackend._parse_agy_pane_subagents(AGY_READY_PANE) == (0, ())
 
 
