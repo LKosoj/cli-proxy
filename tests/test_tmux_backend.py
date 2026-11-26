@@ -421,13 +421,25 @@ async def test_agy_tmux_waits_for_done_and_delivers_only_current_native_reply(tm
     assert "cli-proxy-agy" in command[command.index("--settings") + 1]
 
 
+AGY_FOLDER_TRUST_PANE = (
+    "Accessing workspace:\n"
+    "/tmp/new-project\n"
+    "Do you trust the contents of this project?\n"
+    "> Yes, I trust this folder\n"
+    "  No, exit\n"
+    "  ↑/↓ Navigate · enter Confirm\n"
+    "Gemini 4 Neon · medium"
+)
+AGY_READY_PANE = "────\n>\n────\n? for shortcuts"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("pane", "error"),
     [
         ('warning: conversation "da2359f9-a925-46d9-a871-43d2292d34c1" not found\n────\n>\n────', "not found"),
-        ("Do you trust the contents of this project?\n> Yes, I trust this folder\n"
-         "  No, exit\n  ↑/↓ Navigate · enter Confirm\nGPT-OSS 120B", "workspace trust is required"),
+        ("Do you trust the contents of this project?\n  Yes, I trust this folder\n"
+         "> No, exit\n  ↑/↓ Navigate · enter Confirm\nGPT-OSS 120B", "workspace trust is required"),
     ],
 )
 async def test_agy_tmux_does_not_send_input_to_a_blocked_startup(tmp_path, pane, error):
@@ -443,6 +455,41 @@ async def test_agy_tmux_does_not_send_input_to_a_blocked_startup(tmp_path, pane,
             await backend.run(session, "stay in the original conversation")
     assert driver.sent_prompts == []
     assert driver.sent_key_sequences == []
+
+
+def test_tmux_backend_recognizes_agy_folder_trust_prompt(tmp_path) -> None:
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+
+    assert TmuxExecutionBackend._is_agy_folder_trust_prompt(AGY_FOLDER_TRUST_PANE) is True
+    assert TmuxExecutionBackend._is_agy_folder_trust_prompt(AGY_FOLDER_TRUST_PANE + "\n" + AGY_READY_PANE) is False
+    assert TmuxExecutionBackend._is_agy_folder_trust_prompt(
+        AGY_FOLDER_TRUST_PANE.replace("> Yes, I trust this folder", "  Yes, I trust this folder").replace(
+            "  No, exit", "> No, exit"
+        )
+    ) is False
+    with pytest.raises(TmuxDriverError, match="workspace trust is required"):
+        TmuxExecutionBackend._is_interactive_ready(session, AGY_FOLDER_TRUST_PANE)
+
+
+@pytest.mark.asyncio
+async def test_tmux_backend_confirms_agy_folder_trust_prompt(tmp_path) -> None:
+    driver = FakeTmuxDriver()
+    driver.capture_outputs = [AGY_FOLDER_TRUST_PANE, AGY_FOLDER_TRUST_PANE, AGY_READY_PANE]
+    backend = TmuxExecutionBackend(
+        driver=driver,
+        poll_interval_sec=0.01,
+        idle_fallback_sec=0.05,
+        startup_timeout_sec=0.5,
+    )
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    paths = backend.paths(session)
+
+    await backend._wait_for_interactive_ready(session, paths, fresh_start=True)
+
+    assert driver.sent_key_sequences == [(paths["pane_target"], ("Enter",))]
 
 
 async def _wait_for_preview(session, timeout: float = 5.0) -> str:

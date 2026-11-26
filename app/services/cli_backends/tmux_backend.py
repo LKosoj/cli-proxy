@@ -1122,6 +1122,32 @@ class TmuxExecutionBackend:
         tail = "".join("\n".join(lines[-18:]).lower().split())
         return "trustthisfolder?" in tail and "trustandcontinue" in tail
 
+    @staticmethod
+    def _has_agy_input_prompt(lines: list[str]) -> bool:
+        return any(
+            line == ">" and lines[index - 1].startswith("──") and lines[index + 1].startswith("──")
+            for index, line in enumerate(lines)
+            if 0 < index < len(lines) - 1
+        )
+
+    @classmethod
+    def _is_agy_folder_trust_prompt(cls, pane: str) -> bool:
+        """Живой экран Antigravity CLI «Yes, I trust this folder». Цитата в ответе — не он.
+
+        Папку мы уже выбрали запуском, поэтому подтверждаем только когда курсор на «Yes».
+        """
+
+        text = normalize_terminal_text(pane)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines or cls._has_agy_input_prompt(lines):
+            return False
+        tail = lines[-12:]
+        return (
+            _AGY_TRUST_PROMPT in tail
+            and "↑/↓ Navigate · enter Confirm" in lines[-6:]
+            and any(line.startswith(">") and "yes, i trust this folder" in line.lower() for line in tail)
+        )
+
     @classmethod
     def _workspace_trust_confirm_keys(cls, session: Any, pane: str) -> Optional[tuple[str, ...]]:
         """Клавиши «да» для диалога доверия папке. None — это не тот диалог."""
@@ -1134,6 +1160,9 @@ class TmuxExecutionBackend:
             # 1 ставит курсор на «Trust and continue», Enter подтверждает.
             # Один Enter без 1 нажал бы «Quit», если курсор уже съехал вниз.
             return ("1", "Enter")
+        if cli_name == "agy" and cls._is_agy_folder_trust_prompt(pane):
+            # Курсор уже на «> Yes, I trust this folder», Enter подтверждает.
+            return ("Enter",)
         return None
 
     @staticmethod
@@ -1148,11 +1177,7 @@ class TmuxExecutionBackend:
                 raise TmuxDriverError(lines[0])
             if _AGY_TRUST_PROMPT in lines[-12:] and "↑/↓ Navigate · enter Confirm" in lines[-6:]:
                 raise TmuxDriverError("agy workspace trust is required; open agy in this workdir and confirm the folder")
-            return any(
-                line == ">" and lines[index - 1].startswith("──") and lines[index + 1].startswith("──")
-                for index, line in enumerate(lines)
-                if 0 < index < len(lines) - 1
-            )
+            return TmuxExecutionBackend._has_agy_input_prompt(lines)
         if "doyoutrust" in compact or "trustthisfolder?" in compact:
             # У Codex та же фраза бывает цитатой в ответе. Живой экран
             # подтверждается раньше, до этого вызова.
@@ -1227,9 +1252,9 @@ class TmuxExecutionBackend:
                     await self._driver(session).send_keys(paths["pane_target"], "y", "Enter")
                     dumb_term_confirmed = True
                     continue
-                if not trust_confirmed:
-                    trust_keys = self._workspace_trust_confirm_keys(session, pane)
-                    if trust_keys:
+                trust_keys = self._workspace_trust_confirm_keys(session, pane)
+                if trust_keys:
+                    if not trust_confirmed:
                         trust_confirmed = True
                         logger.info(
                             "confirming workspace trust prompt cli=%s pane=%s",
@@ -1238,7 +1263,8 @@ class TmuxExecutionBackend:
                         )
                         await asyncio.sleep(_FOLDER_TRUST_INPUT_GRACE_SEC)
                         await self._driver(session).send_keys(paths["pane_target"], *trust_keys)
-                        continue
+                    await asyncio.sleep(min(self.poll_interval_sec, 0.25))
+                    continue
                 if self._is_interactive_ready(session, pane, fresh_start=fresh_start):
                     return
             await asyncio.sleep(min(self.poll_interval_sec, 0.25))
