@@ -1097,7 +1097,7 @@ class BotHandlers:
             return
         sent = await self.bot_app._send_document(
             context,
-            document=InputFile(redact_text(pane).encode(), filename="terminal.txt"),
+            document=InputFile(redact_text(pane).encode(), filename="terminal.md"),
             **route.reply_kwargs(),
         )
         if not sent:

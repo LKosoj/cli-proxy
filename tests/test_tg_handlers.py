@@ -1223,7 +1223,7 @@ async def test_cmd_tui_uses_bound_session_and_sends_redacted_snapshot(monkeypatc
         capture.assert_awaited_once_with(session)
     if scenario in ("available", "delivery_failed"):
         document = app._send_document.await_args.kwargs["document"]
-        assert document.filename == "terminal.txt"
+        assert document.filename == "terminal.md"
         assert document.input_file_content == b"Ready\nAPI_KEY=[REDACTED]"
         assert app._send_document.await_args.kwargs["message_thread_id"] == 55
     else:

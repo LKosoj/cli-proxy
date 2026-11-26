@@ -547,7 +547,7 @@ GitHub PAT for HTTPS git:
 - `/files` - file management in the working directory (send/save/rename/delete)
 - `/miniapp` - open MiniApp
 - `/reports` - show, create, or send reports for the current session (`latest`, `snapshot`, `generate`, `<filename.md>`)
-- `/tui` — download the visible part of the current tmux pane as `terminal.txt`.
+- `/tui` — download the visible part of the current tmux pane as `terminal.md`.
 - `/limits` - limits and usage for the current CLI
 - `/tools` - list tools
 ### Available but hidden from menu
