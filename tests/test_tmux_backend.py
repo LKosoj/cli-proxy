@@ -848,6 +848,72 @@ async def test_agy_send_choice_submits_multi_select_digits_and_enter(tmp_path) -
     ]
 
 
+@pytest.mark.asyncio
+async def test_agy_completes_on_idle_screen_when_osc_done_missing(tmp_path, _isolated_home, monkeypatch) -> None:
+    conversation = "9a4bf599-8c24-42d6-bee0-06d25ebe545c"
+    transcript = (
+        _isolated_home / ".gemini" / "antigravity-cli" / "brain" / conversation
+        / ".system_generated" / "logs" / "transcript_full.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("", encoding="utf-8")
+
+    driver = FakeTmuxDriver()
+    driver.autowrite_transcript = False
+    driver.capture_outputs = [AGY_READY_PANE] * 20
+    backend = TmuxExecutionBackend(driver=driver, poll_interval_sec=0.01, quiet_timeout_sec=10, answer_idle_sec=0)
+    session = _session(tmp_path)
+    session.tool.name = session.cli.active_cli = "agy"
+    session.tool.interactive_cmd = ["agy"]
+    session.resume_token = conversation
+    paths = backend.paths(session)
+    os.makedirs(paths["runtime_dir"], exist_ok=True)
+    driver.sessions.add(paths["session_name"])
+    # В pane.log последний сигнал — blocked (как в s30 после Approve plan), done не пришёл.
+    with open(paths["pane_log"], "w", encoding="utf-8") as handle:
+        handle.write("\x1b]7501;state=working:app=antigravity\x07")
+        handle.write("\x1b]7501;state=blocked:kind=permission:app=antigravity:msg=QXBwcm92ZSBwbGFu\x07")
+
+    base_now = time.time()
+    clock = {"now": base_now}
+    monkeypatch.setattr("app.services.cli_backends.tmux_backend.time.time", lambda: clock["now"])
+
+    request = tmux_backend_module.TmuxRecoveryRequest(
+        request_id="s30-missing-done",
+        started_at=base_now - 1,
+        offset=0,
+        prompt="plan and execute",
+        dest={"kind": "telegram", "chat_id": 42},
+        transcript_locator=TranscriptLocator(
+            provider="agy",
+            path=str(transcript),
+            start_offset=0,
+            session_id=conversation,
+        ),
+    )
+
+    async def write_reply_and_advance() -> None:
+        await asyncio.sleep(0.03)
+        transcript.write_text(
+            json.dumps({
+                "type": "PLANNER_RESPONSE", "source": "MODEL", "status": "DONE",
+                "content": "Итоговый отчёт готов", "created_at": _iso_utc(int(base_now)),
+            }) + "\n",
+            encoding="utf-8",
+        )
+        await asyncio.sleep(0.03)
+        clock["now"] = base_now + 4.0
+
+    task = asyncio.create_task(write_reply_and_advance())
+    try:
+        result = await asyncio.wait_for(backend.recover(session, request), timeout=2)
+    finally:
+        await task
+
+    assert result.text == "Итоговый отчёт готов"
+    assert result.diagnostics["completion_source"] == "agy-idle-screen"
+
+
 async def _wait_for_preview(session, timeout: float = 5.0) -> str:
     """Ждёт текст, который монитор отдаёт в превью, не дожидаясь конца хода."""
 

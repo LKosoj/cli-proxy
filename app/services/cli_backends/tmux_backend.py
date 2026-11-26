@@ -1886,6 +1886,7 @@ class TmuxExecutionBackend:
         # Рост журнала агента, не основного хода. Пока он свежий, конец родителя
         # не снимает превью.
         last_agent_change = 0.0
+        last_transcript_change = 0.0
         # В наблюдении первая же запись «ход закончен» может относиться к уже
         # отданному ходу. Принимаем только ту, что появилась после открытого опроса.
         last_read_at = request.started_at
@@ -1984,6 +1985,7 @@ class TmuxExecutionBackend:
                     last_agent_change = time.time()
                 if grew:
                     last_change = time.time()
+                    last_transcript_change = last_change
                 # Чтение pane.log и разбор экрана держатся вне event loop: оба
                 # шага линейны по объёму вывода, а он доходит до сотен мегабайт.
                 advance = await asyncio.to_thread(
@@ -2074,6 +2076,8 @@ class TmuxExecutionBackend:
                         retry_prompt = str(transcript_update.retry_prompt or request.prompt or "").strip()
                         transcript_latest_text = terminal_error
                     elif transcript_update.assistant_text or agy:
+                        if transcript_update.assistant_text != transcript_latest_text:
+                            last_transcript_change = time.time()
                         transcript_latest_text = transcript_update.assistant_text
                     transcript_thinking_text = str(transcript_update.thinking_text or "")
                     activity = transcript_update.activity
@@ -2268,6 +2272,22 @@ class TmuxExecutionBackend:
                 other_text_open = bool(_OTHER_TEXT_PROMPT_RE.search(pane_for_choice or ""))
                 if other_text_open and not terminal_error:
                     complete = False
+                if (
+                    agy
+                    and not complete
+                    and not awaiting_choice
+                    and not other_text_open
+                    and not terminal_error
+                    and agy_subagent_count == 0
+                    and bool(transcript_latest_text)
+                    and live_pane is not None
+                    and "? for shortcuts" in live_pane
+                    and "esc to cancel" not in live_pane.lower()
+                    and last_transcript_change > 0
+                    and time.time() - last_transcript_change >= max(answer_idle, 3.0)
+                ):
+                    complete = True
+                    completion_source = "agy-idle-screen"
                 if complete:
                     break
 
