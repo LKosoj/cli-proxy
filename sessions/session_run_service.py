@@ -50,7 +50,9 @@ from utils.text import build_preview, strip_ansi
 _SESSION_TASK_MODE_ID = "__session__"
 _QUEUE_TASK_NAME = "dispatch_queued_input"
 # Вариант меню CLI: одна цифра, необязательный курсор TUI или чекбокс слева/справа.
-_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»>]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(?:\[[ xX]\]\s+)?(\S.*)$')
+_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(?:\[[ xX]\]\s+)?(\S.*)$')
+# В Antigravity CLI курсор выбора — обычный символ «>», допустим только при футере agy.
+_AGY_CHOICE_OPTION_RE = re.compile(r'^(?:[❯▶►▌»>]\s*)?(?:☐\s*)?([1-9])[\.\)]\s+(?:\[[ xX]\]\s+)?(\S.*)$')
 # Подтверждение ответов Claude: «y. Submit answers» / «n. Cancel», не цифры.
 _CONFIRM_OPTION_RE = re.compile(r'^(?:[❯▶►▌»]\s*)?([yn])[\.\)]\s+(\S.*)$', re.IGNORECASE)
 # Курсор выбора на строке варианта — признак настоящего меню, а не текста агента.
@@ -62,11 +64,12 @@ _MULTI_SELECT_FOOTER_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _AGY_SINGLE_SELECT_FOOTER_RE = re.compile(
-    r"^[ \t]*(↑/↓\s+Navigate\s*·\s*enter\s+Select(?:\s*·\s*esc\s+Skip)?)[ \t]*$",
+    r"^[ \t]*(↑/↓\s+Navigate\s*·(?:[^\n]*·)?\s*enter\s+Select(?:\s*·[^\n]*)?)[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 _AGY_MULTI_SELECT_FOOTER_RE = re.compile(
-    r"^[ \t]*(↑/↓\s+Navigate\s*·\s*space\s+Toggle\s*·\s*enter\s+Submit(?:\s*·\s*esc\s+Skip)?)[ \t]*$",
+    r"^[ \t]*(↑/↓\s+Navigate\s*·(?:[^\n]*·)?\s*space\s+Toggle\s*·(?:[^\n]*·)?\s*enter\s+Submit"
+    r"(?:\s*·[^\n]*)?)[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 _OTHER_OPTION_LABELS = frozenset({"other", "write-in", "write-in..."})
@@ -88,6 +91,15 @@ _CLI_RETRYABLE_ERROR_PARTS = (
 )
 
 
+def _is_agy_choice_footer(line: str) -> bool:
+    """Строка подсказок навигации в вопросе Antigravity CLI."""
+
+    return (
+        _AGY_SINGLE_SELECT_FOOTER_RE.match(line) is not None
+        or _AGY_MULTI_SELECT_FOOTER_RE.match(line) is not None
+    )
+
+
 def _is_choice_submit_footer(line: str) -> bool:
     """Подсказка TUI «введите номер и Enter», а не пункт меню."""
 
@@ -98,8 +110,7 @@ def _is_choice_submit_footer(line: str) -> bool:
         lowered.startswith("select with numbers [")
         or lowered.startswith("enter to submit")
         or lowered.startswith("enter selection [")
-        or _AGY_SINGLE_SELECT_FOOTER_RE.match(line) is not None
-        or _AGY_MULTI_SELECT_FOOTER_RE.match(line) is not None
+        or _is_agy_choice_footer(line)
     )
 
 
@@ -499,7 +510,8 @@ class SessionRunService:
             return True
         lines = [line for line in text.strip().splitlines() if line.strip()]
         return bool(
-            any(_is_choice_submit_footer(line) for line in lines[-3:])
+            (lines and _is_choice_submit_footer(lines[-1]))
+            or any(_is_agy_choice_footer(line) for line in lines[-3:])
             or cls._tmux_multi_select_footer(text)
         )
 
@@ -519,7 +531,7 @@ class SessionRunService:
         if _is_answer_confirm(text):
             return ""
         for line in reversed(str(text or "").splitlines()):
-            match = _CHOICE_OPTION_RE.match(line.strip())
+            match = _AGY_CHOICE_OPTION_RE.match(line.strip())
             if match and match.group(2).strip().casefold() in _OTHER_OPTION_LABELS:
                 return match.group(1)
             if match and match.group(1) == "1":
@@ -577,12 +589,20 @@ class SessionRunService:
                        if _CHOICE_CURSOR_RE.match(lines[idx])), None)
         if cursor is not None and footer is not None and cursor > footer:
             footer = None
+        option_re = (
+            _AGY_CHOICE_OPTION_RE
+            if footer is not None and _is_agy_choice_footer(lines[footer])
+            else _CHOICE_OPTION_RE
+        )
         start = None
         if footer is not None:
-            for idx in range(footer - 1, -1, -1):
+            search_from = footer - 1
+            while search_from >= 0 and not lines[search_from].strip():
+                search_from -= 1
+            for idx in range(search_from, -1, -1):
                 if not lines[idx].strip():
                     break
-                match = _CHOICE_OPTION_RE.match(lines[idx].strip())
+                match = option_re.match(lines[idx].strip())
                 if match and match.group(1) == "1":
                     start = idx
                     break
@@ -592,14 +612,14 @@ class SessionRunService:
             start = cursor
             if start is not None:
                 while start > 0:
-                    current = _CHOICE_OPTION_RE.match(lines[start].strip())
-                    previous = _CHOICE_OPTION_RE.match(lines[start - 1].strip())
+                    current = option_re.match(lines[start].strip())
+                    previous = option_re.match(lines[start - 1].strip())
                     if not current or not previous or int(previous.group(1)) != int(current.group(1)) - 1:
                         break
                     start -= 1
             else:
                 start = next((idx for idx, line in enumerate(lines)
-                              if (match := _CHOICE_OPTION_RE.match(line.strip())) and match.group(1) == "1"), len(lines))
+                              if (match := option_re.match(line.strip())) and match.group(1) == "1"), len(lines))
         q_lines = lines[:start]
         rest = lines[start:]
         # Подсказка «Select with numbers» значит, что ниже ещё меню. Перенос
@@ -612,7 +632,7 @@ class SessionRunService:
             if _is_choice_submit_footer(s):
                 break
             # Support plain "1. foo", "1) foo", "☐ 1. foo", "❯ 1. foo"
-            m = _CHOICE_OPTION_RE.match(s)
+            m = option_re.match(s)
             # Нумерация меню идёт подряд с единицы, поэтому "1754161234.567 /tmp/x"
             # из вывода команд вариантом не становится.
             if m and int(m.group(1)) == next_number:
@@ -631,6 +651,8 @@ class SessionRunService:
         # Вопрос стоит прямо над вариантами и отделён от остального вывода пустой
         # строкой: без этого в него попадал весь экран TUI, включая логи команд.
         if opts:
+            while q_lines and not q_lines[-1].strip():
+                q_lines.pop()
             tail: List[str] = []
             for line in reversed(q_lines):
                 if not line.strip() or len(tail) >= _CHOICE_QUESTION_MAX_LINES:

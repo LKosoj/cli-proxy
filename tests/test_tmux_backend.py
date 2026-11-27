@@ -909,6 +909,73 @@ def test_agy_choice_questions_single_and_multi_select_parsing() -> None:
     assert SRS._tmux_multi_select_footer(mpreview) == footer
 
 
+@pytest.mark.parametrize(
+    ("header", "footer_line", "is_multi"),
+    [
+        ("Question 1/3: First question?", "  ↑/↓ Navigate · → Next · enter Select · esc Skip", False),
+        (
+            "Question 2/3: Как приводим в соответствие каталоги и инструкции?",
+            "  ↑/↓ Navigate · ← Back · → Next · enter Select · esc Skip",
+            False,
+        ),
+        ("Question 3/3: Last question?", "  ↑/↓ Navigate · ← Back · enter Select · esc Skip", False),
+        (
+            "Question 2/3: Future footer hints?",
+            "  ↑/↓ Navigate · tab Review · ← Back · enter Select · esc Cancel",
+            False,
+        ),
+        (
+            "Question 2/3: Select multiple?",
+            "  ↑/↓ Navigate · ← Back · → Next · space Toggle · enter Submit · esc Skip",
+            True,
+        ),
+        (
+            "Question 2/3: Future multi-select hints?",
+            "  ↑/↓ Navigate · tab Review · space Toggle · ← Back · enter Submit · ? Help",
+            True,
+        ),
+    ],
+)
+def test_agy_multi_question_wizard_with_blank_lines_and_nav_footer(
+    header: str,
+    footer_line: str,
+    is_multi: bool,
+) -> None:
+    from sessions.session_run_service import SessionRunService as SRS
+
+    opt_prefix = "[ ] " if is_multi else ""
+    pane = (
+        "Question\n"
+        "────────────────────────────────────────────────────\n"
+        "\n"
+        f"{header}\n"
+        "\n"
+        f"> 1. {opt_prefix}(Recommended) Первый вариант\n"
+        f"  2. {opt_prefix}Второй вариант\n"
+        f"  3. {opt_prefix}Третий вариант\n"
+        "  4. Write-in...\n"
+        "\n"
+        f"{footer_line}\n"
+        "esc to cancel                                          accept-edits · Gemini 4 Neon · medium\n"
+    )
+    assert SRS._is_cli_choice_question(pane) is True
+    q, opts = SRS._parse_cli_choice_question(pane)
+    assert q == header
+    assert opts == [
+        "1. (Recommended) Первый вариант",
+        "2. Второй вариант",
+        "3. Третий вариант",
+    ]
+    assert SRS._claude_other_choice_number(pane) == "4"
+    multi_footer = SRS._tmux_multi_select_footer(pane)
+    assert bool(multi_footer) is is_multi
+    preview = SRS._choice_preview_text(q, opts, "4", multi_footer)
+    assert SRS._is_cli_choice_question(preview) is True
+    assert SRS._parse_cli_choice_question(preview) == (q, opts)
+    assert SRS._claude_other_choice_number(preview) == "4"
+    assert SRS._tmux_multi_select_footer(preview) == multi_footer
+
+
 @pytest.mark.asyncio
 async def test_agy_send_choice_submits_multi_select_digits_and_enter(tmp_path) -> None:
     from sessions.session_run_service import SessionRunService as SRS
